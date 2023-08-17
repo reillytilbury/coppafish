@@ -159,6 +159,8 @@ def regularise_auto_thresh(auto_thresh: np.ndarray):
 
     # reshape to n_channels_use x n_tiles_use x n_rounds_use
     channel_thresh = np.moveaxis(auto_thresh.copy(), 2, 0)
+    # reshape to n_channels x n_tiles_use x n_rounds
+    channel_thresh = np.moveaxis(channel_thresh, 2, 0)
 
     for c in range(len(channel_thresh)):
         c_thresh = channel_thresh[c]
@@ -174,7 +176,6 @@ def regularise_auto_thresh(auto_thresh: np.ndarray):
             c_thresh[outlier_t[i], r] = np.median(c_thresh[:, r])
         # Now replace the values in the original array
         channel_thresh[c] = c_thresh
-
     # reshape back to n_tiles_use x n_rounds x n_channels
     auto_thresh = np.moveaxis(channel_thresh, 0, 2)
 
