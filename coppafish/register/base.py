@@ -350,7 +350,7 @@ def channel_registration(nbp_file: NotebookPage, nbp_basic: NotebookPage, regist
         registration_data updated after the subvolume registration
     """
     # We need to load in the fluorescent bead images
-    fluorescent_beads = np.zeros((len(set(nbp_basic.channel_cameras)), nbp_basic.tile_sz, nbp_basic.tile_sz))
+    fluorescent_beads = np.zeros((len(set(nbp_basic.channel_camera)), nbp_basic.tile_sz, nbp_basic.tile_sz))
     files = [f for f in os.listdir(nbp_file.fluorescent_beads_dir) if f.endswith('.npy')]
     files.sort()
     for i, f in enumerate(files):
