@@ -325,6 +325,8 @@ def extract_and_filter(config: dict, nbp_file: NotebookPage,
     auto_thresh_reg[np.ix_(nbp_basic.use_tiles, nbp_basic.use_rounds, nbp_basic.use_channels)] = \
         extract.regularise_auto_thresh(auto_thresh_raw[np.ix_(nbp_basic.use_tiles, nbp_basic.use_rounds,
                                                               nbp_basic.use_channels)])
+    auto_thresh_reg[:, nbp_basic.anchor_round, nbp_basic.anchor_channel] = \
+        auto_thresh_raw[:, nbp_basic.anchor_round, nbp_basic.anchor_channel]
     del nbp.auto_thresh
     nbp.auto_thresh = auto_thresh_reg
 
