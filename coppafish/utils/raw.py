@@ -116,7 +116,7 @@ def load_dask(nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int) -> dask.a
         if nbp_file.raw_extension == '.nd2':
             round_dask_array = nd2.load(round_file + nbp_file.raw_extension)
         elif nbp_file.raw_extension == '.npy':
-            round_dask_array = dask.array.from_npy_stack(round_file).transpose([0,1,3,4,5,2])
+            round_dask_array = dask.array.from_npy_stack(round_file)
     else:
         # Now deal with the case where files are split by laser
         round_laser_dask_array = []

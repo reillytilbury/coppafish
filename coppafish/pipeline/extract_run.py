@@ -328,6 +328,10 @@ def extract_and_filter(config: dict, nbp_file: NotebookPage,
     auto_thresh_reg[:, nbp_basic.anchor_round, nbp_basic.anchor_channel] = \
         auto_thresh_raw[:, nbp_basic.anchor_round, nbp_basic.anchor_channel]
     del nbp.auto_thresh
+    assert np.min(auto_thresh_reg[np.ix_(nbp_basic.use_tiles, nbp_basic.use_rounds, nbp_basic.use_channels)]) > 0, \
+        f"auto_thresh_reg has some imaging values <= 0. Inspect this"
+    assert np.min(auto_thresh_reg[nbp_basic.use_tiles, nbp_basic.anchor_round, nbp_basic.anchor_channel]) > 0, \
+        f"auto_thresh_reg has some anchor values <= 0. Inspect this"
     nbp.auto_thresh = auto_thresh_reg
 
     if not nbp_basic.use_anchor:
