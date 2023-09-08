@@ -179,7 +179,7 @@ def load_spot_info(nbp_file: NotebookPage, nbp_basic: NotebookPage) -> dict:
     else:
         spot_info = {'spot_yxz': np.zeros((0, 3), dtype=np.int32),
                      'spot_no': np.zeros((nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.n_extra_rounds,
-                                          nbp_basic.n_channels), dtype=np.uint16),
+                                          nbp_basic.n_channels), dtype=np.uint32),
                      'isolated': np.zeros((0), dtype=bool),
                      'completed': np.zeros((nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.n_extra_rounds,
                                             nbp_basic.n_channels), dtype=bool)}
