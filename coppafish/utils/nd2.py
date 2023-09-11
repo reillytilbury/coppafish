@@ -54,11 +54,11 @@ def get_raw_extension(input_dir: str) -> str:
     else:
         # Get the first nd2 file here
         index = min([i for i in range(len(files)) if files[i].endswith('nd2')])
-        image = nd2.ND2File(os.path.join(input_dir, files[index]))
-        if 'P' in image.sizes.keys():
-            raw_extension = '.nd2'
-        else:
-            raw_extension = 'jobs'
+        with nd2.ND2File(os.path.join(input_dir, files[index])) as image:
+            if 'P' in image.sizes.keys():
+                raw_extension = '.nd2'
+            else:
+                raw_extension = 'jobs'
     return raw_extension
 
 
@@ -191,8 +191,7 @@ def get_jobs_metadata(files: list, input_dir: str, config: dict) -> dict:
     metadata['xy_pos'] = xy_pos
     metadata['tilepos_yx_nd2'], metadata['tilepos_yx'] = get_tilepos(xy_pos=xy_pos, tile_sz=metadata['tile_sz'],
                                                                      expected_overlap=config['stitch']
-                                                                     ['expected_overlap'],
-                                                                     format=config['extract']['npy_index_format'])
+                                                                     ['expected_overlap'])
     metadata['n_tiles'] = len(metadata['tilepos_yx_nd2'])
     # get n_channels and channel info
     metadata['channel_laser'], metadata['channel_camera'] = laser, camera
