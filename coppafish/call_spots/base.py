@@ -157,7 +157,7 @@ def compute_gene_efficiency(spot_colours: np.ndarray, bled_codes: np.ndarray, ge
 
 
 def matrix_match(Y: np.ndarray, X: np.ndarray, u: np.ndarray, v: np.ndarray, alpha: float = 0, beta: float = 0,
-                 n_iters: int = 50) -> [np.ndarray, np.ndarray]:
+                 n_iters: int = 50, u_range: tuple = None, v_range: tuple = None) -> [np.ndarray, np.ndarray, np.ndarray]:
     """
     This function solves the following problem: given two matrices Y and X (n rows and m columns each), find two
     vectors u and v (of length n and m respectively) such that Y_ij ~ u_i * X_ij * v_j for all i and j. This is
@@ -170,6 +170,8 @@ def matrix_match(Y: np.ndarray, X: np.ndarray, u: np.ndarray, v: np.ndarray, alp
         alpha: weight of the L2 regularisation term on u
         beta: weight of the L2 regularisation term on v
         n_iters: number of iterations to run the algorithm for
+        u_range: tuple of length 2, giving the minimum and maximum values that u can take
+        v_range: tuple of length 2, giving the minimum and maximum values that v can take
 
     Returns:
         u, v: solutions to the problem. These are vectors of length n and m respectively. u will be L2 normalised,
@@ -177,17 +179,40 @@ def matrix_match(Y: np.ndarray, X: np.ndarray, u: np.ndarray, v: np.ndarray, alp
     """
     u_init, v_init = u.copy(), v.copy()
     n, m = Y.shape
-    eta, theta = np.zeros(n), np.zeros(m)
     W = Y * X
+    # In order to make alpha and beta more interpretable, we normalise them by the number of entries in u and v
+    alpha *= n
+    beta *= m
+    loss = np.zeros(n_iters)
     for iter in range(n_iters):
-        for i in range(n):
-            eta[i] = 1 / (np.sum((X[i] * v) ** 2) + alpha)
-        for j in range(m):
-            theta[j] = 1 / (np.sum((X[:, j] * u) ** 2) + beta)
-        u = (W @ v + alpha * u_init) * eta
-        u /= np.linalg.norm(u)
-        v = (W.T @ u + beta * v_init) * theta
-    return u, v
+        u_matrix = np.repeat(u[:, None], m, axis=1)
+        v_matrix = np.repeat(v[None, :], n, axis=0)
+        xu_squared = (X * u_matrix) ** 2
+        xv_squared = (X * v_matrix) ** 2
+        u_num = W @ v + alpha * u_init
+        u_denom = np.sum(xv_squared, axis=1) + alpha
+        u = u_num / u_denom
+        v_num = W.T @ u + beta * v_init
+        v_denom = np.sum(xu_squared, axis=0) + beta
+        v = v_num / v_denom
+        # normalise u
+        norm_u = np.linalg.norm(u)
+        u /= norm_u
+        v_multiplier = np.sum((u[:, None] * W * v[None, :])) / np.sum((u[:, None] * X * v[None, :])**2)
+        v *= v_multiplier
+        # clip u and v to be within the given ranges
+        if u_range is not None:
+            u = np.clip(u, u_range[0], u_range[1])
+        if v_range is not None:
+            v = np.clip(v, v_range[0], v_range[1])
+        # Normalise u
+        norm_u = np.linalg.norm(u)
+        u /= norm_u
+        v_multiplier = np.sum((u[:, None] * W * v[None, :])) / np.sum((u[:, None] * X * v[None, :]) ** 2)
+        v *= v_multiplier
+        loss[iter] = np.sum((Y - u[:, None] * X * v[None, :]) ** 2)
+
+    return u, v, loss
 
 
 def matrix_match_exact(Y: np.ndarray, X: np.ndarray) -> [np.ndarray, np.ndarray]:

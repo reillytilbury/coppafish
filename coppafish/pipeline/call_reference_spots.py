@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.sparse.linalg import svds
 import warnings
 try:
     import importlib_resources
@@ -129,15 +130,20 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
             + f'expected {expected_shape}.'
 
     # Load spot colours and background colours
-    bleed_matrix = initial_bleed_matrix / np.linalg.norm(initial_bleed_matrix, axis=0)
+    n_tiles, n_rounds, n_channels_use = nbp_basic.n_tiles, nbp_basic.n_rounds, len(nbp_basic.use_channels)
     colours = nbp_ref_spots.colors[:, :, nbp_basic.use_channels].astype(float)
     bg_colours = nbp_ref_spots.bg_colours.astype(float)
-    spot_tile = nbp_ref_spots.tile
-    n_spots, n_rounds, n_channels_use = colours.shape
-    n_tiles, use_channels = nbp_basic.n_tiles, nbp_basic.use_channels
+    spot_tile = nbp_ref_spots.tile.astype(int)
+    n_spots, n_dyes, use_channels = colours.shape[0], len(nbp_basic.dye_names), nbp_basic.use_channels
+
+    # initialise various bleed matrices
+    free_bleed_matrix = np.zeros((n_tiles, n_rounds, initial_bleed_matrix.shape[0], initial_bleed_matrix.shape[1]))
+    initial_bleed_matrix = initial_bleed_matrix / np.linalg.norm(initial_bleed_matrix, axis=0)
+    bleed_matrix = np.zeros_like(initial_bleed_matrix)
+
+    # Initialise the 2 variables we are most interested in estimating: colour_norm_factor and gene_efficiency
     colour_norm_factor = np.ones((n_tiles, n_rounds, n_channels_use))
     gene_efficiency = np.ones((n_genes, n_rounds))
-    pseudo_bleed_matrix = np.zeros((n_tiles, n_rounds, initial_bleed_matrix.shape[0], initial_bleed_matrix.shape[1]))
 
     # Part 1: Estimate norm_factor[t, r, c] for each tile t, round r and channel c + remove background
     for t in tqdm(nbp_basic.use_tiles, desc='Estimating norm_factors for each tile'):
@@ -158,58 +164,89 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
         bg_codes[:, r, c] = bg[:, c]
     colours -= bg_codes
 
-    # Part 2: Estimate gene assignment g[s] for each spot s
-    # This is done by calculating prob(g|s) = (prob(s|g) * prob(g) / prob(s)) under a bayes model where
-    # prob(s|g) ~ Fisher Von Mises distribution
-    bled_codes = call_spots.get_bled_codes(gene_codes=gene_codes, bleed_matrix=bleed_matrix,
-                                           gene_efficiency=gene_efficiency)
-    gene_prob = call_spots.gene_prob_score(spot_colours=colours, bled_codes=bled_codes)
+    # Part 2: Re estimate bleed matrix. To do this, assign spots to genes and we will then use this classification to
+    # estimate the bleed matrix.
+    initial_bled_codes = call_spots.get_bled_codes(gene_codes=gene_codes, bleed_matrix=initial_bleed_matrix,
+                                                   gene_efficiency=np.ones((n_genes, n_rounds)))
+    gene_prob = call_spots.gene_prob_score(spot_colours=colours, bled_codes=initial_bled_codes)
     gene_no = np.argmax(gene_prob, axis=1)
     gene_prob_score = np.max(gene_prob, axis=1)
 
-    # Part 3: Update our colour norm factor. To do this, we will sample dyes from each tile and round - generating
-    # a new un-normalised bleed matrix for each tile and round. We will then use least squares to find the best colour
-    # scaling factors omega = (w_1, ..., w_7) for each tile and round such that
-    # omega_i * initial_bleed_matrix[i] ~ bleed_matrix[t, r, i] for all i. We can then assimilate these scaling factors
-    # into our colour norm factor.
-    gene_prob_bleed_thresh = min(np.percentile(gene_prob_score, 90), 0.95)
-    bg_percentile = 50
-    bg_strength = np.linalg.norm(bg_codes, axis=(1, 2))
-    for t, r in product(nbp_basic.use_tiles, range(n_rounds)):
-        keep = ((spot_tile == t) * (gene_prob_score > gene_prob_bleed_thresh) *
-                (bg_strength < np.percentile(bg_strength, bg_percentile)))
-        colours_tr = colours[keep, r, :]
-        print('Tile ' + str(t) + ' Round ' + str(r) + ' has ' + str(len(colours_tr)) + ' spots.')
-        pseudo_bleed_matrix[t, r] = call_spots.compute_bleed_matrix(initial_bleed_matrix=bleed_matrix,
-                                                                    spot_colours=colours_tr, dye_score_thresh=0.7)
-    # We'll use these to update our colour norm factor
-    colour_norm_factor_update = np.ones_like(colour_norm_factor)
-    for t, r, c in product(nbp_basic.use_tiles, range(n_rounds), range(n_channels_use)):
-        colour_norm_factor_update[t, r, c] = np.dot(pseudo_bleed_matrix[t, r, c], bleed_matrix[c]) / \
-                                             np.dot(bleed_matrix[c], bleed_matrix[c])
-    # Update colours and colour_norm_factor
-    for t in nbp_basic.use_tiles:
-        colours[spot_tile == t] /= colour_norm_factor_update[t]
-    colour_norm_factor *= colour_norm_factor_update
-
-    # Part 4: Estimate gene_efficiency[g, r] for each gene g and round r
-    gene_prob_ge_thresh = max(np.percentile(gene_prob_score, 50), 0.5)
-    use_ge = np.zeros(n_spots, dtype=bool)
-    for g in tqdm(range(n_genes), desc='Estimating gene efficiencies'):
-        keep = (gene_no == g) * (gene_prob_score > gene_prob_ge_thresh)
-        gene_g_colours = colours[keep]
-        # Skip gene if not enough spots.
-        if len(gene_g_colours) == 0:
-            continue
+    # Now we can update our bleed matrix using these gene assignments.
+    # Do this by looking at high probability, low background spots, look at the preimage of these genes to get the dye
+    # in each round, then combine all such dyes across all rounds and take the SVD to get the dye colour. This is how
+    # we estimate each column of the bleed matrix.
+    high_prob = gene_prob_score > 0.9
+    low_bg = np.linalg.norm(bg_codes, axis=(1, 2)) < np.percentile(np.linalg.norm(bg_codes, axis=(1, 2)), 50)
+    for d in range(n_dyes):
+        dye_d_spots = np.zeros((0, n_channels_use))
         for r in range(n_rounds):
-            expected_dye_colour = bleed_matrix[gene_codes[g, r]]
-            gene_efficiency[g, r] = np.dot(np.mean(gene_g_colours[:, r], axis=0), expected_dye_colour)
-        use_ge += keep
-    # Recalculate bled_codes with updated gene_efficiency
-    bled_codes = call_spots.get_bled_codes(gene_codes=gene_codes, bleed_matrix=bleed_matrix, 
-                                           gene_efficiency=gene_efficiency)
+            dye_d_round_r_genes = np.where(gene_codes[:, r] == d)[0]
+            is_relevant_gene = np.isin(gene_no, dye_d_round_r_genes)
+            dye_d_spots = np.concatenate((dye_d_spots, colours[is_relevant_gene * high_prob * low_bg, r, :]))
+        dye_d_spots_norm = np.linalg.norm(dye_d_spots, axis=1)
+        dye_d_spots = dye_d_spots[(dye_d_spots_norm < np.percentile(dye_d_spots_norm, 99)) *
+                                  (dye_d_spots_norm > np.percentile(dye_d_spots_norm, 1))]
+        if len(dye_d_spots) == 0:
+            continue
+        u, s, v = svds(dye_d_spots, k=1)
+        v = v[0]
+        v *= np.sign(v[np.argmax(np.abs(v))])   # Make sure the largest element is positive
+        bleed_matrix[:, d] = v
 
-    # 3.3 Update gene coefficients
+    # part 3: estimate the free bled codes for each gene and tile
+    free_bled_codes = np.zeros((n_tiles, n_genes, n_rounds, n_channels_use))
+    free_g_prob_thresh = min(0.6, np.percentile(gene_prob_score, 50))
+    for t, g in product(nbp_basic.use_tiles, range(n_genes)):
+        keep = (spot_tile == t) * (gene_prob_score > free_g_prob_thresh) * (gene_no == g)
+        colours_tg = colours[keep].reshape((np.sum(keep), -1))
+        if np.sum(keep) <= 1:
+            continue
+        u, s, v = svds(colours_tg, k=1)
+        v = v[0]
+        v *= np.sign(v[np.argmax(np.abs(v))])  # Make sure the largest element is positive
+        free_bled_codes[t, g] = v.reshape((n_rounds, n_channels_use))
+
+    # part 4: estimate gene efficiency and colour norm factor
+    d_max = np.zeros(n_channels_use, dtype=int)
+    for c in range(n_channels_use):
+        d_max[c] = np.argmax(bleed_matrix[c])
+
+    # We will loop through each round and channel and perform an SVD on the free bled code matrix (which is n_tiles x
+    # n_genes_rc, where n_genes_rc is the number of genes that have dye d_max[c] in round r). These singular vectors
+    # will be the gene efficiency (n_genes_rc x 1) and the colour norm factor (n_tiles x 1) for round r and channel c.
+    ge_prob_thresh = min(0.6, np.percentile(gene_prob_score, 50))
+    for r, c in product(range(n_rounds), range(n_channels_use)):
+        c_dye = d_max[c]
+        relevant_genes = np.where(gene_codes[:, r] == c_dye)[0]
+        n_genes_rc = len(relevant_genes)
+        colour_matrix = free_bled_codes[:, relevant_genes, r, c_dye]
+        # we would like to perform an svd on colour_matrix, but certain tile gene pairs are missing. We will use the
+        # following trick to get around this. We will create a matrix n_reads of size n_tiles x n_genes_rc, with
+        # n_reads[t, g] = the number of spots of gene relevant_genes[g] on tile t. We will then find the best rank 1
+        # approximation to n_reads, multiply this by colour_matrix and then perform an SVD on the result.
+        n_reads = np.zeros((n_tiles, n_genes_rc))
+        for t, g in product(nbp_basic.use_tiles, range(n_genes_rc)):
+            n_reads[t, g] = np.sum((spot_tile == t) * (gene_no == relevant_genes[g]) *
+                                   (gene_prob_score > ge_prob_thresh))
+        u_n, s, v_n = svds(n_reads, k=1)
+        weight_matrix = u_n * v_n
+        colour_matrix = weight_matrix * colour_matrix
+        u, s, v = svds(colour_matrix, k=1)
+        gene_efficiency[relevant_genes, r] = (u / u_n)[:, 0]
+        colour_norm_factor[:, r, c] = (v / v_n)[0]
+        # The next line ensures that the sum of the colour norm factors for each tile is equal to the number of dyes
+        tile_scale_rc = n_tiles / np.sum(colour_norm_factor[:, r, c])
+        colour_norm_factor[:, r, c] *= tile_scale_rc
+        gene_efficiency[relevant_genes, r] *= s / (tile_scale_rc * bleed_matrix[c, c_dye])
+
+    # Divide the spots through by the colour norm factor
+    for t in nbp_basic.use_tiles:
+        colours[spot_tile == t] /= colour_norm_factor[t]
+
+    # Calculate bled codes with this gene efficiency
+    bled_codes = call_spots.get_bled_codes(gene_codes=gene_codes, bleed_matrix=bleed_matrix,
+                                           gene_efficiency=gene_efficiency)
     n_spots = colours.shape[0]
     n_genes = bled_codes.shape[0]
     gene_no, gene_score, gene_score_second \
@@ -227,7 +264,6 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
     nbp_ref_spots.finalized = True
 
     # Save variables in nbp
-    nbp.use_ge = np.asarray(use_ge)
     nbp.gene_names = gene_names
     nbp.gene_codes = gene_codes
     # Now expand variables to have n_channels channels instead of n_channels_use channels. For some variables, we
@@ -255,3 +291,4 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
     nbp.abs_intensity_percentile = np.percentile(pixel_intensity, np.arange(1, 101))
 
     return nbp, nbp_ref_spots
+
