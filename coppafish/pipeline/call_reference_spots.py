@@ -142,8 +142,8 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
 
     # initialise bleed matrices
     initial_bleed_matrix = initial_bleed_matrix / np.linalg.norm(initial_bleed_matrix, axis=0)
-    bled_codes_tile_indep = call_spots.get_bled_codes(gene_codes=gene_codes, bleed_matrix=initial_bleed_matrix,
-                                                      gene_efficiency=np.ones((n_genes, n_rounds)))
+    bled_codes = call_spots.get_bled_codes(gene_codes=gene_codes, bleed_matrix=initial_bleed_matrix,
+                                           gene_efficiency=np.ones((n_genes, n_rounds)))
 
     # Initialise the 2 variables we are most interested in estimating: colour_norm_factor and gene_efficiency
     colour_norm_factor_initial = np.ones((n_tiles, n_rounds, n_channels_use))
@@ -174,29 +174,33 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
 
     # Begin the iterative process of estimating bleed matrix, colour norm factor and free bled codes
     n_iter = 10
-    gene_prob_score_save = np.zeros((n_iter, n_spots))
-    gene_no_save = np.zeros((n_iter, n_spots), dtype=int)
-    colour_norm_factor_uniform_rc_correction = np.ones((n_iter, n_rounds, n_channels_use))
-    colour_norm_factor_relative_tile_correction = np.ones((n_iter, n_tiles, n_rounds, n_channels_use))
+    gene_prob_score = np.zeros((n_iter, n_spots))
+    gene_no = np.zeros((n_iter, n_spots), dtype=int)
+    target_matching_scale = np.zeros((n_iter, n_rounds, n_channels_use))
+    scale = np.ones((n_iter, n_tiles, n_rounds, n_channels_use))
     bleed_matrix = np.zeros((n_iter, n_channels_use, n_dyes))
+    free_bled_codes_tile_indep = np.zeros((n_genes, n_rounds, n_channels_use))
+    colours_scaled = colours.copy()
+
+    # Begin iterations!
     for iter in tqdm(range(n_iter), desc='Annealing Iterations'):
-        # Re-estimate bleed matrix. To do this, assign spots to genes, and we will then use this classification
-        # to estimate the bleed matrix.
-        gene_prob = call_spots.gene_prob_score(spot_colours=colours, bled_codes=bled_codes_tile_indep)
-        gene_no = np.argmax(gene_prob, axis=1)
-        gene_prob_score = np.max(gene_prob, axis=1)
+        # 1. Scale the spots by the previous iteration's scale
+        if iter > 0:
+            colours_scaled = colours * scale[iter - 1]
+
+        # 2. Gene assignments using FVM
+        gene_prob = call_spots.gene_prob_score(spot_colours=colours_scaled, bled_codes=bled_codes)
+        gene_no_temp = np.argmax(gene_prob, axis=1)
+        gene_prob_score_temp = np.max(gene_prob, axis=1)
         # Save gene_no and gene_prob_score, so we can see how much they change between iterations
-        gene_no_save[iter] = gene_no
-        gene_prob_score_save[iter] = gene_prob_score
+        gene_no[iter] = gene_no_temp
+        gene_prob_score[iter] = gene_prob_score_temp
 
         if iter > 0:
-            frac_mismatch = np.sum(gene_no_save[iter] != gene_no_save[iter - 1]) / n_spots
+            frac_mismatch = np.sum(gene_no[iter] != gene_no[iter - 1]) / n_spots
             print('Fraction of spots assigned to different genes: {:.3f}'.format(frac_mismatch))
 
-        # Now we can update our bleed matrix using these gene assignments.
-        # Do this by looking at high probability, low background spots, look at the preimage of these genes to get the
-        # dye in each round, then combine all such dyes across all rounds and take the SVD to get the dye colour. This
-        # is how we estimate each column of the bleed matrix.
+        # 3. Update bleed matrix
         bleed_matrix_prob_thresh = 0.9
         high_prob = gene_prob_score > bleed_matrix_prob_thresh
         low_bg = np.linalg.norm(bg_codes, axis=(1, 2)) < np.percentile(np.linalg.norm(bg_codes, axis=(1, 2)), 50)
@@ -205,7 +209,7 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
             for r in range(n_rounds):
                 dye_d_round_r_genes = np.where(gene_codes[:, r] == d)[0]
                 is_relevant_gene = np.isin(gene_no, dye_d_round_r_genes)
-                dye_d_spots = np.concatenate((dye_d_spots, colours[is_relevant_gene * high_prob * low_bg * inlier_mask, r]))
+                dye_d_spots = np.concatenate((dye_d_spots, colours_scaled[is_relevant_gene * high_prob * low_bg * inlier_mask, r]))
             is_positive = np.sum(dye_d_spots, axis=1) > 0
             dye_d_spots = dye_d_spots[is_positive]
             if len(dye_d_spots) == 0:
@@ -215,6 +219,9 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
             v *= np.sign(v[np.argmax(np.abs(v))])   # Make sure the largest element is positive
             bleed_matrix[iter, :, d] = v
 
+        # as part of this step, update the bled_codes (not the free_bled_codes)
+        bled_codes = bleed_matrix[iter, :, gene_codes]
+
         # We need to have a way of changing between dyes and channels, so we define d_max and d_2_max
         d_max = np.zeros(n_channels_use, dtype=int)
         d_2nd_max = np.zeros(n_channels_use, dtype=int)
@@ -222,59 +229,47 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
             d_max[c] = np.argmax(bleed_matrix[iter, c])
             d_2nd_max[c] = np.argsort(bleed_matrix[iter, c])[-2]
 
-        # We are no longer using the above method to estimate gene efficiency and colour norm factor. We do not need to
-        # know GE, so we will just estimate CNF by minimising the weighted least squares problem:
-        # sum_{tgrc} n_{tg}(F_{tgrc} - CNF_{trc} * B_{grc})^2 where F and B are tile dependent and tile independent free
-        # bled codes respectively, n_{tg} is the number of spots of gene g on tile t, and CNF_{trc} is the colour norm
-        # factor for tile t, round r and channel c.
-        bled_codes_prob_thresh = 0.9
+        # 4. Estimate free_bled_codes
+        conc_param_round = .1  # it takes this many spots to scale the bled code for any round
+        conc_param_other = 40  # it takes this many spots to change the bled code in a round
+        free_bled_prob_thresh = 0.9
         for g in range(n_genes):
-            keep = (gene_prob_score > bled_codes_prob_thresh) * (gene_no == g) * inlier_mask
-            colours_g = colours[keep].reshape((np.sum(keep), n_rounds * n_channels_use))
+            keep = (gene_prob_score > free_bled_prob_thresh) * (gene_no == g) * inlier_mask
+            colours_g = colours_scaled[keep]
             if np.sum(keep) <= 1:
                 continue
-            u, s, v = svds(colours_g, k=1)
-            v = v[0]
-            v *= np.sign(v[np.argmax(np.abs(v))])  # Make sure the largest element is positive
-            bled_codes_tile_indep[g] = v.reshape((n_rounds, n_channels_use))
+            for r in range(n_rounds):
+                dye_colour = bleed_matrix[iter, :, gene_codes[g, r]] / np.sqrt(n_rounds)
+                free_bled_codes_tile_indep[g, r] = bayes_mean(data=colours_g[:, r], prior_mean=dye_colour,
+                                                              mean_dir_conc=conc_param_round,
+                                                              other_conc=conc_param_other)
 
-        # part 3: estimate bled codes for each gene and tile
-        bled_codes = np.repeat(bled_codes_tile_indep[None, :, :, :], n_tiles, axis=0)
+        free_bled_codes = np.repeat(free_bled_codes_tile_indep[None, :, :, :], n_tiles, axis=0)
         for t, g in product(nbp_basic.use_tiles, range(n_genes)):
-            keep = (spot_tile == t) * (gene_prob_score > bled_codes_prob_thresh) * (gene_no == g) * inlier_mask
-            colours_tg = colours[keep].reshape((np.sum(keep), n_rounds * n_channels_use))
+            keep = (spot_tile == t) * (gene_prob_score > free_bled_prob_thresh) * (gene_no == g) * inlier_mask
+            colours_tg = colours_scaled[keep]
             if np.sum(keep) <= 1:
                 continue
-            u, s, v = svds(colours_tg, k=1)
-            v = v[0]
-            flip = np.sign(v[np.argmax(np.abs(v))]) < 0
-            if flip:
-                v *= -1
-                u *= -1
-            bled_codes[t, g] = v.reshape((n_rounds, n_channels_use))
-
+            for r in range(n_rounds):
+                dye_colour = bleed_matrix[iter, :, gene_codes[g, r]] / np.sqrt(n_rounds)
+                free_bled_codes[t, g, r] = bayes_mean(data=colours_tg[:, r], prior_mean=dye_colour,
+                                                      mean_dir_conc=conc_param_round, other_conc=conc_param_other)
         n_reads = np.zeros((n_tiles, n_genes))
         for t, g in product(nbp_basic.use_tiles, range(n_genes)):
-            n_reads[t, g] = np.sum((spot_tile == t) * (gene_no == g) * (gene_prob_score > bled_codes_prob_thresh) *
+            n_reads[t, g] = np.sum((spot_tile == t) * (gene_no == g) * (gene_prob_score > free_bled_prob_thresh) *
                                    inlier_mask)
 
+        # 5. Estimate scale.
+        # This needs to be broken down into the computation of an auxiliary scale (target_matching_scale)
+        # and the computation of the final scale (scale)
         for r, c in product(range(n_rounds), range(n_channels_use)):
             relevant_dye = d_max[c]
             target_value = target_channel_strength[c] / np.sqrt(n_rounds)
             relevant_genes = np.where(gene_codes[:, r] == relevant_dye)[0]
-            # weight = np.sqrt(np.sum(n_reads[:, relevant_genes], axis=0))
-            # colour_norm_factor_uniform_rc_correction[r, c] = weighted_mean(
-            # bled_codes_tile_indep[relevant_genes, r, c], weight) / target_value
-            F = np.ones(len(relevant_genes)) * target_value
-            G = bled_codes_tile_indep[relevant_genes, r, c]
-            n = np.sqrt(np.sum(n_reads[:, relevant_genes], axis=0))
-            colour_norm_factor_uniform_rc_correction[iter, r, c] = np.sum(n * F * G) / np.sum(n * G * G)
-
-        # # Now apply this correction to the tile independent bled codes. Then, when we estimate the scale factor for
-        # # each tile, round, channel, it will automatically be corrected by the uniform_rc_correction.
-        # bled_codes_tile_indep /= colour_norm_factor_uniform_rc_correction[None, :, :]
-        # # Also apply this correction to all colours
-        # colours /= colour_norm_factor_uniform_rc_correction[None, :, :]
+            F = target_value * np.ones(len(relevant_genes))
+            G = free_bled_codes_tile_indep[relevant_genes, r, c]
+            n = np.sum(n_reads[:, relevant_genes], axis=0)
+            target_matching_scale[r, c] = np.sum(F * G * n) / np.sum(G * G * n)
 
         for t, r, c in product(nbp_basic.use_tiles, range(n_rounds), range(n_channels_use)):
             dye_c = d_max[c]
@@ -283,18 +278,19 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
             # looking at the ratio of their expected strengths.
             dye_2_strength = bleed_matrix[iter, c, dye_2nd_c] / bleed_matrix[iter, c, dye_c]
             relevant_genes_dye_c = np.where(gene_codes[:, r] == dye_c)[0]
-            F = bled_codes[t, relevant_genes_dye_c, r, c]
-            G = bled_codes_tile_indep[relevant_genes_dye_c, r, c]
+            v_rc = target_matching_scale[r, c]
+            F = free_bled_codes_tile_indep[relevant_genes_dye_c, r, c] * v_rc
+            G = free_bled_codes[t, relevant_genes_dye_c, r, c]
             n = n_reads[t, relevant_genes_dye_c]
             relevant_genes_dye_2nd_c = np.where(gene_codes[:, r] == dye_2nd_c)[0]
-            F = np.concatenate((F, bled_codes[t, relevant_genes_dye_2nd_c, r, c]))
-            G = np.concatenate((G, bled_codes_tile_indep[relevant_genes_dye_2nd_c, r, c]))
+            F = np.concatenate((F, free_bled_codes_tile_indep[t, relevant_genes_dye_2nd_c, r, c] * v_rc))
+            G = np.concatenate((G, free_bled_codes[relevant_genes_dye_2nd_c, r, c]))
 
             n = np.concatenate((n, dye_2_strength * n_reads[t, relevant_genes_dye_2nd_c]))
             if np.sum(n) == 0:
                 continue
             A = np.sum(n * F * G) / np.sum(n * G * G)
-            colour_norm_factor_relative_tile_correction[iter, t, r, c] = A
+            scale[iter, t, r, c] = A
 
     # Calculate bled codes with this gene efficiency
     bled_codes = call_spots.get_bled_codes(gene_codes=gene_codes, bleed_matrix=bleed_matrix,
@@ -555,3 +551,24 @@ def compare_dyes(free_bled_codes_tile_indep, gene_codes, dye, gene_names):
     plt.colorbar()
     plt.title('Correlation between dye reads for dye {} for all genes containing this dye'.format(dye))
     plt.show()
+
+
+def bayes_mean(data, prior_mean, mean_dir_conc, other_conc):
+    ''' Bayesian mean estimation with specific prior concentration matrix
+    prior mean vector is input prior_mean
+    prior concentration along direction of prior mean is mean_dir_conc
+    prior concentration along other dimensions is other_conc'''
+
+    my_sum = data.sum(0)
+    n = data.shape[0]
+
+    prior_mean_norm = prior_mean / np.linalg.norm(prior_mean)  # normalized prior mean
+    sum_proj = (my_sum @ prior_mean_norm) * prior_mean_norm  # projection of data sum along mean direction
+    sum_other = my_sum - sum_proj  # projection of data sum orthogonal to mean direction
+
+    posterior_proj = (sum_proj + prior_mean * mean_dir_conc) / (n + mean_dir_conc)
+    posterior_other = (sum_other) / (n + other_conc)
+    # print(my_sum)
+    # print(sum_proj)
+    # print(sum_other)
+    return posterior_proj + posterior_other
