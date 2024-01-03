@@ -234,7 +234,7 @@ class BuildPDF:
             pbar.update()
 
             pbar.set_postfix_str("Register")
-            # TODO: Display registration images in the output_dir/reg_images directory
+            # TODO: Display registration images from the output_dir/reg_images directory, one page for each tile
             pbar.update()
 
             pbar.set_postfix_str("Stitch")
