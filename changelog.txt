@@ -1,3 +1,7 @@
+2024/01/dd Alpha Update (v0.8.0):
+ * Bled codes are normalised for each gene outside of a gene for loop, reducing OMP computation time.
+
+
 2024/01/02 Alpha Update (v0.7.0):
  * New diagnostics PDF builder has been created. It can be imported through `from coppafish import BuildPDF`, then with 
     the notebook file path as nb_path, it can be run by `BuildPDF(nb_path)`. It currently shows diagnostic plots for 
