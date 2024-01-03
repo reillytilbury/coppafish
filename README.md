@@ -27,7 +27,7 @@ your existing python installation, create an environment specifically for it usi
 To create a conda environment for coppafish and activate it, type these commands into a terminal:
 ```console
 conda create -n coppafish python=3.9
-condate activate coppafish
+conda activate coppafish
 ```
 
 Next, go to the directory where you want to store the coppafish code. 
@@ -39,7 +39,7 @@ pip install -r ./coppafish/requirements.txt
 pip install ./coppafish[plotting,optimised]
 ```
 
-After installing, you can run the code by typing ```python -m coppafish experiment.ini```, where ```experiment.ini``` 
+After installing, you can run the code from the terminal by typing ```python -m coppafish experiment.ini```, where ```experiment.ini``` 
 should be replaced by the name of the configuration file for your experiment.
 
 An alternative way of installing is to run the coppafish code from the directory in which you downloaded it.  This allows you
