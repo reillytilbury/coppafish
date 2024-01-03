@@ -11,13 +11,12 @@ from ..setup.notebook import NotebookPage
 from .. import call_spots
 from .. import spot_colors
 from .. import utils
-from ..extract import scale
+from coppafish import extract
 from ..call_spots import get_spot_intensity
 from tqdm import tqdm
 from itertools import product
-import matplotlib
+# import matplotlib
 import matplotlib.pyplot as plt
-matplotlib.use('MacOSX')
 
 
 def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage,
@@ -139,6 +138,7 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
     spot_tile = nbp_ref_spots.tile.astype(int)
     n_spots, n_dyes, use_channels = colours.shape[0], len(nbp_basic.dye_names), nbp_basic.use_channels
     target_channel_strength = [1, 1, 0.9, 0.8, 0.8, 1, 1]
+    use_tiles = nbp_basic.use_tiles
 
     # initialise bleed matrices
     initial_bleed_matrix = initial_bleed_matrix / np.linalg.norm(initial_bleed_matrix, axis=0)
@@ -186,7 +186,7 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
     for iter in tqdm(range(n_iter), desc='Annealing Iterations'):
         # 1. Scale the spots by the previous iteration's scale
         if iter > 0:
-            colours_scaled = colours * scale[iter - 1]
+            colours_scaled = colours * scale[iter - 1, spot_tile]
 
         # 2. Gene assignments using FVM
         gene_prob = call_spots.gene_prob_score(spot_colours=colours_scaled, bled_codes=bled_codes)
@@ -202,25 +202,27 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
 
         # 3. Update bleed matrix
         bleed_matrix_prob_thresh = 0.9
-        high_prob = gene_prob_score > bleed_matrix_prob_thresh
+        high_prob = gene_prob_score[iter] > bleed_matrix_prob_thresh
         low_bg = np.linalg.norm(bg_codes, axis=(1, 2)) < np.percentile(np.linalg.norm(bg_codes, axis=(1, 2)), 50)
         for d in range(n_dyes):
             dye_d_spots = np.zeros((0, n_channels_use))
             for r in range(n_rounds):
                 dye_d_round_r_genes = np.where(gene_codes[:, r] == d)[0]
-                is_relevant_gene = np.isin(gene_no, dye_d_round_r_genes)
-                dye_d_spots = np.concatenate((dye_d_spots, colours_scaled[is_relevant_gene * high_prob * low_bg * inlier_mask, r]))
+                is_relevant_gene = np.isin(gene_no[iter], dye_d_round_r_genes)
+                dye_d_spots = np.concatenate((dye_d_spots, colours_scaled[is_relevant_gene * high_prob * low_bg *
+                                                                          inlier_mask, r]))
             is_positive = np.sum(dye_d_spots, axis=1) > 0
             dye_d_spots = dye_d_spots[is_positive]
             if len(dye_d_spots) == 0:
                 continue
             u, s, v = svds(dye_d_spots, k=1)
             v = v[0]
-            v *= np.sign(v[np.argmax(np.abs(v))])   # Make sure the largest element is positive
+            v *= np.sign(v[np.argmax(np.abs(v))])  # Make sure the largest element is positive
             bleed_matrix[iter, :, d] = v
 
         # as part of this step, update the bled_codes (not the free_bled_codes)
-        bled_codes = bleed_matrix[iter, :, gene_codes]
+        bled_codes = call_spots.get_bled_codes(gene_codes=gene_codes, bleed_matrix=bleed_matrix[iter],
+                                               gene_efficiency=np.ones((n_genes, n_rounds)))
 
         # We need to have a way of changing between dyes and channels, so we define d_max and d_2_max
         d_max = np.zeros(n_channels_use, dtype=int)
@@ -234,7 +236,7 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
         conc_param_other = 40  # it takes this many spots to change the bled code in a round
         free_bled_prob_thresh = 0.9
         for g in range(n_genes):
-            keep = (gene_prob_score > free_bled_prob_thresh) * (gene_no == g) * inlier_mask
+            keep = (gene_prob_score[iter] > free_bled_prob_thresh) * (gene_no[iter] == g) * inlier_mask
             colours_g = colours_scaled[keep]
             if np.sum(keep) <= 1:
                 continue
@@ -245,8 +247,9 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
                                                               other_conc=conc_param_other)
 
         free_bled_codes = np.repeat(free_bled_codes_tile_indep[None, :, :, :], n_tiles, axis=0)
-        for t, g in product(nbp_basic.use_tiles, range(n_genes)):
-            keep = (spot_tile == t) * (gene_prob_score > free_bled_prob_thresh) * (gene_no == g) * inlier_mask
+        for t, g in product(use_tiles, range(n_genes)):
+            keep = (spot_tile == t) * (gene_prob_score[iter] > free_bled_prob_thresh) * (gene_no[iter] == g) * \
+                   inlier_mask
             colours_tg = colours_scaled[keep]
             if np.sum(keep) <= 1:
                 continue
@@ -255,7 +258,7 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
                 free_bled_codes[t, g, r] = bayes_mean(data=colours_tg[:, r], prior_mean=dye_colour,
                                                       mean_dir_conc=conc_param_round, other_conc=conc_param_other)
         n_reads = np.zeros((n_tiles, n_genes))
-        for t, g in product(nbp_basic.use_tiles, range(n_genes)):
+        for t, g in product(use_tiles, range(n_genes)):
             n_reads[t, g] = np.sum((spot_tile == t) * (gene_no == g) * (gene_prob_score > free_bled_prob_thresh) *
                                    inlier_mask)
 
@@ -269,22 +272,22 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
             F = target_value * np.ones(len(relevant_genes))
             G = free_bled_codes_tile_indep[relevant_genes, r, c]
             n = np.sum(n_reads[:, relevant_genes], axis=0)
-            target_matching_scale[r, c] = np.sum(F * G * n) / np.sum(G * G * n)
+            target_matching_scale[iter, r, c] = np.sum(F * G * n) / np.sum(G * G * n)
 
-        for t, r, c in product(nbp_basic.use_tiles, range(n_rounds), range(n_channels_use)):
+        for t, r, c in product(use_tiles, range(n_rounds), range(n_channels_use)):
             dye_c = d_max[c]
             dye_2nd_c = d_2nd_max[c]
             # we want to know how much more to weight contributions from dye_c than dye_2nd_c. We will do this by
             # looking at the ratio of their expected strengths.
             dye_2_strength = bleed_matrix[iter, c, dye_2nd_c] / bleed_matrix[iter, c, dye_c]
             relevant_genes_dye_c = np.where(gene_codes[:, r] == dye_c)[0]
-            v_rc = target_matching_scale[r, c]
+            v_rc = target_matching_scale[iter, r, c]
             F = free_bled_codes_tile_indep[relevant_genes_dye_c, r, c] * v_rc
             G = free_bled_codes[t, relevant_genes_dye_c, r, c]
             n = n_reads[t, relevant_genes_dye_c]
             relevant_genes_dye_2nd_c = np.where(gene_codes[:, r] == dye_2nd_c)[0]
-            F = np.concatenate((F, free_bled_codes_tile_indep[t, relevant_genes_dye_2nd_c, r, c] * v_rc))
-            G = np.concatenate((G, free_bled_codes[relevant_genes_dye_2nd_c, r, c]))
+            F = np.concatenate((F, free_bled_codes_tile_indep[relevant_genes_dye_2nd_c, r, c] * v_rc))
+            G = np.concatenate((G, free_bled_codes[t, relevant_genes_dye_2nd_c, r, c]))
 
             n = np.concatenate((n, dye_2_strength * n_reads[t, relevant_genes_dye_2nd_c]))
             if np.sum(n) == 0:
@@ -293,22 +296,27 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
             scale[iter, t, r, c] = A
 
     # Calculate bled codes with this gene efficiency
-    bled_codes = call_spots.get_bled_codes(gene_codes=gene_codes, bleed_matrix=bleed_matrix,
-                                           gene_efficiency=np.ones((n_genes, n_rounds)))
-    n_spots = colours.shape[0]
-    n_genes = bled_codes.shape[0]
-    gene_no, gene_score, gene_score_second \
-        = call_spots.dot_product_score(spot_colours=colours.reshape((n_spots, -1)),
-                                       bled_codes=bled_codes.reshape((n_genes, -1)))[:3]
+    # dp_gene_no, dp_gene_score, dp_gene_score_second \
+    #     = call_spots.dot_product_score(spot_colours=colours.reshape((n_spots, -1)),
+    #                                    bled_codes=bled_codes.reshape((n_genes, -1)))[:3]
+
+    dp_gene_no = np.zeros(n_spots, dtype=int)
+    dp_gene_score = np.zeros(n_spots)
+    dp_gene_score_second = np.zeros(n_spots)
+    for t in use_tiles:
+        t_mask = spot_tile == t
+        n_spots_t = np.sum(t_mask)
+        dp_gene_no[t_mask], dp_gene_score[t_mask], dp_gene_score_second[t_mask] \
+            = call_spots.dot_product_score(spot_colours=colours_scaled[t_mask].reshape((n_spots_t, -1)),
+                                           bled_codes=free_bled_codes[t].reshape((n_genes, -1)))[:3]
 
     # save overwritable variables in nbp_ref_spots
-    nbp_ref_spots.gene_no = gene_no
-    nbp_ref_spots.score = gene_score
-    nbp_ref_spots.score_diff = gene_score - gene_score_second
+    nbp_ref_spots.gene_no = dp_gene_no
+    nbp_ref_spots.score = dp_gene_score
+    nbp_ref_spots.score_diff = dp_gene_score - dp_gene_score_second
     nbp_ref_spots.intensity = np.median(np.max(colours, axis=2), axis=1).astype(np.float32)
     nbp_ref_spots.background_strength = bg_codes
     nbp_ref_spots.gene_probs = gene_prob
-    # nbp_ref_spots.dye_strengths = dye_strength
     nbp_ref_spots.finalized = True
 
     # Save variables in nbp
@@ -316,18 +324,15 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
     nbp.gene_codes = gene_codes
     # Now expand variables to have n_channels channels instead of n_channels_use channels. For some variables, we
     # also need to swap axes as the expand channels function assumes the last axis is the channel axis.
-    # nbp.color_norm_factor = utils.base.expand_channels(colour_norm_factor, use_channels, nbp_basic.n_channels)
+    nbp.color_norm_factor = utils.base.expand_channels(scale, use_channels, nbp_basic.n_channels)
     nbp.initial_bleed_matrix = utils.base.expand_channels(initial_bleed_matrix.T, use_channels, nbp_basic.n_channels).T
-    nbp.bleed_matrix = utils.base.expand_channels(bleed_matrix.T, use_channels, nbp_basic.n_channels).T
+    nbp.bleed_matrix = utils.base.expand_channels(bleed_matrix[-1].T, use_channels, nbp_basic.n_channels).T
     nbp.bled_codes_ge = utils.base.expand_channels(bled_codes, use_channels, nbp_basic.n_channels)
-    nbp.bled_codes = utils.base.expand_channels(call_spots.get_bled_codes(gene_codes=gene_codes, 
-                                                                          bleed_matrix=bleed_matrix, 
-                                                                          gene_efficiency=np.ones((n_genes, n_rounds))),
-                                                use_channels, nbp_basic.n_channels)
-    # nbp.gene_efficiency = gene_efficiency
+    nbp.bled_codes = utils.base.expand_channels(bled_codes, use_channels, nbp_basic.n_channels)
+    nbp.gene_efficiency = np.ones((n_genes, n_rounds))
 
     # Extract abs intensity percentile
-    central_tile = scale.central_tile(nbp_basic.tilepos_yx, nbp_basic.use_tiles)
+    central_tile = extract.scale.central_tile(nbp_basic.tilepos_yx, nbp_basic.use_tiles)
     if nbp_basic.is_3d:
         mid_z = int(nbp_basic.use_z[0] + (nbp_basic.use_z[-1] - nbp_basic.use_z[0]) // 2)
     else:
@@ -335,8 +340,9 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
     pixel_colors = spot_colors.get_spot_colors(spot_colors.all_pixel_yxz(nbp_basic.tile_sz, nbp_basic.tile_sz, mid_z),
                                                central_tile, transform, nbp_file, nbp_basic, nbp_extract,
                                                return_in_bounds=True)[0]
-    # pixel_intensity = get_spot_intensity(np.abs(pixel_colors) / colour_norm_factor[central_tile])
-    # nbp.abs_intensity_percentile = np.percentile(pixel_intensity, np.arange(1, 101))
+    pixel_intensity = get_spot_intensity(np.abs(pixel_colors * scale[-1, central_tile]))
+    nbp.abs_intensity_percentile = np.percentile(pixel_intensity, np.arange(1, 101))
+    nbp.use_ge = False
 
     return nbp, nbp_ref_spots
 
