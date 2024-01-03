@@ -14,6 +14,7 @@ def test_dot_product_score_equality():
     n_channels_use = 3
     spot_colours = rng.rand(n_spots, n_rounds * n_channels_use)
     bled_codes = rng.rand(n_genes, n_rounds * n_channels_use)
+    bled_codes /= np.linalg.norm(bled_codes, axis=1, keepdims=True)
     for weight_squared in [rng.rand(n_spots, n_rounds * n_channels_use), None]:
         for norm_shift in [rng.rand()]:
             gene_no, gene_score, gene_score_second, score = dot_product_score(spot_colours, bled_codes, weight_squared, 

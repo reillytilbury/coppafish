@@ -13,6 +13,7 @@ def test_dot_product_score():
     # Use one gene
     n_genes = 1
     bled_codes = np.ones((n_genes,1))
+    bled_codes /= np.linalg.norm(bled_codes, axis=1, keepdims=True)
     norm_shift = 0
     # Set the weighting to ones so change is applied
     weight_squared = np.ones((spot_colors.shape[0], spot_colors.shape[1]))

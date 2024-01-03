@@ -163,6 +163,8 @@ def get_best_gene_first_iter(residual_pixel_colors: np.ndarray, all_bled_codes: 
     n_pixels = residual_pixel_colors.shape[0]
     best_genes = np.zeros(n_pixels, dtype=int)
     pass_score_threshes = np.zeros(n_pixels, dtype=bool)
+    # Ensure bled_codes are normalised for each gene
+    all_bled_codes /= np.linalg.norm(all_bled_codes, axis=1, keepdims=True)
     background_vars = np.square(background_coefs) @ np.square(all_bled_codes[background_genes]) * alpha + beta ** 2
     #TODO: Eliminate for loop with numpy magic
     for p in range(n_pixels):
@@ -226,6 +228,8 @@ def get_best_gene(residual_pixel_colors: npt.NDArray, all_bled_codes: npt.NDArra
     best_genes = np.zeros((n_pixels), dtype=int)
     pass_score_threshes = np.zeros((n_pixels), dtype=bool)
     inverse_vars = np.zeros((n_pixels, n_rounds_channels), dtype=np.float32)
+    # Ensure bled_codes are normalised for each gene
+    all_bled_codes /= np.linalg.norm(all_bled_codes, axis=1, keepdims=True)
 
     #TODO: Eliminate for loop with numpy magic
     for p in range(n_pixels):

@@ -22,14 +22,11 @@ def dot_product_score(spot_colours: np.ndarray, bled_codes: np.ndarray, weight_s
         - `[n_spots x n_genes] ndarray[float]`: `score` such that `score[d, c]` gives dot product between 
             `spot_colours` vector `d` with `bled_codes` vector `c`.
     """
-    n_spots, n_genes = spot_colours.shape[0], bled_codes.shape[0]
-    n_rounds_channels_use = spot_colours.shape[1]
+    n_spots, n_rounds_channels_use = spot_colours.shape
     # If no weighting is given, use equal weighting
     if weight_squared is None:
         weight_squared = np.ones((n_spots, n_rounds_channels_use))
         
-    # Ensure bled_codes is normalised for each gene
-    bled_codes = bled_codes / np.linalg.norm(bled_codes, axis=1, keepdims=True)
     weight_squared = weight_squared / np.sum(weight_squared, axis=1)[:, None]
     spot_colours = spot_colours / (np.linalg.norm(spot_colours, axis=1)[:, None] + norm_shift)
     spot_colours = n_rounds_channels_use * spot_colours * weight_squared
