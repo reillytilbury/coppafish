@@ -430,7 +430,7 @@ class BuildPDF:
         pixel_min: int,
         pixel_max: int,
         bin_size: int,
-        log: bool = True,
+        log_count: bool = True,
     ) -> list:
         assert bin_size >= 1
         assert (pixel_max - pixel_min + 1) % bin_size == 0
@@ -456,13 +456,15 @@ class BuildPDF:
                 nrows=len(use_rounds_all),
                 ncols=len(set(use_channels + self.use_channels_anchor)),
                 size=(A4_SIZE_INCHES[0] * 2, A4_SIZE_INCHES[1] * 2),
+                share_x=True,
                 share_y=True,
             )
             fig.set_layout_engine("constrained")
             fig.suptitle(
-                f"{section_name} pixel values{' log y axis' if log else ''}, {t=}",
+                f"{section_name} {' log of ' if log_count else ''} pixel values, {t=}",
                 fontsize=SMALL_FONTSIZE,
             )
+            greatest_count = 0
             for i, r in enumerate(use_rounds_all):
                 if r == nb.basic_info.anchor_round:
                     use_channels_r = self.use_channels_anchor
@@ -472,30 +474,17 @@ class BuildPDF:
                         use_channels_r += [nb.basic_info.dapi_channel]
                 for j, c in enumerate(use_channels_all):
                     ax: plt.Axes = axes[i, j]
-                    if c == first_channel:
-                        round_label = r
-                        if nb.basic_info.use_anchor and r == nb.basic_info.anchor_round:
-                            round_label = "anchor"
-                        elif nb.basic_info.use_preseq and r == nb.basic_info.pre_seq_round:
-                            round_label = "preseq"
-                        ax.set_ylabel(
-                            f"round {round_label}",
-                            fontdict={"fontsize": SMALL_FONTSIZE},
-                        )
-                    if r == final_round:
-                        ax.set_xlabel(
-                            f"channel {c if c != nb.basic_info.dapi_channel else 'dapi'}",
-                            fontdict={"fontsize": SMALL_FONTSIZE},
-                        )
-                    self.empty_plot_ticks(ax, show_bottom_frame=True)
+                    self.empty_plot_ticks(ax, show_left_frame=c==first_channel, show_bottom_frame=True)
                     if c not in use_channels_r:
                         self.empty_plot_ticks(ax)
                         continue
                     hist_x = []
+                    hist_loc = np.arange(pixel_max - pixel_min + 1, step=bin_size, dtype=int) + bin_size // 2
                     k = 0
                     for pixel_value in range(pixel_max + 1):
                         if pixel_value == pixel_unique_values[t, r, c, k]:
-                            hist_x.append(pixel_unique_counts[t, r, c, k])
+                            count = pixel_unique_counts[t, r, c, k]
+                            hist_x.append(count)
                             k += 1
                         else:
                             hist_x.append(0)
@@ -505,16 +494,37 @@ class BuildPDF:
                             for l in range(bin_size):
                                 new_hist_x[k] += hist_x[k * bin_size + l]
                         hist_x = new_hist_x
+                    if log_count:
+                        for k, count in enumerate(hist_x):
+                            if count == 0:
+                                continue
+                            hist_x[k] = np.log2(count)
                     if np.sum(hist_x) <= 0:
                         warnings.warn(f"The {section_name.lower()} image for {t=}, {r=}, {c=} looks to be all zeroes!")
                         continue
-                    ax.hist(hist_x, bins=len(hist_x), range=(pixel_min, pixel_max), log=log, color="red")
+                    if np.max(hist_x) > greatest_count:
+                        greatest_count = np.max(hist_x)
+                    ax.bar(x=hist_loc, height=hist_x, color="red", width=bin_size, linewidth=bin_size//7)
                     ax.set_xlim(pixel_min, pixel_max)
-                    self.empty_plot_ticks(ax, show_bottom_frame=True)
-            # for i in range(axes.shape[0]):
-            #     for j in range(axes.shape[1]):
-            #         if j == 0:
-            #             axes[i, 0].set_yticks(minor=False)
+                    # Axis labelling and ticks
+                    if c == first_channel:
+                        round_label = str(r)
+                        if nb.basic_info.use_anchor and r == nb.basic_info.anchor_round:
+                            round_label = "anchor"
+                        elif nb.basic_info.use_preseq and r == nb.basic_info.pre_seq_round:
+                            round_label = "preseq"
+                        round_label += "\n" + r"$\log_2$ count" if log_count else "count"
+                        ax.set_ylabel(
+                            f"round {round_label}",
+                            fontdict={"fontsize": SMALL_FONTSIZE},
+                        )
+                    if r == final_round:
+                        ax.set_xlabel(
+                            f"channel {c if c != nb.basic_info.dapi_channel else 'dapi'}",
+                            fontdict={"fontsize": SMALL_FONTSIZE},
+                        )
+                        ax.set_xticks([pixel_min, pixel_max])
+            ax.set_ylim([0, greatest_count])
             figures.append(fig)
         return figures
 
