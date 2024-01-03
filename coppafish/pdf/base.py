@@ -47,11 +47,9 @@ class BuildPDF:
         if output_path is None:
             output_path = os.path.join(nb.file_names.output_dir, "diagnostics.pdf")
         output_path = os.path.abspath(output_path)
-        
+
         if not overwrite:
-            assert not os.path.isfile(
-                output_path
-            ), f"overwrite is set to false but PDF already exists at {output_path}"
+            assert not os.path.isfile(output_path), f"overwrite is set to false but PDF already exists at {output_path}"
 
         with PdfPages(os.path.abspath(output_path)) as pdf:
             self.use_channels_anchor = [
@@ -236,6 +234,7 @@ class BuildPDF:
             pbar.update()
 
             pbar.set_postfix_str("Register")
+            # TODO: Display registration images in the output_dir/reg_images directory
             pbar.update()
 
             pbar.set_postfix_str("Stitch")
@@ -474,7 +473,7 @@ class BuildPDF:
                         use_channels_r += [nb.basic_info.dapi_channel]
                 for j, c in enumerate(use_channels_all):
                     ax: plt.Axes = axes[i, j]
-                    self.empty_plot_ticks(ax, show_left_frame=c==first_channel, show_bottom_frame=True)
+                    self.empty_plot_ticks(ax, show_left_frame=c == first_channel, show_bottom_frame=True)
                     if c not in use_channels_r:
                         self.empty_plot_ticks(ax)
                         continue
@@ -504,7 +503,7 @@ class BuildPDF:
                         continue
                     if np.max(hist_x) > greatest_count:
                         greatest_count = np.max(hist_x)
-                    ax.bar(x=hist_loc, height=hist_x, color="red", width=bin_size, linewidth=bin_size//7)
+                    ax.bar(x=hist_loc, height=hist_x, color="red", width=bin_size)
                     ax.set_xlim(pixel_min, pixel_max)
                     # Axis labelling and ticks
                     if c == first_channel:
