@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from typing import Union, Optional, Tuple, Any
 
-from ...setup import Notebook, NotebookPage
+from ..setup import Notebook, NotebookPage
 
 
 # Plot settings

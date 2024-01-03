@@ -12,7 +12,7 @@ from .. import setup, utils
 from ..setup import Notebook
 from ..find_spots import check_spots
 from ..call_spots import base as call_spots_base
-from ..plot.pdf.base import BuildPDF
+from ..pdf.base import BuildPDF
 from .register import preprocessing
 from . import basic_info
 from . import scale_run
