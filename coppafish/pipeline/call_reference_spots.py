@@ -186,7 +186,7 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
     for iter in tqdm(range(n_iter), desc='Annealing Iterations'):
         # 1. Scale the spots by the previous iteration's scale
         if iter > 0:
-            colours_scaled = colours * scale[iter - 1, spot_tile]
+            colours_scaled *= scale[iter - 1, spot_tile]
 
         # 2. Gene assignments using FVM
         gene_prob = call_spots.gene_prob_score(spot_colours=colours_scaled, bled_codes=bled_codes)
@@ -253,6 +253,9 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
                    inlier_mask
             colours_tg = colours_scaled[keep]
             if np.sum(keep) <= 1:
+                for r in range(n_rounds):
+                    dye_colour = bleed_matrix[iter, :, gene_codes[g, r]] / np.sqrt(n_rounds)
+                    free_bled_codes[t, g, r] = dye_colour
                 continue
             for r in range(n_rounds):
                 dye_colour = bleed_matrix[iter, :, gene_codes[g, r]] / np.sqrt(n_rounds)
@@ -600,6 +603,8 @@ def plot_scale_iters(colour_norm_factor: np.ndarray, tile: int = None):
             ax[r, c].plot(np.arange(n_iter), colour_norm_factor[:, :, r, c].mean(axis=1))
         else:
             ax[r, c].plot(np.arange(n_iter), colour_norm_factor[:, tile, r, c])
+        # Add dotted line at 1 in red
+        ax[r, c].axhline(1, linestyle='--', color='red')
         ax[r, c].set_xticks([])
         ax[r, c].set_yticks([])
         ax[r, c].set_ylim(0, y_max)
@@ -662,6 +667,8 @@ def plot_aux_scale_iters(aux_scale: np.ndarray):
     y_max = np.max(aux_scale)
     for r, c in product(range(n_rounds), range(n_channels)):
         ax[r, c].plot(np.arange(n_iter), aux_scale[:, r, c])
+        # Add dotted line at 1 in red
+        ax[r, c].axhline(1, linestyle='--', color='red')
         ax[r, c].set_xticks([])
         ax[r, c].set_yticks([])
         ax[r, c].set_ylim(0, y_max)
