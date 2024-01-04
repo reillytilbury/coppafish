@@ -305,7 +305,7 @@ def register(
         bg_scale = np.zeros((n_tiles, n_rounds, n_channels))
         mid_z = nbp_basic.tile_centre[2].astype(int)
         z_rad = np.min([len(nbp_basic.use_z) // 2, 5])
-        yxz = [None, None, np.arange(mid_z - z_rad, mid_z + z_rad) - min(nbp_basic.use_z)]
+        yxz = [None, None, np.arange(mid_z - z_rad, mid_z + z_rad) - min(nbp_basic.use_z) - 2]
         n_cores = config["n_background_scale_threads"]
         if n_cores is None:
             # Maximum threads physically possible could be bottlenecked by available RAM
