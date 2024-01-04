@@ -243,7 +243,7 @@ def run_filter(
                             file_exists = tiles_io.image_exists(file_path, file_type)
                             file_path_raw = nbp_file.tile_unfiltered[t][r][c]
                             file_exists_raw = tiles_io.image_exists(file_path_raw, file_type)
-                        else:
+                        if r == pre_seq_round:
                             file_path = nbp_file.tile[t][r][c]
                             file_path = file_path[: file_path.index(file_type)] + "_raw" + file_type
                             file_exists = tiles_io.image_exists(file_path, file_type)
@@ -281,7 +281,9 @@ def run_filter(
                                     apply_shift=False,
                                 )
                                 if not (r == nbp_basic.anchor_round and c == nbp_basic.dapi_channel):
-                                    saved_im = preprocessing.offset_pixels_by(im, -nbp_basic.tile_pixel_value_shift)
+                                    saved_im = preprocessing.offset_pixels_by(
+                                        saved_im, -nbp_basic.tile_pixel_value_shift
+                                    )
                             else:
                                 im = im_all_channels_2d[c].astype(np.int32) - nbp_basic.tile_pixel_value_shift
                             (
@@ -353,33 +355,9 @@ def run_filter(
                                 c != nbp_basic.dapi_channel
                                 and nbp_debug.n_clip_pixels[t, r, c] > config["n_clip_error"]
                             ):
-                                n_clip_error_images += 1
-                                message = (
-                                    f"\nNumber of images for which more than {config['n_clip_error']} pixels "
-                                    f"clipped in conversion to uint16 is {n_clip_error_images}."
+                                raise ValueError(
+                                    f"{t=}, {r=}, {c=} filter image clipped {nbp_debug.n_clip_pixels[t, r, c]} pixels"
                                 )
-                                if n_clip_error_images >= config["n_clip_error_images_thresh"]:
-                                    # create new Notebook to save info obtained so far
-                                    nb_fail_name = os.path.join(
-                                        nbp_file.output_dir,
-                                        "notebook_extract_error.npz",
-                                    )
-                                    nb_fail = Notebook(nb_fail_name, None)
-                                    # change names of pages so can add extra properties not in json file.
-                                    nbp.name = "extract_fail"
-                                    nbp_debug.name = "extract_debug_fail"
-                                    # record where failure occurred
-                                    nbp.fail_trc = np.array([t, r, c])
-                                    nbp_debug.fail_trc = np.array([t, r, c])
-                                    nb_fail += nbp
-                                    nb_fail += nbp_debug
-                                    raise ValueError(f"{message}\nResults up till now saved as {nb_fail_name}.")
-                                else:
-                                    warnings.warn(
-                                        f"{message}\nWhen this reaches {config['n_clip_error_images_thresh']}"
-                                        f", the extract step of the algorithm will be interrupted."
-                                    )
-
                             if r != nbp_basic.anchor_round:
                                 nbp.hist_counts[:, r, c] += hist_counts_trc
                         # delay gaussian blurring of preseq until after reg to give it a better chance
