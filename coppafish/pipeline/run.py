@@ -59,7 +59,6 @@ def run_pipeline(
         run_tile_indep_pipeline(nb)
         BuildPDF(nb, auto_open=False)
         run_stitch(nb)
-        BuildPDF(nb, auto_open=False)
         run_reference_spots(nb, overwrite_ref_spots)
         BuildPDF(nb, auto_open=False)
         run_omp(nb)

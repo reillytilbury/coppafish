@@ -269,7 +269,7 @@ def run_filter(
                         else:
                             # Only need to load in mid-z plane if 3D.
                             if nbp_basic.is_3d:
-                                im = tiles_io.load_image(
+                                saved_im = tiles_io.load_image(
                                     nbp_file,
                                     nbp_basic,
                                     file_type,
@@ -281,7 +281,7 @@ def run_filter(
                                     apply_shift=False,
                                 )
                                 if not (r == nbp_basic.anchor_round and c == nbp_basic.dapi_channel):
-                                    im = preprocessing.shift_pixels(im, -nbp_basic.tile_pixel_value_shift)
+                                    saved_im = preprocessing.offset_pixels_by(im, -nbp_basic.tile_pixel_value_shift)
                             else:
                                 im = im_all_channels_2d[c].astype(np.int32) - nbp_basic.tile_pixel_value_shift
                             (
@@ -396,23 +396,19 @@ def run_filter(
                                 num_rotations=config["num_rotations"],
                             )
                             del im
-                            if return_filtered_image:
-                                image_t[r, c] = saved_im
-                            pixel_unique_values, pixel_unique_counts = np.unique(saved_im, return_counts=True)
-                            del saved_im
-                            if pixel_unique_values.size <= 1:
-                                raise ValueError(
-                                    f"Filtered image for {t=}, {r=}, {c=} only contains unique pixel "
-                                    + "value {pixel_unique_values}"
-                                )
-                            nbp_debug.pixel_unique_values[t][r][c][
-                                : pixel_unique_values.size
-                            ] = pixel_unique_values.astype(int)
-                            nbp_debug.pixel_unique_counts[t][r][c][
-                                : pixel_unique_counts.size
-                            ] = pixel_unique_counts.astype(int)
                         else:
                             im_all_channels_2d[c] = im
+                    if return_filtered_image:
+                        image_t[r, c] = saved_im
+                    pixel_unique_values, pixel_unique_counts = np.unique(saved_im, return_counts=True)
+                    del saved_im
+                    if pixel_unique_values.size <= 1:
+                        raise ValueError(
+                            f"Filtered image for {t=}, {r=}, {c=} only contains unique pixel "
+                            + "value {pixel_unique_values}"
+                        )
+                    nbp_debug.pixel_unique_values[t][r][c][: pixel_unique_values.size] = pixel_unique_values.astype(int)
+                    nbp_debug.pixel_unique_counts[t][r][c][: pixel_unique_counts.size] = pixel_unique_counts.astype(int)
                     pbar.update(1)
                 if not nbp_basic.is_3d:
                     tiles_io.save_image(
