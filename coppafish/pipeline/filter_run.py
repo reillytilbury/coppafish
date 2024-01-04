@@ -257,7 +257,7 @@ def run_filter(
                             "round": r,
                             "tile": t,
                             "channel": c,
-                            "exists": str(filtered_image_exists),
+                            "exists": str(filtered_image_exists).lower(),
                         }
                     )
                     if image_t_raw is None:
@@ -269,23 +269,27 @@ def run_filter(
 
                     if not nbp_basic.is_3d:
                         im_raw = extract.focus_stack(im_raw)
-                    im, bad_columns = extract.strip_hack(im_raw)  # find faulty columns
+                    im_filtered, bad_columns = extract.strip_hack(im_raw)  # check for faulty columns
+                    assert bad_columns.size == 0, f"Bad column(s) were found during image filtering: {t=}, {r=}, {c=}"
+                    print(f"{bad_columns.size=}")
                     del im_raw
                     if config["deconvolve"]:
                         # Deconvolves dapi images too
-                        im = deconvolution.wiener_deconvolve(im, config["wiener_pad_shape"], wiener_filter)
+                        im_filtered = deconvolution.wiener_deconvolve(
+                            im_filtered, config["wiener_pad_shape"], wiener_filter
+                        )
                     if c == nbp_basic.dapi_channel:
                         if filter_kernel_dapi is not None:
-                            im = utils.morphology.top_hat(im, filter_kernel_dapi)
+                            im_filtered = utils.morphology.top_hat(im_filtered, filter_kernel_dapi)
                     elif c != nbp_basic.dapi_channel:
                         # im converted to float in convolve_2d so no point changing dtype beforehand.
-                        im = utils.morphology.convolve_2d(im, filter_kernel) * scale
+                        im_filtered = utils.morphology.convolve_2d(im_filtered, filter_kernel) * scale
                         if nbp_scale.r_smooth is not None:
                             # oa convolve uses lots of memory and much slower here.
-                            im = utils.morphology.imfilter(im, smooth_kernel, oa=False)
-                        im[:, bad_columns] = 0
+                            im_filtered = utils.morphology.imfilter(im_filtered, smooth_kernel, oa=False)
+                        im_filtered[:, bad_columns] = 0
                         # get_info is quicker on int32 so do this conversion first.
-                        im = np.rint(im, np.zeros_like(im, dtype=np.int32), casting="unsafe")
+                        im_filtered = np.rint(im_filtered, np.zeros_like(im_filtered, dtype=np.int32), casting="unsafe")
                         # only use image unaffected by strip_hack to get information from tile
                         good_columns = np.setdiff1d(np.arange(nbp_basic.tile_sz), bad_columns)
                         (
@@ -294,7 +298,7 @@ def run_filter(
                             nbp_debug.n_clip_pixels[t, r, c],
                             nbp_debug.clip_extract_scale[t, r, c],
                         ) = extract.get_extract_info(
-                            im[:, good_columns],
+                            im_filtered[:, good_columns],
                             config["auto_thresh_multiplier"],
                             hist_bin_edges,
                             max_pixel_value,
@@ -321,16 +325,16 @@ def run_filter(
                             nbp_file,
                             nbp_basic,
                             file_type,
-                            im,
+                            im_filtered,
                             t,
                             r,
                             c,
                             suffix="_raw" if r == pre_seq_round else "",
                             num_rotations=config["num_rotations"],
                         )
-                        del im
+                        del im_filtered
                     else:
-                        im_all_channels_2d[c] = im
+                        im_all_channels_2d[c] = im_filtered
                     if return_filtered_image:
                         image_t[r, c] = saved_im
                     pixel_unique_values, pixel_unique_counts = np.unique(saved_im, return_counts=True)
