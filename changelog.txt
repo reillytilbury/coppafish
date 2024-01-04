@@ -1,4 +1,5 @@
-2024/01/dd Alpha Update (v0.8.0):
+2024/01/04 Alpha Update (v0.7.2):
+ * Filter will re-filter if the filter notebook page does not exist to correctly compute the filter variables bug fix.
  * Bled codes are normalised for each gene outside of a gene for loop, reducing OMP computation time.
  * The Viewer now has every hotkey described, these can be shown by opening the Viewer then pressing Shift + k.
  * Improved pixel value histograms in the PDF diagnostics for extract and filter.
