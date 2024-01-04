@@ -60,7 +60,6 @@ def run_pipeline(
         BuildPDF(nb, auto_open=False)
         run_stitch(nb)
         run_reference_spots(nb, overwrite_ref_spots)
-        BuildPDF(nb, auto_open=False)
         run_omp(nb)
     else:
         #TODO: Add run_scale before extract is run
