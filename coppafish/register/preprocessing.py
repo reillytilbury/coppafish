@@ -385,7 +385,7 @@ def generate_reg_images(nb, t: int, r: int, c: int, filter: bool = False, image_
                     [
                         np.arange(tile_centre[0] - yx_radius, tile_centre[0] + yx_radius), 
                         np.arange(tile_centre[1] - yx_radius, tile_centre[1] + yx_radius), 
-                        np.asarray(z_planes),
+                        np.asarray(z_planes) - np.min(nb.basic_info.use_z),
                     ],
                     apply_shift=False))
     # Clip the image to the specified range if required

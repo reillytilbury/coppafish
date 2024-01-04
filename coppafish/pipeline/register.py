@@ -305,7 +305,7 @@ def register(
         bg_scale = np.zeros((n_tiles, n_rounds, n_channels))
         mid_z = nbp_basic.tile_centre[2].astype(int)
         z_rad = np.min([len(nbp_basic.use_z) // 2, 5])
-        yxz = [None, None, np.arange(mid_z - z_rad, mid_z + z_rad) - min(nbp_basic.use_z)]
+        yxz = [None, None, np.arange(mid_z - z_rad, mid_z + z_rad) - min(nbp_basic.use_z) - 2]
         n_cores = config["n_background_scale_threads"]
         if n_cores is None:
             # Maximum threads physically possible could be bottlenecked by available RAM
@@ -352,7 +352,17 @@ def register(
                 if not (nbp_basic.pre_seq_round == nbp_basic.anchor_round and c == nbp_basic.dapi_channel):
                     image_preseq = preprocessing.offset_pixels_by(image_preseq, -nbp_basic.tile_pixel_value_shift)
                 process_args.append(
-                    (image_seq, image_preseq, nbp.transform, mid_z, z_rad, nbp_basic.pre_seq_round, t, r, c)
+                    (
+                        image_seq.copy(),
+                        image_preseq.copy(),
+                        nbp.transform.copy(),
+                        mid_z,
+                        z_rad,
+                        nbp_basic.pre_seq_round,
+                        t,
+                        r,
+                        c,
+                    )
                 )
                 if len(process_args) == n_cores or i == final_index:
                     # Start processes

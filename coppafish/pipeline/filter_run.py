@@ -217,8 +217,8 @@ def run_filter(
             for t in nbp_basic.use_tiles:
                 if not nbp_basic.is_3d:
                     # for 2d all channels in same file
-                    file_exists_raw = tiles_io.image_exists(nbp_file.tile_unfiltered[t][r], file_type)
-                    if file_exists_raw:
+                    raw_image_exists = tiles_io.image_exists(nbp_file.tile_unfiltered[t][r], file_type)
+                    if raw_image_exists:
                         # mmap load in image for all channels if tiff exists
                         im_all_channels_2d = np.load(nbp_file.tile_unfiltered[t][r], mmap_mode="r")
                     else:
@@ -234,148 +234,106 @@ def run_filter(
                         )
                 for c in use_channels:
                     if c == nbp_basic.dapi_channel:
-                        max_tiff_pixel_value = np.iinfo(np.uint16).max
+                        max_pixel_value = np.iinfo(np.uint16).max
                     else:
-                        max_tiff_pixel_value = np.iinfo(np.uint16).max - nbp_basic.tile_pixel_value_shift
+                        max_pixel_value = np.iinfo(np.uint16).max - nbp_basic.tile_pixel_value_shift
                     if nbp_basic.is_3d:
                         if r != pre_seq_round:
                             file_path = nbp_file.tile[t][r][c]
-                            file_exists = tiles_io.image_exists(file_path, file_type)
+                            filtered_image_exists = tiles_io.image_exists(file_path, file_type)
                             file_path_raw = nbp_file.tile_unfiltered[t][r][c]
-                            file_exists_raw = tiles_io.image_exists(file_path_raw, file_type)
+                            raw_image_exists = tiles_io.image_exists(file_path_raw, file_type)
                         if r == pre_seq_round:
                             file_path = nbp_file.tile[t][r][c]
                             file_path = file_path[: file_path.index(file_type)] + "_raw" + file_type
-                            file_exists = tiles_io.image_exists(file_path, file_type)
+                            filtered_image_exists = tiles_io.image_exists(file_path, file_type)
                             file_path_raw = nbp_file.tile_unfiltered[t][r][c]
                             file_path_raw = file_path_raw[: file_path_raw.index(file_type)] + "_raw" + file_type
-                            file_exists_raw = tiles_io.image_exists(file_path_raw, file_type)
-                        assert (
-                            file_exists_raw
-                        ), f"Raw, extracted file at\n\t{file_path_raw}\nwas not found, were the extracted files moved?"
+                            raw_image_exists = tiles_io.image_exists(file_path_raw, file_type)
+                        assert raw_image_exists, f"Raw, extracted file at\n\t{file_path_raw}\nnot found"
 
                     pbar.set_postfix(
                         {
                             "round": r,
                             "tile": t,
                             "channel": c,
-                            "exists": str(file_exists),
+                            "exists": str(filtered_image_exists).lower(),
                         }
                     )
+                    if image_t_raw is None:
+                        im_raw = tiles_io._load_image(file_path_raw, file_type)
+                    else:
+                        im_raw = image_t_raw[r, c]
+                    # zyx -> yxz
+                    im_raw = im_raw.transpose((1, 2, 0))
 
-                    if file_exists:
-                        if r == nbp_basic.anchor_round and c == nbp_basic.dapi_channel:
-                            pass
-                        else:
-                            # Only need to load in mid-z plane if 3D.
-                            if nbp_basic.is_3d:
-                                saved_im = tiles_io.load_image(
-                                    nbp_file,
-                                    nbp_basic,
-                                    file_type,
-                                    t,
-                                    r,
-                                    c,
-                                    yxz=[None, None, nbp_debug.z_info],
-                                    suffix="_raw" if r == pre_seq_round else "",
-                                    apply_shift=False,
-                                )
-                                if not (r == nbp_basic.anchor_round and c == nbp_basic.dapi_channel):
-                                    saved_im = preprocessing.offset_pixels_by(
-                                        saved_im, -nbp_basic.tile_pixel_value_shift
-                                    )
-                            else:
-                                im = im_all_channels_2d[c].astype(np.int32) - nbp_basic.tile_pixel_value_shift
-                            (
-                                nbp.auto_thresh[t, r, c],
-                                hist_counts_trc,
-                                nbp_debug.n_clip_pixels[t, r, c],
-                                nbp_debug.clip_extract_scale[t, r, c],
-                            ) = extract.base.get_extract_info(
-                                im,
-                                config["auto_thresh_multiplier"],
-                                hist_bin_edges,
-                                max_tiff_pixel_value,
-                                scale,
-                            )
-                            if r != nbp_basic.anchor_round:
-                                # Does hist counts ad all tiles?
-                                nbp.hist_counts[:, r, c] += hist_counts_trc
-                    if not file_exists:
-                        if image_t_raw is None:
-                            im_raw = tiles_io._load_image(file_path_raw, file_type)
-                        else:
-                            im_raw = image_t_raw[r, c]
-                        # zyx -> yxz
-                        im_raw = im_raw.transpose((1, 2, 0))
+                    if not nbp_basic.is_3d:
+                        im_raw = extract.focus_stack(im_raw)
+                    im_filtered, bad_columns = extract.strip_hack(im_raw)  # check for faulty columns
+                    assert bad_columns.size == 0, f"Bad column(s) were found during image filtering: {t=}, {r=}, {c=}"
+                    del im_raw
+                    if config["deconvolve"]:
+                        # Deconvolves dapi images too
+                        im_filtered = deconvolution.wiener_deconvolve(
+                            im_filtered, config["wiener_pad_shape"], wiener_filter
+                        )
+                    if c == nbp_basic.dapi_channel:
+                        if filter_kernel_dapi is not None:
+                            im_filtered = utils.morphology.top_hat(im_filtered, filter_kernel_dapi)
+                    elif c != nbp_basic.dapi_channel:
+                        # im converted to float in convolve_2d so no point changing dtype beforehand.
+                        im_filtered = utils.morphology.convolve_2d(im_filtered, filter_kernel) * scale
+                        if nbp_scale.r_smooth is not None:
+                            # oa convolve uses lots of memory and much slower here.
+                            im_filtered = utils.morphology.imfilter(im_filtered, smooth_kernel, oa=False)
+                        im_filtered[:, bad_columns] = 0
+                        # get_info is quicker on int32 so do this conversion first.
+                        im_filtered = np.rint(im_filtered, np.zeros_like(im_filtered, dtype=np.int32), casting="unsafe")
+                        # only use image unaffected by strip_hack to get information from tile
+                        good_columns = np.setdiff1d(np.arange(nbp_basic.tile_sz), bad_columns)
+                        (
+                            nbp.auto_thresh[t, r, c],
+                            hist_counts_trc,
+                            nbp_debug.n_clip_pixels[t, r, c],
+                            nbp_debug.clip_extract_scale[t, r, c],
+                        ) = extract.get_extract_info(
+                            im_filtered[:, good_columns],
+                            config["auto_thresh_multiplier"],
+                            hist_bin_edges,
+                            max_pixel_value,
+                            scale,
+                            nbp_debug.z_info,
+                        )
 
-                        if not nbp_basic.is_3d:
-                            im_raw = extract.focus_stack(im_raw)
-                        im, bad_columns = extract.strip_hack(im_raw)  # find faulty columns
-                        del im_raw
-                        # This will deconcolve dapis as well, but I think that is what we want.
-                        if config["deconvolve"]:
-                            im = deconvolution.wiener_deconvolve(im, config["wiener_pad_shape"], wiener_filter)
-                        if c == nbp_basic.dapi_channel:
-                            if filter_kernel_dapi is not None:
-                                im = utils.morphology.top_hat(im, filter_kernel_dapi)
-                        elif c != nbp_basic.dapi_channel:
-                            # im converted to float in convolve_2d so no point changing dtype beforehand.
-                            im = utils.morphology.convolve_2d(im, filter_kernel) * scale
-                            if nbp_scale.r_smooth is not None:
-                                # oa convolve uses lots of memory and much slower here.
-                                im = utils.morphology.imfilter(im, smooth_kernel, oa=False)
-                            im[:, bad_columns] = 0
-                            # get_info is quicker on int32 so do this conversion first.
-                            im = np.rint(im, np.zeros_like(im, dtype=np.int32), casting="unsafe")
-                            # only use image unaffected by strip_hack to get information from tile
-                            good_columns = np.setdiff1d(np.arange(nbp_basic.tile_sz), bad_columns)
-                            (
-                                nbp.auto_thresh[t, r, c],
-                                hist_counts_trc,
-                                nbp_debug.n_clip_pixels[t, r, c],
-                                nbp_debug.clip_extract_scale[t, r, c],
-                            ) = extract.get_extract_info(
-                                im[:, good_columns],
-                                config["auto_thresh_multiplier"],
-                                hist_bin_edges,
-                                max_tiff_pixel_value,
-                                scale,
-                                nbp_debug.z_info,
+                        # Deal with pixels outside uint16 range when saving
+                        if c != nbp_basic.dapi_channel and nbp_debug.n_clip_pixels[t, r, c] > config["n_clip_warn"]:
+                            warnings.warn(
+                                f"\nTile {t}, round {r}, channel {c} has "
+                                f"{nbp_debug.n_clip_pixels[t, r, c]} pixels\n"
+                                f"that will be clipped when converting to uint16."
                             )
-
-                            # Deal with pixels outside uint16 range when saving
-                            if c != nbp_basic.dapi_channel and nbp_debug.n_clip_pixels[t, r, c] > config["n_clip_warn"]:
-                                warnings.warn(
-                                    f"\nTile {t}, round {r}, channel {c} has "
-                                    f"{nbp_debug.n_clip_pixels[t, r, c]} pixels\n"
-                                    f"that will be clipped when converting to uint16."
-                                )
-                            if (
-                                c != nbp_basic.dapi_channel
-                                and nbp_debug.n_clip_pixels[t, r, c] > config["n_clip_error"]
-                            ):
-                                raise ValueError(
-                                    f"{t=}, {r=}, {c=} filter image clipped {nbp_debug.n_clip_pixels[t, r, c]} pixels"
-                                )
-                            if r != nbp_basic.anchor_round:
-                                nbp.hist_counts[:, r, c] += hist_counts_trc
-                        # delay gaussian blurring of preseq until after reg to give it a better chance
-                        if nbp_basic.is_3d:
-                            saved_im = tiles_io.save_image(
-                                nbp_file,
-                                nbp_basic,
-                                file_type,
-                                im,
-                                t,
-                                r,
-                                c,
-                                suffix="_raw" if r == pre_seq_round else "",
-                                num_rotations=config["num_rotations"],
+                        if c != nbp_basic.dapi_channel and nbp_debug.n_clip_pixels[t, r, c] > config["n_clip_error"]:
+                            raise ValueError(
+                                f"{t=}, {r=}, {c=} filter image clipped {nbp_debug.n_clip_pixels[t, r, c]} pixels"
                             )
-                            del im
-                        else:
-                            im_all_channels_2d[c] = im
+                        if r != nbp_basic.anchor_round:
+                            nbp.hist_counts[:, r, c] += hist_counts_trc
+                    # delay gaussian blurring of preseq until after reg to give it a better chance
+                    if nbp_basic.is_3d:
+                        saved_im = tiles_io.save_image(
+                            nbp_file,
+                            nbp_basic,
+                            file_type,
+                            im_filtered,
+                            t,
+                            r,
+                            c,
+                            suffix="_raw" if r == pre_seq_round else "",
+                            num_rotations=config["num_rotations"],
+                        )
+                        del im_filtered
+                    else:
+                        im_all_channels_2d[c] = im_filtered
                     if return_filtered_image:
                         image_t[r, c] = saved_im
                     pixel_unique_values, pixel_unique_counts = np.unique(saved_im, return_counts=True)

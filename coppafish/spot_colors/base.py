@@ -170,11 +170,11 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
                                                use_channels[c], yxz_transform, apply_shift=False)
                 pbar.update(1)
         # subtract tile pixel shift value so that bg_colours are in range -15_000 to 50_000 (approx)
-        valid = bg_colours > 0
+        valid = (bg_colours > 0).all(1)
         bg_colours[valid] = bg_colours[valid] - nbp_basic.tile_pixel_value_shift
         # repeat bg_colours so it is the same shape as spot_colors
         bg_colours = np.repeat(bg_colours[:, None, :], n_use_rounds, axis=1)
-        bg_colours[valid] = bg_colours[valid] * bg_scale[t, use_rounds, use_channels]
+        bg_colours[valid] = bg_colours[valid] * bg_scale[t][np.ix_(use_rounds, use_channels)]
     # Remove shift so now spots outside bounds have color equal to - nbp_basic.tile_pixel_shift_value.
     # It is impossible for any actual spot color to be this due to clipping at the extract stage.
     spot_colors = spot_colors - nbp_basic.tile_pixel_value_shift

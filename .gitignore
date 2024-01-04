@@ -6,3 +6,4 @@ coppafish.egg-info
 **/*.egg
 **/.DS_Store
 **/*.pytest_cache
+**/.vscode
