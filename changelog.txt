@@ -3,6 +3,7 @@
  * Bled codes are normalised for each gene outside of a gene for loop, reducing OMP computation time.
  * The Viewer now has every hotkey described, these can be shown by opening the Viewer then pressing Shift + k.
  * Improved pixel value histograms in the PDF diagnostics for extract and filter.
+ * BuildPDF is called fewer times throughout the pipeline to reduce compute time.
 
 
 2024/01/03 Alpha Update (v0.7.1):
