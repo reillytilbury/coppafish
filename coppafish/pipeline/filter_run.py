@@ -243,7 +243,7 @@ def run_filter(
                             file_exists = tiles_io.image_exists(file_path, file_type)
                             file_path_raw = nbp_file.tile_unfiltered[t][r][c]
                             file_exists_raw = tiles_io.image_exists(file_path_raw, file_type)
-                        else:
+                        if r == pre_seq_round:
                             file_path = nbp_file.tile[t][r][c]
                             file_path = file_path[: file_path.index(file_type)] + "_raw" + file_type
                             file_exists = tiles_io.image_exists(file_path, file_type)
@@ -269,7 +269,7 @@ def run_filter(
                         else:
                             # Only need to load in mid-z plane if 3D.
                             if nbp_basic.is_3d:
-                                im = tiles_io.load_image(
+                                saved_im = tiles_io.load_image(
                                     nbp_file,
                                     nbp_basic,
                                     file_type,
@@ -281,7 +281,9 @@ def run_filter(
                                     apply_shift=False,
                                 )
                                 if not (r == nbp_basic.anchor_round and c == nbp_basic.dapi_channel):
-                                    im = preprocessing.shift_pixels(im, -nbp_basic.tile_pixel_value_shift)
+                                    saved_im = preprocessing.offset_pixels_by(
+                                        saved_im, -nbp_basic.tile_pixel_value_shift
+                                    )
                             else:
                                 im = im_all_channels_2d[c].astype(np.int32) - nbp_basic.tile_pixel_value_shift
                             (
@@ -353,33 +355,9 @@ def run_filter(
                                 c != nbp_basic.dapi_channel
                                 and nbp_debug.n_clip_pixels[t, r, c] > config["n_clip_error"]
                             ):
-                                n_clip_error_images += 1
-                                message = (
-                                    f"\nNumber of images for which more than {config['n_clip_error']} pixels "
-                                    f"clipped in conversion to uint16 is {n_clip_error_images}."
+                                raise ValueError(
+                                    f"{t=}, {r=}, {c=} filter image clipped {nbp_debug.n_clip_pixels[t, r, c]} pixels"
                                 )
-                                if n_clip_error_images >= config["n_clip_error_images_thresh"]:
-                                    # create new Notebook to save info obtained so far
-                                    nb_fail_name = os.path.join(
-                                        nbp_file.output_dir,
-                                        "notebook_extract_error.npz",
-                                    )
-                                    nb_fail = Notebook(nb_fail_name, None)
-                                    # change names of pages so can add extra properties not in json file.
-                                    nbp.name = "extract_fail"
-                                    nbp_debug.name = "extract_debug_fail"
-                                    # record where failure occurred
-                                    nbp.fail_trc = np.array([t, r, c])
-                                    nbp_debug.fail_trc = np.array([t, r, c])
-                                    nb_fail += nbp
-                                    nb_fail += nbp_debug
-                                    raise ValueError(f"{message}\nResults up till now saved as {nb_fail_name}.")
-                                else:
-                                    warnings.warn(
-                                        f"{message}\nWhen this reaches {config['n_clip_error_images_thresh']}"
-                                        f", the extract step of the algorithm will be interrupted."
-                                    )
-
                             if r != nbp_basic.anchor_round:
                                 nbp.hist_counts[:, r, c] += hist_counts_trc
                         # delay gaussian blurring of preseq until after reg to give it a better chance
@@ -396,23 +374,19 @@ def run_filter(
                                 num_rotations=config["num_rotations"],
                             )
                             del im
-                            if return_filtered_image:
-                                image_t[r, c] = saved_im
-                            pixel_unique_values, pixel_unique_counts = np.unique(saved_im, return_counts=True)
-                            del saved_im
-                            if pixel_unique_values.size <= 1:
-                                raise ValueError(
-                                    f"Filtered image for {t=}, {r=}, {c=} only contains unique pixel "
-                                    + "value {pixel_unique_values}"
-                                )
-                            nbp_debug.pixel_unique_values[t][r][c][
-                                : pixel_unique_values.size
-                            ] = pixel_unique_values.astype(int)
-                            nbp_debug.pixel_unique_counts[t][r][c][
-                                : pixel_unique_counts.size
-                            ] = pixel_unique_counts.astype(int)
                         else:
                             im_all_channels_2d[c] = im
+                    if return_filtered_image:
+                        image_t[r, c] = saved_im
+                    pixel_unique_values, pixel_unique_counts = np.unique(saved_im, return_counts=True)
+                    del saved_im
+                    if pixel_unique_values.size <= 1:
+                        raise ValueError(
+                            f"Filtered image for {t=}, {r=}, {c=} only contains unique pixel "
+                            + "value {pixel_unique_values}"
+                        )
+                    nbp_debug.pixel_unique_values[t][r][c][: pixel_unique_values.size] = pixel_unique_values.astype(int)
+                    nbp_debug.pixel_unique_counts[t][r][c][: pixel_unique_counts.size] = pixel_unique_counts.astype(int)
                     pbar.update(1)
                 if not nbp_basic.is_3d:
                     tiles_io.save_image(

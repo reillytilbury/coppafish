@@ -506,6 +506,7 @@ def get_all_coefs(pixel_colors: jnp.ndarray, bled_codes: jnp.ndarray, background
     with tqdm(total=max_genes, disable=no_verbose) as pbar:
         pbar.set_description('Finding OMP coefficients for each pixel')
         for i in range(max_genes):
+            jax.clear_caches()
             if i == 0:
                 # Background coefs don't change, hence contribution to variance won't either.
                 added_genes, pass_score_thresh, background_variance = \

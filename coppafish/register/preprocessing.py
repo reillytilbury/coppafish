@@ -9,7 +9,7 @@ from ..setup import NotebookPage
 from ..utils import tiles_io
 
 
-def shift_pixels(image: npt.NDArray[np.uint16], tile_pixel_value_shift: int) -> npt.NDArray[np.int32]:
+def offset_pixels_by(image: npt.NDArray[np.uint16], tile_pixel_value_shift: int) -> npt.NDArray[np.int32]:
     """
     Apply an integer, negative shift to every image pixel and convert datatype from uint16 to int32.
 
