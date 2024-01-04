@@ -271,7 +271,6 @@ def run_filter(
                         im_raw = extract.focus_stack(im_raw)
                     im_filtered, bad_columns = extract.strip_hack(im_raw)  # check for faulty columns
                     assert bad_columns.size == 0, f"Bad column(s) were found during image filtering: {t=}, {r=}, {c=}"
-                    print(f"{bad_columns.size=}")
                     del im_raw
                     if config["deconvolve"]:
                         # Deconvolves dapi images too
