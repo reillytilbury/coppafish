@@ -148,7 +148,7 @@ def initialize_nb(config_file: str) -> Notebook:
         )
         print("Are you sure you want to continue? (y or n) ", end='')
         user_input = input()
-        if not user_input.strip().lower() == 'y':
+        if user_input.strip().lower() != 'y':
             print("Exiting...")
             sys.exit()
     return nb
