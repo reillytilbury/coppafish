@@ -171,6 +171,7 @@ def check_color_nan(colors: np.ndarray, nbp_basic: NotebookPage) -> None:
         nan_codes = np.where(use_colors == invalid_value)
     n_nan_spots = nan_codes[0].size
     if n_nan_spots > 0:
+        print(f"{n_nan_spots=}")
         s = nan_codes[0][0]
         # round, channel number in spot_colors different from in use_spot_colors.
         r = np.arange(n_rounds)[nan_codes[1][0]]
