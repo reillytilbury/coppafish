@@ -5,7 +5,8 @@
  * Improved pixel value histograms in the PDF diagnostics for extract and filter.
  * BuildPDF is called fewer times throughout the pipeline to reduce compute time.
  * Middle z plane selection for registration with few z planes bug fixed.
- * OMP jax memory leaking is reduced or fixed.
+ * Handling of invalid spot colours and their background colours bug fix.
+ * jax memory leak in OMP is reduced or fixed.
 
 
 2024/01/03 Alpha Update (v0.7.1):
