@@ -3,6 +3,7 @@ import zarr
 import numbers
 import itertools
 import numpy as np
+import math as maths
 from numcodecs import Blosc
 try:
     import jax.numpy as jnp
@@ -11,7 +12,7 @@ except ImportError:
 from tqdm import tqdm
 import numpy_indexed
 import numpy.typing as npt
-from typing import List, Tuple, Union, Optional
+from typing import List, Tuple, Union, Optional, Any
 
 from ..setup import NotebookPage
 from ..register import preprocessing
@@ -57,10 +58,12 @@ def _save_image(image: Union[npt.NDArray[np.uint16], jnp.ndarray], file_path: st
     if file_type.lower() == '.npy':
         np.save(file_path, image)
     elif file_type.lower() == '.zarr':
+        compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
         # We chunk each z plane individually, since single z planes are often retrieved. We also chunk x and y so 
         # that each chunk is at least 1MB, as suggested in the zarr documentation.
-        compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
-        chunks = (None, 750, 750) if image.ndim == 3 else (750, 750)
+        chunk_size_yx = 750
+        chunk_count_yx = maths.ceil(image.shape[1] * image.shape[2] / (chunk_size_yx * chunk_size_yx))
+        chunks = (None, chunk_count_yx, chunk_count_yx) if image.ndim == 3 else (chunk_count_yx, chunk_count_yx)
         zarray = zarr.open(
             file_path, mode='w', zarr_version=2, shape=image.shape, chunks=chunks, dtype='|u2', 
             synchronizer=zarr.ThreadSynchronizer(), compressor=compressor)
@@ -69,24 +72,36 @@ def _save_image(image: Union[npt.NDArray[np.uint16], jnp.ndarray], file_path: st
         raise ValueError(f'Unsupported `file_type`: {file_type.lower()}')
 
 
-def _load_image(file_path: str, file_type: str, mmap_mode: str = None) -> npt.NDArray[np.uint16]:
+def _load_image(file_path: str, file_type: str, indices: Optional[Union[Tuple[Any], int]] = None, 
+                mmap_mode: str = None,
+                ) -> npt.NDArray[np.uint16]:
     """
     Read in image from file_path location.
 
     Args:
         file_path (str): image location.
         file_type (str): file type. Either `'.npy'` or `'.zarr'`.
+        indices (int or tuple of int, optional): coordinate indices to retrieve from the image. Default: entire image.
         mmap_mode (str, optional): the mmap_mode for numpy loading only. Default: no mapping.
 
     Returns `ndarray[uint16]`: loaded image.
 
     Raises:
         ValueError: unsupported file type.
+
+    Notes:
+        - For zarr, if indices is None then the entire image will be loaded into memory (not memory mapped like numpy), 
+            which can be slower if you only need a subset of the image.
     """
+    if indices is None:
+        indices = ...
+    else:
+        assert isinstance(indices, (int, tuple)), "Coordinate indices must be type tuple or int"
+
     if file_type.lower() == '.npy':
-        return np.load(file_path, mmap_mode=mmap_mode)
+        return np.load(file_path, mmap_mode=mmap_mode)[indices]
     elif file_type.lower() == '.zarr':
-        return zarr.open(file_path, mode='r')[...]
+        return zarr.open(file_path, mode='r')[indices]
     else:
         raise ValueError(f'Unsupported `file_type`: {file_type.lower()}')
 
@@ -218,15 +233,12 @@ def load_image(nbp_file: NotebookPage, nbp_basic: NotebookPage, file_type: str, 
                 if len(yxz) != 3:
                     raise ValueError(f'Loading in a 3D tile but dimension of coordinates given is {len(yxz)}.')
                 if yxz[0] is None and yxz[1] is None:
-                    try:
-                        image = _load_image(file_path, file_type, mmap_mode='r')[yxz[2]]
-                    except ValueError:
-                        image = _load_image(file_path, file_type, mmap_mode='r+')[yxz[2]]
+                    image = _load_image(file_path, file_type, indices=yxz[2], mmap_mode='r')
                     if image.ndim == 3:
                         image = np.moveaxis(image, 0, 2)
                 else:
-                    coord_index = np.ix_(yxz[0], yxz[1], yxz[2])
-                    image = np.moveaxis(_load_image(file_path, file_type, mmap_mode='r'), 0, 2)[coord_index]
+                    coord_index_zyx = np.ix_(yxz[2], yxz[0], yxz[1])
+                    image = np.moveaxis(_load_image(file_path, file_type, indices=coord_index_zyx, mmap_mode='r'), 0, 2)
             else:
                 if len(yxz) != 2:
                     raise ValueError(f'Loading in a 2D tile but dimension of coordinates given is {len(yxz)}.')
@@ -237,8 +249,8 @@ def load_image(nbp_file: NotebookPage, nbp_basic: NotebookPage, file_type: str, 
             if nbp_basic.is_3d:
                 if yxz.shape[1] != 3:
                     raise ValueError(f'Loading in a 3D tile but dimension of coordinates given is {yxz.shape[1]}.')
-                coord_index = tuple(np.asarray(yxz[:, i]) for i in range(3))
-                image = np.moveaxis(_load_image(file_path, file_type, mmap_mode='r'), 0, 2)[coord_index]
+                coord_index_zyx = tuple(list(yxz[:, i]) for i in [2, 0, 1])
+                image = _load_image(file_path, file_type, indices=coord_index_zyx, mmap_mode='r')
             else:
                 if yxz.shape[1] != 2:
                     raise ValueError(f'Loading in a 2D tile but dimension of coordinates given is {yxz.shape[1]}.')
@@ -257,8 +269,6 @@ def load_image(nbp_file: NotebookPage, nbp_basic: NotebookPage, file_type: str, 
         else:
             # Use mmap when only loading in part of image
             image = _load_image(file_path, file_type, mmap_mode='r')[c]
-    # if apply_shift and not (r == nbp_basic.anchor_round and c == nbp_basic.dapi_channel):
-    #     image = image.astype(np.int32) - nbp_basic.tile_pixel_value_shift
     return image
 
 

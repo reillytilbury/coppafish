@@ -7,6 +7,7 @@
  * Middle z plane selection for registration with few z planes bug fixed.
  * Handling of invalid spot colours and their background colours bug fix.
  * jax memory leak in OMP is reduced or fixed.
+ * Subset image loading for extract and filtered images is now faster on zarr.
 
 
 2024/01/03 Alpha Update (v0.7.1):
