@@ -255,7 +255,7 @@ class BuildPDF:
                     g_spots = np.argsort(-gene_probs[:, g])
                     # Sorted probabilities, with greatest score at index 0
                     g_probs = gene_probs[g_spots, g]
-                    g_bled_code = nb.call_spots.bled_codes[g, :, nb.basic_info.use_channels]  # rounds x channels
+                    g_bled_code = nb.call_spots.bled_codes[g, :, nb.basic_info.use_channels].T  # rounds x channels
                     g_r_dot_products = np.sum(spot_colours_rnorm * g_bled_code[None, :, :], 2)
                     fig, axes = self.create_empty_page(2, 2, gridspec_kw={"width_ratios": [2, 1]})
                     self.empty_plot_ticks(axes[1, 1])
@@ -281,7 +281,7 @@ class BuildPDF:
                     axes[0, 1].set_title("bled code")
                     axes[0, 1].set_xlabel("channels")
                     axes[0, 1].set_xticks(
-                        np.arange(len(nb.basic_info.use_channels)), labels=(str(c) for c in nb.basic_info.use_channels)
+                        range(len(nb.basic_info.use_channels)), labels=(str(c) for c in nb.basic_info.use_channels)
                     )
                     cbar = fig.colorbar(im, ax=axes[0, 1], orientation="vertical")
                     cbar.ax.set_ylabel("Score", rotation=-90, va="bottom")
