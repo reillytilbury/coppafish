@@ -63,7 +63,7 @@ def get_coef_images(nb: Notebook, spot_no: int, method, im_size: List[int]) -> T
         nb.basic_info, 
         nb.extract, 
         nb.filter, 
-    ) / color_norm
+    )[0] / color_norm
 
     # Only look at pixels with high enough intensity - same as in full pipeline
     spot_intensity = get_spot_intensity(np.abs(spot_colors))

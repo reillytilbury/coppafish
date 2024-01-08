@@ -111,11 +111,11 @@ def get_reference_spots(
             print(f"Tile {np.where(use_tiles==t)[0][0]+1}/{n_use_tiles}")
             # this line will return invalid_value for spots outside tile bounds on particular r/c.
             if nbp_basic.use_preseq:
-                nd_spot_colors_use[in_tile], bg_colours[in_tile] = spot_colors_base.get_spot_colors(
+                nd_spot_colors_use[in_tile], _, bg_colours[in_tile] = spot_colors_base.get_spot_colors(
                     jnp.asarray(nd_local_yxz[in_tile]), t, transform, nbp_file, nbp_basic, nbp_extract, nbp_filter
                 )
             if not nbp_basic.use_preseq:
-                nd_spot_colors_use[in_tile] = spot_colors_base.get_spot_colors(
+                nd_spot_colors_use[in_tile], _ = spot_colors_base.get_spot_colors(
                     jnp.asarray(nd_local_yxz[in_tile]), t, transform, nbp_file, nbp_basic, nbp_extract, nbp_filter
                 )
 
