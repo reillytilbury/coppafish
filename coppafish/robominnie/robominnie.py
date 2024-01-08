@@ -15,7 +15,7 @@ import scipy.stats
 import numpy as np
 from tqdm import tqdm
 import numpy.typing as npt
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Tuple, Optional
 
 from coppafish import utils
 from coppafish.pipeline import run
@@ -203,7 +203,9 @@ class RoboMinnie:
         if self.n_planes < 4:
             warnings.warn("Coppafish may break with fewer than four z planes")
 
-    def generate_gene_codes(self, n_genes: int = 20, n_rounds: int = None) -> Dict:
+    def generate_gene_codes(
+        self, n_genes: int = 20, n_rounds: Optional[int] = None, n_channels: Optional[int] = None
+    ) -> Dict:
         """
         Generates random gene codes based on reed-solomon principle, using the lowest degree polynomial possible
         relative to the number of genes wanted. Saves codes in self, can be used in function `Add_Spots`. The `i`th
@@ -221,10 +223,12 @@ class RoboMinnie:
             See [here](https://en.wikipedia.org/wiki/Reed%E2%80%93Solomon_error_correction) for more details.
         """
         self.instructions.append(utils.base.get_function_name())
-        if n_rounds == None:
+        if n_rounds is None:
             n_rounds = self.n_rounds
+        if n_channels is None:
+            n_channels = self.n_channels
 
-        codes = utils.base.reed_solomon_codes(n_genes, n_rounds)
+        codes = utils.base.reed_solomon_codes(n_genes, n_rounds, n_channels)
         self.codes = codes
         return codes
 
@@ -822,8 +826,8 @@ class RoboMinnie:
             "tile_centre": [self.n_tile_yx[0] / 2, self.n_tile_yx[1] / 2, self.n_planes / 2],
             "tilepos_yx": self.tile_origins_yx,
             "tilepos_yx_nd2": list(reversed(self.tile_origins_yx)),
-            "channel_camera": [1, 1, 2, 3, 2, 3, 3, 3],
-            "channel_laser": [1, 1, 2, 3, 2, 3, 3, 3],
+            "channel_camera": [1] * (self.n_channels + 1),
+            "channel_laser": [1] * (self.n_channels + 1),
             "xy_pos": self.tile_xy_pos,
             "nz": self.n_planes,
         }
