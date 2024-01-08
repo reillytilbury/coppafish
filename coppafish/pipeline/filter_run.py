@@ -286,18 +286,16 @@ def run_filter(
                         if nbp_scale.r_smooth is not None:
                             # oa convolve uses lots of memory and much slower here.
                             im_filtered = utils.morphology.imfilter(im_filtered, smooth_kernel, oa=False)
-                        im_filtered[:, bad_columns] = 0
                         # get_info is quicker on int32 so do this conversion first.
                         im_filtered = np.rint(im_filtered, np.zeros_like(im_filtered, dtype=np.int32), casting="unsafe")
                         # only use image unaffected by strip_hack to get information from tile
-                        good_columns = np.setdiff1d(np.arange(nbp_basic.tile_sz), bad_columns)
                         (
                             nbp.auto_thresh[t, r, c],
                             hist_counts_trc,
                             nbp_debug.n_clip_pixels[t, r, c],
                             nbp_debug.clip_extract_scale[t, r, c],
                         ) = extract.get_extract_info(
-                            im_filtered[:, good_columns],
+                            im_filtered,
                             config["auto_thresh_multiplier"],
                             hist_bin_edges,
                             max_pixel_value,
