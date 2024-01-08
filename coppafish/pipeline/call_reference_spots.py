@@ -15,7 +15,7 @@ from coppafish import extract
 from ..call_spots import get_spot_intensity
 from tqdm import tqdm
 from itertools import product
-# import matplotlib
+import matplotlib
 import matplotlib.pyplot as plt
 
 
@@ -139,6 +139,7 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
     n_spots, n_dyes, use_channels = colours.shape[0], len(nbp_basic.dye_names), nbp_basic.use_channels
     target_channel_strength = [1, 1, 0.9, 0.8, 0.8, 1, 1]
     use_tiles = nbp_basic.use_tiles
+    colours_raw = colours.copy()
 
     # initialise bleed matrices
     initial_bleed_matrix = initial_bleed_matrix / np.linalg.norm(initial_bleed_matrix, axis=0)
@@ -158,8 +159,8 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
             continue
         tile_colours = tile_colours[weak_bg]
         # normalise pixel colours by round and channel on this tile
-        colour_norm_factor_initial[t] = np.percentile(abs(tile_colours), 95, axis=0)
-        colours[spot_tile == t] /= colour_norm_factor_initial[t]
+        colour_norm_factor_initial[t] = 1 / np.percentile(abs(tile_colours), 95, axis=0)
+        colours[spot_tile == t] *= colour_norm_factor_initial[t]
     # Remove background
     bg_codes = np.zeros((n_spots, n_rounds, n_channels_use))
     bg = np.percentile(colours, 25, axis=1)
@@ -325,7 +326,7 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
     nbp.gene_codes = gene_codes
     # Now expand variables to have n_channels channels instead of n_channels_use channels. For some variables, we
     # also need to swap axes as the expand channels function assumes the last axis is the channel axis.
-    nbp.color_norm_factor = utils.base.expand_channels(colour_norm_factor_initial / total_scale,
+    nbp.color_norm_factor = utils.base.expand_channels(colour_norm_factor_initial * total_scale,
                                                        use_channels, nbp_basic.n_channels)
     nbp.initial_bleed_matrix = utils.base.expand_channels(initial_bleed_matrix.T, use_channels, nbp_basic.n_channels).T
     nbp.bleed_matrix = utils.base.expand_channels(bleed_matrix[-1].T, use_channels, nbp_basic.n_channels).T
@@ -415,6 +416,57 @@ def plot_svd(gene_name, tile, colours_tg, u, v):
     plt.close(fig)
 
 
+def view_bleed_calculation(colours_scaled: np.ndarray, gene_no: np.ndarray, gene_codes: np.ndarray, dye_names: list):
+    """
+    View the bleed matrix calculation for each dye and channel
+    Args:
+        colours_scaled: n_spots_use x n_rounds x n_channels_use array of spot colours
+        gene_no: n_spots_use x n_genes array of gene assignments
+        gene_codes: n_genes x n_rounds array of gene codes
+        dye_names: list of dye names
+    """
+    n_dyes = len(dye_names)
+    n_rounds = gene_codes.shape[1]
+    n_channels_use = colours_scaled.shape[2]
+    bleed_matrix = np.zeros((n_channels_use, n_dyes))
+    fig, ax = plt.subplots(2, n_dyes + 1, figsize=(20, 10))
+    for d in range(n_dyes):
+        dye_d_spots = np.zeros((0, n_channels_use))
+        for r in range(n_rounds):
+            dye_d_round_r_genes = np.where(gene_codes[:, r] == d)[0]
+            is_relevant_gene = np.isin(gene_no, dye_d_round_r_genes)
+            dye_d_spots = np.concatenate((dye_d_spots, colours_scaled[is_relevant_gene, r]))
+        is_positive = np.sum(dye_d_spots, axis=1) > 0
+        dye_d_spots = dye_d_spots[is_positive]
+        order = np.argsort(np.sum(dye_d_spots, axis=1))[::-1]
+        dye_d_spots = dye_d_spots[order]
+        ax[0, d].imshow(dye_d_spots, aspect='auto', interpolation='none')
+        ax[0, d].set_title(dye_names[d] + ' spots')
+        ax[0, d].set_ylabel('spots')
+        ax[0, d].set_xlabel('channel')
+        if len(dye_d_spots) == 0:
+            continue
+        u, s, v = svds(dye_d_spots, k=1)
+        v = v[0]
+        v *= np.sign(v[np.argmax(np.abs(v))])  # Make sure the largest element is positive
+        bleed_matrix[iter, :, d] = v
+        ax[1, d].imshow(v[None, :], aspect='auto', interpolation='none')
+        ax[1, d].set_title(dye_names[d] + ' bleed. Eigenvalue = {:.3f}'.format(s))
+        ax[1, d].set_xlabel('channel')
+    # Now we want to plot the bleed matrix
+    ax[0, -1].imshow(bleed_matrix, aspect='auto', interpolation='none')
+    ax[0, -1].set_title('Bleed matrix')
+    ax[0, -1].set_xlabel('dye')
+    ax[0, -1].set_ylabel('channel')
+    ax[0, -1].set_xticks(range(n_dyes))
+    ax[0, -1].set_xticklabels(dye_names, rotation=90)
+
+    # turn off blank axes
+    ax[1, -1].axis('off')
+    plt.show()
+
+
+
 def plot_free_comparison(F, b, A, gene_names, save=False):
     predicted = np.zeros_like(F)
     for t in range(F.shape[0]):
@@ -482,79 +534,113 @@ def view_A_fit(F, G, n, t, r, c, save=False):
         plt.show()
 
 
-def view_all_genes(bled_codes_tile_indep, gene_names, scale_correction):
-    n_genes, n_rounds, n_channels = bled_codes_tile_indep.shape
-    square_side = int(np.ceil(np.sqrt(n_genes)))
-    fig, ax = plt.subplots(square_side, 2 * square_side, figsize=(20, 10))
+def view_all_genes(free_bled_codes_tile_indep, gene_names, scale_correction):
+    """
+    View all genes in a grid of plots, with the tile independent free bled codes in the even columns and the odd columns
+    showing the scaled tile independent free bled codes. The scale here is the target matching scale which scales the
+    tile independent free bled codes to match the target channel strength as well as possible.
+    Args:
+        free_bled_codes_tile_indep: n_genes x n_rounds x n_channels array of tile independent free bled codes
+        gene_names: n_genes array of gene names
+        scale_correction: n_rounds x n_channels array of scale corrections
+    """
+    n_genes, n_rounds, n_channels = free_bled_codes_tile_indep.shape
+    height = int(np.ceil(np.sqrt(n_genes)))
+    width = 2 * height
+    fig, ax = plt.subplots(height, width, figsize=(20, 10))
+    scaled_free_bled_codes_tile_indep = free_bled_codes_tile_indep * scale_correction[None, :, :]
+    existing = np.max(free_bled_codes_tile_indep, axis=(1, 2)) > 0
+    scaled_free_bled_codes_tile_indep[existing] /= np.linalg.norm(scaled_free_bled_codes_tile_indep[existing],
+                                                                  axis=(1, 2))[:, None, None]
     # we will plot the raw codes in the even columns and the scaled codes in the odd columns
     for g in range(n_genes):
-        row = g // square_side
-        col = (g % square_side) * 2
-        ax[row, col].imshow(bled_codes_tile_indep[g].T, aspect='auto', interpolation='none', vmin=0,
-                            vmax=max(np.max(bled_codes_tile_indep[g]),
-                                     np.max(bled_codes_tile_indep[g] / scale_correction)))
-        if row == square_side - 1:
+        row = g // height
+        col = (g % height) * 2
+        ax[row, col].imshow(free_bled_codes_tile_indep[g].T, aspect='auto', interpolation='none', vmin=0,
+                            vmax=max(np.max(free_bled_codes_tile_indep[g]),
+                                     np.max(free_bled_codes_tile_indep[g] * scale_correction)))
+        if row == height - 1:
             ax[row, col].set_xlabel('Round')
         if col == 0:
-            ax[row, col].set_ylabel('Intensity')
+            ax[row, col].set_ylabel('Channel')
         ax[row, col].set_xticks([])
         ax[row, col].set_yticks([])
-        ax[row, col].set_title(gene_names[g] + 'raw', fontsize=6)
+        ax[row, col].set_title(gene_names[g] + ' raw', fontsize=6)
 
     for g in range(n_genes):
-        row = g // square_side
-        col = 2 * (g % square_side) + 1
-        ax[row, col].imshow(bled_codes_tile_indep[g].T / scale_correction.T, aspect='auto', interpolation='none', vmin=0,
-                            vmax=max(np.max(bled_codes_tile_indep[g]),
-                                     np.max(bled_codes_tile_indep[g] / scale_correction)))
-        if row == square_side - 1:
+        row = g // height
+        col = 2 * (g % height) + 1
+        ax[row, col].imshow(scaled_free_bled_codes_tile_indep[g].T, aspect='auto', interpolation='none', vmin=0,
+                            vmax=max(np.max(free_bled_codes_tile_indep[g]),
+                                     np.max(free_bled_codes_tile_indep[g] * scale_correction)))
+        if row == height - 1:
             ax[row, col].set_xlabel('Round')
         ax[row, col].set_xticks([])
         ax[row, col].set_yticks([])
-        ax[row, col].set_title(gene_names[g] + 'scaled', fontsize=6)
+        ax[row, col].set_title(gene_names[g] + ' scaled', fontsize=6)
 
     # loop through the rest of the axes and turn them off
-    for g in range(n_genes, square_side ** 2):
-        row = g // square_side
-        col = 2 * (g % square_side)
+    for g in range(n_genes, height ** 2):
+        row = g // height
+        col = 2 * (g % height)
         ax[row, col].axis('off')
         ax[row, col + 1].axis('off')
+
+    # for final row and column, plot the scale correction
+    row = height - 1
+    col = width - 1
+    ax[row, col].imshow(scale_correction.T, aspect='auto', interpolation='none')
+    ax[row, col].set_xlabel('Round')
+    ax[row, col].set_ylabel('Channel')
+    ax[row, col].set_xticks([])
+    ax[row, col].set_yticks([])
+    ax[row, col].set_title('Scale correction', fontsize=6)
 
     fig.suptitle('Tile independent free bled codes for all genes, scaled and unscaled')
     plt.show()
 
 
-def view_all_gene_round_strengths(bled_codes_tile_indep, gene_names, scale_correction: np.ndarray, save=False):
-    n_genes, n_rounds, n_channels = bled_codes_tile_indep.shape
+def view_all_gene_round_strengths(free_bled_codes_tile_indep, gene_names, scale_correction: np.ndarray):
+    """
+    View the round strengths for all genes in a grid of plots.
+    Args:
+        free_bled_codes_tile_indep: n_genes x n_rounds x n_channels array of tile independent free bled codes
+        gene_names: n_genes array of gene names
+        scale_correction: n_rounds x n_channels total auxiliary scale correction
+        save: bool, optional. Whether to save the figure or not
+    """
+    n_genes, n_rounds, n_channels = free_bled_codes_tile_indep.shape
     square_side = int(np.ceil(np.sqrt(n_genes)))
     fig, ax = plt.subplots(square_side, square_side, figsize=(20, 10))
+    scaled_free_bled_codes_tile_indep = free_bled_codes_tile_indep * scale_correction[None, :, :]
+    existing = np.max(free_bled_codes_tile_indep, axis=(1, 2)) > 0
+    scaled_free_bled_codes_tile_indep[existing] /= np.linalg.norm(scaled_free_bled_codes_tile_indep[existing],
+                                                                  axis=(1, 2))[:, None, None]
+    free_bled_round_strength = np.sum(free_bled_codes_tile_indep, axis=2)
+    free_bled_round_strength_scaled = np.sum(scaled_free_bled_codes_tile_indep, axis=2)
+    max_strength = max(np.max(free_bled_round_strength), np.max(free_bled_round_strength_scaled))
     for g in range(n_genes):
         row = g // square_side
         col = g % square_side
-        ax[row, col].plot(np.sum(bled_codes_tile_indep[g], axis=1))
-        ax[row, col].plot(np.sum(bled_codes_tile_indep[g] / scale_correction, axis=1))
+        ax[row, col].plot(free_bled_round_strength[g])
+        ax[row, col].plot(free_bled_round_strength_scaled[g])
         if row == square_side - 1:
             ax[row, col].set_xlabel('Round')
         if col == 0:
             ax[row, col].set_ylabel('Intensity')
         ax[row, col].set_xticks([])
         ax[row, col].set_yticks([])
+        ax[row, col].set_ylim(0, max_strength)
         ax[row, col].set_title(gene_names[g])
     for g in range(n_genes, square_side ** 2):
         row = g // square_side
         col = g % square_side
         ax[row, col].axis('off')
-    raw_round_strength = np.sum(bled_codes_tile_indep, axis=2)
-    scaled_round_strength = np.sum(bled_codes_tile_indep / scale_correction, axis=2)
-    raw_std = np.std(raw_round_strength)
-    scaled_std = np.std(scaled_round_strength)
+    cv = np.mean(np.std(free_bled_round_strength, axis=1)) / np.mean(free_bled_round_strength)
+    scaled_cv= np.mean(np.std(free_bled_round_strength_scaled, axis=1)) / np.mean(free_bled_round_strength_scaled)
     fig.suptitle('Tile independent free bled codes for all genes. Blue is unscaled, orange is scaled \n'
-                 'Raw Average Standard Deviation = {:.3f}, Scaled Average Standard Deviation = {:.3f}'.format(raw_std,scaled_std))
-    if save:
-        plt.savefig('/home/reilly/Desktop/tile_indep_free_bled_codes.png')
-        plt.close(fig)
-    else:
-        plt.show()
+                 'Raw Coef. of Variation = {:.3f}, Scaled Coef. of Variation = {:.3f}'.format(cv, scaled_cv))
+    plt.show()
 
 
 def weighted_mean(x, w):
@@ -679,3 +765,188 @@ def plot_aux_scale_iters(aux_scale: np.ndarray):
 
     plt.suptitle('Auxiliary scale for each round and channel')
     plt.show()
+
+
+def plot_bg_subtraction(colours: np.ndarray, bg_colours: np.ndarray, spot_tile: np.ndarray, bg_scale: np.ndarray,
+                        use_channels: np.ndarray):
+    """
+    Plot 2 raster plots of colours before and after subtracting background.
+    Args:
+        colours: n_spots x n_rounds x n_channels array of spot colours (bg removed)
+        bg_colours: n_spots x n_rounds x n_channels array of background colours
+        spot_tile: n_spots array of tile numbers
+        bg_scale: n_tiles x n_rounds x n_channels array of background scale
+        use_channels: n_channels array of channels in use
+    """
+    n_spots, n_rounds, n_channels = colours.shape
+    colours_post = colours.copy()
+    colours_pre = colours_post + bg_colours * bg_scale[spot_tile, :, :]
+    rc_max = np.max(colours_pre.reshape(n_spots, -1), axis=1)
+    rc_min = np.min(colours_pre.reshape(n_spots, -1), axis=1)
+    inlier_mask = (np.max(colours_pre.reshape(n_spots, -1), axis=1) < np.percentile(rc_max, 99)) * \
+                  (np.min(colours_pre.reshape(n_spots, -1), axis=1) > np.percentile(rc_min, 1))
+    colours_pre, colours_post = colours_pre[inlier_mask], colours_post[inlier_mask]
+    bg_colours = bg_colours[inlier_mask]
+    # reorder colours by strongest background
+    bg_strength = np.sum(np.abs(bg_colours), axis=(1, 2))
+    order = np.argsort(bg_strength)[::-1]
+    colours_pre, colours_post = colours_pre[order], colours_post[order]
+    # Need to reshape colours_pre and colours_post to be n_spots x (n_rounds x n_channels)
+    colours_pre = colours_pre.swapaxes(1, 2)
+    colours_post = colours_post.swapaxes(1, 2)
+    colours_pre = colours_pre.reshape((colours_pre.shape[0], -1))
+    colours_post = colours_post.reshape((colours_post.shape[0], -1))
+    # plot
+    fig, ax = plt.subplots(1, 2, figsize=(20, 10))
+    # Plot colours_pre
+    ax[0].imshow(colours_pre, aspect='auto', interpolation='none', vmin=np.percentile(colours_pre, 1),
+                 vmax=np.percentile(colours_pre, 99))
+    # plot vertical dotted lines to separate channels
+    for c in range(1, n_channels):
+        ax[0].axvline(c * n_rounds - 0.5, color='white', linestyle='--')
+    x_ticks = []
+    for c,r in product(range(n_channels), range(n_rounds)):
+        x_ticks.append('C{}R{}'.format(use_channels[c], r))
+    ax[0].set_xticks(np.arange(n_channels * n_rounds))
+    ax[0].set_xticklabels(x_ticks, rotation=90)
+    # plot_colours_post
+    ax[1].imshow(colours_post, aspect='auto', interpolation='none', vmin=np.percentile(colours_post, 1),
+                 vmax=np.percentile(colours_post, 99))
+    # plot vertical dotted lines to separate channels
+    for c in range(1, n_channels):
+        ax[1].axvline(c * n_rounds - 0.5, color='white', linestyle='--')
+    ax[1].set_xticks(np.arange(n_channels * n_rounds))
+    ax[1].set_xticklabels(x_ticks, rotation=90)
+    # set titles
+    ax[0].set_title('Before background subtraction')
+    ax[1].set_title('After background subtraction')
+    plt.suptitle('Raster plots of colours before and after background subtraction')
+    plt.show()
+
+
+def plot_initial_normalisation(colours: np.ndarray, spot_tile: np.ndarray, initial_norm_factor: np.ndarray,
+                               use_channels: np.ndarray):
+    """
+    Plot 3 raster plots of colours before normalisation, after normalisation and after normalisation and bg removal.
+    Args:
+        colours: n_spots x n_rounds x n_channels array of spot colours
+        spot_tile: n_spots array of tile numbers
+        initial_norm_factor: n_tiles x n_rounds x n_channels array of initial normalisation factor
+        use_channels: n_channels array of channels in use
+    """
+    n_spots, n_rounds, n_channels = colours.shape
+    colours_raw = colours.copy()
+    colours = colours_raw / initial_norm_factor[spot_tile, :, :]
+    bg_colours = np.percentile(colours, 25, axis=1)
+    bg_codes = np.repeat(bg_colours[:, None, :], n_rounds, axis=1)
+    colours_no_bg = colours - bg_codes
+    # reorder colours by strongest background
+    bg_strength = np.sum(np.abs(bg_colours), axis=1)
+    order = np.argsort(bg_strength)[::-1]
+    colours_raw, colours, colours_no_bg = colours_raw[order], colours[order], colours_no_bg[order]
+    vmin_raw, vmax_raw = np.percentile(colours_raw, 1), np.percentile(colours_raw, 99)
+    vmin, vmax = np.percentile(colours, 1), np.percentile(colours, 99)
+    vmin_no_bg, vmax_no_bg = np.percentile(colours_no_bg, 1), np.percentile(colours_no_bg, 99)
+    # Need to reshape colours_raw, colours and colours_no_bg to be n_spots x (n_rounds x n_channels)
+    colours_raw = colours_raw.swapaxes(1, 2)
+    colours = colours.swapaxes(1, 2)
+    colours_no_bg = colours_no_bg.swapaxes(1, 2)
+    colours_raw = colours_raw.reshape((colours_raw.shape[0], -1))
+    colours = colours.reshape((colours.shape[0], -1))
+    colours_no_bg = colours_no_bg.reshape((colours_no_bg.shape[0], -1))
+    # plot
+    fig, ax = plt.subplots(2, 3, figsize=(20, 10))
+    x_ticks = []
+    for c, r in product(range(n_channels), range(n_rounds)):
+        x_ticks.append('C{}R{}'.format(use_channels[c], r))
+    colour_list = [colours_raw, colours, colours_no_bg]
+    vmin_list = [vmin_raw, vmin, vmin_no_bg]
+    vmax_list = [vmax_raw, vmax, vmax_no_bg]
+    title_list = ['Raw', 'Scaled', 'Scaled and bg removed']
+    for i in range(3):
+        ax[0, i].imshow(colour_list[i], aspect='auto', interpolation='none', vmin=vmin_list[i], vmax=vmax_list[i])
+        ax[1, i].plot(np.percentile(colour_list[i], 90, axis=0), label='90', linestyle='--')
+        ax[1, i].plot(np.percentile(colour_list[i], 95, axis=0), label='95')
+        ax[1, i].plot(np.percentile(colour_list[i], 99, axis=0), label='99', linestyle='--')
+        ax[1, i].legend(loc='upper right')
+        ax[1, i].set_title(title_list[i] + ' percentiles')
+        for j in range(2):
+            # plot vertical dotted lines to separate channels
+            for c in range(1, n_channels):
+                ax[j, i].axvline(c * n_rounds - 0.5, color='white', linestyle='--')
+            ax[j, i].set_xticks(np.arange(n_channels * n_rounds))
+            ax[j, i].set_xticklabels(x_ticks, rotation=90, fontsize=4)
+            ax[j, i].set_yticks([])
+            ax[j, i].set_title(title_list[i])
+
+    plt.suptitle('Raster plots of colours before and after initial normalisation')
+    plt.show()
+
+
+def plot_final_normalisation(colours: np.ndarray, spot_tile: np.ndarray, gene_prob: np.ndarray,
+                             final_norm_factor: np.ndarray, use_channels: np.ndarray, gene_names: np.ndarray,
+                             gene: int = None, prob_thresh: float = 0.9, save: bool = False):
+    """
+    Plot raster plots of colours before and after final normalisation for a given gene. If gene is None, plot all
+    colours.
+    Args:
+        colours: n_spots x n_rounds x n_channels array of spot colours
+        spot_tile: n_spots array of tile numbers
+        gene_prob: n_spots x n_genes array of gene probabilities
+        final_norm_factor: n_tiles x n_rounds x n_channels array of final normalisation factor. This is the pointwise
+        division colour_norm_factor / initial_norm_factor
+        use_channels: n_channels array of channels in use
+        gene_names: n_genes array of gene names
+        gene: int, optional. The gene to plot
+        prob_thresh: float, optional. The probability threshold to use for assigning genes
+        save: bool, optional. Whether to save the figure
+    """
+    n_spots, n_rounds, n_channels = colours.shape
+    gene_no = np.argmax(gene_prob, axis=1)
+    gene_score = np.max(gene_prob, axis=1)
+    if gene is not None:
+        keep = (gene_score > prob_thresh) * (gene_no == gene)
+        colours = colours[keep]
+        spot_tile = spot_tile[keep]
+        order = np.argsort(np.sum(colours, axis=(1,2)))[::-1]
+    else:
+        # reorder colours by strongest gene no, then strongest gene score
+        order = np.lexsort((gene_score, gene_no))[::-1]
+    colours = colours[order]
+    spot_tile = spot_tile[order]
+    colours_norm = colours * final_norm_factor[spot_tile, :, :]
+    vmin, vmax = np.percentile(colours, 1), np.percentile(colours, 99)
+    vmin_norm, vmax_norm = np.percentile(colours_norm, 1), np.percentile(colours_norm, 99)
+    # Need to reshape colours and colours_norm to be n_spots x (n_rounds x n_channels)
+    colours = colours.reshape((colours.shape[0], -1))
+    colours_norm = colours_norm.reshape((colours_norm.shape[0], -1))
+    # plot
+    fig, ax = plt.subplots(2, 2, figsize=(20, 10))
+    x_ticks = []
+    for r, c in product(range(n_rounds), range(n_channels)):
+        x_ticks.append('R{}C{}'.format(r, use_channels[c]))
+    colour_list = [colours, colours_norm]
+    vmin_list = [vmin, vmin_norm]
+    vmax_list = [vmax, vmax_norm]
+    title_list = ['Raw', 'Scaled']
+    for i in range(2):
+        ax[0, i].imshow(colour_list[i], aspect='auto', interpolation='none', vmin=vmin_list[i], vmax=vmax_list[i])
+        ax[0, i].set_title(title_list[i])
+    for i in range(2):
+        ax[1, i].plot(np.mean(colour_list[i], axis=0), label='mean')
+        ax[1, i].set_title(title_list[i] + ' mean')
+    for i, j in product(range(2), range(2)):
+        # plot vertical dotted lines to separate channels
+        for c in range(1, n_channels):
+            ax[i, j].axvline(c * n_rounds - 0.5, color='white', linestyle='--')
+        ax[i, j].set_xticks(np.arange(n_channels * n_rounds))
+        ax[i, j].set_xticklabels(x_ticks, rotation=90, fontsize=5)
+    if gene is not None:
+        plt.suptitle('Raster plots of colours before and after final normalisation for gene {}'.format(gene_names[gene]))
+    else:
+        plt.suptitle('Raster plots of colours before and after final normalisation')
+    if save:
+        plt.savefig('/home/reilly/Desktop/final_normalisation.png')
+        plt.close(fig)
+    else:
+        plt.show()

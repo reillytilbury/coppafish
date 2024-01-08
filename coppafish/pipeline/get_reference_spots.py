@@ -101,13 +101,13 @@ def get_reference_spots(nbp_file: NotebookPage, nbp_basic: NotebookPage, nbp_fin
             print(f"Tile {np.where(use_tiles==t)[0][0]+1}/{n_use_tiles}")
             # this line will return invalid_value for spots outside tile bounds on particular r/c.
             if nbp_basic.use_preseq:
-                nd_spot_colors_use[in_tile], bg_colours[in_tile] = \
+                nd_spot_colors_use[in_tile], _, bg_colours[in_tile] = \
                     spot_colors_base.get_spot_colors(jnp.asarray(nd_local_yxz[in_tile]), t, transform, nbp_file, 
                                                      nbp_basic, nbp_extract)
             if not nbp_basic.use_preseq:
                 nd_spot_colors_use[in_tile] = \
                     spot_colors_base.get_spot_colors(jnp.asarray(nd_local_yxz[in_tile]), t, transform, nbp_file, 
-                                                     nbp_basic, nbp_extract)
+                                                     nbp_basic, nbp_extract)[0]
 
     # good means all spots that were in bounds of tile on every imaging round and channel that was used.
     good = ~np.any(nd_spot_colors_use == invalid_value, axis=(1, 2))
