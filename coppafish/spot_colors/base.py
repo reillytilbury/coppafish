@@ -148,6 +148,7 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
                         spot_colors[in_range, r, c] = image_all_channels[use_channels[c]][
                             tuple(np.asarray(yxz_transform[:, i]) for i in range(2))]
                 pbar.update(1)
+    invalid_value = -nbp_basic.tile_pixel_value_shift
     if use_bg:
         with tqdm(total=n_use_channels, disable=no_verbose) as pbar:
             pbar.set_description(
@@ -170,20 +171,20 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
                                                use_channels[c], yxz_transform, apply_shift=False)
                 pbar.update(1)
         # subtract tile pixel shift value so that bg_colours are in range -15_000 to 50_000 (approx)
-        valid = (bg_colours > 0).all(1)
-        bg_colours[valid] = bg_colours[valid] - nbp_basic.tile_pixel_value_shift
+        bg_colours = bg_colours - nbp_basic.tile_pixel_value_shift
         # repeat bg_colours so it is the same shape as spot_colors
         bg_colours = np.repeat(bg_colours[:, None, :], n_use_rounds, axis=1)
-        bg_colours[valid] = bg_colours[valid] * bg_scale[t][np.ix_(use_rounds, use_channels)][np.newaxis, ...]
+        bg_valid = (bg_colours != invalid_value).all((1, 2))
+        bg_colours[bg_valid] = bg_colours[bg_valid] * bg_scale[t][np.ix_(use_rounds, use_channels)][np.newaxis, ...]
     # Remove shift so now spots outside bounds have color equal to - nbp_basic.tile_pixel_shift_value.
     # It is impossible for any actual spot color to be this due to clipping at the extract stage.
     spot_colors = spot_colors - nbp_basic.tile_pixel_value_shift
     if use_bg and not return_in_bounds:
-        spot_colors = spot_colors - bg_colours
+        good = np.logical_and((spot_colors != invalid_value).all((1, 2)), bg_valid)
+        spot_colors[good] = spot_colors[good] - bg_colours[good]
         return spot_colors, bg_colours
-    invalid_value = -nbp_basic.tile_pixel_value_shift
     if use_bg and return_in_bounds:
-        good = ~np.any(spot_colors == invalid_value, axis=(1, 2))
+        good = np.logical_and((spot_colors != invalid_value).all((1, 2)), bg_valid)
         return spot_colors[good], yxz_base[good], bg_colours[good]
     elif not use_bg and return_in_bounds:
         good = ~np.any(spot_colors == invalid_value, axis=(1, 2))

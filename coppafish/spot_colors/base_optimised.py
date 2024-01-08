@@ -182,7 +182,7 @@ def get_spot_colors(yxz_base: jnp.ndarray, t: int, transforms: jnp.ndarray, nbp_
         # repeat bg_colours so it is the same shape as spot_colors
         bg_colours = np.repeat(bg_colours[:, None, :], n_use_rounds, axis=1)
         bg_valid = (bg_colours != invalid_value).all((1, 2))
-        bg_colours[bg_valid] = bg_colours[bg_valid] * bg_scale[t][np.ix_(use_rounds, use_channels)]
+        bg_colours[bg_valid] = bg_colours[bg_valid] * bg_scale[t][np.ix_(use_rounds, use_channels)][np.newaxis, ...]
     # Remove shift so now spots outside bounds have color equal to - nbp_basic.tile_pixel_shift_value.
     # It is impossible for any actual spot color to be this due to clipping at the extract stage.
     spot_colors = spot_colors - nbp_basic.tile_pixel_value_shift
