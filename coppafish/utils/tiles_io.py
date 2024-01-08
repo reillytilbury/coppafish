@@ -65,8 +65,7 @@ def _save_image(image: Union[npt.NDArray[np.uint16], jnp.ndarray], file_path: st
         chunk_count_yx = maths.ceil(image.shape[1] * image.shape[2] / (chunk_size_yx * chunk_size_yx))
         chunks = (None, chunk_count_yx, chunk_count_yx) if image.ndim == 3 else (chunk_count_yx, chunk_count_yx)
         zarray = zarr.open(
-            file_path, mode='w', zarr_version=2, shape=image.shape, chunks=chunks, dtype='|u2', 
-            synchronizer=zarr.ThreadSynchronizer(), compressor=compressor)
+            file_path, mode='w', zarr_version=2, shape=image.shape, chunks=chunks, dtype='|u2', compressor=compressor)
         zarray[:] = image
     else:
         raise ValueError(f'Unsupported `file_type`: {file_type.lower()}')
