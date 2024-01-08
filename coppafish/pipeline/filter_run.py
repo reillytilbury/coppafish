@@ -270,7 +270,7 @@ def run_filter(
                     if not nbp_basic.is_3d:
                         im_raw = extract.focus_stack(im_raw)
                     im_filtered, bad_columns = extract.strip_hack(im_raw)  # check for faulty columns
-                    assert bad_columns.size == 0, f"Bad column(s) were found during image filtering: {t=}, {r=}, {c=}"
+                    assert bad_columns.size == 0, f"Bad y column(s) were found during image filtering: {t=}, {r=}, {c=}"
                     del im_raw
                     if config["deconvolve"]:
                         # Deconvolves dapi images too
