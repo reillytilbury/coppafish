@@ -64,7 +64,7 @@ def _save_image(image: Union[npt.NDArray[np.uint16], jnp.ndarray], file_path: st
         # We chunk each z plane individually, since single z planes are often retrieved. We also chunk x and y by
         # squares of size 500x500 because that seems to be fast, based on trial and error.
         chunk_size_yx = 500
-        chunk_count_yx = maths.ceil(image.shape[1] * image.shape[2] / (chunk_size_yx * chunk_size_yx))
+        chunk_count_yx = maths.ceil(image.shape[1] / chunk_size_yx)
         chunks = (None, chunk_count_yx, chunk_count_yx) if image.ndim == 3 else (chunk_count_yx, chunk_count_yx)
         zarray = zarr.open(
             file_path, mode="w", zarr_version=2, shape=image.shape, chunks=chunks, dtype="|u2", compressor=compressor
