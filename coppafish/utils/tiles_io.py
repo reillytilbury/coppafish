@@ -274,10 +274,14 @@ def load_image(
                 if len(yxz) != 3:
                     raise ValueError(f"Loading in a 3D tile but dimension of coordinates given is {len(yxz)}.")
                 if yxz[0] is None and yxz[1] is None:
-                    image = np.asarray([
-                        _load_image(file_path, file_type, indices=int(yxz[2][i]), mmap_mode="r")
-                        for i in range(len(yxz[2]))
-                    ], dtype=np.uint16)
+                    z_indices = yxz[2]
+                    if isinstance(z_indices, int):
+                        image = _load_image(file_path, file_type, z_indices, mmap_mode="r")
+                    else:
+                        image = np.asarray([
+                            _load_image(file_path, file_type, indices=int(z_indices[i]), mmap_mode="r")
+                            for i in range(len(z_indices))
+                        ], dtype=np.uint16)
                     if image.ndim == 3:
                         # zyx -> yxz
                         image = np.moveaxis(image, 0, 2)
