@@ -1,4 +1,4 @@
-2024/01/04 Alpha Update (v0.7.2):
+2024/01/09 Alpha Update (v0.7.2):
  * Filter will re-filter if the filter notebook page does not exist to correctly compute the filter variables bug fix.
  * Bled codes are normalised for each gene outside of a gene for loop, reducing OMP computation time.
  * The Viewer now has every hotkey described, these can be shown by opening the Viewer then pressing Shift + k.
@@ -8,6 +8,8 @@
  * Handling of invalid spot colours and their background colours bug fix.
  * jax memory leak in OMP is reduced or fixed.
  * Subset image loading for extract and filtered images is now faster on zarr.
+ * Improved chunking of y and x dimensions on .zarr files.
+ * RoboMinnie `n_rounds != n_channels` integration test.
 
 
 2024/01/03 Alpha Update (v0.7.1):

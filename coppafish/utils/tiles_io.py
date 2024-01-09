@@ -4,7 +4,7 @@ import numbers
 import itertools
 import numpy as np
 import math as maths
-from numcodecs import Blosc
+from numcodecs import blosc, Blosc
 try:
     import jax.numpy as jnp
 except ImportError:
@@ -58,29 +58,32 @@ def _save_image(image: Union[npt.NDArray[np.uint16], jnp.ndarray], file_path: st
     if file_type.lower() == '.npy':
         np.save(file_path, image)
     elif file_type.lower() == '.zarr':
+        blosc.set_nthreads(utils.system.get_core_count())
         compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
-        # We chunk each z plane individually, since single z planes are often retrieved. We also chunk x and y so 
-        # that each chunk is at least 1MB, as suggested in the zarr documentation.
-        chunk_size_yx = 750
+        # We chunk each z plane individually, since single z planes are often retrieved. We also chunk x and y by 
+        # squares of size 500x500 because that seems to be fast, based on trial and error.
+        chunk_size_yx = 500
         chunk_count_yx = maths.ceil(image.shape[1] * image.shape[2] / (chunk_size_yx * chunk_size_yx))
         chunks = (None, chunk_count_yx, chunk_count_yx) if image.ndim == 3 else (chunk_count_yx, chunk_count_yx)
         zarray = zarr.open(
-            file_path, mode='w', zarr_version=2, shape=image.shape, chunks=chunks, dtype='|u2', compressor=compressor)
+            file_path, mode='w', zarr_version=2, shape=image.shape, chunks=chunks, dtype='|u2', compressor=compressor
+        )
         zarray[:] = image
     else:
         raise ValueError(f'Unsupported `file_type`: {file_type.lower()}')
 
 
-def _load_image(file_path: str, file_type: str, indices: Optional[Union[Tuple[Any], int]] = None, 
-                mmap_mode: str = None,
-                ) -> npt.NDArray[np.uint16]:
+def _load_image(
+    file_path: str, file_type: str, indices: Optional[Union[Tuple[Union[List, int]], int]] = None, 
+    mmap_mode: str = None,
+) -> npt.NDArray[np.uint16]:
     """
     Read in image from file_path location.
 
     Args:
         file_path (str): image location.
         file_type (str): file type. Either `'.npy'` or `'.zarr'`.
-        indices (int or tuple of int, optional): coordinate indices to retrieve from the image. Default: entire image.
+        indices (tuple or int, optional): coordinate indices to retrieve from the image. Default: entire image.
         mmap_mode (str, optional): the mmap_mode for numpy loading only. Default: no mapping.
 
     Returns `ndarray[uint16]`: loaded image.
@@ -91,16 +94,18 @@ def _load_image(file_path: str, file_type: str, indices: Optional[Union[Tuple[An
     Notes:
         - For zarr, if indices is None then the entire image will be loaded into memory (not memory mapped like numpy), 
             which can be slower if you only need a subset of the image.
+        - Indexing a zarr array can be different from a numpy array, so we only support indexing with tuples and 
+            integers. See [here](https://zarr.readthedocs.io/en/stable/tutorial.html#advanced-indexing) for details.
     """
     if indices is None:
         indices = ...
     else:
-        assert isinstance(indices, (int, tuple)), "Coordinate indices must be type tuple or int"
+        assert isinstance(indices, (int, tuple)), f"Unexpected indices type: {type(indices)}"
 
     if file_type.lower() == '.npy':
         return np.load(file_path, mmap_mode=mmap_mode)[indices]
     elif file_type.lower() == '.zarr':
-        return zarr.open(file_path, mode='r')[indices]
+        return zarr.open(file_path, mode='r').get_coordinate_selection(indices)
     else:
         raise ValueError(f'Unsupported `file_type`: {file_type.lower()}')
 
@@ -248,7 +253,7 @@ def load_image(nbp_file: NotebookPage, nbp_basic: NotebookPage, file_type: str, 
             if nbp_basic.is_3d:
                 if yxz.shape[1] != 3:
                     raise ValueError(f'Loading in a 3D tile but dimension of coordinates given is {yxz.shape[1]}.')
-                coord_index_zyx = tuple(list(yxz[:, i]) for i in [2, 0, 1])
+                coord_index_zyx = tuple([yxz[:, j] for j in [2, 0, 1]])
                 image = _load_image(file_path, file_type, indices=coord_index_zyx, mmap_mode='r')
             else:
                 if yxz.shape[1] != 2:
