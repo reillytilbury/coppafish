@@ -303,9 +303,13 @@ def register(
     if nbp_basic.use_preseq:
         use_rounds = nbp_basic.use_rounds
         bg_scale = np.zeros((n_tiles, n_rounds, n_channels))
-        mid_z = nbp_basic.tile_centre[2].astype(int)
+        mid_z = len(nbp_basic.use_z) // 2
         z_rad = np.min([len(nbp_basic.use_z) // 2, 5])
-        yxz = [None, None, np.arange(mid_z - z_rad, mid_z + z_rad) - min(nbp_basic.use_z) - 2]
+        yxz = [
+            None,
+            None,
+            np.asarray(nbp_basic.use_z.copy())[np.arange(mid_z - z_rad, mid_z + z_rad)] - min(nbp_basic.use_z),
+        ]
         n_cores = config["n_background_scale_threads"]
         if n_cores is None:
             # Maximum threads physically possible could be bottlenecked by available RAM
