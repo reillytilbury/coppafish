@@ -5,7 +5,7 @@
  * Improved pixel value histograms in the PDF diagnostics for extract and filter.
  * BuildPDF is called fewer times throughout the pipeline to reduce compute time.
  * Middle z plane selection for registration with few z planes bug fixed.
- * Handling of invalid spot colours and their background colours bug fix.
+ * Handling of invalid spot colours and their background colours in spot_colors bug fix.
  * jax memory leak in OMP is reduced or fixed.
  * Subset image loading for extract and filtered images is now faster on zarr.
  * Improved chunking of y and x dimensions on .zarr files.
