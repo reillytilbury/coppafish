@@ -9,6 +9,7 @@
  * jax memory leak in OMP is reduced or fixed.
  * Subset image loading for extract and filtered images is now faster on zarr.
  * Improved chunking of y and x dimensions on .zarr files.
+ * Zarr arrays are read faster by using more available cores on the CPU to decompress the files.
  * RoboMinnie `n_rounds != n_channels` integration test.
 
 
