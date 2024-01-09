@@ -107,6 +107,8 @@ def _load_image(
     elif file_type.lower() == '.zarr':
         if indices == ...:
             return zarr.open(file_path, mode="r")[:]
+        elif isinstance(indices, int):
+            return zarr.open(file_path, mode="r")[indices]
         return zarr.open(file_path, mode="r").get_coordinate_selection(indices)
     else:
         raise ValueError(f'Unsupported `file_type`: {file_type.lower()}')
