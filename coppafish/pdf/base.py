@@ -244,18 +244,19 @@ class BuildPDF:
             if nb.has_page("ref_spots") and nb.has_page("call_spots"):
                 # Create a page for every gene
                 gene_probs = nb.ref_spots.gene_probs
+                # bg colour was subtracted if use_preseq
+                colours = nb.ref_spots.colors[
+                    np.ix_(range(nb.ref_spots.colors.shape[0]), nb.basic_info.use_rounds, nb.basic_info.use_channels)
+                ]
                 n_genes = gene_probs.shape[1]
                 gene_names = nb.call_spots.gene_names
-                colours = (
-                    nb.ref_spots.colors[:, :, nb.basic_info.use_channels].copy() + nb.basic_info.tile_pixel_value_shift
-                )
                 spot_colours_rnorm = colours / np.linalg.norm(colours, axis=2)[:, :, None]
                 n_rounds = spot_colours_rnorm.shape[1]
                 for g in range(n_genes):
                     g_spots = np.argsort(-gene_probs[:, g])
                     # Sorted probabilities, with greatest score at index 0
                     g_probs = gene_probs[g_spots, g]
-                    g_bled_code = nb.call_spots.bled_codes[g, :, nb.basic_info.use_channels].T  # rounds x channels
+                    g_bled_code = nb.call_spots.bled_codes[g, :, nb.basic_info.use_channels].T  # (rounds, channels)
                     g_r_dot_products = np.sum(spot_colours_rnorm * g_bled_code[None, :, :], 2)
                     fig, axes = self.create_empty_page(2, 2, gridspec_kw={"width_ratios": [2, 1]})
                     self.empty_plot_ticks(axes[1, 1])
