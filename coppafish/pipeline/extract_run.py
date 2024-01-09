@@ -1,6 +1,7 @@
 import os
 import time
 import pickle
+import warnings
 import numpy as np
 from tqdm import tqdm
 from typing import Tuple, Optional
@@ -162,6 +163,9 @@ def run_extract(
                             # yxz -> zyx
                             im = im.transpose((2, 0, 1))
                             tiles_io._save_image(im, file_path, config["file_type"])
+                        for z in range(im.shape[0]):
+                            if (im[z].max() - im[z].min()) == 0:
+                                warnings.warn(f"Raw image {t=}, {r=}, {c=} at plane {z} is single valued!")
                         if return_image_t_raw:
                             image_t[r, c] = im
                         pixel_unique_values, pixel_unique_counts = np.unique(im, return_counts=True)

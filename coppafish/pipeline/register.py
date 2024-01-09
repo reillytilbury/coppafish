@@ -118,7 +118,7 @@ def register(
                 )
             )
             if not (use_dapi):
-                anchor_image = preprocessing.shift_pixels(anchor_image, -nbp_basic.tile_pixel_value_shift)
+                anchor_image = preprocessing.offset_pixels_by(anchor_image, -nbp_basic.tile_pixel_value_shift)
             use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
             # split the rounds into two chunks, as we can't fit all of them into memory at once
             round_chunks = [use_rounds[: len(use_rounds) // 2], use_rounds[len(use_rounds) // 2 :]]
@@ -128,7 +128,7 @@ def register(
                     if not (use_dapi and r == nbp_basic.anchor_round):
                         round_image.append(
                             preprocessing.yxz_to_zyx(
-                                preprocessing.shift_pixels(
+                                preprocessing.offset_pixels_by(
                                     tiles_io.load_image(
                                         nbp_file,
                                         nbp_basic,
@@ -264,7 +264,7 @@ def register(
                 apply_shift=False,
             )
             if not (nbp_basic.pre_seq_round == nbp_basic.anchor_round and c == nbp_basic.dapi_channel):
-                im = preprocessing.shift_pixels(im, -nbp_basic.tile_pixel_value_shift)
+                im = preprocessing.offset_pixels_by(im, -nbp_basic.tile_pixel_value_shift)
             if pre_seq_blur_radius > 0:
                 for z in tqdm(range(len(nbp_basic.use_z))):
                     im[:, :, z] = filters.gaussian(im[:, :, z], pre_seq_blur_radius, truncate=3, preserve_range=True)
@@ -303,9 +303,13 @@ def register(
     if nbp_basic.use_preseq:
         use_rounds = nbp_basic.use_rounds
         bg_scale = np.zeros((n_tiles, n_rounds, n_channels))
-        mid_z = nbp_basic.tile_centre[2].astype(int)
+        mid_z = len(nbp_basic.use_z) // 2
         z_rad = np.min([len(nbp_basic.use_z) // 2, 5])
-        yxz = [None, None, np.arange(mid_z - z_rad, mid_z + z_rad) - min(nbp_basic.use_z)]
+        yxz = [
+            None,
+            None,
+            np.asarray(nbp_basic.use_z.copy())[np.arange(mid_z - z_rad, mid_z + z_rad)] - min(nbp_basic.use_z),
+        ]
         n_cores = config["n_background_scale_threads"]
         if n_cores is None:
             # Maximum threads physically possible could be bottlenecked by available RAM
@@ -338,7 +342,7 @@ def register(
                     apply_shift=False,
                 )
                 if not (r == nbp_basic.anchor_round and c == nbp_basic.dapi_channel):
-                    image_seq = preprocessing.shift_pixels(image_seq, -nbp_basic.tile_pixel_value_shift)
+                    image_seq = preprocessing.offset_pixels_by(image_seq, -nbp_basic.tile_pixel_value_shift)
                 image_preseq = tiles_io.load_image(
                     nbp_file,
                     nbp_basic,
@@ -350,9 +354,19 @@ def register(
                     apply_shift=False,
                 )
                 if not (nbp_basic.pre_seq_round == nbp_basic.anchor_round and c == nbp_basic.dapi_channel):
-                    image_preseq = preprocessing.shift_pixels(image_preseq, -nbp_basic.tile_pixel_value_shift)
+                    image_preseq = preprocessing.offset_pixels_by(image_preseq, -nbp_basic.tile_pixel_value_shift)
                 process_args.append(
-                    (image_seq, image_preseq, nbp.transform, mid_z, z_rad, nbp_basic.pre_seq_round, t, r, c)
+                    (
+                        image_seq.copy(),
+                        image_preseq.copy(),
+                        nbp.transform.copy(),
+                        mid_z,
+                        z_rad,
+                        nbp_basic.pre_seq_round,
+                        t,
+                        r,
+                        c,
+                    )
                 )
                 if len(process_args) == n_cores or i == final_index:
                     # Start processes

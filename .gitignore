@@ -5,3 +5,6 @@ coppafish.egg-info
 **/unit_test_dir
 **/*.egg
 **/.DS_Store
+**/*.pytest_cache
+**/.vscode
+**/temp.*

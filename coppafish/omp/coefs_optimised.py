@@ -281,6 +281,8 @@ def get_best_gene_first_iter(residual_pixel_colors: jnp.ndarray, all_bled_codes:
     for padding in range(n_devices + 1):
         if (n_pixels + padding) % n_devices == 0:
             break
+    # Ensure bled_codes are normalised for each gene
+    all_bled_codes /= jnp.linalg.norm(all_bled_codes, axis=1, keepdims=True)
     
     residual_pixel_colors_batched = jnp.append(residual_pixel_colors, jnp.ones((padding, n_rounds_channels)), axis=0)
     background_coefs_batched = jnp.append(background_coefs, jnp.ones((padding, n_channels)), axis=0)
@@ -404,6 +406,8 @@ def get_best_gene(residual_pixel_colors: jnp.ndarray, all_bled_codes: jnp.ndarra
     n_pixels, n_rounds_channels = residual_pixel_colors.shape
     n_genes_add = coefs.shape[1]
     n_devices = jax.local_device_count()
+    # Ensure bled_codes are normalised for each gene
+    all_bled_codes /= jnp.linalg.norm(all_bled_codes, axis=1, keepdims=True)
     
     # Pad the data so the data can be split between n_devices
     for padding in range(n_devices + 1):
@@ -502,6 +506,7 @@ def get_all_coefs(pixel_colors: jnp.ndarray, bled_codes: jnp.ndarray, background
     with tqdm(total=max_genes, disable=no_verbose) as pbar:
         pbar.set_description('Finding OMP coefficients for each pixel')
         for i in range(max_genes):
+            jax.clear_caches()
             if i == 0:
                 # Background coefs don't change, hence contribution to variance won't either.
                 added_genes, pass_score_thresh, background_variance = \

@@ -62,6 +62,7 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
         nbp_file: `file_names` notebook page.
         nbp_basic: `basic_info` notebook page.
         nbp_extract: `extract` notebook page.
+        nbp_filter: `filter` notebook page.
         use_rounds: `int [n_use_rounds]`.
             Rounds you would like to find the `spot_color` for.
             Error will raise if transform is zero for particular round.
@@ -84,7 +85,7 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
         - `yxz_base` - `int16 [n_spots_in_bounds x 3]`.
             If `return_in_bounds`, the `yxz_base` corresponding to spots in bounds for all `use_rounds` / `use_channels`
             will be returned. It is likely that `n_spots_in_bounds` won't be the same as `n_spots`.
-        - `bg_colours` - `int32 [n_spots x n_channels_use]`.
+        - `bg_colours` - only returned if use_bg = True. `int32 [n_spots x n_channels_use]`.
 
     Notes:
         - Returned spot colors have dimension `n_spots x len(nbp_basic.use_rounds) x len(nbp_basic.use_channels)` not
@@ -148,6 +149,10 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
                         spot_colors[in_range, r, c] = image_all_channels[use_channels[c]][
                             tuple(np.asarray(yxz_transform[:, i]) for i in range(2))]
                 pbar.update(1)
+    # Remove shift so now spots outside bounds have color equal to - nbp_basic.tile_pixel_shift_value.
+    # It is impossible for any actual spot color to be this due to clipping at the extract stage.
+    spot_colors = spot_colors - nbp_basic.tile_pixel_value_shift
+    colours_valid = (spot_colors > -nbp_basic.tile_pixel_value_shift).all(axis=(1, 2))
     if use_bg:
         with tqdm(total=n_use_channels, disable=no_verbose) as pbar:
             pbar.set_description(
@@ -170,26 +175,31 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
                                                use_channels[c], yxz_transform, apply_shift=False)
                 pbar.update(1)
         # subtract tile pixel shift value so that bg_colours are in range -15_000 to 50_000 (approx)
-        valid = bg_colours > 0
-        bg_colours[valid] = bg_colours[valid] - nbp_basic.tile_pixel_value_shift
+        bg_colours = bg_colours - nbp_basic.tile_pixel_value_shift
         # repeat bg_colours so it is the same shape as spot_colors
         bg_colours = np.repeat(bg_colours[:, None, :], n_use_rounds, axis=1)
-        bg_colours[valid] = bg_colours[valid] * bg_scale[t, use_rounds, use_channels]
-    # Remove shift so now spots outside bounds have color equal to - nbp_basic.tile_pixel_shift_value.
-    # It is impossible for any actual spot color to be this due to clipping at the extract stage.
-    spot_colors = spot_colors - nbp_basic.tile_pixel_value_shift
-    if use_bg and not return_in_bounds:
-        spot_colors = spot_colors - bg_colours
-        return spot_colors, bg_colours
+        bg_valid = (bg_colours > -nbp_basic.tile_pixel_value_shift).all(axis=(1, 2))
+        bg_colours[bg_valid] = bg_colours[bg_valid] * bg_scale[t][np.ix_(use_rounds, use_channels)]
+    
     invalid_value = -nbp_basic.tile_pixel_value_shift
-    if use_bg and return_in_bounds:
-        good = ~np.any(spot_colors == invalid_value, axis=(1, 2))
-        return spot_colors[good], yxz_base[good], bg_colours[good]
-    elif not use_bg and return_in_bounds:
-        good = ~np.any(spot_colors == invalid_value, axis=(1, 2))
-        return spot_colors[good], yxz_base[good]
-    else:
-        return spot_colors
+    if use_bg:
+        good = colours_valid * bg_valid
+        if return_in_bounds:
+            spot_colors = (spot_colors - bg_colours)[good]
+            bg_colours = bg_colours[good]
+            yxz_base = yxz_base[good]
+        else:
+            spot_colors[good] = (spot_colors - bg_colours)[good]
+            spot_colors[~good] = invalid_value
+    elif not use_bg:
+        good = colours_valid
+        if return_in_bounds:
+            spot_colors = spot_colors[good]
+            yxz_base = yxz_base[good]
+        else:
+            spot_colors[~good] = invalid_value
+            
+    return (spot_colors, yxz_base, bg_colours) if use_bg else (spot_colors, yxz_base)
 
 
 def all_pixel_yxz(y_size: int, x_size: int, z_planes: Union[List, int, np.ndarray]) -> np.ndarray:
