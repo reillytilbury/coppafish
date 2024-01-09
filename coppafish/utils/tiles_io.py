@@ -105,7 +105,9 @@ def _load_image(
     if file_type.lower() == '.npy':
         return np.load(file_path, mmap_mode=mmap_mode)[indices]
     elif file_type.lower() == '.zarr':
-        return zarr.open(file_path, mode='r').get_coordinate_selection(indices)
+        if indices == ...:
+            return zarr.open(file_path, mode="r")[:]
+        return zarr.open(file_path, mode="r").get_coordinate_selection(indices)
     else:
         raise ValueError(f'Unsupported `file_type`: {file_type.lower()}')
 
