@@ -57,7 +57,6 @@ def run_pipeline(
     nb = initialize_nb(config_file)    
     if not parallel:
         run_tile_indep_pipeline(nb)
-        BuildPDF(nb, auto_open=False)
         run_stitch(nb)
         run_reference_spots(nb, overwrite_ref_spots)
         run_omp(nb)
@@ -73,7 +72,6 @@ def run_pipeline(
         run_register(nb, overwrite_ref_spots)
         run_omp(nb)
 
-    BuildPDF(nb)
     return nb
 
 
