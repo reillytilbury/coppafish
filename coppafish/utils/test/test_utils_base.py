@@ -1,3 +1,4 @@
+import itertools
 import numpy as np
 
 from coppafish.utils import base
@@ -5,6 +6,14 @@ from coppafish.utils import base
 
 def test_get_function_name():
     assert base.get_function_name() == 'test_get_function_name'
+
+
+def test_reed_solomon_codes():
+    n_channels_try = [3, 4]
+    n_rounds_try = [3, 4, 5, 6]
+    for n_channels, n_rounds in itertools.product(n_channels_try, n_rounds_try):
+        codes = base.reed_solomon_codes(4, n_rounds, n_channels)
+        assert len(codes) == len(set(codes)), "All reed solomon codes must be unique"
 
 
 def test_round_any():

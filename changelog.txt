@@ -1,3 +1,22 @@
+2024/01/09 Alpha Update (v0.7.2):
+ * Filter will re-filter if the filter notebook page does not exist to correctly compute the filter variables bug fix.
+ * Bled codes are normalised for each gene outside of a gene for loop, reducing OMP computation time.
+ * The Viewer now has every hotkey described, these can be shown by opening the Viewer then pressing Shift + k.
+ * Improved pixel value histograms in the PDF diagnostics for extract and filter.
+ * BuildPDF is called fewer times throughout the pipeline to reduce compute time.
+ * Middle z plane selection for registration with few z planes bug fixed.
+ * Handling of invalid spot colours and their background colours in spot_colors bug fix.
+ * jax memory leak in OMP is reduced or fixed.
+ * Subset image loading for extract and filtered images is now faster on zarr.
+ * Improved chunking of y and x dimensions on .zarr files.
+ * Zarr arrays are read faster by using more available cores on the CPU to decompress files.
+ * RoboMinnie `n_rounds != n_channels` integration test.
+
+
+2024/01/03 Alpha Update (v0.7.1):
+ * Bug fix for gene efficiency calculation in call_reference_spots.py.
+
+
 2024/01/02 Alpha Update (v0.7.0):
  * New diagnostics PDF builder has been created. It can be imported through `from coppafish import BuildPDF`, then with 
     the notebook file path as nb_path, it can be run by `BuildPDF(nb_path)`. It currently shows diagnostic plots for 

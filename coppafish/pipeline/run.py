@@ -12,7 +12,7 @@ from .. import setup, utils
 from ..setup import Notebook
 from ..find_spots import check_spots
 from ..call_spots import base as call_spots_base
-from ..plot.pdf.base import BuildPDF
+from ..pdf.base import BuildPDF
 from .register import preprocessing
 from . import basic_info
 from . import scale_run
@@ -59,9 +59,7 @@ def run_pipeline(
         run_tile_indep_pipeline(nb)
         BuildPDF(nb, auto_open=False)
         run_stitch(nb)
-        BuildPDF(nb, auto_open=False)
         run_reference_spots(nb, overwrite_ref_spots)
-        BuildPDF(nb, auto_open=False)
         run_omp(nb)
     else:
         #TODO: Add run_scale before extract is run
@@ -150,7 +148,7 @@ def initialize_nb(config_file: str) -> Notebook:
         )
         print("Are you sure you want to continue? (y or n) ", end='')
         user_input = input()
-        if not user_input.strip().lower() == 'y':
+        if user_input.strip().lower() != 'y':
             print("Exiting...")
             sys.exit()
     return nb

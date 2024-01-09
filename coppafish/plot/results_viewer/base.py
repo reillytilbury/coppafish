@@ -18,6 +18,7 @@ except ModuleNotFoundError:
 from typing import Optional
 
 from . import legend
+from .hotkeys import KeyBinds, ViewHotkeys
 from ..call_spots import view_codes, view_bleed_matrix, view_bled_codes, view_spot, view_intensity, gene_counts
 from .. import call_spots as call_spots_plot
 from ..call_spots_new import GEViewer, ViewBleedCalc, ViewAllGeneScores, BGNormViewer
@@ -545,7 +546,7 @@ class Viewer:
 
     def key_call_functions(self):
         # Contains all functions which can be called by pressing a key with napari viewer open
-        @Points.bind_key('Space', overwrite=True)
+        @Points.bind_key(KeyBinds.switch_zoom_select, overwrite=True)
         def change_zoom_select_mode(layer):
             if layer.mode == Mode.PAN_ZOOM:
                 layer.mode = Mode.SELECT
@@ -553,8 +554,13 @@ class Viewer:
             elif layer.mode == Mode.SELECT:
                 layer.mode = Mode.PAN_ZOOM
                 self.viewer.help = 'Mode: Pan/Zoom'
+                
+        @self.viewer.bind_key(KeyBinds.view_hotkeys)
+        def view_hotkeys(viewer):
+            # Show Viewer keybindings
+            ViewHotkeys()
 
-        @self.viewer.bind_key('i')
+        @self.viewer.bind_key(KeyBinds.remove_background)
         def remove_background_image(viewer):
             # Make background image visible / remove it
             if self.image_layer_ind is not None:
@@ -563,31 +569,31 @@ class Viewer:
                 else:
                     viewer.layers[self.image_layer_ind].visible = True
 
-        @self.viewer.bind_key('b')
+        @self.viewer.bind_key(KeyBinds.view_bleed_matrix)
         def call_to_view_bm(viewer):
             view_bleed_matrix(self.nb)
 
-        @self.viewer.bind_key('n')
+        @self.viewer.bind_key(KeyBinds.view_background_norm)
         def call_to_view_bg_norm(viewer):
             BGNormViewer(self.nb)
 
-        @self.viewer.bind_key('Shift-b')
+        @self.viewer.bind_key(KeyBinds.view_bleed_matrix_calculation)
         def call_to_view_bm_calc(viewer):
             ViewBleedCalc(self.nb)
 
-        @self.viewer.bind_key('g')
+        @self.viewer.bind_key(KeyBinds.view_bled_codes)
         def call_to_view_bm(viewer):
             view_bled_codes(self.nb)
 
-        @self.viewer.bind_key('Shift-h')
+        @self.viewer.bind_key(KeyBinds.view_all_gene_scores)
         def call_to_view_all_hists(viewer):
             ViewAllGeneScores(self.nb)
 
-        @self.viewer.bind_key('e')
+        @self.viewer.bind_key(KeyBinds.view_gene_efficiency)
         def call_to_view_gene_efficiency(viewer):
             GEViewer(self.nb)
 
-        @self.viewer.bind_key('Shift-g')
+        @self.viewer.bind_key(KeyBinds.view_gene_counts)
         def call_to_gene_counts(viewer):
             if self.nb.has_page('omp'):
                 score_multiplier = self.omp_score_multiplier_slider.value()
@@ -599,7 +605,7 @@ class Viewer:
             intensity_thresh = self.intensity_thresh_slider.value()
             gene_counts(self.nb, None, None, score_thresh, intensity_thresh, score_omp_thresh, score_multiplier)
 
-        @self.viewer.bind_key('h')
+        @self.viewer.bind_key(KeyBinds.view_histogram_scores)
         def call_to_view_omp_score(viewer):
             if self.nb.has_page('omp'):
                 score_multiplier = self.omp_score_multiplier_slider.value()
@@ -612,47 +618,47 @@ class Viewer:
         #     if self.nb.has_page('omp'):
         #         histogram_2d_score(self.nb, self.omp_score_multiplier_slider.value())
 
-        @self.viewer.bind_key('k')
+        @self.viewer.bind_key(KeyBinds.view_scaled_k_means)
         def call_to_view_omp_score(viewer):
             call_spots_plot.view_scaled_k_means(self.nb)
 
-        @self.viewer.bind_key('c')
+        @self.viewer.bind_key(KeyBinds.view_colour_and_codes)
         def call_to_view_codes(viewer):
             spot_no = self.get_selected_spot()
             if spot_no is not None:
                 view_codes(self.nb, spot_no, self.method_buttons.method)
 
-        @self.viewer.bind_key('s')
+        @self.viewer.bind_key(KeyBinds.view_spot_intensities)
         def call_to_view_spot(viewer):
             spot_no = self.get_selected_spot()
             if spot_no is not None:
                 view_spot(self.nb, spot_no, self.method_buttons.method)
 
-        @self.viewer.bind_key('d')
+        @self.viewer.bind_key(KeyBinds.view_spot_colours_and_weights)
         def call_to_view_omp_score(viewer):
             spot_no = self.get_selected_spot()
             if spot_no is not None:
                 view_score(self.nb, spot_no, self.method_buttons.method)
 
-        @self.viewer.bind_key('Shift-i')
+        @self.viewer.bind_key(KeyBinds.view_intensity_from_colour)
         def call_to_view_omp_score(viewer):
             spot_no = self.get_selected_spot()
             if spot_no is not None:
                 view_intensity(self.nb, spot_no, self.method_buttons.method)
 
-        @self.viewer.bind_key('o')
+        @self.viewer.bind_key(KeyBinds.view_omp_coefficients)
         def call_to_view_omp(viewer):
             spot_no = self.get_selected_spot()
             if spot_no is not None:
                 view_omp(self.nb, spot_no, self.method_buttons.method)
 
-        @self.viewer.bind_key('Shift-o')
+        @self.viewer.bind_key(KeyBinds.view_omp_fit)
         def call_to_view_omp(viewer):
             spot_no = self.get_selected_spot()
             if spot_no is not None:
                 view_omp_fit(self.nb, spot_no, self.method_buttons.method)
 
-        @self.viewer.bind_key('Shift-s')
+        @self.viewer.bind_key(KeyBinds.view_omp_score)
         def call_to_view_omp_score(viewer):
             spot_no = self.get_selected_spot()
             if spot_no is not None:
