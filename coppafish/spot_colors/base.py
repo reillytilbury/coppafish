@@ -153,6 +153,7 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
     # It is impossible for any actual spot color to be this due to clipping at the extract stage.
     spot_colors = spot_colors - nbp_basic.tile_pixel_value_shift
     colours_valid = (spot_colors > -nbp_basic.tile_pixel_value_shift).all(axis=(1, 2))
+
     if use_bg:
         with tqdm(total=n_use_channels, disable=no_verbose) as pbar:
             pbar.set_description(
@@ -200,6 +201,7 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
             spot_colors[~good] = invalid_value
             
     return (spot_colors, yxz_base, bg_colours) if use_bg else (spot_colors, yxz_base)
+
 
 
 def all_pixel_yxz(y_size: int, x_size: int, z_planes: Union[List, int, np.ndarray]) -> np.ndarray:

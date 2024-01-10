@@ -187,7 +187,7 @@ def get_spot_colors(yxz_base: jnp.ndarray, t: int, transforms: jnp.ndarray, nbp_
         bg_colours = np.repeat(bg_colours[:, None, :], n_use_rounds, axis=1)
         bg_valid = (bg_colours > -nbp_basic.tile_pixel_value_shift).all(axis=(1, 2))
         bg_colours[bg_valid] = bg_colours[bg_valid] * bg_scale[t][np.ix_(use_rounds, use_channels)]
-    
+
     invalid_value = -nbp_basic.tile_pixel_value_shift
     if use_bg:
         good = colours_valid * bg_valid
@@ -205,7 +205,7 @@ def get_spot_colors(yxz_base: jnp.ndarray, t: int, transforms: jnp.ndarray, nbp_
             yxz_base = yxz_base[good]
         else:
             spot_colors[~good] = invalid_value
-    
+
     return (spot_colors, yxz_base, bg_colours) if use_bg else (spot_colors, yxz_base)
 
 
