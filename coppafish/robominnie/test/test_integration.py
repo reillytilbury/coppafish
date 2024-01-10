@@ -500,6 +500,6 @@ def test_pdf_builder() -> None:
 
 
 if __name__ == "__main__":
-    # test_integration_003()
+    test_integration_003()
     test_pdf_builder()
     test_viewers()
