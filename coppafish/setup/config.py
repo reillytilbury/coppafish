@@ -162,22 +162,12 @@ _options = {
         },
     'call_spots':
         {
-            'bleed_matrix_method': 'str',
-            'bleed_matrix_score_thresh': 'number',
-            'bleed_matrix_min_cluster_size': 'int',
-            'bleed_matrix_n_iter': 'int',
-            'bleed_matrix_anneal': 'bool',
-            'background_weight_shift': 'maybe_number',
-            'dp_norm_shift': 'maybe_number',
-            'norm_shift_min': 'number',
-            'norm_shift_max': 'number',
-            'norm_shift_precision': 'number',
-            'gene_efficiency_min_spots': 'int',
-            'gene_efficiency_score_thresh': 'number',
-            'gene_efficiency_intensity_thresh': 'number',
-            'gene_efficiency_intensity_thresh_percentile': 'number',
-            'alpha': 'number',
-            'beta': 'number',
+            'n_iter': 'int',
+            'bleed_matrix_prob_thresh': 'number',
+            'conc_param_round': 'number',
+            'conc_param_other': 'number',
+            'free_bled_prob_thresh': 'number',
+            'target_channel_strength': 'list_number',
         },
     'omp':
         {

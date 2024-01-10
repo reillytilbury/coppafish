@@ -91,42 +91,42 @@ def get_reference_spots(nbp_file: NotebookPage, nbp_basic: NotebookPage, nbp_fin
     n_use_channels = len(nbp_basic.use_channels)
     use_tiles = np.array(nbp_basic.use_tiles.copy())
     n_use_tiles = len(use_tiles)
-    nd_spot_colors_use = np.zeros((nd_local_tile.shape[0], n_use_rounds, n_use_channels), dtype=np.int32)
-    bg_colours = np.zeros_like(nd_spot_colors_use)
+    nd_spot_colours_use = np.zeros((nd_local_tile.shape[0], n_use_rounds, n_use_channels), dtype=np.int32)
+    bg_colours = np.zeros_like(nd_spot_colours_use)
     transform = jnp.asarray(transform)
-    print('Reading in spot_colors for ref_round spots')
+    print('Reading in spot_colours for ref_round spots')
     for t in nbp_basic.use_tiles:
         in_tile = nd_local_tile == t
         if np.sum(in_tile) > 0:
             print(f"Tile {np.where(use_tiles==t)[0][0]+1}/{n_use_tiles}")
             # this line will return invalid_value for spots outside tile bounds on particular r/c.
             if nbp_basic.use_preseq:
-                nd_spot_colors_use[in_tile], _, bg_colours[in_tile] = \
-                    spot_colors_base.get_spot_colors(jnp.asarray(nd_local_yxz[in_tile]), t, transform, nbp_file, 
+                nd_spot_colours_use[in_tile], _, bg_colours[in_tile] = \
+                    spot_colors_base.get_spot_colors(jnp.asarray(nd_local_yxz[in_tile]), t, transform, nbp_file,
                                                      nbp_basic, nbp_extract)
             if not nbp_basic.use_preseq:
-                nd_spot_colors_use[in_tile] = \
+                nd_spot_colours_use[in_tile] = \
                     spot_colors_base.get_spot_colors(jnp.asarray(nd_local_yxz[in_tile]), t, transform, nbp_file, 
                                                      nbp_basic, nbp_extract)[0]
 
     # good means all spots that were in bounds of tile on every imaging round and channel that was used.
-    good = ~np.any(nd_spot_colors_use == invalid_value, axis=(1, 2))
+    good = ~np.any(nd_spot_colours_use == invalid_value, axis=(1, 2))
 
     good_local_yxz = nd_local_yxz[good]
     good_isolated = nd_isolated[good]
     good_local_tile = nd_local_tile[good]
     # add in un-used rounds with invalid_value
     n_good = np.sum(good)
-    good_spot_colors = np.full((n_good, nbp_basic.n_rounds,
+    good_spot_colours = np.full((n_good, nbp_basic.n_rounds,
                                 nbp_basic.n_channels), invalid_value, dtype=np.int32)
-    good_spot_colors[np.ix_(np.arange(n_good), nbp_basic.use_rounds, nbp_basic.use_channels)] = nd_spot_colors_use[good]
-    good_bg_colors = bg_colours[good]
+    good_spot_colours[np.ix_(np.arange(n_good), nbp_basic.use_rounds, nbp_basic.use_channels)] = nd_spot_colours_use[good]
+    good_bg_colours = bg_colours[good]
     # save spot info to notebook
     nbp.local_yxz = good_local_yxz
     nbp.isolated = good_isolated
     nbp.tile = good_local_tile
-    nbp.colors = good_spot_colors
-    nbp.bg_colours = good_bg_colors
+    nbp.colours = good_spot_colours
+    nbp.bg_colours = good_bg_colours
 
     # Set variables added in call_reference_spots to None so can save to Notebook.
     # I.e. if call_reference_spots hit error, but we did not do this, we would have to run get_reference_spots again.
@@ -136,6 +136,7 @@ def get_reference_spots(nbp_file: NotebookPage, nbp_basic: NotebookPage, nbp_fin
     nbp.intensity = None
     nbp.background_strength = None
     nbp.gene_probs = None
-    nbp.dye_strengths = None
+    nbp.gene_probs_initial = None
+    nbp.gene_probs_mid = None
 
     return nbp

@@ -48,7 +48,7 @@ def get_non_duplicate(tile_origin: np.ndarray, use_tiles: List, tile_centre: np.
     return not_duplicate
 
 
-def get_bled_codes(gene_codes: np.ndarray, bleed_matrix: np.ndarray, gene_efficiency: np.ndarray) -> np.ndarray:
+def get_bled_codes(gene_codes: np.ndarray, bleed_matrix: np.ndarray) -> np.ndarray:
     """
     This gets ```bled_codes``` such that the spot_color of a gene ```g``` in round ```r``` is expected to be a constant
     multiple of ```bled_codes[g, r]```.
@@ -60,8 +60,6 @@ def get_bled_codes(gene_codes: np.ndarray, bleed_matrix: np.ndarray, gene_effici
             ```gene_codes[g, r]``` indicates the dye that should be present for gene ```g``` in round ```r```.
         bleed_matrix: ```float [n_channels x n_dyes]```.
             Expected intensity of dye ```d``` is a constant multiple of ```bleed_matrix[:, d]```.
-        gene_efficiency: ```float [n_genes, n_rounds]```.
-            Efficiency of gene ```g``` in round ```r``` is ```gene_efficiency[g, r]```.
 
     Returns:
         ```float [n_genes x n_rounds x n_channels]```.
@@ -86,7 +84,7 @@ def get_bled_codes(gene_codes: np.ndarray, bleed_matrix: np.ndarray, gene_effici
     for g in range(n_genes):
         for r in range(n_rounds):
             for c in range(n_channels):
-                bled_codes[g, r, c] = gene_efficiency[g, r] * bleed_matrix[c, gene_codes[g, r]]
+                bled_codes[g, r, c] = bleed_matrix[c, gene_codes[g, r]]
 
     # Give all bled codes an L2 norm of 1
     norm_factor = np.linalg.norm(bled_codes, axis=(1, 2))

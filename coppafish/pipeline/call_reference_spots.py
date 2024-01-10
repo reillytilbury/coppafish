@@ -7,7 +7,7 @@ except ModuleNotFoundError:
     import importlib.resources as importlib_resources
 from typing import Tuple
 
-from ..setup.notebook import NotebookPage
+from ..setup.notebook import NotebookPage, Notebook
 from .. import call_spots
 from .. import spot_colors
 from .. import utils
@@ -15,8 +15,13 @@ from coppafish import extract
 from ..call_spots import get_spot_intensity
 from tqdm import tqdm
 from itertools import product
+from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 import matplotlib
+import mplcursors
+from matplotlib.patches import Rectangle
+from matplotlib.widgets import CheckButtons
 import matplotlib.pyplot as plt
+matplotlib.use('Agg')
 
 
 def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage,
@@ -71,7 +76,8 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
 
     nbp_ref_spots.finalized = False  # So we can add and delete ref_spots page variables
     # delete all variables in ref_spots set to None so can add them later.
-    for var in ['gene_no', 'score', 'score_diff', 'intensity', 'background_strength',  'gene_probs', 'dye_strengths']:
+    for var in ['gene_no', 'score', 'score_diff', 'intensity', 'background_strength',  'gene_probs', 'dye_strengths',
+                'gene_probs_initial', 'gene_probs_mid']:
         if hasattr(nbp_ref_spots, var):
             nbp_ref_spots.__delattr__(var)
     nbp = NotebookPage("call_spots")
@@ -133,20 +139,18 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
 
     # Load spot colours and background colours
     n_tiles, n_rounds, n_channels_use = nbp_basic.n_tiles, nbp_basic.n_rounds, len(nbp_basic.use_channels)
-    colours = nbp_ref_spots.colors[:, :, nbp_basic.use_channels].astype(float)
+    colours = nbp_ref_spots.colours[:, :, nbp_basic.use_channels].astype(float)
     bg_colours = nbp_ref_spots.bg_colours.astype(float)
     spot_tile = nbp_ref_spots.tile.astype(int)
     n_spots, n_dyes, use_channels = colours.shape[0], len(nbp_basic.dye_names), nbp_basic.use_channels
-    target_channel_strength = [1, 1, 0.9, 0.8, 0.8, 1, 1]
+    target_channel_strength = config['target_channel_strength']
     use_tiles = nbp_basic.use_tiles
-    colours_raw = colours.copy()
 
     # initialise bleed matrices
     initial_bleed_matrix = initial_bleed_matrix / np.linalg.norm(initial_bleed_matrix, axis=0)
-    bled_codes = call_spots.get_bled_codes(gene_codes=gene_codes, bleed_matrix=initial_bleed_matrix,
-                                           gene_efficiency=np.ones((n_genes, n_rounds)))
+    bled_codes = call_spots.get_bled_codes(gene_codes=gene_codes, bleed_matrix=initial_bleed_matrix)
 
-    # Initialise the 2 variables we are most interested in estimating: colour_norm_factor and gene_efficiency
+    # Initialise the colour norm factor
     colour_norm_factor_initial = np.ones((n_tiles, n_rounds, n_channels_use))
 
     # Part 1: Estimate norm_factor[t, r, c] for each tile t, round r and channel c + remove background
@@ -174,7 +178,7 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
                   (np.min(colours.reshape(n_spots, -1), axis=1) > np.percentile(rc_min, 1))
 
     # Begin the iterative process of estimating bleed matrix, colour norm factor and free bled codes
-    n_iter = 10
+    n_iter = config['n_iter']
     gene_prob_score = np.zeros((n_iter, n_spots))
     gene_no = np.zeros((n_iter, n_spots), dtype=int)
     target_matching_scale = np.zeros((n_iter, n_rounds, n_channels_use))
@@ -197,12 +201,14 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
         gene_no[iter] = gene_no_temp
         gene_prob_score[iter] = gene_prob_score_temp
 
-        if iter > 0:
+        if iter == 0:
+            gene_probs_initial = gene_prob
+        else:
             frac_mismatch = np.sum(gene_no[iter] != gene_no[iter - 1]) / n_spots
             print('Fraction of spots assigned to different genes: {:.3f}'.format(frac_mismatch))
 
         # 3. Update bleed matrix
-        bleed_matrix_prob_thresh = 0.9
+        bleed_matrix_prob_thresh = config['bleed_matrix_prob_thresh']
         high_prob = gene_prob_score[iter] > bleed_matrix_prob_thresh
         low_bg = np.linalg.norm(bg_codes, axis=(1, 2)) < np.percentile(np.linalg.norm(bg_codes, axis=(1, 2)), 50)
         for d in range(n_dyes):
@@ -233,9 +239,11 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
             d_2nd_max[c] = np.argsort(bleed_matrix[iter, c])[-2]
 
         # 4. Estimate free_bled_codes
-        conc_param_round = .1  # it takes this many spots to scale the bled code for any round
-        conc_param_other = 40  # it takes this many spots to change the bled code in a round
-        free_bled_prob_thresh = 0.9
+        # conc_param_round = .1  # it takes this many spots to scale the bled code for any round
+        # conc_param_other = 40  # it takes this many spots to change the bled code in a round
+        conc_param_round = config['conc_param_round']
+        conc_param_other = config['conc_param_other']
+        free_bled_prob_thresh = config['free_bled_prob_thresh']
         for g in range(n_genes):
             keep = (gene_prob_score[iter] > free_bled_prob_thresh) * (gene_no[iter] == g) * inlier_mask
             colours_g = colours_scaled[keep]
@@ -300,8 +308,12 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
             A = np.sum(n * F * G) / np.sum(n * G * G)
             scale[iter, t, r, c] = A
 
-    total_scale = np.product(scale, axis=0)
-
+    gene_probs_mid = gene_prob
+    colour_norm_factor_correction = np.product(scale, axis=0)
+    auxiliary_correction = np.product(target_matching_scale, axis=0)
+    colour_norm_factor = colour_norm_factor_initial * colour_norm_factor_correction
+    # Get the dot product score for each spot and the final gene probabilities
+    gene_probs_final = np.zeros((n_spots, n_genes))
     dp_gene_no = np.zeros(n_spots, dtype=int)
     dp_gene_score = np.zeros(n_spots)
     dp_gene_score_second = np.zeros(n_spots)
@@ -311,28 +323,37 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
         dp_gene_no[t_mask], dp_gene_score[t_mask], dp_gene_score_second[t_mask] \
             = call_spots.dot_product_score(spot_colours=colours_scaled[t_mask].reshape((n_spots_t, -1)),
                                            bled_codes=free_bled_codes[t].reshape((n_genes, -1)))[:3]
+        gene_probs_final[t_mask] = call_spots.gene_prob_score(spot_colours=colours_scaled[t_mask],
+                                                              bled_codes=free_bled_codes[t])
 
     # save overwritable variables in nbp_ref_spots
     nbp_ref_spots.gene_no = dp_gene_no
     nbp_ref_spots.score = dp_gene_score
     nbp_ref_spots.score_diff = dp_gene_score - dp_gene_score_second
-    nbp_ref_spots.intensity = np.median(np.max(colours, axis=2), axis=1).astype(np.float32)
+    nbp_ref_spots.intensity = np.median(np.max(colours_scaled, axis=2), axis=1).astype(np.float32)
     nbp_ref_spots.background_strength = bg_codes
-    nbp_ref_spots.gene_probs = gene_prob
-    nbp_ref_spots.finalized = True
+    nbp_ref_spots.gene_probs = gene_probs_final
+    nbp_ref_spots.gene_probs_initial = gene_probs_initial
+    nbp_ref_spots.gene_probs_mid = gene_probs_mid
 
     # Save variables in nbp
     nbp.gene_names = gene_names
     nbp.gene_codes = gene_codes
     # Now expand variables to have n_channels channels instead of n_channels_use channels. For some variables, we
     # also need to swap axes as the expand channels function assumes the last axis is the channel axis.
-    nbp.color_norm_factor = utils.base.expand_channels(colour_norm_factor_initial * total_scale,
-                                                       use_channels, nbp_basic.n_channels)
+    nbp.colour_norm_factor = utils.base.expand_channels(colour_norm_factor, use_channels, nbp_basic.n_channels)
     nbp.initial_bleed_matrix = utils.base.expand_channels(initial_bleed_matrix.T, use_channels, nbp_basic.n_channels).T
     nbp.bleed_matrix = utils.base.expand_channels(bleed_matrix[-1].T, use_channels, nbp_basic.n_channels).T
-    nbp.bled_codes_ge = utils.base.expand_channels(bled_codes, use_channels, nbp_basic.n_channels)
-    nbp.bled_codes = utils.base.expand_channels(bled_codes, use_channels, nbp_basic.n_channels)
-    nbp.gene_efficiency = np.ones((n_genes, n_rounds))
+    nbp.initial_bled_codes = utils.base.expand_channels(call_spots.get_bled_codes(gene_codes=gene_codes,
+                                                                                  bleed_matrix=initial_bleed_matrix),
+                                                        use_channels, nbp_basic.n_channels)
+    nbp.bled_codes = utils.base.expand_channels(call_spots.get_bled_codes(gene_codes=gene_codes,
+                                                                          bleed_matrix=bleed_matrix[-1]),
+                                                 use_channels, nbp_basic.n_channels)
+    nbp.free_bled_codes = utils.base.expand_channels(free_bled_codes, use_channels, nbp_basic.n_channels)
+    nbp.free_bled_codes_tile_indep = utils.base.expand_channels(free_bled_codes_tile_indep, use_channels,
+                                                                nbp_basic.n_channels)
+    nbp.target_matching_scale = utils.base.expand_channels(auxiliary_correction, use_channels, nbp_basic.n_channels)
 
     # Extract abs intensity percentile
     central_tile = extract.scale.central_tile(nbp_basic.tilepos_yx, nbp_basic.use_tiles)
@@ -345,7 +366,6 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
                                                return_in_bounds=True)[0]
     pixel_intensity = get_spot_intensity(np.abs(pixel_colors * scale[-1, central_tile]))
     nbp.abs_intensity_percentile = np.percentile(pixel_intensity, np.arange(1, 101))
-    nbp.use_ge = False
 
     return nbp, nbp_ref_spots
 
@@ -374,61 +394,20 @@ def bayes_mean(data, prior_mean, mean_dir_conc, other_conc):
 # Below are some functions for plotting the results of the call_spots pipeline
 
 
-def plot_svd(gene_name, tile, colours_tg, u, v):
-    order = np.argsort(np.sum(colours_tg, axis=1))[::-1]
-    mean = np.mean(colours_tg, axis=0)
-    mean = mean / np.linalg.norm(mean)
-
-    fig = plt.figure(figsize=(20, 10))
-    plt.subplot(2, 3, 1)
-    plt.imshow(colours_tg[order], aspect='auto', interpolation='none')
-    plt.title('Raw colours')
-    plt.xticks([])
-    plt.ylabel('spots')
-    plt.colorbar()
-    plt.subplot(2, 3, 2)
-    plt.imshow((u * v[None, :])[order], aspect='auto', interpolation='none')
-    plt.title('SVD Fit')
-    plt.xticks([])
-    plt.colorbar()
-    plt.subplot(2, 3, 3)
-    plt.imshow((u * mean[None, :])[order], aspect='auto', interpolation='none')
-    plt.xticks([])
-    plt.title('Mean Fit')
-    plt.colorbar()
-    plt.subplot(2, 3, 4)
-    plt.xticks([])
-    plt.xlabel('Round channel')
-    plt.ylabel('spots')
-    plt.imshow((u * mean[None, :] - u * v[None, :])[order], aspect='auto', interpolation='none')
-    plt.title('svd - mean')
-    plt.colorbar()
-    plt.subplot(2, 3, 5)
-    plt.plot(mean, label='mean')
-    plt.plot(v, label='svd')
-    plt.ylim(0, 1)
-    plt.xticks([])
-    plt.xlabel('Round channel')
-    plt.title('svd and mean for each round channel')
-    plt.legend()
-    plt.suptitle('Spots and predictions for gene ' + gene_name + ' on tile ' + str(tile))
-    plt.savefig('/home/reilly/Desktop/svd_plots_new/' + gene_name + '_' + str(tile) + '.png')
-    plt.close(fig)
-
-
-def view_bleed_calculation(colours_scaled: np.ndarray, gene_no: np.ndarray, gene_codes: np.ndarray, dye_names: list):
+def view_bleed_calculation(nb: Notebook):
     """
     View the bleed matrix calculation for each dye and channel
     Args:
-        colours_scaled: n_spots_use x n_rounds x n_channels_use array of spot colours
-        gene_no: n_spots_use x n_genes array of gene assignments
-        gene_codes: n_genes x n_rounds array of gene codes
-        dye_names: list of dye names
+        nb: Notebook for current experiment. Must contain the call_spots page.
     """
-    n_dyes = len(dye_names)
-    n_rounds = gene_codes.shape[1]
-    n_channels_use = colours_scaled.shape[2]
+    colours_raw = nb.ref_spots.colors[:, :, nb.basic.use_channels].astype(float)
+    spot_tile = nb.ref_spots.tile.astype(int)
+    colours_scaled = colours_raw * nb.call_spots.color_norm_factor[spot_tile]
+    dye_names, gene_codes, gene_no = nb.call_spots.dye_names, nb.call_spots.gene_codes, nb.ref_spots.gene_no
+    n_dyes, n_rounds, n_channels_use = len(dye_names), nb.basic_info.n_rounds, len(nb.basic_info.use_channels)
     bleed_matrix = np.zeros((n_channels_use, n_dyes))
+
+    # Begin the calculation and plotting
     fig, ax = plt.subplots(2, n_dyes + 1, figsize=(20, 10))
     for d in range(n_dyes):
         dye_d_spots = np.zeros((0, n_channels_use))
@@ -459,40 +438,22 @@ def view_bleed_calculation(colours_scaled: np.ndarray, gene_no: np.ndarray, gene
     ax[0, -1].set_xlabel('dye')
     ax[0, -1].set_ylabel('channel')
     ax[0, -1].set_xticks(range(n_dyes))
-    ax[0, -1].set_xticklabels(dye_names, rotation=90)
+    ax[0, -1].set_xticklabels(dye_names, rotation=90, fontsize=6)
 
     # turn off blank axes
     ax[1, -1].axis('off')
     plt.show()
 
 
-
-def plot_free_comparison(F, b, A, gene_names, save=False):
-    predicted = np.zeros_like(F)
-    for t in range(F.shape[0]):
-        for g in range(F.shape[1]):
-            predicted[t, g] = A[t] * b[g]
-    score = np.zeros((F.shape[0], F.shape[1])) * np.nan
-    for t in range(F.shape[0]):
-        for g in range(F.shape[1]):
-            if np.max(F[t, g]) == 0:
-                continue
-            score[t, g] = np.sum(F[t, g] * predicted[t, g]) / np.linalg.norm(F[t, g]) / np.linalg.norm(predicted[t, g])
-    fig = plt.figure(figsize=(20, 10))
-    plt.imshow(score.T, aspect='auto', interpolation='none')
-    plt.xlabel('Tile')
-    plt.ylabel('Gene')
-    plt.xticks(range(F.shape[0]), range(F.shape[0]))
-    plt.yticks(range(F.shape[1]), gene_names, fontsize=4)
-    plt.colorbar()
-    plt.title('Similarity score between predicted and actual free bled codes for each gene and tile')
-    plt.show()
-    if save:
-        plt.savefig('/home/reilly/Desktop/free_comparison.png')
-        plt.close(fig)
-
-
-def plot_cnf(colour_norm_factor, use_channels, n_tiles, n_rounds):
+def plot_cnf(nb: Notebook):
+    """
+    Plot the colour norm factor for each tile, round and channel
+    Args:
+        nb: Notebook for current experiment. Must contain the call_spots page.
+    """
+    n_tiles, n_rounds, use_channels = (len(nb.basic_info.use_tiles), len(nb.basic_info.use_rounds),
+                                       nb.basic_info.use_channels)
+    colour_norm_factor = nb.call_spots.colour_norm_factor
     # Now we are going to plot the colour norm factor for each tile, round and channel
     norm_factor_reshaped = colour_norm_factor.swapaxes(1, 2).reshape(n_tiles, -1)
     plt.figure(figsize=(10, 10))
@@ -510,27 +471,328 @@ def plot_cnf(colour_norm_factor, use_channels, n_tiles, n_rounds):
     plt.show()
 
 
-def view_A_fit(F, G, n, t, r, c, save=False):
-    A = np.sum(n * F * G) / np.sum(n * G * G)
-    F_bar = weighted_mean(F, n)
-    G_bar = weighted_mean(G, n)
-    weighted_cov = weighted_mean((F - F_bar) * (G - G_bar), n)
-    weighted_var_F = weighted_mean((F - F_bar) ** 2, n)
-    weighted_var_G = weighted_mean((G - G_bar) ** 2, n)
-    weighted_correlation = weighted_cov / np.sqrt(weighted_var_F * weighted_var_G)
+class ViewGeneTransitions:
+    def __init__(self, nb: Notebook, pre: str = 'gene_probs_initial'):
+        """
+        View the gene transitions between the original and new gene assignments.
+        Note that the order of the gene probability assignments is gene_probs_initial -> gene_probs_mid -> gene_probs
+        and the option to use anchor gene assignments allows the user to compare the anchor method and any probability
+        method, but it makes the most sense to compare anchor and gene_probs.
+        Args:
+            nb: Notebook for current experiment. Must contain the call_spots page.
+            pre: The gene assignment to use for the original gene assignment. Must be one of
+                ['gene_probs_initial', 'gene_probs_mid', 'anchor']
+            The post gene assignment will always be gene_probs
+        """
+        self.nb = nb
+        self.pre = pre
+        self.post = 'gene_probs'
+        # First, add the data to the object (this will be the gene_no_original, gene_no_new and transition_matrix)
+        self.update_data()
+        # Now plot the data
+        self.plot_data()
 
-    fig = plt.figure(figsize=(20, 10))
-    plt.scatter(G, F, label='data. Weighted correlation = {:.3f}'.format(weighted_correlation), c='red',
-                s=np.clip(n, 0, 100))
-    plt.plot(G, A * G, label='fit', c='blue')
-    plt.legend()
-    plt.xlabel('Tile independent free bled code')
-    plt.ylabel('Tile dependent free bled code')
-    plt.title('Fit for tile {}, round {}, channel {}'.format(t, r, c))
-    if save:
-        plt.savefig('/home/reilly/Desktop/A_fits/' + str(t) + '_' + str(r) + '_' + str(c) + '.png')
-        plt.close(fig)
-    else:
+    def check_args(self):
+        """
+        Check that the arguments are valid
+        """
+        assert self.pre in ['gene_probs_initial', 'gene_probs_mid', 'gene_probs', 'anchor'], \
+            f'pre must be one of ["gene_probs_initial", "gene_probs_mid", "gene_probs", "anchor"], not {self.pre}'
+
+    def update_data(self):
+        """
+        Update the parameters: gene_no_original, gene_no_new and transition_matrix
+        """
+        self.check_args()
+        if 'prob' in self.pre:
+            gene_probs_original = self.nb.ref_spots.__getattribute__(self.pre)
+            self.gene_no_original = np.argmax(gene_probs_original, axis=1)
+            self.score_original = np.max(gene_probs_original, axis=1)
+        else:
+            self.gene_no_original = self.nb.ref_spots.gene_no
+            self.score_original = self.nb.ref_spots.score
+        # update the new gene assignments
+        gene_probs_new = self.nb.ref_spots.gene_probs
+        self.gene_no_new = np.argmax(gene_probs_new, axis=1)
+        self.score_new = np.max(gene_probs_new, axis=1)
+        # first record the gene transitions
+        n_genes = len(self.nb.call_spots.gene_names)
+        transition_matrix = np.zeros((n_genes, n_genes))
+        for g1, g2 in product(range(n_genes), range(n_genes)):
+            if g1 != g2:
+                transition_matrix[g1, g2] = np.sum((self.gene_no_original == g1) * (self.gene_no_new == g2))
+            else:
+                transition_matrix[g1, g2] = np.nan
+        self.transition_matrix = transition_matrix
+
+    def plot_data(self):
+        """
+        Plot the gene transitions and the number of reads in the original and new gene assignments
+        Args:
+            self: the ViewGeneTransitions object
+        """
+        if not hasattr(self, 'fig'):
+            # make sure the axes and their labels do not go below y = 0.2
+            self.fig, self.ax = plt.subplots(1, 2, figsize=(20, 10))
+        else:
+            self.ax[0].clear()
+            self.ax[1].clear()
+
+        ax = self.ax
+        n_genes = len(self.nb.call_spots.gene_names)
+        gene_names = self.nb.call_spots.gene_names
+        # now plot the transition matrix
+        ax[0].imshow(self.transition_matrix, aspect='auto', interpolation='none')
+        ax[0].set_xticks(range(n_genes))
+        ax[0].set_yticks(range(n_genes))
+        # make each tick label a gene name and its index
+        ax[0].set_xticklabels([f'{i}: {gene_names[i]}' for i in range(n_genes)], rotation=90, fontsize=6)
+        ax[0].set_yticklabels([f'{i}: {gene_names[i]}' for i in range(n_genes)], fontsize=6)
+        ax[0].set_xlabel('New gene')
+        ax[0].set_ylabel('Original gene')
+        ax[0].set_title('Gene transitions')
+        # now plot the number of reads initially versus finally
+        num_reads_original = np.zeros(n_genes)
+        num_reads_new = np.zeros(n_genes)
+        for g in range(n_genes):
+            num_reads_original[g] = np.sum(self.gene_no_original == g)
+            num_reads_new[g] = np.sum(self.gene_no_new == g)
+        ax[1].plot(num_reads_original, label=self.pre)
+        ax[1].plot(num_reads_new, label=self.post)
+        ax[1].set_xticks(range(n_genes))
+        ax[1].set_xticklabels(gene_names, rotation=90, fontsize=6)
+        ax[1].set_xlabel('Gene')
+        ax[1].set_ylabel('Number of reads')
+        ax[1].legend()
+        ax[1].set_title('Assignment of reads to genes')
+        # Add check buttons to change the gene assignments
+        self.add_buttons()
+        ratio_change = np.sum(self.gene_no_original != self.gene_no_new) / len(self.gene_no_original)
+        plt.suptitle(f'Gene transitions from {self.pre} to {self.post}. The percentage of reads that changed gene '
+                     f'assignment is {ratio_change * 100:.2f}%')
+        self.fig.tight_layout()
+        self.fig.canvas.draw()
+        plt.show()
+
+    def add_buttons(self):
+        """
+        Make each pixel clickable. Clicking on a pixel will show the gene transitions for that gene pair.
+        """
+        # Add check buttons to change the pre gene assignment
+        if hasattr(self, 'button_ax'):
+            self.button_ax.clear()
+        else:
+            self.button_ax = plt.axes([0.55, 0.8125, 0.1, 0.1])
+        self.check = CheckButtons(self.button_ax, ['gene_probs_initial', 'gene_probs_mid', 'anchor'],
+                                  [self.pre == 'gene_probs_initial', self.pre == 'gene_probs_mid',
+                                   self.pre == 'anchor'], frame_props={'color': ['white', 'white', 'white']})
+        self.check.on_clicked(self.change_pre)
+        # make the transition matrix clickable. Add a white rectangle around any pixel that we hover over
+        mplcursors.cursor(self.ax[0], hover=True).connect('add', self.add_rectangle)
+        # Now let's make it so that clicking on a pixel will show the gene transitions for that gene pair
+        mplcursors.cursor(self.ax[0]).connect('add', self.view_specific_transitions)
+
+    def change_pre(self, label):
+        """
+        Change the pre gene assignment
+        Args:
+            label: the label of the check button that was clicked
+        """
+        if label == 'gene_probs_initial':
+            self.pre = 'gene_probs_initial'
+        elif label == 'gene_probs_mid':
+            self.pre = 'gene_probs_mid'
+        elif label == 'anchor':
+            self.pre = 'anchor'
+        self.update_data()
+        self.plot_data()
+
+    def add_rectangle(self, selection):
+        """
+        Add a white rectangle around any pixel that we hover over
+        Args:
+            event: the event that triggered this function
+        """
+        # first remove any existing rectangles
+        for rectangle in self.ax[0].patches:
+            rectangle.remove()
+        # now add the new rectangle
+        x, y = np.rint(selection.target).astype(int)
+        max_index = len(self.nb.call_spots.gene_names)
+        if 0 <= x < max_index and 0 <= y < max_index:
+            self.ax[0].add_patch(Rectangle((x - 0.5, y - 0.5), 1, 1, fill=False, edgecolor='white',
+                                           linewidth=2))
+
+    def view_specific_transitions(self, selection):
+        """
+        View the gene transitions between the original and new gene assignments for a specific gene pair
+        Args:
+            event: the event that triggered this function
+        """
+        x, y = np.rint(selection.target).astype(int)
+        max_index = len(self.nb.call_spots.gene_names)
+        if 0 <= x < max_index and 0 <= y < max_index and x != y:
+            g1, g2 = y, x
+            num_mismatch = np.sum((self.gene_no_original == g1) * (self.gene_no_new == g2))
+            if num_mismatch == 0:
+                print(f'No reads changed from {self.pre} gene {g1} to {self.post} gene {g2}')
+                return
+        else:
+            print('Invalid Choice')
+            return
+        print('Printing gene transitions from', self.pre, 'gene', g1, 'to', self.post, 'gene', g2)
+        colours = self.nb.ref_spots.colours[:, :, self.nb.basic_info.use_channels].astype(float)
+        colour_nom_factor = self.nb.call_spots.colour_norm_factor[:, :, self.nb.basic_info.use_channels]
+        spot_tile = self.nb.ref_spots.tile.astype(int)
+        colours_scaled = colours * colour_nom_factor[spot_tile]
+        n_spots, n_rounds, n_channels_use = colours_scaled.shape
+        gene_names = self.nb.call_spots.gene_names
+        use_channels = self.nb.basic_info.use_channels
+        print('Gene 1 is ' + gene_names[g1] + ' and gene 2 is ' + gene_names[g2])
+        if not hasattr(self, 'fig2'):
+            self.fig2, self.ax2 = plt.subplots(3, 2, figsize=(20, 10))
+        else:
+            del self.fig2, self.ax2
+            self.fig2, self.ax2 = plt.subplots(3, 2, figsize=(20, 10))
+        fig, ax = self.fig2, self.ax2
+        transition_spots = np.where((self.gene_no_original == g1) * (self.gene_no_new == g2))[0]
+        new_score = self.score_new[transition_spots] * len(transition_spots)
+        order = np.argsort(new_score)
+
+        if self.pre == 'gene_probs_mid':
+            transition_colours = colours_scaled[transition_spots][order].reshape((len(transition_spots),
+                                                                           n_rounds * n_channels_use))
+            original_gene_code = self.nb.call_spots.bled_codes[g1][:, use_channels].ravel()[None, :]
+            new_gene_code = self.nb.call_spots.bled_codes[g2][:, use_channels].ravel()[None, :]
+        else:
+            transition_colours = colours[transition_spots][order].reshape((len(transition_spots),
+                                                                           n_rounds * n_channels_use))
+            original_gene_code = self.nb.call_spots.initial_bled_codes[g1][:, use_channels].ravel()[None, :]
+            new_gene_code = self.nb.call_spots.initial_bled_codes[g2][:, use_channels].ravel()[None, :]
+        round_dp_score_original = np.zeros((len(transition_spots), n_rounds))
+        round_dp_score_new = np.zeros((len(transition_spots), n_rounds))
+        for r in range(n_rounds):
+            colours_r = transition_colours[:, r*n_channels_use:(r+1)*n_channels_use]
+            colours_r /= np.linalg.norm(colours_r, axis=1)[:, None]
+            original_gene_code_r = original_gene_code[:, r*n_channels_use:(r+1)*n_channels_use]
+            original_gene_code_r /= np.linalg.norm(original_gene_code_r, axis=1)[:, None]
+            new_gene_code_r = new_gene_code[:, r*n_channels_use:(r+1)*n_channels_use]
+            new_gene_code_r /= np.linalg.norm(new_gene_code_r, axis=1)[:, None]
+            round_dp_score_original[:, r] = np.sum(colours_r * original_gene_code_r, axis=1)
+            round_dp_score_new[:, r] = np.sum(colours_r * new_gene_code_r, axis=1)
+
+        mean_dp_original = np.mean(round_dp_score_original, axis=0)
+        mean_dp_new = np.mean(round_dp_score_new, axis=0)
+        original_rounds_win = mean_dp_original > mean_dp_new
+        new_rounds_win = mean_dp_new > mean_dp_original
+        print('Original rounds win:', original_rounds_win)
+
+        print('Number of transitions:', len(transition_spots))
+
+        # add vertical lines every n_channels_use to separate rounds
+        ax[0, 0].imshow(original_gene_code, aspect='auto', interpolation='none')
+        for i in range(1, n_rounds):
+            ax[0, 0].axvline(i * n_channels_use - 0.5, color='white', linestyle='--')
+            # add a green box around the winning round
+        for i in range(n_rounds):
+            if original_rounds_win[i]:
+                ax[0, 0].add_patch(Rectangle((i * n_channels_use - 0.5, -0.5), n_channels_use, 1, fill=False,
+                                             edgecolor='red', linewidth=6))
+        if self.pre == 'gene_probs_mid':
+            ax[0, 0].set_title('Bled Code for ' + gene_names[g1])
+        else:
+            ax[0, 0].set_title('Unscaled ' + gene_names[g1])
+        ax[0, 0].set_xticks(np.arange(n_channels_use // 2, n_channels_use * n_rounds, n_channels_use))
+        ax[0, 0].set_xticklabels(range(n_rounds))
+        ax[0, 0].set_yticks([])
+
+        ax[1, 0].imshow(transition_colours, aspect='auto', interpolation='none', vmin=0,
+                        vmax=np.percentile(transition_colours, 99))
+        for i in range(1, n_rounds):
+            ax[1, 0].axvline(i * n_channels_use - 0.5, color='white', linestyle='--')
+        ax[1, 0].set_xticks(np.arange(n_channels_use // 2, n_channels_use * n_rounds, n_channels_use))
+        ax[1, 0].set_xticklabels(range(n_rounds))
+        ax[1, 0].set_yticks([])
+
+        ax[2, 0].imshow(new_gene_code, aspect='auto', interpolation='none')
+        if self.pre == 'gene_probs_mid':
+            ax[2, 0].set_title('Bled Code for ' + gene_names[g2])
+        else:
+            ax[2, 0].set_title('Unscaled ' + gene_names[g2])
+        for i in range(1, n_rounds):
+            ax[2, 0].axvline(i * n_channels_use - 0.5, color='white', linestyle='--')
+        for i in range(n_rounds):
+            if new_rounds_win[i]:
+                ax[2, 0].add_patch(Rectangle((i * n_channels_use - 0.5, -0.5), n_channels_use, 1, fill=False,
+                                             edgecolor='red', linewidth=6))
+
+        ax[2, 0].set_xticks(np.arange(n_channels_use // 2, n_channels_use * n_rounds, n_channels_use))
+        ax[2, 0].set_xticklabels(range(n_rounds))
+        ax[2, 0].set_yticks([])
+
+        # Now we will plot the scaled colours
+        transition_colours = colours_scaled[transition_spots][order].reshape((len(transition_spots),
+                                                                              n_rounds * n_channels_use)).astype(float)
+        original_gene_code = self.nb.call_spots.free_bled_codes_tile_indep[g1][:, use_channels].ravel()[None, :]
+        new_gene_code = self.nb.call_spots.free_bled_codes_tile_indep[g2][:, use_channels].ravel()[None, :]
+        round_dp_score_original = np.zeros((len(transition_spots), n_rounds))
+        round_dp_score_new = np.zeros((len(transition_spots), n_rounds))
+        for r in range(n_rounds):
+            colours_r = transition_colours[:, r * n_channels_use:(r + 1) * n_channels_use]
+            colours_r /= np.linalg.norm(colours_r, axis=1)[:, None]
+            original_gene_code_r = original_gene_code[:, r * n_channels_use:(r + 1) * n_channels_use]
+            original_gene_code_r /= np.linalg.norm(original_gene_code_r, axis=1)[:, None]
+            new_gene_code_r = new_gene_code[:, r * n_channels_use:(r + 1) * n_channels_use]
+            new_gene_code_r /= np.linalg.norm(new_gene_code_r, axis=1)[:, None]
+            round_dp_score_original[:, r] = np.sum(colours_r * original_gene_code_r, axis=1)
+            round_dp_score_new[:, r] = np.sum(colours_r * new_gene_code_r, axis=1)
+        mean_dp_original = np.mean(round_dp_score_original, axis=0)
+        mean_dp_new = np.mean(round_dp_score_new, axis=0)
+        original_rounds_win = mean_dp_original > mean_dp_new
+        new_rounds_win = mean_dp_new > mean_dp_original
+        print('Original rounds win:', original_rounds_win)
+
+        # add vertical lines every n_channels_use to separate rounds
+        ax[0, 1].imshow(original_gene_code, aspect='auto', interpolation='none')
+        for i in range(1, n_rounds):
+            ax[0, 1].axvline(i * n_channels_use - 0.5, color='white', linestyle='--')
+        for i in range(n_rounds):
+            if original_rounds_win[i]:
+                ax[0, 1].add_patch(Rectangle((i * n_channels_use - 0.5, -0.5), n_channels_use, 1, fill=False,
+                                             edgecolor='red', linewidth=6))
+        if self.pre == 'gene_probs_mid':
+            ax[0, 1].set_title('Free Bled Code for ' + gene_names[g1])
+        else:
+            ax[0, 1].set_title('Scaled ' + gene_names[g1])
+        ax[0, 1].set_xticks(np.arange(n_channels_use // 2, n_channels_use * n_rounds, n_channels_use))
+        ax[0, 1].set_xticklabels(range(n_rounds))
+        ax[0, 1].set_yticks([])
+
+        ax[1, 1].imshow(transition_colours, aspect='auto', interpolation='none', vmin=0,
+                        vmax=np.percentile(transition_colours, 99))
+        for i in range(1, n_rounds):
+            ax[1, 1].axvline(i * n_channels_use - 0.5, color='white', linestyle='--')
+        ax[1, 1].set_xticks(np.arange(n_channels_use // 2, n_channels_use * n_rounds, n_channels_use))
+        ax[1, 1].set_xticklabels(range(n_rounds))
+        ax[1, 1].set_yticks([])
+
+        ax[2, 1].imshow(new_gene_code, aspect='auto', interpolation='none')
+        if self.pre == 'gene_probs_mid':
+            ax[2, 1].set_title('Free Bled Code for ' + gene_names[g2])
+        else:
+            ax[2, 1].set_title('Scaled ' + gene_names[g2])
+        for i in range(1, n_rounds):
+            ax[2, 1].axvline(i * n_channels_use - 0.5, color='white', linestyle='--')
+        for i in range(n_rounds):
+            if new_rounds_win[i]:
+                ax[2, 1].add_patch(Rectangle((i * n_channels_use - 0.5, -0.5), n_channels_use, 1, fill=False,
+                                                edgecolor='red', linewidth=6))
+        ax[2, 1].set_xticks(np.arange(n_channels_use // 2, n_channels_use * n_rounds, n_channels_use))
+        ax[2, 1].set_xticklabels(range(n_rounds))
+        ax[2, 1].set_yticks([])
+
+        plt.suptitle('Gene transitions from gene ' + gene_names[g1] + ' to gene ' + gene_names[g2])
+        fig.canvas.draw_idle()
         plt.show()
 
 
@@ -640,34 +902,6 @@ def view_all_gene_round_strengths(free_bled_codes_tile_indep, gene_names, scale_
     scaled_cv= np.mean(np.std(free_bled_round_strength_scaled, axis=1)) / np.mean(free_bled_round_strength_scaled)
     fig.suptitle('Tile independent free bled codes for all genes. Blue is unscaled, orange is scaled \n'
                  'Raw Coef. of Variation = {:.3f}, Scaled Coef. of Variation = {:.3f}'.format(cv, scaled_cv))
-    plt.show()
-
-
-def weighted_mean(x, w):
-    return np.sum(x * w) / np.sum(w)
-
-
-def compare_dyes(free_bled_codes_tile_indep, gene_codes, dye, gene_names):
-    # We will compare the dye reads from each gene to each other
-    n_genes, n_rounds, n_channels = free_bled_codes_tile_indep.shape
-    relevant_genes = np.unique(np.where(gene_codes == dye)[0])
-    gene_codes = gene_codes.tolist()
-    dye_d_index = [gene_codes[g].index(dye) for g in relevant_genes]
-    dye_corr = np.zeros((len(relevant_genes), len(relevant_genes)))
-    for g1, g2 in product(range(len(relevant_genes)), range(len(relevant_genes))):
-        if g1 == g2:
-            dye_corr[g1, g2] = 1
-        g1_dye = free_bled_codes_tile_indep[relevant_genes[g1], dye_d_index[g1]]
-        g2_dye = free_bled_codes_tile_indep[relevant_genes[g2], dye_d_index[g2]]
-        dye_corr[g1, g2] = np.sum(g1_dye * g2_dye) / np.linalg.norm(g1_dye) / np.linalg.norm(g2_dye)
-
-    # Now we will plot the correlation matrix
-    plt.figure(figsize=(10, 10))
-    plt.imshow(dye_corr, aspect='auto', interpolation='none')
-    plt.xticks(range(len(relevant_genes)), [gene_names[g] for g in relevant_genes], rotation=90, fontsize=4)
-    plt.yticks(range(len(relevant_genes)), [gene_names[g] for g in relevant_genes], fontsize=4)
-    plt.colorbar()
-    plt.title('Correlation between dye reads for dye {} for all genes containing this dye'.format(dye))
     plt.show()
 
 
