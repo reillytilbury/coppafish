@@ -256,8 +256,8 @@ class BuildPDF:
                     g_spots = np.argsort(-gene_probs[:, g])
                     # Sorted probabilities, with greatest score at index 0
                     g_probs = gene_probs[g_spots, g]
-                    g_bled_code = nb.call_spots.bled_codes[g, :, nb.basic_info.use_channels] # (rounds, channels)
-                    g_bled_code /= np.linalg.norm(g_bled_code, axis=1)
+                    g_bled_code = nb.call_spots.bled_codes[g][:, nb.basic_info.use_channels] # (rounds, channels)
+                    g_bled_code /= np.linalg.norm(g_bled_code, axis=1)[:, None]
                     g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code[None, :, :], axis=2))
                     fig, axes = self.create_empty_page(2, 2, gridspec_kw={"width_ratios": [2, 1]})
                     self.empty_plot_ticks(axes[1, 1])
