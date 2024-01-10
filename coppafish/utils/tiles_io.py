@@ -61,10 +61,12 @@ def _save_image(image: Union[npt.NDArray[np.uint16], jnp.ndarray], file_path: st
     elif file_type.lower() == ".zarr":
         blosc.use_threads = True
         blosc.set_nthreads(utils.system.get_core_count())
-        compressor = Blosc(cname="lz4", clevel=3, shuffle=Blosc.SHUFFLE)
-        # We chunk each z plane individually, since single z planes are often retrieved. We also chunk x and y by
-        # squares of size 25x25 because that seems to be fast, based on trial and error.
-        chunk_size_yx = 25
+        # By formally benchmarking every single blosc algorithm type, chunk size and compression level, it was found 
+        # that zstd was incredibly fast at both full image reading + writing. The compression level of 2 and the chunk 
+        # y/x size of 4x4 was also optimised via benchmarking.
+        # Benchmarking done by Paul Shuker (paul.shuker@outlook.com), January 2024.
+        compressor = Blosc(cname="zstd", clevel=2, shuffle=Blosc.SHUFFLE)
+        chunk_size_yx = 4
         chunk_count_yx = maths.ceil(image.shape[1] / chunk_size_yx)
         chunks = (None, chunk_count_yx, chunk_count_yx) if image.ndim == 3 else (chunk_count_yx, chunk_count_yx)
         zarray = zarr.open(
