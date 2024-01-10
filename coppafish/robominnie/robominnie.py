@@ -19,7 +19,6 @@ from typing import Dict, List, Any, Tuple, Optional
 
 from coppafish import utils
 from coppafish.pipeline import run
-from coppafish.pdf.base import BuildPDF
 
 
 DEFAULT_IMAGE_DTYPE = float
