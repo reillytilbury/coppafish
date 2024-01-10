@@ -1010,7 +1010,6 @@ class RoboMinnie:
         profile_omp: bool = False,
         save_ref_spots_data: bool = True,
         run_tile_by_tile: bool = False,
-        build_pdf_doc: bool = True,
     ):
         """
         Run RoboMinnie instance on the entire coppafish pipeline.
@@ -1029,8 +1028,6 @@ class RoboMinnie:
                 Default: true.
             run_tile_by_tile (bool, optional): run each tile on a separate notebook through 'find_spots' and
                 'register', then merge them together. Only applicable for `n_tiles > 1`. Default: false.
-            build_pdf_doc (bool, optional): build the PDF diagnostic document at the end of the coppafish pipeline run.
-                Default: true.
 
         Returns:
             Notebook: final notebook.
@@ -1120,8 +1117,6 @@ class RoboMinnie:
 
         if self.omp_spot_count == 0:
             warnings.warn("Copppafish OMP found zero spots")
-        if build_pdf_doc:
-            BuildPDF(nb)
 
         return nb
 
