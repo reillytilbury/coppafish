@@ -61,7 +61,7 @@ class view_bled_codes(ColorPlotBase):
         t = nb.basic_info.use_tiles[0]
         color_norm = nb.call_spots.color_norm_factor[t][
             np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
-        ].transpose()[..., np.newaxis]
+        ].T[:, :, np.newaxis]
         self.n_genes = nb.call_spots.bled_codes_ge.shape[0]
         self.gene_names = nb.call_spots.gene_names
         self.gene_efficiency = nb.call_spots.gene_efficiency
