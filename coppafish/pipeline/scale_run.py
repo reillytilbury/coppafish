@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import warnings
 
@@ -34,6 +35,8 @@ def compute_scale(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage)
     nbp.software_version = utils.system.get_software_verison()
     nbp.revision_hash = utils.system.get_git_revision_hash()
     
+    if not os.path.isdir(os.path.dirname(nbp_file.scale)):
+        os.mkdir(os.path.dirname(nbp_file.scale))
     if config["r1"] is None:
         config["r1"] = extract.base.get_pixel_length(config["r1_auto_microns"], nbp_basic.pixel_size_xy)
     if config["r2"] is None:

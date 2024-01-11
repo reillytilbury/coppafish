@@ -57,6 +57,8 @@ def run_filter(
     nbp.revision_hash = utils.system.get_git_revision_hash()
 
     start_time = time.time()
+    if not os.path.isdir(nbp_file.tile_dir):
+        os.mkdir(nbp_file.tile_dir)
     file_type = nbp_extract.file_type
     # get rounds to iterate over
     use_channels_anchor = [c for c in [nbp_basic.dapi_channel, nbp_basic.anchor_channel] if c is not None]
