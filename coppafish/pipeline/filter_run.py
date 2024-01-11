@@ -243,9 +243,9 @@ def run_filter(
                             "exists": str(filtered_image_exists).lower(),
                         }
                     )
+                    im_raw = tiles_io._load_image(file_path_raw, file_type)
                     # zyx -> yxz
                     im_raw = im_raw.transpose((1, 2, 0))
-
                     if not nbp_basic.is_3d:
                         im_raw = extract.focus_stack(im_raw)
                     im_filtered, bad_columns = extract.strip_hack(im_raw)  # check for faulty columns
@@ -306,7 +306,7 @@ def run_filter(
                             r,
                             c,
                             suffix="_raw" if r == pre_seq_round else "",
-                            num_rotations=config["num_rotations"],
+                            num_rotations=config["num_rotations"], 
                         )
                         del im_filtered
                     else:

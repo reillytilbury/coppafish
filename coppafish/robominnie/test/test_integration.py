@@ -102,11 +102,7 @@ def test_integration_002() -> None:
 
 
 @pytest.mark.slow
-def test_integration_003(
-    include_stitch: bool = True,
-    include_omp: bool = True,
-    run_tile_by_tile: bool = False,
-) -> Notebook:
+def test_integration_003(include_stitch: bool = True, include_omp: bool = True) -> Notebook:
     """
     Summary of input data: random spots and pink noise.
 
@@ -115,8 +111,6 @@ def test_integration_003(
     Args:
         include_stitch (bool, optional): run stitch. Default: true.
         include_omp (bool, optional): run OMP. Default: true.
-        run_tile_by_tile (bool, optional): run each tile separately then combine notebooks on tile independent
-            pipeline. Default: true.
 
     Returns:
         Notebook: final notebook.
@@ -133,9 +127,7 @@ def test_integration_003(
         n_spots=25_000, include_dapi=True, spot_size_pixels_dapi=np.array([9, 9, 9]), spot_amplitude_dapi=0.05
     )
     robominnie.save_raw_images(output_dir=output_dir)
-    nb = robominnie.run_coppafish(
-        include_stitch=include_stitch, include_omp=include_omp, run_tile_by_tile=run_tile_by_tile
-    )
+    nb = robominnie.run_coppafish(include_stitch=include_stitch, include_omp=include_omp)
     if not include_omp or not include_stitch:
         return nb
     get_robominnie_scores(robominnie)
@@ -200,6 +192,7 @@ def test_tile_by_tile_equality() -> None:
     Test for coppafish notebook equality when running the pipeline tile by tile then merging versus all tiles at once
     (old approach) using ``test_integration_003``.
     """
+    raise NotImplementedError("This will be implemented once tile by tile pipeline running is implemented")
 
     def _approximately_equal(a: Any, b: Any) -> bool:
         if a is None and b is None:
@@ -241,10 +234,10 @@ def test_tile_by_tile_equality() -> None:
         return equal
 
     start_time_tile_by_tile = time.time()
-    nb_1 = test_integration_003(include_omp=True, run_tile_by_tile=True)
+    nb_1 = test_integration_003(include_omp=True)
     end_time_tile_by_tile = time.time()
     start_time = time.time()
-    nb_0 = test_integration_003(include_omp=True, run_tile_by_tile=False)
+    nb_0 = test_integration_003(include_omp=True)
     end_time = time.time()
     print(f"Pipeline time: {round(end_time - start_time, 1)}s")
     print(f"Pipeline tile by tile time: {round(end_time_tile_by_tile - start_time_tile_by_tile, 1)}s")

@@ -1008,7 +1008,6 @@ class RoboMinnie:
         jax_profile_omp: bool = False,
         profile_omp: bool = False,
         save_ref_spots_data: bool = True,
-        run_tile_by_tile: bool = False,
     ):
         """
         Run RoboMinnie instance on the entire coppafish pipeline.
@@ -1025,8 +1024,6 @@ class RoboMinnie:
             save_ref_spots_data (bool, optional): if true, will save ref_spots data, which is used for comparing
                 ref_spots results to the true robominnie spots. Default: false to reduce RoboMinnie's memory usage.
                 Default: true.
-            run_tile_by_tile (bool, optional): run each tile on a separate notebook through 'find_spots' and
-                'register', then merge them together. Only applicable for `n_tiles > 1`. Default: false.
 
         Returns:
             Notebook: final notebook.
@@ -1049,7 +1046,7 @@ class RoboMinnie:
         nb = run.initialize_nb(config_filepath)
         if time_pipeline:
             start_time = time.time()
-        run.run_tile_indep_pipeline(nb, run_tile_by_tile=run_tile_by_tile)
+        run.run_tile_indep_pipeline(nb)
         if not include_stitch:
             return nb
         run.run_stitch(nb)

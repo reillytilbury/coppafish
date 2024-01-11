@@ -22,8 +22,8 @@ from .. import utils, extract
 
 
 class OptimisedFor(Enum):
-    READ_PLUS_WRITE_SPEED = 0
-    RANDOM_ACCESS_SPEED = 1
+    FULL_READ_AND_WRITE = 0
+    Z_RANDOM_ACCESS = 1
 
 
 def image_exists(file_path: str, file_type: str) -> bool:
@@ -70,7 +70,7 @@ def _save_image(
         ValueError: unsupported file_type or optimised_for.
     """
     if optimised_for is None:
-        optimised_for = OptimisedFor.READ_PLUS_WRITE_SPEED
+        optimised_for = OptimisedFor.FULL_READ_AND_WRITE
     if file_type.lower() == ".npy":
         np.save(file_path, image)
     elif file_type.lower() == ".zarr":
@@ -80,9 +80,11 @@ def _save_image(
         # chunk size and compression level, it was found that zstd, chunk size of 1x2x2 and compression level 3 was
         # fast at the sum of full image reading + writing times while still compressing the files to ~70-80%.
         # Benchmarking done by Paul Shuker (paul.shuker@outlook.com), January 2024.
-        if optimised_for == OptimisedFor.READ_PLUS_WRITE_SPEED:
+        if optimised_for == OptimisedFor.FULL_READ_AND_WRITE:
             compressor = Blosc(cname="zstd", clevel=3, shuffle=Blosc.BITSHUFFLE)
             chunk_size_yx = 2
+        elif optimised_for == OptimisedFor.Z_RANDOM_ACCESS:
+            compressor = Blosc(cname="lz4", clevel=5, shuffle=Blosc.SHUFFLE)
         else:
             ValueError(f"Unexpected opimised_for parameter: {optimised_for}")
         chunk_count_yx = maths.ceil(image.shape[1] / chunk_size_yx)

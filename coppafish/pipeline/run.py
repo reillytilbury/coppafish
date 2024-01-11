@@ -5,13 +5,11 @@ import joblib
 import warnings
 import numpy as np
 from scipy import sparse
-from typing import Optional
 
 from .. import setup, utils
 from ..setup import Notebook
 from ..find_spots import check_spots
 from ..call_spots import base as call_spots_base
-from ..pdf.base import BuildPDF
 from .register import preprocessing
 from . import basic_info
 from . import scale_run
@@ -70,7 +68,6 @@ def run_pipeline(
         run_stitch(nb)
         run_register(nb, overwrite_ref_spots)
         run_omp(nb)
-
     return nb
 
 
@@ -145,7 +142,7 @@ def run_scale(nb: Notebook) -> None:
         warnings.warn('scale', utils.warnings.NotebookPageWarning)
     
 
-def run_extract(nb: Notebook, return_image_t: Optional[bool] = False) -> Optional[np.ndarray]:
+def run_extract(nb: Notebook) -> None:
     """
     This runs the `extract_and_filter` step of the pipeline to produce the tiff files in the tile directory.
 
@@ -155,7 +152,6 @@ def run_extract(nb: Notebook, return_image_t: Optional[bool] = False) -> Optiona
 
     Args:
         nb: `Notebook` containing `file_names`, `basic_info` and `scale` pages.
-        return_image_t (bool, optional): return the extracted, unfiltered image for a single tile. Default: false.
         
     Returns:
         `(n_rounds x n_channels x nz x ny x nx) ndarray[uint16]` or None: all extracted images if running on a single 
@@ -163,42 +159,34 @@ def run_extract(nb: Notebook, return_image_t: Optional[bool] = False) -> Optiona
     """
     if not nb.has_page("extract") or not nb.has_page("extract_debug"):
         config = nb.get_config()
-        nbp, nbp_debug, image_t_raw = extract_run.run_extract(
-            config['extract'], nb.file_names, nb.basic_info, nb.scale, return_image_t, 
+        nbp, nbp_debug = extract_run.run_extract(
+            config['extract'], nb.file_names, nb.basic_info, nb.scale,
         )
         nb += nbp
         nb += nbp_debug
-        return image_t_raw
     else:
         warnings.warn('extract', utils.warnings.NotebookPageWarning)
         warnings.warn('extract_debug', utils.warnings.NotebookPageWarning)
 
 
-def run_filter(nb: Notebook, image_t_raw: Optional[np.ndarray] = None, return_filtered_image: Optional[bool] = False
-               ) -> Optional[np.ndarray]:
+def run_filter(nb: Notebook) -> None:
     """
     Run `filter` step of the pipeline to produce filtered images in the tile directory.
 
     Args:
         nb (Notebook): `Notebook` containing `file_names`, `basic_info`, `scale` and `extract` pages.
-        image_t_raw (n_rounds x n_channels x ny x nx x nz): the raw, extracted image for single tile, only given when 
-            running on one tile. Default: not given.
-        return_filtered_image (bool, optional): return the filtered image for a single tile. Default: false.
     """
     if not nb.has_page('filter'):
         config = nb.get_config()
-        nbp, nbp_debug, image_t = filter_run.run_filter(
+        nbp, nbp_debug = filter_run.run_filter(
             config['filter'], 
             nb.file_names, 
             nb.basic_info, 
             nb.scale, 
             nb.extract, 
-            image_t_raw, 
-            return_filtered_image, 
         )
         nb += nbp
         nb += nbp_debug
-        return image_t
     else:
         warnings.warn('filter', utils.warnings.NotebookPageWarning)
 
@@ -213,9 +201,6 @@ def run_find_spots(nb: Notebook) -> Notebook:
 
     Args:
         nb: `Notebook` containing `extract` page.
-        image_t (`(n_rounds x n_channels x ny x nz (x nz)) ndarray[uint16]`, optional): image pixels for tile 
-            specified in `nb`. If given, find_spots will be run on this single tile only and return the find_spots 
-            NotebookPage, not adding it to the Notebook. Default: not given.
         
     Returns:
         NoteBook containing 'find_spots' page.
@@ -279,12 +264,8 @@ def run_register(nb: Notebook) -> None:
 
     If `Notebook` already contains these pages, it will just be returned.
     
-    If `image_t` is given, register will run on the single tile given.
-
     Args:
         nb: `Notebook` containing `extract` page.
-        image_t (`(n_rounds x n_channels x ny x nz (x nz)) ndarray[uint16]`, optional): image for tile 
-            `nb[basic_info][use_tile]`. Default: not given.
     """
     config = nb.get_config()
     # if not all(nb.has_page(["register", "register_debug"])):
