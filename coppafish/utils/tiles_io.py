@@ -4,6 +4,7 @@ import numbers
 import itertools
 import numpy as np
 import math as maths
+from enum import Enum
 from numcodecs import blosc, Blosc
 
 try:
@@ -13,11 +14,16 @@ except ImportError:
 from tqdm import tqdm
 import numpy_indexed
 import numpy.typing as npt
-from typing import List, Tuple, Union, Optional, Any
+from typing import Tuple, Union, Optional, List, Any
 
 from ..setup import NotebookPage
 from ..register import preprocessing
 from .. import utils, extract
+
+
+class OptimisedFor(Enum):
+    READ_PLUS_WRITE_SPEED = 0
+    RANDOM_ACCESS_SPEED = 1
 
 
 def image_exists(file_path: str, file_type: str) -> bool:
@@ -43,7 +49,12 @@ def image_exists(file_path: str, file_type: str) -> bool:
         raise ValueError(f"Unsupported file_type: {file_type.lower()}")
 
 
-def _save_image(image: Union[npt.NDArray[np.uint16], jnp.ndarray], file_path: str, file_type: str) -> None:
+def _save_image(
+    image: Union[npt.NDArray[np.uint16], jnp.ndarray],
+    file_path: str,
+    file_type: str,
+    optimised_for: OptimisedFor = None,
+) -> None:
     """
     Save image in `file_path` location. No manipulation or logic is applied here, just purely saving the image as it
     was given.
@@ -52,25 +63,38 @@ def _save_image(image: Union[npt.NDArray[np.uint16], jnp.ndarray], file_path: st
         image (((nz x) ny x nx) ndarray[uint16]): image to save.
         file_path (str): file path.
         file_type (str): file type, case insensitive.
+        optimised_for (literal[int]): what speed to optimise compression for. Affects the blosc compressor. Default:
+            optimised for full image reading + writing time.
 
     Raises:
-        ValueError: unsupported file type.
+        ValueError: unsupported file_type or optimised_for.
     """
+    if optimised_for is None:
+        optimised_for = OptimisedFor.READ_PLUS_WRITE_SPEED
     if file_type.lower() == ".npy":
         np.save(file_path, image)
     elif file_type.lower() == ".zarr":
         blosc.use_threads = True
         blosc.set_nthreads(utils.system.get_core_count())
-        # By formally benchmarking every single blosc algorithm type, chunk size and compression level, it was found 
-        # that zstd was incredibly fast at both full image reading + writing. The compression level of 2 and the chunk 
-        # y/x size of 4x4 was also optimised via benchmarking.
+        # By formally benchmarking every single blosc algorithm type (except snappy since this is unsupported by zarr),
+        # chunk size and compression level, it was found that zstd, chunk size of 1x2x2 and compression level 3 was
+        # fast at the sum of full image reading + writing times while still compressing the files to ~70-80%.
         # Benchmarking done by Paul Shuker (paul.shuker@outlook.com), January 2024.
-        compressor = Blosc(cname="zstd", clevel=2, shuffle=Blosc.SHUFFLE)
-        chunk_size_yx = 4
+        if optimised_for == OptimisedFor.READ_PLUS_WRITE_SPEED:
+            compressor = Blosc(cname="zstd", clevel=3, shuffle=Blosc.BITSHUFFLE)
+            chunk_size_yx = 2
+        else:
+            ValueError(f"Unexpected opimised_for parameter: {optimised_for}")
         chunk_count_yx = maths.ceil(image.shape[1] / chunk_size_yx)
         chunks = (None, chunk_count_yx, chunk_count_yx) if image.ndim == 3 else (chunk_count_yx, chunk_count_yx)
         zarray = zarr.open(
-            file_path, mode="w", zarr_version=2, shape=image.shape, chunks=chunks, dtype="|u2", compressor=compressor
+            file_path,
+            mode="w",
+            zarr_version=2,
+            shape=image.shape,
+            chunks=chunks,
+            dtype="|u2",
+            compressor=compressor,
         )
         zarray[:] = image
     else:
@@ -281,10 +305,13 @@ def load_image(
                     if isinstance(z_indices, int):
                         image = _load_image(file_path, file_type, z_indices, mmap_mode="r")
                     else:
-                        image = np.asarray([
-                            _load_image(file_path, file_type, indices=int(z_indices[i]), mmap_mode="r")
-                            for i in range(len(z_indices))
-                        ], dtype=np.uint16)
+                        image = np.asarray(
+                            [
+                                _load_image(file_path, file_type, indices=int(z_indices[i]), mmap_mode="r")
+                                for i in range(len(z_indices))
+                            ],
+                            dtype=np.uint16,
+                        )
                     if image.ndim == 3:
                         # zyx -> yxz
                         image = np.moveaxis(image, 0, 2)
