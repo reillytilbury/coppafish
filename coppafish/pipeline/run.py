@@ -5,7 +5,6 @@ import joblib
 import warnings
 import numpy as np
 from scipy import sparse
-import numpy.typing as npt
 from typing import Optional
 
 from .. import setup, utils
@@ -75,7 +74,7 @@ def run_pipeline(
     return nb
 
 
-def run_tile_indep_pipeline(nb: Notebook, run_tile_by_tile: bool = None) -> None:
+def run_tile_indep_pipeline(nb: Notebook) -> None:
     """
     Run tile-independent pipeline processes.
 
@@ -84,37 +83,12 @@ def run_tile_indep_pipeline(nb: Notebook, run_tile_by_tile: bool = None) -> None
         run_tile_by_tile (bool, optional): run each tile on a separate notebook through 'find_spots' and 'register', 
             then merge them together. Default: true if PC has >110GB of available memory. False otherwise.
     """
-    if run_tile_by_tile is None:
-        run_tile_by_tile = utils.system.get_available_memory() > 110
-        run_tile_by_tile = False # Currently not stable, needs to be fully tested
-    assert not run_tile_by_tile, "Running tile by tile in memory is still a work in progress"
     
     run_scale(nb)
-    if run_tile_by_tile and nb.basic_info.n_tiles > 1:
-        print("Running tile by tile...")
-        # Load one tile image into memory to run in both find_spots and register
-        nb_tiles = setup.notebook.split_by_tiles(nb)
-        for nb_tile in nb_tiles:
-            image_t_raw = run_extract(nb_tile, return_image_t=True)
-            image_t_filtered = run_filter(nb_tile, image_t_raw, return_filtered_image=True)
-            del image_t_raw
-            nb_tile = run_find_spots(nb_tile, image_t_filtered)
-            del image_t_filtered
-        nb = setup.merge_notebooks(nb_tiles, nb)
-    elif run_tile_by_tile and nb.basic_info.n_tiles == 1:
-        image_t_raw = run_extract(nb, return_image_t=True)
-        image_t_filtered = run_filter(nb, image_t_raw, return_filtered_image=True)
-        del image_t_raw
-        run_find_spots(nb, image_t_filtered)
-        del image_t_filtered
-    else:
-        # Version 0.4.1 and below method
-        run_extract(nb)
-        run_filter(nb)
-        run_find_spots(nb)
-    #TODO: Place run_register within the t loop and run tile by tile, inputting image_t_filtered as a parameter
+    run_extract(nb)
+    run_filter(nb)
+    run_find_spots(nb)
     run_register(nb)
-    # error if too few spots - may indicate tile or channel which should not be included
     check_spots.check_n_spots(nb)
 
 
@@ -229,8 +203,7 @@ def run_filter(nb: Notebook, image_t_raw: Optional[np.ndarray] = None, return_fi
         warnings.warn('filter', utils.warnings.NotebookPageWarning)
 
 
-def run_find_spots(
-    nb: Notebook, image_t: Optional[npt.NDArray[np.uint16]] = None) -> Notebook:
+def run_find_spots(nb: Notebook) -> Notebook:
     """
     This runs the `find_spots` step of the pipeline to produce point cloud from each tiff file in the tile directory.
 
@@ -247,13 +220,10 @@ def run_find_spots(
     Returns:
         NoteBook containing 'find_spots' page.
     """
-    if image_t is not None:
-        assert len(nb.basic_info.use_tiles) == 1, "Can only run on a single-tile notebook when `image_t` is given"
-
     if not nb.has_page("find_spots"):
         config = nb.get_config()
         nbp = find_spots.find_spots(
-            config['find_spots'], nb.file_names, nb.basic_info, nb.extract, nb.filter, nb.filter.auto_thresh, image_t, 
+            config['find_spots'], nb.file_names, nb.basic_info, nb.extract, nb.filter, nb.filter.auto_thresh,
         )
         nb += nbp
     else:
@@ -299,7 +269,7 @@ def run_stitch(nb: Notebook) -> None:
                                      config['filter']['num_rotations'])
 
 
-def run_register(nb: Notebook, image_t: Optional[npt.NDArray[np.uint16]] = None) -> None:
+def run_register(nb: Notebook) -> None:
     """
     This runs the `register_initial` step of the pipeline to find shift between ref round/channel to each imaging round
     for each tile. It then runs the `register` step of the pipeline which uses this as a starting point to get
@@ -316,10 +286,6 @@ def run_register(nb: Notebook, image_t: Optional[npt.NDArray[np.uint16]] = None)
         image_t (`(n_rounds x n_channels x ny x nz (x nz)) ndarray[uint16]`, optional): image for tile 
             `nb[basic_info][use_tile]`. Default: not given.
     """
-    if image_t is not None:
-        assert len(nb.basic_info.use_tiles) == 1, "Can only run on a single-tile notebook when `image_t` is given"
-        NotImplementedError("Cannot run register tile by tile yet")
-
     config = nb.get_config()
     # if not all(nb.has_page(["register", "register_debug"])):
     if not nb.has_page("register"):

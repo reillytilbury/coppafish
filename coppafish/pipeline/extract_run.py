@@ -13,11 +13,7 @@ from ..utils import tiles_io
 
 # TODO: Add parameter return_image: bool to return the image for every round & channel when running on a single tile
 def run_extract(
-    config: dict,
-    nbp_file: NotebookPage,
-    nbp_basic: NotebookPage,
-    nbp_scale: NotebookPage,
-    return_image_t_raw: bool = False,
+    config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage, nbp_scale: NotebookPage
 ) -> Tuple[NotebookPage, NotebookPage, Optional[np.ndarray]]:
     """
     This reads in images from the raw `nd2` files, filters them and then saves them as `config[extract][file_type]`
@@ -46,8 +42,6 @@ def run_extract(
     if not nbp_basic.is_3d:
         # config["deconvolve"] = False  # only deconvolve if 3d pipeline
         raise NotImplementedError(f"coppafish 2d is not in a stable state, please contact a dev to add this. Sorry! ;(")
-    if return_image_t_raw:
-        assert len(nbp_basic.use_tiles) == 1, "The notebook must contain a single tile to return its image"
 
     start_time = time.time()
     nbp = NotebookPage("extract")
@@ -76,19 +70,6 @@ def run_extract(
     else:
         pre_seq_round = None
 
-    if return_image_t_raw:
-        image_t = np.zeros(
-            (
-                nbp_basic.n_rounds + nbp_basic.n_extra_rounds,
-                nbp_basic.n_channels,
-                nbp_basic.nz,
-                nbp_basic.tile_sz,
-                nbp_basic.tile_sz,
-            ),
-            dtype=np.uint16,
-        )
-    else:
-        image_t = None
     nbp_debug.pixel_unique_values = np.full(
         (
             nbp_basic.n_tiles,
@@ -100,15 +81,15 @@ def run_extract(
         dtype=int,
     )
     nbp_debug.pixel_unique_counts = nbp_debug.pixel_unique_values.copy()
-    
+
     if not os.path.isdir(nbp_file.tile_unfiltered_dir):
         os.mkdir(nbp_file.tile_unfiltered_dir)
 
     with tqdm(
         total=(len(use_rounds) - 1)
-            * len(nbp_basic.use_tiles)
-            * (len(nbp_basic.use_channels) + 1 if nbp_basic.dapi_channel is not None else 0)
-            + len(nbp_basic.use_tiles) * len(use_channels_anchor),
+        * len(nbp_basic.use_tiles)
+        * (len(nbp_basic.use_channels) + 1 if nbp_basic.dapi_channel is not None else 0)
+        + len(nbp_basic.use_tiles) * len(use_channels_anchor),
         desc=f"Extracting raw {nbp_file.raw_extension} files to {config['file_type']}",
     ) as pbar:
         for r in use_rounds:
@@ -162,12 +143,10 @@ def run_extract(
                             assert np.sum(im) != 0, f"Extracted image {t=}, {r=}, {c=} contains all zeros"
                             # yxz -> zyx
                             im = im.transpose((2, 0, 1))
+                            for z in range(im.shape[0]):
+                                if (im[z].max() - im[z].min()) == 0:
+                                    warnings.warn(f"Raw image {t=}, {r=}, {c=} at plane {z} is single valued!")
                             tiles_io._save_image(im, file_path, config["file_type"])
-                        for z in range(im.shape[0]):
-                            if (im[z].max() - im[z].min()) == 0:
-                                warnings.warn(f"Raw image {t=}, {r=}, {c=} at plane {z} is single valued!")
-                        if return_image_t_raw:
-                            image_t[r, c] = im
                         pixel_unique_values, pixel_unique_counts = np.unique(im, return_counts=True)
                         del im
                         nbp_debug.pixel_unique_values[t][r][c][: pixel_unique_values.size] = pixel_unique_values
@@ -176,4 +155,4 @@ def run_extract(
             del round_dask_array
     end_time = time.time()
     nbp_debug.time_taken = end_time - start_time
-    return nbp, nbp_debug, image_t
+    return nbp, nbp_debug

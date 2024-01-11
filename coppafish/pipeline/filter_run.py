@@ -19,8 +19,6 @@ def run_filter(
     nbp_basic: NotebookPage,
     nbp_scale: NotebookPage,
     nbp_extract: NotebookPage,
-    image_t_raw: Optional[npt.NDArray[np.uint16]] = None,
-    return_filtered_image: Optional[bool] = False,
 ) -> Tuple[NotebookPage, NotebookPage, Optional[npt.NDArray[np.uint16]]]:
     """
     Read in extracted raw images, filter them, then re-save in a different location.
@@ -46,10 +44,6 @@ def run_filter(
     # TODO: Refactor this function to make it more readable
     if not nbp_basic.is_3d:
         NotImplementedError(f"2d coppafish is not stable, very sorry! :9")
-    if image_t_raw is not None:
-        assert len(nbp_basic.use_tiles) == 1, "If image_t is given, the notebook must contain a single tile"
-    if return_filtered_image:
-        assert len(nbp_basic.use_tiles) == 1, "To return a filtered image, filter must be run on a single tile"
 
     nbp = NotebookPage("filter")
     nbp_debug = NotebookPage("filter_debug")
@@ -70,19 +64,6 @@ def run_filter(
     else:
         round_files = nbp_file.round
         use_rounds = nbp_basic.use_rounds
-    if return_filtered_image:
-        image_t = np.zeros(
-            (
-                nbp_basic.n_rounds + nbp_basic.n_extra_rounds,
-                nbp_basic.n_channels,
-                nbp_basic.nz,
-                nbp_basic.tile_sz,
-                nbp_basic.tile_sz,
-            ),
-            dtype=np.uint16,
-        )
-    else:
-        image_t = None
 
     # initialise output of this part of pipeline as 'vars' key
     nbp.auto_thresh = np.zeros(
@@ -262,10 +243,6 @@ def run_filter(
                             "exists": str(filtered_image_exists).lower(),
                         }
                     )
-                    if image_t_raw is None:
-                        im_raw = tiles_io._load_image(file_path_raw, file_type)
-                    else:
-                        im_raw = image_t_raw[r, c]
                     # zyx -> yxz
                     im_raw = im_raw.transpose((1, 2, 0))
 
@@ -334,8 +311,6 @@ def run_filter(
                         del im_filtered
                     else:
                         im_all_channels_2d[c] = im_filtered
-                    if return_filtered_image:
-                        image_t[r, c] = saved_im
                     pixel_unique_values, pixel_unique_counts = np.unique(saved_im, return_counts=True)
                     del saved_im
                     if pixel_unique_values.size <= 1:
@@ -360,4 +335,4 @@ def run_filter(
     nbp.bg_scale = None
     end_time = time.time()
     nbp_debug.time_taken = end_time - start_time
-    return nbp, nbp_debug, image_t
+    return nbp, nbp_debug
