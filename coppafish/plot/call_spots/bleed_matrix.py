@@ -78,6 +78,12 @@ class view_bled_codes(ColorPlotBase):
         bled_codes = np.moveaxis(bled_codes, 0, 1)
         subplot_adjust = [0.07, 0.775, 0.095, 0.9]  # larger top adjust for super title
         super().__init__([bled_codes_ge, bled_codes], color_norm, subplot_adjust=subplot_adjust)
+        n_channels = bled_codes_ge.shape[1]
+        for j in range(self.n_images):
+            # plot a black horizontal line above every third channel
+            for c in range(n_channels):
+                if c % 3 == 0:
+                    self.ax[j].axhline(c - 0.5, color='black', lw=2)
         self.gene_no = 0
         self.ax[0].set_title('With Gene Efficiency', size=10)
         self.ax[1].set_title('Without Gene Efficiency', size=10)

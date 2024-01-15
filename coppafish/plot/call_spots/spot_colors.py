@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import numpy as np
 from matplotlib.widgets import Button, RangeSlider
 from ...call_spots.qual_check import omp_spot_score, get_intensity_thresh
@@ -57,8 +58,6 @@ class ColorPlotBase:
                 Position of button which triggers change of normalisation.
                 If not given, will be set to `[0.85, 0.02, 0.1, 0.05]`.
         """
-        # When bled code of a gene more than this, that particular round/channel will be highlighted in plots
-        self.intense_gene_thresh = 0.2
         self.n_images = len(images)
         if subplot_row_columns is None:
             subplot_row_columns = [self.n_images, 1]
@@ -248,9 +247,9 @@ class view_codes(ColorPlotBase):
             self.spot_color_pb = self.spot_color - background_strength
         self.background_removed = bg_removed
         self.spot_color, self.spot_color_pb = self.spot_color.transpose(), self.spot_color_pb.transpose()
+        color_norm = color_norm.transpose()
 
         gene_no = nb.__getattribute__(page_name).gene_no[spot_no]
-
         gene_name = nb.call_spots.gene_names[gene_no]
         gene_color = nb.call_spots.bled_codes_ge[gene_no][np.ix_(nb.basic_info.use_rounds,
                                                                  nb.basic_info.use_channels)].transpose()
@@ -269,13 +268,34 @@ class view_codes(ColorPlotBase):
                                     for r in nb.basic_info.use_rounds])
         self.ax[1].set_xlabel('Round (Gene Efficiency)')
         self.fig.supylabel('Color Channel')
-        intense_gene_cr = np.where(gene_color > self.intense_gene_thresh)
-        for i in range(len(intense_gene_cr[0])):
-            for j in range(2):
-                # can't add rectangle to multiple axes hence second for loop
-                rectangle = plt.Rectangle((intense_gene_cr[1][i]-0.5, intense_gene_cr[0][i]-0.5), 1, 1,
-                                          fill=False, ec="lime", linestyle=':', lw=2)
-                self.ax[j].add_patch(rectangle)
+        # for each round, plot a green circle in the channel which is highest for that round
+        n_channels, n_rounds = gene_color.shape
+        max_channels = np.zeros((n_rounds, n_channels), dtype=bool)
+        max_channel_share = np.zeros((n_rounds, n_channels))
+        total_intensity = 0
+        for r in range(n_rounds):
+            # we will add all channels with intensity > 0.25 * sum of all channels
+            round_color = gene_color[:, r] / np.sum(gene_color[:, r])
+            good_channels = np.where(round_color > 0.25)[0]
+            max_channels[r, good_channels] = True
+            max_channel_share[r, good_channels] = gene_color[good_channels, r]
+            total_intensity += np.sum(gene_color[good_channels, r])
+        n_circles = np.sum(max_channels)
+        max_channel_share *= n_circles / total_intensity
+        for j in range(2):
+            for r in range(n_rounds):
+                good_channels = np.where(max_channels[r])[0]
+                for c in good_channels:
+                    scale = max_channel_share[r, c]
+                    default_width = 0.1
+                    default_height = 0.3
+                    circle = mpl.patches.Ellipse((r, c), width=scale * default_width, height=scale * default_height,
+                                                 facecolor='lime', edgecolor='none', alpha=0.5)
+                    self.ax[j].add_patch(circle)
+            # plot a black horizontal line above every third channel
+            for c in range(n_channels):
+                if c % 3 == 0:
+                    self.ax[j].axhline(c - 0.5, color='black', lw=2)
 
         self.background_button_ax = self.fig.add_axes([0.85, 0.1, 0.1, 0.05])
         self.background_button = Button(self.background_button_ax, 'Background', hovercolor='0.275')
@@ -335,21 +355,21 @@ class view_spot(ColorPlotBase):
             page_name = 'ref_spots'
             t = nb.ref_spots.tile[spot_no]
             spot_score = nb.ref_spots.score[spot_no]
-        color_norm = nb.call_spots.color_norm_factor[t][
-            np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
-        ].transpose()
+        if np.ndim(nb.call_spots.color_norm_factor) == 3:
+            color_norm = nb.call_spots.color_norm_factor[t][np.ix_(nb.basic_info.use_rounds,
+                                                                nb.basic_info.use_channels)].T
+        else:
+            color_norm = nb.call_spots.color_norm_factor[np.ix_(nb.basic_info.use_rounds,
+                                                                nb.basic_info.use_channels)].T
         gene_no = nb.__getattribute__(page_name).gene_no[spot_no]
         t = nb.__getattribute__(page_name).tile[spot_no]
         spot_yxz = nb.__getattribute__(page_name).local_yxz[spot_no]
 
         gene_name = nb.call_spots.gene_names[gene_no]
         gene_code = nb.call_spots.gene_codes[gene_no].copy()
-        # Need to flip 2 and 3 to match the channel order in the image
-        gene_code[gene_code == 2] = 9
-        gene_code[gene_code == 3] = 2
-        gene_code[gene_code == 9] = 3
         gene_color = nb.call_spots.bled_codes_ge[gene_no][np.ix_(nb.basic_info.use_rounds,
-                                                                 nb.basic_info.use_channels)].transpose().flatten()
+                                                                 nb.basic_info.use_channels)].transpose()
+        gene_color_flat = gene_color.flatten()
         n_use_channels, n_use_rounds = color_norm.shape
         color_norm = [val for val in color_norm.flatten()]
         spot_yxz_global = spot_yxz + nb.stitch.tile_origin[t]
@@ -378,14 +398,31 @@ class view_spot(ColorPlotBase):
                        im_yxz[:, 1].max()+0.5+nb.stitch.tile_origin[t, 1],
                        im_yxz[:, 0].min()-0.5+nb.stitch.tile_origin[t, 0],
                        im_yxz[:, 0].max()+0.5+nb.stitch.tile_origin[t, 0]]
+        # for each round, plot a green circle in the channel which is highest for that round
+        n_channels, n_rounds = gene_color.shape
+        max_channels = np.zeros((n_rounds, n_channels), dtype=bool)
+        max_channel_share = np.zeros((n_rounds, n_channels))
+        total_intensity = 0
+        for r in range(n_rounds):
+            # we will add all channels with intensity > 0.25 * sum of all channels
+            round_color = gene_color[:, r] / np.sum(gene_color[:, r])
+            good_channels = np.where(round_color > 0.25)[0]
+            max_channels[r, good_channels] = True
+            max_channel_share[r, good_channels] = gene_color[good_channels, r]
+            total_intensity += np.sum(gene_color[good_channels, r])
+        n_circles = np.sum(max_channels)
+        max_channel_share *= n_circles / total_intensity
+        max_channels = max_channels.transpose().flatten()
+        max_channel_share = max_channel_share.transpose().flatten()
         for i in range(self.n_images):
             # Add cross-hair
-            if gene_color[i] > self.intense_gene_thresh:
+            if max_channels[i]:
                 cross_hair_color = 'lime'  # different color if expected large intensity
                 linestyle = '--'
                 self.ax[i].tick_params(color='lime', labelcolor='lime')
                 for spine in self.ax[i].spines.values():
                     spine.set_edgecolor('lime')
+                    spine.set_linewidth(max_channel_share[i])
             else:
                 cross_hair_color = 'k'
                 linestyle = ':'
@@ -401,7 +438,6 @@ class view_spot(ColorPlotBase):
             if i >= self.n_images - n_use_rounds:
                 r = nb.basic_info.use_rounds[i-(self.n_images - n_use_rounds)]
                 self.ax[i].set_xlabel('{:.0f} ({:.2f})'.format(r, nb.call_spots.gene_efficiency[gene_no, r]))
-
 
         self.ax[0].set_xticks([spot_yxz_global[1]])
         self.ax[0].set_yticks([spot_yxz_global[0]])

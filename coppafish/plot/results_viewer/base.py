@@ -347,12 +347,23 @@ class Viewer:
                     if self.method_buttons.method == 'OMP':
                         spot_no = spot_no - self.omp_0_ind * 2
                         spot_gene = self.gene_names[self.nb.omp.gene_no[spot_no]]
+                        tile = self.nb.omp.tile[spot_no]
                     elif self.method_buttons.method == 'Anchor':
                         spot_gene = self.gene_names[self.nb.ref_spots.gene_no[spot_no]]
+                        score = self.nb.ref_spots.score[spot_no]
+                        tile = self.nb.ref_spots.tile[spot_no]
                     elif self.method_buttons.method == 'Prob':
                         spot_no = spot_no % self.omp_0_ind
                         spot_gene = self.gene_names[np.argmax(self.nb.ref_spots.gene_probs, axis=1)[spot_no]]
-                    self.viewer.status = f'Spot {spot_no}, {spot_gene} Selected'
+                        score = np.max(self.nb.ref_spots.gene_probs[spot_no], axis=1)
+                        tile = self.nb.ref_spots.tile[spot_no]
+
+                    # OMP has no score so don't show it
+                    if self.method_buttons.method == 'OMP':
+                        self.viewer.status = f'Spot {spot_no}, Gene {spot_gene}, Tile {tile} selected'
+                    else:
+                        self.viewer.status = (f'Spot {spot_no}, Gene {spot_gene}, Score {score:.2f}, '
+                                              f'Tile {tile} selected')
                 elif n_selected > 1:
                     self.viewer.status = f'{n_selected} spots selected'
 
