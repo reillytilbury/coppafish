@@ -32,13 +32,13 @@ jobs:
         run: python -m pip install --upgrade pip
 
       - name: Install non-jax dependencies
-        run: python -m pip install pytest .[plotting]
+        run: python -m pip install pytest .
 
       - name: Run non-jax unit tests
         run: pytest -m 'not slow and not optimised'
 
       - name: Install jax dependencies
-        run: python -m pip install pytest .[plotting,optimised]
+        run: python -m pip install pytest .[optimised]
 
       - name: Run jax unit tests
         run: pytest -m 'not slow'

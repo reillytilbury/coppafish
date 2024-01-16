@@ -17,7 +17,6 @@ def find_spots(
     nbp_extract: NotebookPage,
     nbp_filter: NotebookPage,
     auto_thresh: np.ndarray,
-    image_t: Optional[npt.NDArray[np.int32]] = None,
 ) -> NotebookPage:
     """
     This function turns each tiff file in the tile directory into a point cloud, saving the results
@@ -44,15 +43,6 @@ def find_spots(
     """
     n_z = np.max([1, nbp_basic.is_3d * nbp_basic.nz])
     use_tiles, use_rounds, use_channels = nbp_basic.use_tiles, nbp_basic.use_rounds, nbp_basic.use_channels
-
-    if image_t is not None:
-        assert (
-            len(nbp_basic.use_tiles) == 1
-        ), "Require use_tiles and n_tiles to be for a single tile if image_t is given"
-        if nbp_basic.is_3d:
-            assert image_t.ndim == 5, f"Expected image_t in 3D to have 5 dimensions, got {image_t.ndim}"
-        else:
-            assert image_t.ndim == 4, f"Expected image_t in 2D to have 4 dimensions, got {image_t.ndim}"
 
     # Phase 0: Initialisation
     nbp = NotebookPage("find_spots")
@@ -110,20 +100,16 @@ def find_spots(
         for t, r, c in np.argwhere(uncompleted):
             pbar.set_postfix({"tile": t, "round": r, "channel": c})
             # Then need to shift the detect_spots and check_neighb_intensity thresh correspondingly.
-            if image_t is None:
-                image_trc = tiles_io.load_image(
-                    nbp_file,
-                    nbp_basic,
-                    nbp_extract.file_type,
-                    t,
-                    r,
-                    c,
-                    apply_shift=False,
-                    suffix="_raw" if r == nbp_basic.pre_seq_round else "",
-                )
-            else:
-                # zyx -> yxz
-                image_trc = image_t[r, c].transpose((1, 2, 0))
+            image_trc = tiles_io.load_image(
+                nbp_file,
+                nbp_basic,
+                nbp_extract.file_type,
+                t,
+                r,
+                c,
+                apply_shift=False,
+                suffix="_raw" if r == nbp_basic.pre_seq_round else "",
+            )
             local_yxz, spot_intensity = fs.detect_spots(
                 image_trc,
                 auto_thresh[t, r, c] + nbp_basic.tile_pixel_value_shift,

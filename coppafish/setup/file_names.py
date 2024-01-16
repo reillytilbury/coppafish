@@ -28,8 +28,8 @@ def set_file_names(nb, nbp):
     # Copy some variables that are in config to page.
     nbp.input_dir = config['input_dir']
     nbp.output_dir = config['output_dir']
-    nbp.tile_dir = config['tile_dir']
-    nbp.tile_unfiltered_dir = os.path.join(config['tile_dir'], 'raw')
+    nbp.tile_dir = os.path.join(config['tile_dir'], 'filter')
+    nbp.tile_unfiltered_dir = os.path.join(config['tile_dir'], 'extract')
     nbp.fluorescent_bead_path = config['fluorescent_bead_path']
 
     # remove file extension from round and anchor file names if it is present
@@ -144,7 +144,7 @@ def set_file_names(nb, nbp):
         if nb.basic_info.is_3d:
             round_files = config['round'] + [config['anchor']] + [config['pre_seq']]
             tile_names, tile_names_unfiltered = get_tile_file_names(
-                config['tile_dir'], 
+                nbp.tile_dir, 
                 nbp.tile_unfiltered_dir, 
                 round_files, 
                 nb.basic_info.n_tiles, 
@@ -157,7 +157,7 @@ def set_file_names(nb, nbp):
     else:
         if nb.basic_info.is_3d:
             tile_names, tile_names_unfiltered = get_tile_file_names(
-                config['tile_dir'], 
+                nbp.tile_dir, 
                 nbp.tile_unfiltered_dir, 
                 round_files, 
                 nb.basic_info.n_tiles, 
@@ -166,7 +166,7 @@ def set_file_names(nb, nbp):
             )
         else:
             tile_names, tile_names_unfiltered = get_tile_file_names(
-                config['tile_dir'], 
+                nbp.tile_dir, 
                 nbp.tile_unfiltered_dir, 
                 round_files, 
                 nb.basic_info.n_tiles, 
