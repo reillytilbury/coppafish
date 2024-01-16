@@ -1,3 +1,20 @@
+2024/01/12 Alpha Update (v0.8.0):
+ * Filtered images are now saved in ['file_names']['tile_dir']/filter and extract images are saved in 
+    ['file_names']['tile_dir']/extract.
+ * Removed notebook variables pixel_unique_values and pixel_unique_counts from ['filter_debug'] and ['extract_debug'] 
+    sections. These will be saved locally in the tile output directory.
+ * Extract and filter now continue where they left off. They are checkpoint-ed after each iteration.
+ * Optimised choice of zarr compressors for extract and filter through benchmarking.
+ * The PDF diagnostic saves a separate pdf for each section, these sections are then not rebuilt if they already exist.
+ * Some of the subplots inside the Viewer had the colour norm applied incorrectly, this has been fixed.
+ * Each gene page in the PDF diagnostic is now computed correctly.
+ * Removed old function called regularise_auto_thresh relating to filter that is never used any more.
+ * Renamed get_extract_info to get_filter_info and moved it to the filter section.
+ * requirements.txt files for optimised setup option.
+ * 'plotting' option is removed, the plotting packages are always installed.
+ * Deleting unused file image_stitcher.py from repository.
+
+
 2024/01/09 Alpha Update (v0.7.2):
  * Filter will re-filter if the filter notebook page does not exist to correctly compute the filter variables bug fix.
  * Bled codes are normalised for each gene outside of a gene for loop, reducing OMP computation time.

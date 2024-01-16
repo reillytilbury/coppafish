@@ -10,6 +10,7 @@ import time
 from ...setup import Notebook
 from ..raw import get_raw_images, number_to_list, add_basic_info_no_save
 from ... import extract, utils
+from ...filter import base as filter_base
 from ...register import preprocessing
 from ...utils import tiles_io
 from ...find_spots import check_neighbour_intensity
@@ -117,7 +118,7 @@ class view_find_spots:
             )
             if not (r == nb.basic_info.anchor_round and c == nb.basic_info.dapi_channel):
                 self.image = preprocessing.offset_pixels_by(self.image, -nb.basic_info.tile_pixel_value_shift)
-            scale = 1  # Can be any value as not actually used but needed as argument in get_extract_info
+            scale = 1  # Can be any value as not actually used but needed as argument in get_filter_info
 
         # Get auto_threshold value used to detect spots
         if nb.has_page('extract'):
@@ -129,8 +130,9 @@ class view_find_spots:
                                     np.iinfo(np.uint16).max - nb.basic_info.tile_pixel_value_shift + 2, 1)
             hist_bin_edges = np.concatenate((hist_values - 0.5, hist_values[-1:] + 0.5))
             max_npy_pixel_value = np.iinfo(np.uint16).max - nb.basic_info.tile_pixel_value_shift
-            self.auto_thresh = extract.get_extract_info(self.image, config['auto_thresh_multiplier'], hist_bin_edges,
-                                                        max_npy_pixel_value, scale, z_info)[0]
+            self.auto_thresh = filter_base.get_filter_info(
+                self.image, config['auto_thresh_multiplier'], hist_bin_edges, max_npy_pixel_value, scale, z_info
+            )[0]
 
         config = nb.get_config()['find_spots']
         self.r_xy = config['radius_xy']

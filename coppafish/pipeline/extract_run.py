@@ -11,13 +11,8 @@ from .. import utils
 from ..utils import tiles_io
 
 
-# TODO: Add parameter return_image: bool to return the image for every round & channel when running on a single tile
 def run_extract(
-    config: dict,
-    nbp_file: NotebookPage,
-    nbp_basic: NotebookPage,
-    nbp_scale: NotebookPage,
-    return_image_t_raw: bool = False,
+    config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage, nbp_scale: NotebookPage
 ) -> Tuple[NotebookPage, NotebookPage, Optional[np.ndarray]]:
     """
     This reads in images from the raw `nd2` files, filters them and then saves them as `config[extract][file_type]`
@@ -46,8 +41,6 @@ def run_extract(
     if not nbp_basic.is_3d:
         # config["deconvolve"] = False  # only deconvolve if 3d pipeline
         raise NotImplementedError(f"coppafish 2d is not in a stable state, please contact a dev to add this. Sorry! ;(")
-    if return_image_t_raw:
-        assert len(nbp_basic.use_tiles) == 1, "The notebook must contain a single tile to return its image"
 
     start_time = time.time()
     nbp = NotebookPage("extract")
@@ -76,39 +69,25 @@ def run_extract(
     else:
         pre_seq_round = None
 
-    if return_image_t_raw:
-        image_t = np.zeros(
-            (
-                nbp_basic.n_rounds + nbp_basic.n_extra_rounds,
-                nbp_basic.n_channels,
-                nbp_basic.nz,
-                nbp_basic.tile_sz,
-                nbp_basic.tile_sz,
-            ),
-            dtype=np.uint16,
-        )
-    else:
-        image_t = None
-    nbp_debug.pixel_unique_values = np.full(
-        (
-            nbp_basic.n_tiles,
-            nbp_basic.n_rounds + nbp_basic.n_extra_rounds,
-            nbp_basic.n_channels,
-            np.iinfo(np.uint16).max,
-        ),
-        fill_value=0,
+    hist_counts_values_path = os.path.join(nbp_file.tile_unfiltered_dir, "hist_counts_values.npz")
+    hist_values = np.arange(np.iinfo(np.uint16).max - np.iinfo(np.uint16).min + 1)
+    hist_counts = np.zeros(
+        (hist_values.size, nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.n_extra_rounds, nbp_basic.n_channels),
         dtype=int,
     )
-    nbp_debug.pixel_unique_counts = nbp_debug.pixel_unique_values.copy()
-    
+    if os.path.isfile(hist_counts_values_path):
+        results = np.load(hist_counts_values_path)
+        hist_counts, hist_values = results["arr_0"], results["arr_1"]
+    hist_counts_values_exists = ~(hist_counts == 0).all(0)
+
     if not os.path.isdir(nbp_file.tile_unfiltered_dir):
         os.mkdir(nbp_file.tile_unfiltered_dir)
 
     with tqdm(
         total=(len(use_rounds) - 1)
-            * len(nbp_basic.use_tiles)
-            * (len(nbp_basic.use_channels) + 1 if nbp_basic.dapi_channel is not None else 0)
-            + len(nbp_basic.use_tiles) * len(use_channels_anchor),
+        * len(nbp_basic.use_tiles)
+        * (len(nbp_basic.use_channels) + 1 if nbp_basic.dapi_channel is not None else 0)
+        + len(nbp_basic.use_tiles) * len(use_channels_anchor),
         desc=f"Extracting raw {nbp_file.raw_extension} files to {config['file_type']}",
     ) as pbar:
         for r in use_rounds:
@@ -128,13 +107,12 @@ def run_extract(
                 if nbp_basic.dapi_channel is not None:
                     use_channels += [nbp_basic.dapi_channel]
 
-            # convolve_2d each image
+            # Load and save each image, if it does not already exist
             for t in nbp_basic.use_tiles:
                 if not nbp_basic.is_3d:
                     # for 2d all channels in same file
                     file_exists = tiles_io.image_exists(nbp_file.tile_unfiltered[t][r], config["file_type"])
                     if file_exists:
-                        # mmap load in image for all channels if tiff exists
                         im_all_channels_2d = np.load(nbp_file.tile_unfiltered[t][r], mmap_mode="r")
                     else:
                         # Only save 2d data when all channels collected
@@ -153,27 +131,34 @@ def run_extract(
                             file_path = file_path[: file_path.index(config["file_type"])] + "_raw" + config["file_type"]
                             file_exists = tiles_io.image_exists(file_path, config["file_type"])
                         pbar.set_postfix({"round": r, "tile": t, "channel": c, "exists": str(file_exists)})
+                        if hist_counts_values_exists[t, r, c] and file_exists:
+                            # This image and its pixel histogram values already exist
+                            pbar.update()
+                            continue
 
                         if file_exists:
                             im = tiles_io._load_image(file_path, config["file_type"])
                         if not file_exists:
                             im = utils.raw.load_image(nbp_file, nbp_basic, t, c, round_dask_array, r, nbp_basic.use_z)
+                            n_pixels_clip = np.sum(
+                                np.logical_or(im > np.iinfo(np.uint16).max, im < np.iinfo(np.uint16).min)
+                            )
+                            if n_pixels_clip > 0:
+                                warnings.warn(f"{n_pixels_clip} bad pixels from {t=}, {r=}, {c=} raw image")
                             im = im.astype(np.uint16, casting="safe")
                             assert np.sum(im) != 0, f"Extracted image {t=}, {r=}, {c=} contains all zeros"
                             # yxz -> zyx
                             im = im.transpose((2, 0, 1))
+                            for z in range(im.shape[0]):
+                                if (im[z].max() - im[z].min()) == 0:
+                                    warnings.warn(f"Raw image {t=}, {r=}, {c=} at plane {z} is single valued!")
                             tiles_io._save_image(im, file_path, config["file_type"])
-                        for z in range(im.shape[0]):
-                            if (im[z].max() - im[z].min()) == 0:
-                                warnings.warn(f"Raw image {t=}, {r=}, {c=} at plane {z} is single valued!")
-                        if return_image_t_raw:
-                            image_t[r, c] = im
-                        pixel_unique_values, pixel_unique_counts = np.unique(im, return_counts=True)
+                        # Compute the counts of each possible uint16 pixel value for the image.
+                        hist_counts[:, t, r, c] = np.histogram(im, hist_values.size)[0]
+                        np.savez_compressed(hist_counts_values_path, hist_counts, hist_values)
                         del im
-                        nbp_debug.pixel_unique_values[t][r][c][: pixel_unique_values.size] = pixel_unique_values
-                        nbp_debug.pixel_unique_counts[t][r][c][: pixel_unique_counts.size] = pixel_unique_counts
-                    pbar.update(1)
+                    pbar.update()
             del round_dask_array
     end_time = time.time()
     nbp_debug.time_taken = end_time - start_time
-    return nbp, nbp_debug, image_t
+    return nbp, nbp_debug

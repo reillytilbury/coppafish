@@ -80,51 +80,51 @@ def get_tile_name(tile_directory: str, file_base: List[str], suffix: str, r: int
     return tile_name
 
 
-def get_tile_file_names(tile_directory: str, tile_directory_unfiltered: str, file_base: List[str], n_tiles: int, 
+def get_tile_file_names(tile_directory_filter: str, tile_directory_extract: str, file_base: List[str], n_tiles: int, 
                         suffix: str, n_channels: int = 0, jobs: bool = False) -> Tuple[np.ndarray, np.ndarray]:
     """
     Gets array of all tile file paths which will be saved in tile directory.
 
     Args:
-        tile_directory: path to folder where tiles npy files saved.
-        tile_directory_unfiltered: path to folder where unfiltered, extracted tiles will be saved.
-        file_base: `str [n_rounds]`.
-            `file_base[r]` is identifier for round `r`.
-        n_tiles: number of tiles in data set.
+        tile_directory_filter: path to folder where filtered image files saved.
+        tile_directory_unfiltered: path to folder where unfiltered, extract image files will be saved.
+        file_base (`(n_rounds) list[str]`): `file_base[r]` is identifier for round `r`.
+        n_tiles (int): number of tiles in data set.
         suffix (str): file name suffix. For example, for numpy file saves, will be `'.npy'`.
-        n_channels: total number of imaging channels if using 3D.
-            `0` if using 2D pipeline as all channels saved in same file.
-        jobs: set True if file were acquired using JOBs (i.e. tiles are split by laser).
+        n_channels (int, optional): total number of imaging channels if using 3D. `0` if using 2D pipeline as all 
+            channels saved in same file.
+        jobs (bool, optional): set True if file were acquired using JOBs (i.e. tiles are split by laser). Default: 
+            false.
 
     Returns:
-        - `n_tiles x n_rounds (x n_channels) ndarray[str]`. filtered tile file paths such that:
+        - `(n_tiles x n_rounds (x n_channels)) ndarray[str]`. filtered image file paths such that:
         
             * If 2D so `n_channels = 0`, `tile_files[t, r]` is the full path to npy file containing all channels of
                 tile `t`, round `r`.
             * If 3D so `n_channels > 0`, `tile_files[t, r]` is the full path to npy file containing all z-planes of
             tile `t`, round `r`, channel `c`.
-        - `n_tiles x n_rounds (x n_channels) ndarray[str]`: unfiltered, extracted tile file paths.
+        - `(n_tiles x n_rounds (x n_channels)) ndarray[str]`: extract image file paths.
     """
     if not jobs:
         n_rounds = len(file_base)
         if n_channels == 0:
             # 2D
-            tile_files = np.zeros((n_tiles, n_rounds), dtype=object)
-            tile_files_unfiltered = np.zeros((n_tiles, n_rounds), dtype=object)
+            tile_files_filter = np.zeros((n_tiles, n_rounds), dtype=object)
+            tile_files_extract = np.zeros((n_tiles, n_rounds), dtype=object)
             for r in range(n_rounds):
                 for t in range(n_tiles):
-                    tile_files[t, r] = get_tile_name(tile_directory, file_base, suffix, r, t)
-                    tile_files_unfiltered[t, r] = get_tile_name(tile_directory_unfiltered, file_base, suffix, r, t)
+                    tile_files_filter[t, r] = get_tile_name(tile_directory_filter, file_base, suffix, r, t)
+                    tile_files_extract[t, r] = get_tile_name(tile_directory_extract, file_base, suffix, r, t)
         else:
             # 3D
-            tile_files = np.zeros((n_tiles, n_rounds, n_channels), dtype=object)
-            tile_files_unfiltered = np.zeros((n_tiles, n_rounds, n_channels), dtype=object)
+            tile_files_filter = np.zeros((n_tiles, n_rounds, n_channels), dtype=object)
+            tile_files_extract = np.zeros((n_tiles, n_rounds, n_channels), dtype=object)
             for r in range(n_rounds):
                 for t in range(n_tiles):
                     for c in range(n_channels):
-                        tile_files[t, r, c] = get_tile_name(tile_directory, file_base, suffix, r, t, c)
-                        tile_files_unfiltered[t, r, c] = get_tile_name(
-                            tile_directory_unfiltered, 
+                        tile_files_filter[t, r, c] = get_tile_name(tile_directory_filter, file_base, suffix, r, t, c)
+                        tile_files_extract[t, r, c] = get_tile_name(
+                            tile_directory_extract, 
                             file_base, 
                             suffix, 
                             r, 
@@ -134,8 +134,8 @@ def get_tile_file_names(tile_directory: str, tile_directory_unfiltered: str, fil
     else:
         n_lasers = 7  # TODO: should have the option to pass n_lasers as an argument for better generalisation
         n_rounds = len(file_base)
-        tile_files = np.zeros((n_tiles, n_rounds, n_channels), dtype=object)
-        tile_files_unfiltered = np.zeros((n_tiles, n_rounds, n_channels), dtype=object)
+        tile_files_filter = np.zeros((n_tiles, n_rounds, n_channels), dtype=object)
+        tile_files_extract = np.zeros((n_tiles, n_rounds, n_channels), dtype=object)
 
         for r in range(n_rounds):
 
@@ -144,12 +144,12 @@ def get_tile_file_names(tile_directory: str, tile_directory_unfiltered: str, fil
 
                 for c in range(n_channels):
                     f_index = int(np.floor(c/4))
-                    t_name = os.path.join(tile_directory, '{}_t{}c{}{}'.format(raw_tile_files[f_index], t, c, suffix))
+                    t_name = os.path.join(tile_directory_filter, '{}_t{}c{}{}'.format(raw_tile_files[f_index], t, c, suffix))
                     t_name_unfiltered = os.path.join(
-                        tile_directory_unfiltered, 
+                        tile_directory_extract, 
                         '{}_t{}c{}{}'.format(raw_tile_files[f_index], t, c, suffix), 
                     )
-                    tile_files[t, r, c] = t_name
-                    tile_files_unfiltered[t, r, c] = t_name_unfiltered
+                    tile_files_filter[t, r, c] = t_name
+                    tile_files_extract[t, r, c] = t_name_unfiltered
 
-    return tile_files, tile_files_unfiltered
+    return tile_files_filter, tile_files_extract
