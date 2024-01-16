@@ -470,7 +470,7 @@ class RoboMinnie:
             + f"{(len(self.codes), self.n_rounds + self.include_anchor)}, got {gene_efficiency.shape}"
         )
         if n_spots is None:
-            n_spots = maths.floor(0.02 * self.n_planes * self.n_tile_yx[0] * self.n_tile_yx[1] * self.n_tiles)
+            n_spots = maths.floor(0.03 * self.n_planes * self.n_tile_yx[0] * self.n_tile_yx[1] * self.n_tiles)
         assert n_spots > 0, f"Expected n_spots > 0, got {n_spots}"
         if background_offset is None:
             background_offset = np.zeros((n_spots, self.n_channels))
