@@ -27,269 +27,275 @@ class BuildPDF:
     def __init__(
         self,
         nb: Union[Notebook, str],
-        output_path: Optional[str] = None,
-        overwrite: bool = True,
+        output_dir: Optional[str] = None,
         auto_open: bool = True,
     ) -> None:
         """
-        Build a diagnostic PDF of coppafish results.
+        Build a diagnostic PDF of coppafish results for each relevant section. A section pdf is not re-generated if the 
+        file was found inside output_dir.
 
         Args:
             nb (Notebook or str): notebook or file path to notebook.
-            output_path (str, optional): file path for pdf. Default: `nb.basic_info.file_names/diagnostics.pdf`.
-            overwrite (bool, optional): overwrite any other pdf outputs. Default: true.
+            output_dir (str, optional): directory to save pdfs. Default: `nb.basic_info.file_names/diagnostics.pdf`.
             auto_open (bool, optional): open the PDF in a web browser after creation. Default: true.
         """
         pbar = tqdm(desc="Creating Diagnostic PDF", total=10, unit="section")
         pbar.set_postfix_str("Loading notebook")
         if isinstance(nb, str):
             nb = Notebook(nb)
-        if output_path is None:
-            output_path = os.path.join(nb.file_names.output_dir, "diagnostics.pdf")
-        output_path = os.path.abspath(output_path)
+        pbar.update()
+        if output_dir is None:
+            output_dir = nb.file_names.output_dir
+        output_dir = os.path.abspath(output_dir)
+        assert os.path.isdir(output_dir), "output_dir must be a valid directory"
 
-        if not overwrite:
-            assert not os.path.isfile(output_path), f"overwrite is set to false but PDF already exists at {output_path}"
+        if not os.path.isfile(os.path.join(output_dir, "_basic_info.pdf")):
+            with PdfPages(os.path.join(output_dir, "_basic_info.pdf")) as pdf:
+                self.use_channels_anchor = [
+                    c for c in [nb.basic_info.dapi_channel, nb.basic_info.anchor_channel] if c is not None
+                ]
+                self.use_channels_anchor.sort()
+                self.use_channels_plus_dapi = nb.basic_info.use_channels.copy()
+                if nb.basic_info.dapi_channel is not None:
+                    self.use_channels_plus_dapi += [nb.basic_info.dapi_channel]
+                self.use_channels_all = self.use_channels_plus_dapi.copy()
+                if nb.basic_info.anchor_channel is not None:
+                    self.use_channels_all += [nb.basic_info.anchor_channel]
+                self.use_channels_all = list(set(self.use_channels_all))
+                self.use_channels_all.sort()
+                self.use_channels_plus_dapi.sort()
+                self.use_rounds_all = (
+                    nb.basic_info.use_rounds.copy()
+                    + nb.basic_info.use_anchor * [nb.basic_info.anchor_round]
+                    + nb.basic_info.use_preseq * [nb.basic_info.pre_seq_round]
+                )
+                self.use_rounds_all.sort()
+                mpl.rcParams.update(mpl.rcParamsDefault)
 
-        with PdfPages(os.path.abspath(output_path)) as pdf:
-            self.use_channels_anchor = [
-                c for c in [nb.basic_info.dapi_channel, nb.basic_info.anchor_channel] if c is not None
-            ]
-            self.use_channels_anchor.sort()
-            self.use_channels_plus_dapi = nb.basic_info.use_channels.copy()
-            if nb.basic_info.dapi_channel is not None:
-                self.use_channels_plus_dapi += [nb.basic_info.dapi_channel]
-            self.use_channels_all = self.use_channels_plus_dapi.copy()
-            if nb.basic_info.anchor_channel is not None:
-                self.use_channels_all += [nb.basic_info.anchor_channel]
-            self.use_channels_all = list(set(self.use_channels_all))
-            self.use_channels_all.sort()
-            self.use_channels_plus_dapi.sort()
-            self.use_rounds_all = (
-                nb.basic_info.use_rounds.copy()
-                + nb.basic_info.use_anchor * [nb.basic_info.anchor_round]
-                + nb.basic_info.use_preseq * [nb.basic_info.pre_seq_round]
-            )
-            self.use_rounds_all.sort()
-            mpl.rcParams.update(mpl.rcParamsDefault)
-            pbar.update()
-
-            # Build a pdf with data from scale, extract, filter, find_spots, register, stitch, OMP
-            pbar.set_postfix_str("Basic info")
-            text_intro_info = self.get_basic_info(nb.basic_info, nb.file_names)
-            fig, axes = self.create_empty_page(1, 1)
-            self.empty_plot_ticks(axes)
-            axes[0, 0].set_title(text_intro_info, fontdict=INFO_FONTDICT, y=0.5)
-            pdf.savefig(fig)
-            plt.close(fig)
-            pbar.update()
-
-            pbar.set_postfix_str("Scale")
-            if nb.has_page("scale"):
-                text_scale_info = "Scale\n \n"
-                text_scale_info += self.get_version_from_page(nb.scale)
-                text_scale_info += f"computed scale: {nb.scale.scale}\n"
-                text_scale_info += f"computed anchor scale: {nb.scale.scale_anchor}\n"
-                plt.figure(figsize=A4_SIZE_INCHES, frameon=False)
+                # Build a pdf with data from scale, extract, filter, find_spots, register, stitch, OMP
+                pbar.set_postfix_str("Basic info")
+                text_intro_info = self.get_basic_info(nb.basic_info, nb.file_names)
                 fig, axes = self.create_empty_page(1, 1)
                 self.empty_plot_ticks(axes)
-                axes[0, 0].set_title(text_scale_info, fontdict=INFO_FONTDICT, y=0.5)
-                # Saves the current figure onto a new pdf page
+                axes[0, 0].set_title(text_intro_info, fontdict=INFO_FONTDICT, y=0.5)
                 pdf.savefig(fig)
                 plt.close(fig)
-            pbar.update()
+        pbar.update()
 
-            # Extract section
-            pbar.set_postfix_str("Extract")
-            if nb.has_page("extract"):
-                fig, axes = self.create_empty_page(1, 1)
-                text_extract_info = ""
-                text_extract_info += self.get_extract_info(nb.extract, nb.extract_debug)
-                axes[0, 0].set_title(text_extract_info, fontdict=INFO_FONTDICT, y=0.5)
-                extract_image_dtype = np.uint16
-                self.empty_plot_ticks(axes[0, 0])
-                pdf.savefig(fig)
-                plt.close(fig)
-                del fig, axes
-                try:
-                    extract_pixel_unique_values = nb.extract_debug.pixel_unique_values.copy()
-                    extract_pixel_unique_counts = nb.extract_debug.pixel_unique_counts.copy()
-                except AttributeError:
-                    extract_pixel_unique_values = None
-                    extract_pixel_unique_counts = None
-                if extract_pixel_unique_values is not None:
-                    pixel_min, pixel_max = np.iinfo(extract_image_dtype).min, np.iinfo(extract_image_dtype).max
-                    # Histograms of pixel value histograms
-                    figs = self.create_pixel_value_hists(
-                        nb,
-                        "Extract",
-                        extract_pixel_unique_values,
-                        extract_pixel_unique_counts,
-                        pixel_min,
-                        pixel_max,
-                        bin_size=2**10,
-                    )
-                    for fig in figs:
-                        pdf.savefig(fig)
-                        plt.close(fig)
-                    del figs
-                del extract_pixel_unique_values, extract_pixel_unique_counts
-            pbar.update()
-
-            # Filter section
-            pbar.set_postfix_str("Filter")
-            if nb.has_page("filter") or nb.has_page("extract"):
-                fig, axes = self.create_empty_page(1, 1)
-                text_filter_info = ""
-                if nb.has_page("filter"):
-                    # Versions >=0.5.0
-                    text_filter_info += self.get_filter_info(nb.filter, nb.filter_debug)
-                else:
-                    text_filter_info += self.get_filter_info(nb.extract, nb.extract_debug)
-                axes[0, 0].set_title(text_filter_info, fontdict=INFO_FONTDICT, y=0.5)
-                self.empty_plot_ticks(axes[0, 0])
-                pdf.savefig(fig)
-                plt.close(fig)
-
-                filter_image_dtype = np.uint16
-                try:
-                    filter_pixel_unique_values = nb.filter_debug.pixel_unique_values.copy()
-                    filter_pixel_unique_counts = nb.filter_debug.pixel_unique_counts.copy()
-                except AttributeError:
-                    filter_pixel_unique_values = None
-                    filter_pixel_unique_counts = None
-                if filter_pixel_unique_values is not None:
-                    pixel_min, pixel_max = np.iinfo(filter_image_dtype).min, np.iinfo(filter_image_dtype).max
-                    # Histograms of pixel value histograms
-                    figs = self.create_pixel_value_hists(
-                        nb,
-                        "Filter",
-                        filter_pixel_unique_values,
-                        filter_pixel_unique_counts,
-                        pixel_min,
-                        pixel_max,
-                        bin_size=2**10,
-                    )
-                    for fig in figs:
-                        pdf.savefig(fig)
-                        plt.close(fig)
-                    del figs
-                del filter_pixel_unique_values, filter_pixel_unique_counts
-            pbar.update()
-
-            pbar.set_postfix_str("Find spots")
-            if nb.has_page("find_spots"):
-                fig, axes = self.create_empty_page(1, 1)
-                text_find_spots_info = ""
-                text_find_spots_info += self.get_find_spots_info(nb.find_spots)
-                axes[0, 0].set_title(text_find_spots_info, fontdict=INFO_FONTDICT, y=0.5)
-                self.empty_plot_ticks(axes[0, 0])
-                pdf.savefig(fig)
-                plt.close(fig)
-
-                minimum_spot_count = nb.find_spots.spot_no[nb.find_spots.spot_no != 0].min()
-                maximum_spot_count = nb.find_spots.spot_no.max()
-                for t in nb.basic_info.use_tiles:
+        if not os.path.isfile(os.path.join(output_dir, "_scale.pdf")):
+            with PdfPages(os.path.join(output_dir, "_scale.pdf")) as pdf:
+                pbar.set_postfix_str("Scale")
+                if nb.has_page("scale"):
+                    text_scale_info = "Scale\n \n"
+                    text_scale_info += self.get_version_from_page(nb.scale)
+                    text_scale_info += f"computed scale: {nb.scale.scale}\n"
+                    text_scale_info += f"computed anchor scale: {nb.scale.scale_anchor}\n"
+                    plt.figure(figsize=A4_SIZE_INCHES, frameon=False)
                     fig, axes = self.create_empty_page(1, 1)
-                    fig.suptitle(f"Find spot counts, tile {t}")
-                    ax: plt.Axes = axes[0, 0]
-                    channels_to_index = {c: i for i, c in enumerate(self.use_channels_all)}
-                    X = np.zeros(
-                        (nb.basic_info.n_rounds + nb.basic_info.n_extra_rounds, len(channels_to_index)), dtype=np.int32
-                    )
-                    ticks_channels = np.arange(X.shape[1])
-                    ticks_channels_labels = ["" for _ in range(ticks_channels.size)]
-                    ticks_rounds = np.arange(X.shape[0])
-                    ticks_rounds_labels = ["" for _ in range(ticks_rounds.size)]
-                    for r in self.use_rounds_all:
-                        if nb.basic_info.use_anchor and r == nb.basic_info.anchor_round:
-                            use_channels = [
-                                c for c in [nb.basic_info.dapi_channel, nb.basic_info.anchor_channel] if c is not None
-                            ]
-                        else:
-                            use_channels = nb.basic_info.use_channels.copy()
-                        for c in use_channels:
-                            X[r, channels_to_index[c]] = nb.find_spots.spot_no[t, r, c]
-                            ticks_channels_labels[channels_to_index[c]] = f"{c}"
-                            if nb.basic_info.dapi_channel is not None and c == nb.basic_info.dapi_channel:
-                                ticks_channels_labels[channels_to_index[c]] = f"dapi"
-                            if nb.basic_info.anchor_channel is not None and c == nb.basic_info.anchor_channel:
-                                ticks_channels_labels[channels_to_index[c]] = f"anchor"
-                            ticks_rounds_labels[r] = f"{r if r != nb.basic_info.anchor_round else 'anchor'}"
-                            if r == nb.basic_info.pre_seq_round:
-                                ticks_rounds_labels[r] = f"preseq"
-                    im = ax.imshow(X, cmap="viridis", norm="log", vmin=minimum_spot_count, vmax=maximum_spot_count)
-                    ax.set_xlabel("Channels")
-                    ax.set_xticks(ticks_channels)
-                    ax.set_xticklabels(ticks_channels_labels)
-                    ax.set_yticks(ticks_rounds)
-                    ax.set_yticklabels(ticks_rounds_labels)
-                    ax.set_ylabel("Rounds")
-                    # Create colour bar
-                    cbar = ax.figure.colorbar(im, ax=ax)
-                    cbar.ax.set_ylabel("Spot count", rotation=-90, va="bottom")
-                    fig.tight_layout()
+                    self.empty_plot_ticks(axes)
+                    axes[0, 0].set_title(text_scale_info, fontdict=INFO_FONTDICT, y=0.5)
+                    # Saves the current figure onto a new pdf page
                     pdf.savefig(fig)
                     plt.close(fig)
-            pbar.update()
+        pbar.update()
 
-            pbar.set_postfix_str("Register")
-            # TODO: Display registration images from the output_dir/reg_images directory, one page for each tile
-            pbar.update()
-
-            pbar.set_postfix_str("Stitch")
-            pbar.update()
-
-            pbar.set_postfix_str("Reference and call spots")
-            if nb.has_page("ref_spots") and nb.has_page("call_spots"):
-                # Create a page for every gene
-                gene_probs = nb.ref_spots.gene_probs
-                # bg colour was subtracted if use_preseq
-                colours = nb.ref_spots.colors[
-                    np.ix_(range(nb.ref_spots.colors.shape[0]), nb.basic_info.use_rounds, nb.basic_info.use_channels)
-                ]
-                n_genes = gene_probs.shape[1]
-                gene_names = nb.call_spots.gene_names
-                spot_colours_rnorm = colours / np.linalg.norm(colours, axis=2)[:, :, None]
-                n_rounds = spot_colours_rnorm.shape[1]
-                for g in range(n_genes):
-                    g_spots = np.argsort(-gene_probs[:, g])
-                    # Sorted probabilities, with greatest score at index 0
-                    g_probs = gene_probs[g_spots, g]
-                    g_bled_code = nb.call_spots.bled_codes[g][:, nb.basic_info.use_channels] # (rounds, channels)
-                    g_bled_code /= np.linalg.norm(g_bled_code, axis=1)[:, None]
-                    g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code[None, :, :], axis=2))
-                    fig, axes = self.create_empty_page(2, 2, gridspec_kw={"width_ratios": [2, 1]})
-                    self.empty_plot_ticks(axes[1, 1])
-                    fig.suptitle(f"{gene_names[g]}", size=NORMAL_FONTSIZE)
-                    im = axes[0, 0].imshow(g_r_dot_products[g_spots[:N_GENES_SHOW], :].T, vmin=0, vmax=1, aspect="auto")
-                    axes[0, 0].set_yticks(range(n_rounds))
-                    axes[0, 0].set_ylim([n_rounds - 0.5, -0.5])
-                    axes[0, 0].set_ylabel("round")
-                    axes[0, 0].set_title(f"dye code match")
-                    self.empty_plot_ticks(axes[1, 0], show_bottom_frame=True, show_left_frame=True)
-                    axes[1, 0].plot(np.arange(N_GENES_SHOW), g_probs[:N_GENES_SHOW])
-                    axes[1, 0].plot(np.arange(N_GENES_SHOW), g_r_dot_products[g_spots[:N_GENES_SHOW]].mean(1))
-                    axes[1, 0].legend(("probability score", "mean match"), loc="lower right")
-                    for ax in [axes[0, 0], axes[1, 0]]:
-                        ax.set_xlim([0, N_GENES_SHOW - 1])
-                        ax.set_xticks([0, N_GENES_SHOW - 1], labels=["1", N_GENES_SHOW])
-                    axes[1, 0].set_xlabel("spot number (ranked by probability)")
-                    axes[1, 0].set_ylim([0, 1])
-                    axes[1, 0].set_yticks([0, 0.25, 0.5, 0.75, 1])
-                    axes[1, 0].grid(True)
-                    axes[0, 0].autoscale(enable=True, axis="x", tight=True)
-                    axes[0, 1].imshow(g_bled_code, vmin=0, vmax=1)
-                    axes[0, 1].set_title("bled code")
-                    axes[0, 1].set_xlabel("channels")
-                    axes[0, 1].set_xticks(
-                        range(len(nb.basic_info.use_channels)), labels=(str(c) for c in nb.basic_info.use_channels)
-                    )
-                    cbar = fig.colorbar(im, ax=axes[0, 1], orientation="vertical")
-                    cbar.ax.set_ylabel("Score", rotation=-90, va="bottom")
-                    fig.tight_layout()
+        if not os.path.isfile(os.path.join(output_dir, "_extract.pdf")):
+            with PdfPages(os.path.join(output_dir, "_extract.pdf")) as pdf:
+                # Extract section
+                pbar.set_postfix_str("Extract")
+                if nb.has_page("extract"):
+                    fig, axes = self.create_empty_page(1, 1)
+                    text_extract_info = ""
+                    text_extract_info += self.get_extract_text_info(nb.extract, nb.extract_debug)
+                    axes[0, 0].set_title(text_extract_info, fontdict=INFO_FONTDICT, y=0.5)
+                    extract_image_dtype = np.uint16
+                    self.empty_plot_ticks(axes[0, 0])
                     pdf.savefig(fig)
                     plt.close(fig)
+                    del fig, axes
+                    file_path = os.path.join(nb.file_names.tile_unfiltered_dir, "hist_counts_values.npz")
+                    extract_pixel_unique_values, extract_pixel_unique_counts = None, None
+                    if os.path.isfile(file_path):
+                        results = np.load(file_path)
+                        extract_pixel_unique_counts, extract_pixel_unique_values = results["arr_0"], results["arr_1"]
+                    if extract_pixel_unique_values is not None:
+                        pixel_min, pixel_max = np.iinfo(extract_image_dtype).min, np.iinfo(extract_image_dtype).max
+                        # Histograms of pixel value histograms
+                        figs = self.create_pixel_value_hists(
+                            nb,
+                            "Extract",
+                            extract_pixel_unique_values,
+                            extract_pixel_unique_counts,
+                            pixel_min,
+                            pixel_max,
+                            bin_size=2**10,
+                        )
+                        for fig in figs:
+                            pdf.savefig(fig)
+                            plt.close(fig)
+                        del figs
+                    del extract_pixel_unique_values, extract_pixel_unique_counts
+        pbar.update()
+
+        if not os.path.isfile(os.path.join(output_dir, "_filter.pdf")):
+            with PdfPages(os.path.join(output_dir, "_filter.pdf")) as pdf:
+                # Filter section
+                pbar.set_postfix_str("Filter")
+                if nb.has_page("filter") or nb.has_page("extract"):
+                    fig, axes = self.create_empty_page(1, 1)
+                    text_filter_info = ""
+                    if nb.has_page("filter"):
+                        # Versions >=0.5.0
+                        text_filter_info += self.get_filter_info(nb.filter, nb.filter_debug)
+                    else:
+                        text_filter_info += self.get_filter_info(nb.extract, nb.extract_debug)
+                    axes[0, 0].set_title(text_filter_info, fontdict=INFO_FONTDICT, y=0.5)
+                    self.empty_plot_ticks(axes[0, 0])
+                    pdf.savefig(fig)
+                    plt.close(fig)
+
+                    filter_image_dtype = np.uint16
+                    file_path = os.path.join(nb.file_names.tile_dir, "hist_counts_values.npz")
+                    filter_pixel_unique_counts, filter_pixel_unique_values = None, None
+                    if os.path.isfile(file_path):
+                        results = np.load(file_path)
+                        filter_pixel_unique_counts, filter_pixel_unique_values = results["arr_0"], results["arr_1"]
+                    if filter_pixel_unique_values is not None:
+                        pixel_min, pixel_max = np.iinfo(filter_image_dtype).min, np.iinfo(filter_image_dtype).max
+                        # Histograms of pixel value histograms
+                        figs = self.create_pixel_value_hists(
+                            nb,
+                            "Filter",
+                            filter_pixel_unique_values,
+                            filter_pixel_unique_counts,
+                            pixel_min,
+                            pixel_max,
+                            bin_size=2**10,
+                        )
+                        for fig in figs:
+                            pdf.savefig(fig)
+                            plt.close(fig)
+                        del figs
+                    del filter_pixel_unique_values, filter_pixel_unique_counts
+        pbar.update()
+
+        if not os.path.isfile(os.path.join(output_dir, "_find_spots.pdf")):
+            with PdfPages(os.path.join(output_dir, "_find_spots.pdf")) as pdf:
+                pbar.set_postfix_str("Find spots")
+                if nb.has_page("find_spots"):
+                    fig, axes = self.create_empty_page(1, 1)
+                    text_find_spots_info = ""
+                    text_find_spots_info += self.get_find_spots_info(nb.find_spots)
+                    axes[0, 0].set_title(text_find_spots_info, fontdict=INFO_FONTDICT, y=0.5)
+                    self.empty_plot_ticks(axes[0, 0])
+                    pdf.savefig(fig)
+                    plt.close(fig)
+
+                    minimum_spot_count = nb.find_spots.spot_no[nb.find_spots.spot_no != 0].min()
+                    maximum_spot_count = nb.find_spots.spot_no.max()
+                    for t in nb.basic_info.use_tiles:
+                        fig, axes = self.create_empty_page(1, 1)
+                        fig.suptitle(f"Find spot counts, tile {t}")
+                        ax: plt.Axes = axes[0, 0]
+                        channels_to_index = {c: i for i, c in enumerate(self.use_channels_all)}
+                        X = np.zeros(
+                            (nb.basic_info.n_rounds + nb.basic_info.n_extra_rounds, len(channels_to_index)), dtype=np.int32
+                        )
+                        ticks_channels = np.arange(X.shape[1])
+                        ticks_channels_labels = ["" for _ in range(ticks_channels.size)]
+                        ticks_rounds = np.arange(X.shape[0])
+                        ticks_rounds_labels = ["" for _ in range(ticks_rounds.size)]
+                        for r in self.use_rounds_all:
+                            if nb.basic_info.use_anchor and r == nb.basic_info.anchor_round:
+                                use_channels = [
+                                    c for c in [nb.basic_info.dapi_channel, nb.basic_info.anchor_channel] if c is not None
+                                ]
+                            else:
+                                use_channels = nb.basic_info.use_channels.copy()
+                            for c in use_channels:
+                                X[r, channels_to_index[c]] = nb.find_spots.spot_no[t, r, c]
+                                ticks_channels_labels[channels_to_index[c]] = f"{c}"
+                                if nb.basic_info.dapi_channel is not None and c == nb.basic_info.dapi_channel:
+                                    ticks_channels_labels[channels_to_index[c]] = f"dapi"
+                                if nb.basic_info.anchor_channel is not None and c == nb.basic_info.anchor_channel:
+                                    ticks_channels_labels[channels_to_index[c]] = f"anchor"
+                                ticks_rounds_labels[r] = f"{r if r != nb.basic_info.anchor_round else 'anchor'}"
+                                if r == nb.basic_info.pre_seq_round:
+                                    ticks_rounds_labels[r] = f"preseq"
+                        im = ax.imshow(X, cmap="viridis", norm="log", vmin=minimum_spot_count, vmax=maximum_spot_count)
+                        ax.set_xlabel("Channels")
+                        ax.set_xticks(ticks_channels)
+                        ax.set_xticklabels(ticks_channels_labels)
+                        ax.set_yticks(ticks_rounds)
+                        ax.set_yticklabels(ticks_rounds_labels)
+                        ax.set_ylabel("Rounds")
+                        # Create colour bar
+                        cbar = ax.figure.colorbar(im, ax=ax)
+                        cbar.ax.set_ylabel("Spot count", rotation=-90, va="bottom")
+                        fig.tight_layout()
+                        pdf.savefig(fig)
+                        plt.close(fig)
+        pbar.update()
+
+        pbar.set_postfix_str("Register")
+        # TODO: Display registration images from the output_dir/reg_images directory, one page for each tile
+        pbar.update()
+
+        pbar.set_postfix_str("Stitch")
+        pbar.update()
+
+        if not os.path.isfile(os.path.join(output_dir, "_ref_call_spots.pdf")):
+            with PdfPages(os.path.join(output_dir, "_ref_call_spots.pdf")) as pdf:
+                pbar.set_postfix_str("Reference and call spots")
+                if nb.has_page("ref_spots") and nb.has_page("call_spots"):
+                    # Create a page for every gene
+                    gene_probs = nb.ref_spots.gene_probs
+                    # bg colour was subtracted if use_preseq
+                    colours = nb.ref_spots.colors[
+                        np.ix_(range(nb.ref_spots.colors.shape[0]), nb.basic_info.use_rounds, nb.basic_info.use_channels)
+                    ]
+                    n_genes = gene_probs.shape[1]
+                    gene_names = nb.call_spots.gene_names
+                    spot_colours_rnorm = colours / np.linalg.norm(colours, axis=2)[:, :, None]
+                    n_rounds = spot_colours_rnorm.shape[1]
+                    for g in range(n_genes):
+                        g_spots = np.argsort(-gene_probs[:, g])
+                        # Sorted probabilities, with greatest score at index 0
+                        g_probs = gene_probs[g_spots, g]
+                        g_bled_code = nb.call_spots.bled_codes[g][:, nb.basic_info.use_channels]  # (rounds, channels)
+                        g_bled_code /= np.linalg.norm(g_bled_code, axis=1)[:, None]
+                        g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code[None, :, :], axis=2))
+                        fig, axes = self.create_empty_page(2, 2, gridspec_kw={"width_ratios": [2, 1]})
+                        self.empty_plot_ticks(axes[1, 1])
+                        fig.suptitle(f"{gene_names[g]}", size=NORMAL_FONTSIZE)
+                        im = axes[0, 0].imshow(g_r_dot_products[g_spots[:N_GENES_SHOW], :].T, vmin=0, vmax=1, aspect="auto")
+                        axes[0, 0].set_yticks(range(n_rounds))
+                        axes[0, 0].set_ylim([n_rounds - 0.5, -0.5])
+                        axes[0, 0].set_ylabel("round")
+                        axes[0, 0].set_title(f"dye code match")
+                        self.empty_plot_ticks(axes[1, 0], show_bottom_frame=True, show_left_frame=True)
+                        axes[1, 0].plot(np.arange(N_GENES_SHOW), g_probs[:N_GENES_SHOW])
+                        axes[1, 0].plot(np.arange(N_GENES_SHOW), g_r_dot_products[g_spots[:N_GENES_SHOW]].mean(1))
+                        axes[1, 0].legend(("probability score", "mean match"), loc="lower right")
+                        for ax in [axes[0, 0], axes[1, 0]]:
+                            ax.set_xlim([0, N_GENES_SHOW - 1])
+                            ax.set_xticks([0, N_GENES_SHOW - 1], labels=["1", N_GENES_SHOW])
+                        axes[1, 0].set_xlabel("spot number (ranked by probability)")
+                        axes[1, 0].set_ylim([0, 1])
+                        axes[1, 0].set_yticks([0, 0.25, 0.5, 0.75, 1])
+                        axes[1, 0].grid(True)
+                        axes[0, 0].autoscale(enable=True, axis="x", tight=True)
+                        axes[0, 1].imshow(g_bled_code, vmin=0, vmax=1)
+                        axes[0, 1].set_title("bled code")
+                        axes[0, 1].set_xlabel("channels")
+                        axes[0, 1].set_xticks(
+                            range(len(nb.basic_info.use_channels)), labels=(str(c) for c in nb.basic_info.use_channels)
+                        )
+                        cbar = fig.colorbar(im, ax=axes[0, 1], orientation="vertical")
+                        cbar.ax.set_ylabel("Score", rotation=-90, va="bottom")
+                        fig.tight_layout()
+                        pdf.savefig(fig)
+                        plt.close(fig)
             pbar.update()
 
             pbar.set_postfix_str("OMP")
@@ -297,7 +303,7 @@ class BuildPDF:
             pbar.close()
 
         if auto_open:
-            webbrowser.open_new_tab(rf"{output_path}")
+            webbrowser.open_new_tab(rf"{output_dir}")
 
     def create_empty_page(
         self,
@@ -402,7 +408,7 @@ class BuildPDF:
         output += f"{wrapped_output}\n"
         return output
 
-    def get_extract_info(self, extract_page: NotebookPage, extract_debug_page: NotebookPage) -> str:
+    def get_extract_text_info(self, extract_page: NotebookPage, extract_debug_page: NotebookPage) -> str:
         output = "Extract\n \n"
         output += self.get_version_from_page(extract_page)
         time_taken = self.get_time_taken_from_page(extract_debug_page)
@@ -483,8 +489,8 @@ class BuildPDF:
                     hist_loc = np.arange(pixel_max - pixel_min + 1, step=bin_size, dtype=int) + bin_size // 2
                     k = 0
                     for pixel_value in range(pixel_max + 1):
-                        if pixel_value == pixel_unique_values[t, r, c, k]:
-                            count = pixel_unique_counts[t, r, c, k]
+                        if pixel_value == pixel_unique_values[k]:
+                            count = pixel_unique_counts[k, t, r, c]
                             hist_x.append(count)
                             k += 1
                         else:

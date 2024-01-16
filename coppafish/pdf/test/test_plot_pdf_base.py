@@ -16,4 +16,4 @@ def test_BuildPDF():
     if not os.path.isfile(robominnie_notebook):
         assert False, f"Could not find robominnie notebook at\n\t{robominnie_notebook}.\nRun an integration test first"
 
-    BuildPDF(robominnie_notebook, output_path=output_path, auto_open=False)
+    BuildPDF(robominnie_notebook, output_dir=output_path, auto_open=False)

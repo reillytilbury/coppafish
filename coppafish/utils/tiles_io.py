@@ -3,8 +3,7 @@ import zarr
 import numbers
 import itertools
 import numpy as np
-import math as maths
-from enum import Enum
+from enum import Enum, auto
 from numcodecs import blosc, Blosc
 
 try:
@@ -22,8 +21,8 @@ from .. import utils, extract
 
 
 class OptimisedFor(Enum):
-    FULL_READ_AND_WRITE = 0
-    Z_RANDOM_ACCESS = 1
+    FULL_READ_AND_WRITE = auto()
+    Z_PLANE_READ = auto()
 
 
 def image_exists(file_path: str, file_type: str) -> bool:
@@ -81,19 +80,24 @@ def _save_image(
         # fast at the sum of full image reading + writing times while still compressing the files to ~70-80%.
         # Benchmarking done by Paul Shuker (paul.shuker@outlook.com), January 2024.
         if optimised_for == OptimisedFor.FULL_READ_AND_WRITE:
-            compressor = Blosc(cname="zstd", clevel=3, shuffle=Blosc.BITSHUFFLE)
-            chunk_size_yx = 2
-        elif optimised_for == OptimisedFor.Z_RANDOM_ACCESS:
-            compressor = Blosc(cname="lz4", clevel=5, shuffle=Blosc.SHUFFLE)
+            compressor = Blosc(cname="lz4", clevel=2, shuffle=Blosc.BITSHUFFLE)
+            chunk_count_z = image.shape[0] // 2
+            chunk_count_yx = min(288, image.shape[1])
+        elif optimised_for == OptimisedFor.Z_PLANE_READ:
+            compressor = Blosc(cname="lz4", clevel=4, shuffle=Blosc.SHUFFLE)
+            chunk_count_z = image.shape[0] // 2
+            chunk_count_yx = min(576, image.shape[1])
         else:
-            ValueError(f"Unexpected opimised_for parameter: {optimised_for}")
-        chunk_count_yx = maths.ceil(image.shape[1] / chunk_size_yx)
-        chunks = (None, chunk_count_yx, chunk_count_yx) if image.ndim == 3 else (chunk_count_yx, chunk_count_yx)
+            ValueError(f"Unexpected opimised_for parameter: {optimised_for.value}")
+        if image.ndim == 3:
+            chunks = (chunk_count_z, chunk_count_yx, chunk_count_yx)
+        else:
+            chunks = (chunk_count_yx, chunk_count_yx)
         zarray = zarr.open(
-            file_path,
+            store=file_path,
+            shape=image.shape,
             mode="w",
             zarr_version=2,
-            shape=image.shape,
             chunks=chunks,
             dtype="|u2",
             compressor=compressor,
@@ -210,7 +214,7 @@ def save_image(
             image = np.rot90(image, k=num_rotations, axes=(1, 2))
         file_path = nbp_file.tile[t][r][c]
         file_path = file_path[: file_path.index(file_type)] + suffix + file_type
-        _save_image(image, file_path, file_type)
+        _save_image(image, file_path, file_type, optimised_for=OptimisedFor.Z_PLANE_READ)
         return image
     else:
         # Don't need to apply rotations here as 2D data obtained from upstairs microscope without this issue
@@ -241,7 +245,7 @@ def save_image(
             raise utils.errors.ShapeError("tile to be saved", image.shape, expected_shape)
         file_path = nbp_file.tile[t][r][c]
         file_path = file_path[file_path.index(file_type) :] + suffix + file_type
-        _save_image(image, file_path, file_type)
+        _save_image(image, file_path, file_type, optimised_for=OptimisedFor.Z_PLANE_READ)
         return image
 
 
@@ -331,7 +335,11 @@ def load_image(
                 if yxz.shape[1] != 3:
                     raise ValueError(f"Loading in a 3D tile but dimension of coordinates given is {yxz.shape[1]}.")
                 coord_index_zyx = tuple([yxz[:, j] for j in [2, 0, 1]])
-                image = _load_image(file_path, file_type, indices=coord_index_zyx, mmap_mode="r")
+                if np.allclose(coord_index_zyx[0], coord_index_zyx[0][0]) and coord_index_zyx[0].size > 100_000:
+                    image = _load_image(file_path, file_type, indices=coord_index_zyx[0][0].item())
+                    image = image[coord_index_zyx[1:]]
+                else:
+                    image = _load_image(file_path, file_type, indices=coord_index_zyx, mmap_mode="r")
             else:
                 if yxz.shape[1] != 2:
                     raise ValueError(f"Loading in a 2D tile but dimension of coordinates given is {yxz.shape[1]}.")

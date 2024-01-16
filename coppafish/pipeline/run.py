@@ -10,6 +10,7 @@ from .. import setup, utils
 from ..setup import Notebook
 from ..find_spots import check_spots
 from ..call_spots import base as call_spots_base
+from ..pdf.base import BuildPDF
 from .register import preprocessing
 from . import basic_info
 from . import scale_run
@@ -68,6 +69,7 @@ def run_pipeline(
         run_stitch(nb)
         run_register(nb, overwrite_ref_spots)
         run_omp(nb)
+    BuildPDF(nb)
     return nb
 
 
