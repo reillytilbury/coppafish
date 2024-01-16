@@ -175,7 +175,7 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
     # scaling factors omega = (w_1, ..., w_7) for each tile and round such that
     # omega_i * initial_bleed_matrix[i] ~ bleed_matrix[t, r, i] for all i. We can then assimilate these scaling factors
     # into our colour norm factor.
-    gene_prob_bleed_thresh = min(np.percentile(gene_prob_score, 90), 0.95)
+    gene_prob_bleed_thresh = min(np.percentile(gene_prob_score, 80), 0.8)
     bg_percentile = 50
     bg_strength = np.linalg.norm(bg_codes, axis=(1, 2))
     for t, r in product(nbp_basic.use_tiles, range(n_rounds)):
