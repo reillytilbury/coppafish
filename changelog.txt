@@ -1,3 +1,8 @@
+2024/01/18 Alpha Update (v0.8.1):
+ * Tile, round and channel indexing now originates from multi-purpose functions in coppafish/utils/indexing.py.
+ * Removed outdated 2d pipeline code.
+
+
 2024/01/12 Alpha Update (v0.8.0):
  * Filtered images are now saved in ['file_names']['tile_dir']/filter and extract images are saved in 
     ['file_names']['tile_dir']/extract.
