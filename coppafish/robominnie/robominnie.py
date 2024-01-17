@@ -681,15 +681,16 @@ class RoboMinnie:
         ``run_coppafish`` to run the coppafish pipeline.
 
         Args:
-            output_dir (str): Save directory
-            overwrite (bool, optional): Overwrite any saved coppafish data inside the directory, delete old
+            output_dir (str): save directory.
+            overwrite (bool, optional): overwrite any saved coppafish data inside the directory, delete old
                 `notebook.npz` file if there is one and ignore any other files inside the directory. Default: true.
-            omp_iterations (int, optional): Number of OMP iterations on every pixel. Increasing this may improve gene
+            omp_iterations (int, optional): number of OMP iterations on every pixel. Increasing this may improve gene
                 scoring. Default: `1`.
             omp_initial_intensity_thresh_percentile (float, optional): percentile of the absolute intensity of all
                 pixels in the mid z-plane of the central tile. Used as a threshold for pixels to decide what to apply
                 OMP on. A higher number leads to stricter picking of pixels. Default: `90`.
-            register_with_dapi (bool, optional): Apply channel registration using the DAPI images. Default: true.
+            register_with_dapi (bool, optional): apply channel registration using the DAPI channel, if available. 
+                Default: true.
         """
         # Same dtype as ND2s
         self.scale_images_to_type(np.uint16)
@@ -930,6 +931,7 @@ class RoboMinnie:
         self.dye_names = list(self.dye_names)
 
         is_3d = self.n_planes > 1
+        # Box sizes must be even numbers
         max_box_size_z, max_box_size_yx = 12, 300
         box_size_z = min([max_box_size_z, self.n_planes if self.n_planes % 2 == 0 else self.n_planes - 1])
         box_size_yx = min([max_box_size_yx, self.n_tile_yx[0] if self.n_tile_yx[0] % 2 == 0 else self.n_tile_yx[0] - 1])
@@ -971,7 +973,7 @@ class RoboMinnie:
         ;psf_detect_radius_xy = 1
         ;psf_detect_radius_z = 1
         ;deconvolve = {True}
-        r_dapi = {1 if self.include_dapi else ''}
+        r_dapi = {5 if self.include_dapi else ''}
         ;#? Should probably be 0 for robominnie multi-tile setup? Unsure tho
         num_rotations = 0
 
@@ -990,7 +992,7 @@ class RoboMinnie:
         pearson_r_thresh = 0.25
         round_registration_channel = {self.dapi_channel if (self.include_dapi and register_with_dapi) else ''}
         sobel = {not self.include_dapi}
-        icp_min_spots = 1
+        icp_min_spots = 10
 
         [omp]
         max_genes = {omp_iterations}
