@@ -8,6 +8,3 @@ def test_unique():
     assert indexing.unique([(0,), (0,), (1,)], 0) == [(0,), (1,)]
     assert indexing.unique([(1,), (1,), (1,)], 0) == [(1,)]
     assert indexing.unique([(0, 0), (1, 0), (2, 1)], 1) == [(0, 0), (2, 1)]
-
-
-test_unique()
