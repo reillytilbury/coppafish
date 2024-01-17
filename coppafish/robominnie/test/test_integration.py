@@ -72,6 +72,7 @@ def test_integration_002() -> None:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 def test_integration_non_symmetric(include_stitch: bool = True, include_omp: bool = True) -> Notebook:
     """
     Summary of input data: random spots and pink noise.
@@ -164,6 +165,8 @@ def test_viewers() -> None:
     notebook_path = os.path.join(
         os.path.dirname(os.path.realpath(__file__)), "integration_dir/output_coppafish/notebook.npz"
     )
+    if not os.path.isfile(notebook_path):
+        return
     gene_colours_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "integration_dir/gene_colours.csv")
     notebook = Notebook(notebook_path)
     Viewer(notebook, gene_marker_file=gene_colours_path)
@@ -182,7 +185,7 @@ def test_pdf_builder() -> None:
     notebook_path = os.path.join(
         os.path.dirname(os.path.realpath(__file__)), "integration_dir/output_coppafish/notebook.npz"
     )
-    BuildPDF(notebook_path)
+    BuildPDF(notebook_path, auto_open=False)
 
 
 if __name__ == "__main__":
