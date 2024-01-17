@@ -140,11 +140,6 @@ def run_extract(
                             im = tiles_io._load_image(file_path, config["file_type"])
                         if not file_exists:
                             im = utils.raw.load_image(nbp_file, nbp_basic, t, c, round_dask_array, r, nbp_basic.use_z)
-                            n_pixels_clip = np.sum(
-                                np.logical_or(im > np.iinfo(np.uint16).max, im < np.iinfo(np.uint16).min)
-                            )
-                            if n_pixels_clip > 0:
-                                warnings.warn(f"{n_pixels_clip} bad pixels from {t=}, {r=}, {c=} raw image")
                             im = im.astype(np.uint16, casting="safe")
                             assert np.sum(im) != 0, f"Extracted image {t=}, {r=}, {c=} contains all zeros"
                             # yxz -> zyx
