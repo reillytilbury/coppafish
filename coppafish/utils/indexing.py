@@ -19,8 +19,9 @@ def create(
 ) -> Union[List[Tuple[int, int, int]], List[Tuple[int, int]], List[Tuple[int]]]:
     """
     Create tile, round and/or channel indices to loops through. Used throughout the coppafish pipeline. The defaults
-    are set to return every index which are used at all, i.e. the ones that are extracted. If something is set to be 
-    included which does not exist in the notebook, e.g. a dapi channel, then it will not be included in the output.
+    are set to return every index which are used at all, i.e. all extracted images. If something is set to be included 
+    which does not exist in the notebook, e.g. a dapi channel or an anchor round, then it will not be included in the 
+    output.
 
     Args:
         nbp_basic (NotebookPage): 'basic_info' notebook page.
