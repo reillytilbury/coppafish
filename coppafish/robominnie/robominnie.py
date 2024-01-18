@@ -396,7 +396,7 @@ class RoboMinnie:
         presequence images. We assume that `n_channels == n_dyes`.
 
         Args:
-            n_spots (int, optional): Number of spots to superimpose. Default: `floor(0.1% * total_imaging_volume)`.
+            n_spots (int, optional): Number of spots to superimpose. Default: `floor(3% * total_imaging_volume)`.
             bleed_matrix (`n_dyes x n_channels ndarray[float, float]`, optional): The bleed matrix, used to map each
                 dye to its pattern as viewed by the camera in each channel. Default: Ones along the diagonals.
             spot_size_pixels (`(3) ndarray[float]`): The spot's standard deviation in directions `x, y, z`
@@ -671,7 +671,7 @@ class RoboMinnie:
         self,
         output_dir: str,
         overwrite: bool = True,
-        omp_iterations: int = 1,
+        omp_iterations: int = 2,
         omp_initial_intensity_thresh_percentile: int = 90,
         register_with_dapi: bool = True,
     ) -> None:
@@ -685,7 +685,7 @@ class RoboMinnie:
             overwrite (bool, optional): overwrite any saved coppafish data inside the directory, delete old
                 `notebook.npz` file if there is one and ignore any other files inside the directory. Default: true.
             omp_iterations (int, optional): number of OMP iterations on every pixel. Increasing this may improve gene
-                scoring. Default: `1`.
+                scoring. Default: `2`.
             omp_initial_intensity_thresh_percentile (float, optional): percentile of the absolute intensity of all
                 pixels in the mid z-plane of the central tile. Used as a threshold for pixels to decide what to apply
                 OMP on. A higher number leads to stricter picking of pixels. Default: `90`.
@@ -975,6 +975,7 @@ class RoboMinnie:
         ;deconvolve = {True}
         r_dapi = {5 if self.include_dapi else ''}
         ;#? Should probably be 0 for robominnie multi-tile setup? Unsure tho
+        auto_thresh_multiplier = 2
         num_rotations = 0
 
         [find_spots]
@@ -983,8 +984,9 @@ class RoboMinnie:
 
         [stitch]
         expected_overlap = {self.tile_overlap if self.n_tiles > 1 else 0}
-        shift_max_range = 6000, 6000, 100
+        shift_max_range = 25, 25, 10
         shift_score_thresh = {0.2 if self.n_tiles > 1 else ''}
+        auto_n_shifts = 2, 2, 1
 
         [register]
         subvols = {1}, {8}, {8}

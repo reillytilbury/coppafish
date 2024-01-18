@@ -37,7 +37,7 @@ def test_integration_smallest() -> Notebook:
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
-    robominnie = RoboMinnie(n_planes=10, n_tile_yx=(100, 100), include_presequence=False, include_dapi=False)
+    robominnie = RoboMinnie(n_planes=5, n_tile_yx=(100, 100), include_presequence=False, include_dapi=False)
     robominnie.generate_gene_codes()
     robominnie.generate_pink_noise()
     robominnie.add_spots()
@@ -91,7 +91,7 @@ def test_integration_non_symmetric(include_stitch: bool = True, include_omp: boo
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
-    robominnie = RoboMinnie(n_planes=11, n_tile_yx=(151, 151), n_channels=9, n_tiles_x=2)
+    robominnie = RoboMinnie(n_planes=4, n_tile_yx=(141, 141), n_channels=9, n_tiles_x=2)
     robominnie.generate_gene_codes(10)
     robominnie.generate_pink_noise()
     # Add spots to DAPI image as larger spots
