@@ -142,7 +142,15 @@ def run_filter(
         nbp_debug.psf_intensity_thresh = None
         nbp_debug.psf_tiles_used = None
 
-    indices = indexing.create(nbp_basic)
+    indices = indexing.create(
+        nbp_basic,
+        include_anchor_round=True,
+        include_anchor_channel=True,
+        include_preseq_round=True,
+        include_dapi_seq=True,
+        include_dapi_anchor=True,
+        include_dapi_preseq=True,
+    )
     with tqdm(total=len(indices), desc=f"Filtering extracted {nbp_extract.file_type} files") as pbar:
         for t, r, c in indices:
             if r == nbp_basic.anchor_round:

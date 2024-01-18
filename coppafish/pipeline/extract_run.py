@@ -69,7 +69,15 @@ def run_extract(
     if not os.path.isdir(nbp_file.tile_unfiltered_dir):
         os.mkdir(nbp_file.tile_unfiltered_dir)
 
-    indices = indexing.create(nbp_basic)
+    indices = indexing.create(
+        nbp_basic,
+        include_anchor_round=True,
+        include_anchor_channel=True,
+        include_preseq_round=True,
+        include_dapi_seq=True,
+        include_dapi_anchor=True,
+        include_dapi_preseq=True,
+    )
     first_rounds = indexing.unique(indices, 1)
     loaded_dasks = [utils.raw.load_dask(nbp_file, nbp_basic, r=r) for _, r, _ in first_rounds]
     with tqdm(

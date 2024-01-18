@@ -77,8 +77,8 @@ def get_reference_spots(
     for t in nbp_basic.use_tiles:
         t_local_yxz = fs.spot_yxz(nbp_find_spots.spot_yxz, t, r, c, nbp_find_spots.spot_no)
         t_isolated = fs.spot_isolated(nbp_find_spots.isolated_spots, t, r, c, nbp_find_spots.spot_no)
-        # np.shape(t_local_yxz)[0] is the number of spots found on this tile. If there's a nonzero number of spots found
-        # then we append the local_yxz info and isolated info to our arrays.
+        # np.shape(t_local_yxz)[0] is the number of spots found on this tile. If there's a nonzero number of spots 
+        # found then we append the local_yxz info and isolated info to our arrays.
         # The all_local_tiles array SHOULD be the same length (ie have same number of elements as all_local_yxz has
         # rows) as all_local_yxz
         if np.shape(t_local_yxz)[0] > 0:
