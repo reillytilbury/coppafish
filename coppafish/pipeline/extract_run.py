@@ -144,9 +144,8 @@ def run_extract(
                             assert np.sum(im) != 0, f"Extracted image {t=}, {r=}, {c=} contains all zeros"
                             # yxz -> zyx
                             im = im.transpose((2, 0, 1))
-                            for z in range(im.shape[0]):
-                                if (im[z].max() - im[z].min()) == 0:
-                                    warnings.warn(f"Raw image {t=}, {r=}, {c=} at plane {z} is single valued!")
+                            if ((im.max(0) - im.min(0)) == 0).any():
+                                warnings.warn(f"Raw image {t=}, {r=}, {c=} contains a single valued plane!")
                             tiles_io._save_image(im, file_path, config["file_type"])
                         # Compute the counts of each possible uint16 pixel value for the image.
                         hist_counts[:, t, r, c] = np.histogram(im, hist_values.size)[0]
