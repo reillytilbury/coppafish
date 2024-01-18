@@ -967,7 +967,6 @@ def shift_vector_field(nb: Notebook):
     Function to plot vector fields of predicted shifts vs shifts to see if we classify a shift as an outlier.
     Args:
         nb: Notebook
-        round: True if round, False if Channel
     """
     nbp_basic, nbp_register_debug = nb.basic_info, nb.register_debug
     residual_thresh = nb.get_config()['register']['residual_thresh']

@@ -125,6 +125,7 @@ def load_dask(nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int) -> Tuple[
         elif nbp_file.raw_extension == '.npy':
             round_dask_array = dask.array.from_npy_stack(round_file)
     else:
+        #TODO: Combine all metadata from the jobs nd2 files for each round.
         # Now deal with the case where files are split by laser
         if nbp_basic.use_anchor:
             # always have anchor as first round after imaging rounds
