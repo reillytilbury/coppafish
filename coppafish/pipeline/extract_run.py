@@ -107,7 +107,7 @@ def run_extract(
                 im = im.astype(np.uint16, casting="safe")
                 # yxz -> zyx
                 im = im.transpose((2, 0, 1))
-                if ((im.max(0) - im.min(0)) == 0).any():
+                if ((im.max((1, 2)) - im.min((1, 2))) == 0).any():
                     warnings.warn(f"Raw image {t=}, {r=}, {c=} has a single valued plane!")
                 tiles_io._save_image(im, file_path, config["file_type"])
             # Compute the counts of each possible uint16 pixel value for the image.
