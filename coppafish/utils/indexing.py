@@ -10,18 +10,17 @@ def create(
     include_channels: bool = True,
     include_seq_rounds: bool = True,
     include_seq_channels: bool = True,
-    include_anchor_round: bool = True,
-    include_anchor_channel: bool = True,
-    include_preseq_round: bool = True,
-    include_dapi_seq: bool = True,
-    include_dapi_anchor: bool = True,
-    include_dapi_preseq: bool = True,
+    include_anchor_round: bool = False,
+    include_anchor_channel: bool = False,
+    include_preseq_round: bool = False,
+    include_dapi_seq: bool = False,
+    include_dapi_anchor: bool = False,
+    include_dapi_preseq: bool = False,
 ) -> Union[List[Tuple[int, int, int]], List[Tuple[int, int]], List[Tuple[int]]]:
     """
     Create tile, round and/or channel indices to loops through. Used throughout the coppafish pipeline. The defaults
-    are set to return every index which are used at all, i.e. all extracted images. If something is set to be included 
-    which does not exist in the notebook, e.g. a dapi channel or an anchor round, then it will not be included in the 
-    output.
+    are set to return only sequencing rounds and channels. If something is set to be included which does not exist in 
+    the notebook, e.g. a dapi channel or an anchor round, then it will not be included in the output.
 
     Args:
         nbp_basic (NotebookPage): 'basic_info' notebook page.
@@ -30,12 +29,12 @@ def create(
         include_seq_rounds (bool, optional): include sequencing rounds. Default: True.
         include_seq_channels (bool, optional): include sequencing channels (gathered for the sequencing rounds and 
             presequence round, if chosen). Default: True.
-        include_anchor_round (bool, optional): include anchor round. Default: True.
-        include_anchor_channel (bool, optional): include the anchor channel, only for the anchor round. Default: True.
-        include_preseq_round (bool, optional): include presequencing round. Default: True.
-        include_dapi_seq (bool, optional): include dapi channel in sequencing rounds. Default: True.
-        include_dapi_anchor (bool, optional): include dapi channel in anchor round. Default: True.
-        include_dapi_preseq (bool, optional): include dapi channel in presequencing round. Default: True.
+        include_anchor_round (bool, optional): include anchor round. Default: False.
+        include_anchor_channel (bool, optional): include the anchor channel, only for the anchor round. Default: False.
+        include_preseq_round (bool, optional): include presequencing round. Default: False.
+        include_dapi_seq (bool, optional): include dapi channel in sequencing rounds. Default: False.
+        include_dapi_anchor (bool, optional): include dapi channel in anchor round. Default: False.
+        include_dapi_preseq (bool, optional): include dapi channel in presequencing round. Default: False.
 
     Returns:
         list of tuple[int, int, int]] or list of tuple[int, int] or list of tuple[int] or list or tuple]: a list of
