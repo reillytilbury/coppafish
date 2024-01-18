@@ -2,7 +2,6 @@ import numpy as np
 import os
 import warnings
 import json
-from pathlib import PurePath
 
 from ..setup.notebook import NotebookPage
 from .. import utils, setup
