@@ -268,7 +268,7 @@ def view_stitch(nb: Notebook):
     # Create a num_ref_spots * 3 array of local coords of spot positions of the reference spots across all tiles used
     local_yxz = np.zeros((0, 3), dtype=int)
     for t in nb.basic_info.use_tiles:
-        local_yxz = np.vstack((local_yxz, spot_yxz(spot_details=nb.find_spots.spot_yxz,
+        local_yxz = np.vstack((local_yxz, spot_yxz(local_yxz=nb.find_spots.spot_yxz,
                               spot_no=nb.find_spots.spot_no, tile=t, round=nb.basic_info.anchor_round,
                                channel=nb.basic_info.anchor_channel)))
     # Recreate tile array from spot_no matrix

@@ -13,6 +13,7 @@ import warnings
 import dask.array
 import scipy.stats
 import numpy as np
+import math as maths
 from tqdm import tqdm
 import numpy.typing as npt
 from typing import Dict, List, Any, Tuple, Optional
@@ -185,10 +186,10 @@ class RoboMinnie:
             self.n_yxz[1],
             self.n_yxz[2],
         )
-        # These are the images we will build throughout RoboMinnie and eventually save. Starting with just zeroes
-        # DAPI image is contained within the anchor, presequencing and sequencing images. We use one giant image,
-        # across all tiles. Then, when saving as a raw files, we "un-stitch" the giant image into each individual tile
-        # with the given tile overlap.
+        # These are the images we will build throughout RoboMinnie and eventually save, starting with just zeroes.
+        # The DAPI channel is contained within the anchor, pre-sequencing and sequencing images. We use one giant
+        # image, across all tiles. Then, when saving as a raw files, we "un-stitch" the giant image into each
+        # individual tile with the given tile overlap.
         self.image = np.zeros(self.shape, dtype=self.image_dtype)
         self.anchor_image = np.zeros(self.anchor_shape, dtype=self.image_dtype)
         self.presequence_image = np.zeros(self.presequence_shape, dtype=self.image_dtype)
@@ -378,7 +379,7 @@ class RoboMinnie:
 
     def add_spots(
         self,
-        n_spots: int,
+        n_spots: Optional[int] = None,
         bleed_matrix: npt.NDArray[np.float_] = None,
         spot_size_pixels: npt.NDArray[np.float_] = None,
         gene_codebook_path: str = USE_INSTANCE_GENE_CODES,
@@ -395,9 +396,9 @@ class RoboMinnie:
         presequence images. We assume that `n_channels == n_dyes`.
 
         Args:
-            n_spots (int): Total number of spots to add.
-            bleed_matrix (`n_dyes x n_channels ndarray[float, float]`): The bleed matrix, used to map each dye to its
-                pattern as viewed by the camera in each channel. Default: Ones along the diagonals.
+            n_spots (int, optional): Number of spots to superimpose. Default: `floor(3% * total_imaging_volume)`.
+            bleed_matrix (`n_dyes x n_channels ndarray[float, float]`, optional): The bleed matrix, used to map each
+                dye to its pattern as viewed by the camera in each channel. Default: Ones along the diagonals.
             spot_size_pixels (`(3) ndarray[float]`): The spot's standard deviation in directions `x, y, z`
                 respectively. Default: `array([1.5, 1.5, 1.5])`.
             gene_codebook_path (str, optional): Path to the gene codebook, saved as a .txt file. Default: use `self`
@@ -450,7 +451,6 @@ class RoboMinnie:
         assert (
             bleed_matrix.shape[1] == self.n_channels
         ), f"Bleed matrix does not have n_channels={self.n_channels} as expected"
-        assert n_spots > 0, f"Expected n_spots > 0, got {n_spots}"
         if gene_codebook_path != USE_INSTANCE_GENE_CODES:
             assert os.path.isfile(gene_codebook_path), f"Gene codebook at {gene_codebook_path} does not exist"
         assert spot_size_pixels.size == 3, "`spot_size_pixels` must be in three dimensions"
@@ -469,6 +469,9 @@ class RoboMinnie:
             f"Gene efficiency must have shape `n_genes x n_rounds`=="
             + f"{(len(self.codes), self.n_rounds + self.include_anchor)}, got {gene_efficiency.shape}"
         )
+        if n_spots is None:
+            n_spots = maths.floor(0.03 * self.n_planes * self.n_tile_yx[0] * self.n_tile_yx[1] * self.n_tiles)
+        assert n_spots > 0, f"Expected n_spots > 0, got {n_spots}"
         if background_offset is None:
             background_offset = np.zeros((n_spots, self.n_channels))
         assert background_offset.shape == (
@@ -477,7 +480,6 @@ class RoboMinnie:
         ), f"background_offset must have shape {(n_spots, self.n_channels)}, got {background_offset.shape}"
 
         self.n_spots += n_spots
-
         if gene_codebook_path != USE_INSTANCE_GENE_CODES:
             # Read in the gene codebook txt file
             _codes = dict()
@@ -557,6 +559,9 @@ class RoboMinnie:
             s += 1
 
         # Append just in case spots are superimposed multiple times
+        assert len(set(true_spot_identities)) == len(
+            self.codes
+        ), "Some gene codes were never added, consider increasing the number of spots"
         self.true_spot_identities = np.append(self.true_spot_identities, np.asarray(true_spot_identities))
         self.true_spot_positions_pixels = np.append(self.true_spot_positions_pixels, true_spot_positions_pixels, axis=0)
 
@@ -666,7 +671,7 @@ class RoboMinnie:
         self,
         output_dir: str,
         overwrite: bool = True,
-        omp_iterations: int = 1,
+        omp_iterations: int = 2,
         omp_initial_intensity_thresh_percentile: int = 90,
         register_with_dapi: bool = True,
     ) -> None:
@@ -676,15 +681,16 @@ class RoboMinnie:
         ``run_coppafish`` to run the coppafish pipeline.
 
         Args:
-            output_dir (str): Save directory
-            overwrite (bool, optional): Overwrite any saved coppafish data inside the directory, delete old
+            output_dir (str): save directory.
+            overwrite (bool, optional): overwrite any saved coppafish data inside the directory, delete old
                 `notebook.npz` file if there is one and ignore any other files inside the directory. Default: true.
-            omp_iterations (int, optional): Number of OMP iterations on every pixel. Increasing this may improve gene
-                scoring. Default: `1`.
+            omp_iterations (int, optional): number of OMP iterations on every pixel. Increasing this may improve gene
+                scoring. Default: `2`.
             omp_initial_intensity_thresh_percentile (float, optional): percentile of the absolute intensity of all
                 pixels in the mid z-plane of the central tile. Used as a threshold for pixels to decide what to apply
                 OMP on. A higher number leads to stricter picking of pixels. Default: `90`.
-            register_with_dapi (bool, optional): Apply channel registration using the DAPI images. Default: true.
+            register_with_dapi (bool, optional): apply channel registration using the DAPI channel, if available. 
+                Default: true.
         """
         # Same dtype as ND2s
         self.scale_images_to_type(np.uint16)
@@ -925,6 +931,10 @@ class RoboMinnie:
         self.dye_names = list(self.dye_names)
 
         is_3d = self.n_planes > 1
+        # Box sizes must be even numbers
+        max_box_size_z, max_box_size_yx = 12, 300
+        box_size_z = min([max_box_size_z, self.n_planes if self.n_planes % 2 == 0 else self.n_planes - 1])
+        box_size_yx = min([max_box_size_yx, self.n_tile_yx[0] if self.n_tile_yx[0] % 2 == 0 else self.n_tile_yx[0] - 1])
 
         # Save the config file. z_subvols is moved from the default of 5 based on n_planes.
         config_file_contents = f"""; This config file is auto-generated by RoboMinnie. 
@@ -963,21 +973,28 @@ class RoboMinnie:
         ;psf_detect_radius_xy = 1
         ;psf_detect_radius_z = 1
         ;deconvolve = {True}
-        r_dapi = {1 if self.include_dapi else ''}
+        r_dapi = {5 if self.include_dapi else ''}
         ;#? Should probably be 0 for robominnie multi-tile setup? Unsure tho
+        auto_thresh_multiplier = 2
         num_rotations = 0
+
+        [find_spots]
+        n_spots_warn_fraction = 0
+        n_spots_error_fraction = 1
 
         [stitch]
         expected_overlap = {self.tile_overlap if self.n_tiles > 1 else 0}
-        shift_max_range = 6000, 6000, 100
+        shift_max_range = 25, 25, 10
         shift_score_thresh = {0.2 if self.n_tiles > 1 else ''}
+        auto_n_shifts = 2, 2, 1
 
         [register]
         subvols = {1}, {8}, {8}
-        box_size = {np.min([self.n_planes, 12])}, 300, 300
+        box_size = {box_size_z}, {box_size_yx}, {box_size_yx}
         pearson_r_thresh = 0.25
         round_registration_channel = {self.dapi_channel if (self.include_dapi and register_with_dapi) else ''}
         sobel = {not self.include_dapi}
+        icp_min_spots = 10
 
         [omp]
         max_genes = {omp_iterations}

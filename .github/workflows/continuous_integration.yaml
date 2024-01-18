@@ -15,7 +15,7 @@ jobs:
         python-version:
           - "3.9"
           - "3.10"
-    name: Unit Tests
+    name: Tests
     runs-on: ${{ matrix.os }}
     timeout-minutes: 5
 
@@ -31,14 +31,24 @@ jobs:
       - name: Update pip
         run: python -m pip install --upgrade pip
 
-      - name: Install non-jax dependencies
-        run: python -m pip install pytest .
+      - name: Install pytest
+        run: python -m pip install pytest
 
+      - name: Install non-jax dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install .
+      
       - name: Run non-jax unit tests
-        run: pytest -m 'not slow and not optimised'
+        run: pytest -m 'not slow and not optimised and not integration'
 
       - name: Install jax dependencies
-        run: python -m pip install pytest .[optimised]
+        run: |
+          python -m pip install -r requirements-optimised.txt
+          python -m pip install .[optimised]
 
       - name: Run jax unit tests
-        run: pytest -m 'not slow'
+        run: pytest -m 'not slow and not integration'
+
+      - name: Run jax integration tests
+        run: pytest -m 'integration and not slow'

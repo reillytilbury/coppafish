@@ -134,6 +134,7 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
     bg_colours = nbp_ref_spots.bg_colours.astype(float)
     spot_tile = nbp_ref_spots.tile
     n_spots, n_rounds, n_channels_use = colours.shape
+    n_dyes = initial_bleed_matrix.shape[1]
     n_tiles, use_channels = nbp_basic.n_tiles, nbp_basic.use_channels
     colour_norm_factor = np.ones((n_tiles, n_rounds, n_channels_use))
     gene_efficiency = np.ones((n_genes, n_rounds))
@@ -179,12 +180,17 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
     bg_percentile = 50
     bg_strength = np.linalg.norm(bg_codes, axis=(1, 2))
     for t, r in product(nbp_basic.use_tiles, range(n_rounds)):
-        keep = ((spot_tile == t) * (gene_prob_score > gene_prob_bleed_thresh) *
-                (bg_strength < np.percentile(bg_strength, bg_percentile)))
-        colours_tr = colours[keep, r, :]
-        print('Tile ' + str(t) + ' Round ' + str(r) + ' has ' + str(len(colours_tr)) + ' spots.')
-        pseudo_bleed_matrix[t, r] = call_spots.compute_bleed_matrix(initial_bleed_matrix=bleed_matrix,
-                                                                    spot_colours=colours_tr, dye_score_thresh=0.7)
+        for d in range(n_dyes):
+            my_genes = [g for g in range(n_genes) if gene_codes[g, r] == d]
+            keep = ((spot_tile == t) * (gene_prob_score > gene_prob_bleed_thresh) *
+                    (bg_strength < np.percentile(bg_strength, bg_percentile))) * np.isin(gene_no, my_genes)
+            colours_trd = colours[keep, r, :]
+            print('Tile ' + str(t) + ' Round ' + str(r) + 'Dye' + str(d) + ' has ' + str(len(colours_trd)) + ' spots.')
+            if len(colours_trd) == 0:
+                pseudo_bleed_matrix[t, r, :, d] = initial_bleed_matrix[:, d]
+            else:
+                pseudo_bleed_matrix[t, r, :, d] = np.mean(colours_trd, axis=0)
+
     # We'll use these to update our colour norm factor
     colour_norm_factor_update = np.ones_like(colour_norm_factor)
     for t, r, c in product(nbp_basic.use_tiles, range(n_rounds), range(n_channels_use)):

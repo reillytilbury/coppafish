@@ -177,7 +177,7 @@ def load_dask(nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int) -> Tuple[
                         tile_dask_array.append(new_dask_array)
                         del new_dask_array
                     else:
-                        tile_dask_array.append(dask.array.zeros(latest_shape))
+                        tile_dask_array.append(dask.array.zeros(latest_shape, dtype=np.uint16))
                         # TODO find a better fix for nz. here it is different because of basic_info use_z
                         # Ideally it should have the same shape as the array for dapi
 
