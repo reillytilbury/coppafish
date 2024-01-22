@@ -113,6 +113,7 @@ class ViewAllGeneScores():
         cax.yaxis.set_label_position("left")
         self.add_buttons()
         self.fig.canvas.draw_idle()
+        plt.show()
 
     def add_buttons(self):
         """

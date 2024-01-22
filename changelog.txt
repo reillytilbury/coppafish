@@ -1,3 +1,17 @@
+2024/01/dd Alpha Update (v0.8.1):
+ * Config variable auto_n_shifts in stitch section is no longer a magic number, it now scales with tile size fix.
+ * Dask array was converted to a float for jobs raw data has been fixed.
+ * view_find_spots diagnostic is now fixed.
+ * view_stitch diagnostic is now fixed.
+ * Bleed matrix computation in call spots has been slightly improved and is capable of reverting to a default bleed 
+    matrix if there are too few genes to compute with.
+ * Config variable n_background_scale_threads in register renamed to max_background_scale_cores
+ * Tile, round, channel indexing for extract, filter and find_spots now originates from functions in utils/indexing.py.
+ * requirements.txt and requirements-optimised.txt files for python==3.9 fixed.
+ * Removed call_spots bleed_matrix.py unused code.
+ * Removed outdated 2d pipeline code.
+
+
 2024/01/12 Alpha Update (v0.8.0):
  * Filtered images are now saved in ['file_names']['tile_dir']/filter and extract images are saved in 
     ['file_names']['tile_dir']/extract.

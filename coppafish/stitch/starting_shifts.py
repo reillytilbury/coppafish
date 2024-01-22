@@ -20,8 +20,10 @@ def get_shifts_to_search(config: dict, nbp_basic: NotebookPage, nbp_debug: Optio
             `j = 'north', 'east'`.
             `i = 'y', 'x', 'z'`.
     """
-    expected_shift_north = np.array([-(1 - config['expected_overlap']) * nbp_basic.tile_sz, 0, 0]).astype(int)
-    auto_shift_north_extent = np.array(config['auto_n_shifts']) * np.array(config['shift_step'])
+    expected_shift_north = np.asarray([-(1 - config['expected_overlap']) * nbp_basic.tile_sz, 0, 0]).astype(int)
+    auto_shift_north_extent = np.asarray(config['auto_n_shifts'], float) * np.asarray(config['shift_step'])
+    auto_shift_north_extent *= np.asarray([nbp_basic.tile_sz, nbp_basic.tile_sz, nbp_basic.nz]) / [2000, 2000, 50]
+    auto_shift_north_extent = np.clip(auto_shift_north_extent, a_min=1, a_max=None).astype(int)
     expected_shift_east = expected_shift_north[[1, 0, 2]]
     auto_shift_east_extent = auto_shift_north_extent[[1, 0, 2]]
     if config['shift_north_min'] is None:

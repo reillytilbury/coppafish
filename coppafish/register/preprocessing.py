@@ -144,8 +144,8 @@ def n_matches_to_frac_matches(n_matches: np.ndarray, spot_no: np.ndarray):
 
 def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box, x_box):
     """
-    Splits a 3D image into y_subvolumes * x_subvolumes * z_subvolumes subvolumes.
-    NOTE: z_box, y_box and x_box must be even numbers!
+    Splits a 3D image into y_subvolumes * x_subvolumes * z_subvolumes subvolumes. z_box, y_box and x_box must be even 
+    numbers.
 
     Parameters
     ----------

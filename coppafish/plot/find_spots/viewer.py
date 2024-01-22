@@ -28,7 +28,7 @@ def get_filtered_image(nb: Notebook, t: int, r: int, c: int) -> np.ndarray:
     if not nb.basic_info.is_3d:
         image_raw = extract.focus_stack(image_raw)
     image_raw, bad_columns = extract.strip_hack(image_raw)
-    config = nb.get_config()['extract']
+    config = nb.get_config()['scale']
     r1 = config['r1']
     r2 = config['r2']
     if r1 is None:

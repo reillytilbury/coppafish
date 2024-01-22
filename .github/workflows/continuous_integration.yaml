@@ -1,4 +1,4 @@
-name: Unit Tests
+name: CI
 
 # Trigger on any push or pull requests
 on:
@@ -15,9 +15,9 @@ jobs:
         python-version:
           - "3.9"
           - "3.10"
-    name: Unit Tests
+    name: Tests
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
@@ -31,14 +31,27 @@ jobs:
       - name: Update pip
         run: python -m pip install --upgrade pip
 
-      - name: Install non-jax dependencies
-        run: python -m pip install pytest .
+      - name: Install pytest
+        run: python -m pip install pytest
 
-      - name: Run non-jax unit tests
-        run: pytest -m 'not slow and not optimised'
+      - name: Install non-optimised dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install .
+      
+      - name: Run non-optimised unit tests
+        run: pytest -m 'not slow and not optimised and not integration'
 
-      - name: Install jax dependencies
-        run: python -m pip install pytest .[optimised]
+      - name: Run non-optimised integration tests
+        run: pytest -m 'integration and not slow and not optimised'
 
-      - name: Run jax unit tests
-        run: pytest -m 'not slow'
+      - name: Install optimised dependencies
+        run: |
+          python -m pip install -r requirements-optimised.txt
+          python -m pip install .[optimised]
+
+      - name: Run optimised unit tests
+        run: pytest -m 'not slow and not integration'
+
+      - name: Run optimised integration tests
+        run: pytest -m 'integration and not slow'

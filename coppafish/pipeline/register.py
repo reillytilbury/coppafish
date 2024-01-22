@@ -307,18 +307,17 @@ def register(
             None,
             np.asarray(nbp_basic.use_z.copy())[np.arange(mid_z - z_rad, mid_z + z_rad)] - min(nbp_basic.use_z),
         ]
-        n_cores = config["n_background_scale_threads"]
-        if n_cores is None:
-            # Maximum threads physically possible could be bottlenecked by available RAM
-            n_cores = max(system.get_core_count(), 1)
-            n_image_bytes = (2 * z_rad + 1) * nbp_basic.tile_sz * nbp_basic.tile_sz * 4
-            memory_core_limit = math.floor(system.get_available_memory() * 7e7 / n_image_bytes)
-            if memory_core_limit < 1:
-                warnings.warn(
-                    f"Available memory is low, if coppafish crashes, try freeing up memory before re-running pipeline"
-                )
-                memory_core_limit = 1
-            n_cores = min(n_cores, memory_core_limit)
+        max_cores = config["max_background_scale_cores"]
+        # Maximum cores physically possible could be bottlenecked by available RAM
+        n_cores = max(system.get_core_count(), 1)
+        n_image_bytes = (2 * z_rad + 1) * nbp_basic.tile_sz * nbp_basic.tile_sz * 4
+        memory_core_limit = math.floor(system.get_available_memory() * 7e7 / n_image_bytes)
+        if memory_core_limit < 1:
+            warnings.warn(
+                f"Available memory is low, if coppafish crashes, try freeing up memory before re-running pipeline"
+            )
+            memory_core_limit = 1
+        n_cores = min([n_cores, memory_core_limit, 999 if max_cores is None else max_cores])
         # Each tuple in the list is a processes args
         process_args = []
         final_index = len(use_tiles) * len(use_rounds) * len(use_channels) - 1
