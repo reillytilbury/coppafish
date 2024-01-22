@@ -645,7 +645,14 @@ def brightness_scale(preseq: np.ndarray, seq: np.ndarray, intensity_percentile: 
                               j * sub_image_size:(j + 1) * sub_image_size]
             sub_image_seq = seq[:, i * sub_image_size:(i + 1) * sub_image_size,
                             j * sub_image_size:(j + 1) * sub_image_size]
-            sub_image_shifts[i, j] = skimage.registration.phase_cross_correlation(sub_image_preseq, sub_image_seq)[0]
+            sub_image_seq_windowed = preprocessing.window_image(sub_image_seq)
+            sub_image_preseq_windowed = preprocessing.window_image(sub_image_preseq)
+            sub_image_shifts[i, j] = skimage.registration.phase_cross_correlation(sub_image_preseq_windowed,
+                                                                                  sub_image_seq_windowed)[0]
+            # skip calculation if any of the images are all zeros
+            if min(np.max(sub_image_seq), np.max(sub_image_preseq)) == 0:
+                sub_image_shift_score[i, j] = 0
+                continue
             sub_image_shift_score[i, j] = np.corrcoef(
                 sub_image_preseq.ravel(),
                 preprocessing.custom_shift(sub_image_seq, sub_image_shifts[i, j].astype(int)).ravel()

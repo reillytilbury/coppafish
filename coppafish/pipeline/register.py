@@ -243,34 +243,6 @@ def register(
         # Save registration data externally
         with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
             pickle.dump(registration_data, f)
-
-    # Now blur the pre seq round images
-    if registration_data["blur"] is False and nbp_basic.use_preseq:
-        for t, c in tqdm(itertools.product(use_tiles, use_channels + [nbp_basic.dapi_channel])):
-            print(f" Blurring pre-seq tile {t}, channel {c}")
-            # Load in the pre-seq round image, blur it and save it under a different name (dropping the _raw suffix)
-            im = tiles_io.load_image(
-                nbp_file,
-                nbp_basic,
-                nbp_extract.file_type,
-                t=t,
-                r=nbp_basic.pre_seq_round,
-                c=c,
-                suffix="_raw",
-                apply_shift=False,
-            )
-            if not (nbp_basic.pre_seq_round == nbp_basic.anchor_round and c == nbp_basic.dapi_channel):
-                im = preprocessing.offset_pixels_by(im, -nbp_basic.tile_pixel_value_shift)
-            if pre_seq_blur_radius > 0:
-                for z in tqdm(range(len(nbp_basic.use_z))):
-                    im[:, :, z] = filters.gaussian(im[:, :, z], pre_seq_blur_radius, truncate=3, preserve_range=True)
-            # Save the blurred image (no need to rotate this, as the rotation was done in extract)
-            tiles_io.save_image(nbp_file, nbp_basic, nbp_extract.file_type, im, t, r, c)
-        registration_data["blur"] = True
-
-    # Save registration data externally
-    with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
-        pickle.dump(registration_data, f)
     # Add round statistics to debugging page.
     nbp_debug.position = registration_data["round_registration"]["position"]
     nbp_debug.round_shift = registration_data["round_registration"]["shift"]
@@ -295,7 +267,7 @@ def register(
     transform[:, use_rounds_new] = registration_data["icp"]["transform"][:, use_rounds_new]
     nbp.transform = transform
 
-    # Load in the middle z-plane of each tile and compute the scale factors to be used when removing background
+    # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
     # fluorescence
     if nbp_basic.use_preseq:
         use_rounds = nbp_basic.use_rounds
