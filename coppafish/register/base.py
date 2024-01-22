@@ -221,6 +221,7 @@ def huber_regression(shift, position, predict_shift=True):
 def round_registration(anchor_image: np.ndarray, round_image: list, config: dict) -> dict:
     """
     Function to carry out sub-volume round registration on a single tile.
+    
     Args:
         anchor_image: np.ndarray size [n_z, n_y, n_x] of the anchor image
         round_image: list of length n_rounds, where round_image[r] is  np.ndarray size [n_z, n_y, n_x] of round r

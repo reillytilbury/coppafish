@@ -1,5 +1,6 @@
 [tool.pytest.ini_options]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "optimised: tests with this mark only work with the optimised packages installed"
+    "integration: integration tests",
+    "optimised: tests with this mark only work with optimised packages installed"
 ]
