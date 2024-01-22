@@ -64,13 +64,13 @@ def test_integration_small_two_tile():
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
-    robominnie = RoboMinnie(n_channels=4, n_planes=5, n_tile_yx=(50, 50), n_tiles_y=2)
-    robominnie.generate_gene_codes(2)
+    robominnie = RoboMinnie(n_channels=4, n_planes=5, n_tile_yx=(100, 100), n_tiles_y=2)
+    robominnie.generate_gene_codes(4)
     robominnie.generate_pink_noise()
-    robominnie.add_spots(500)
+    robominnie.add_spots(1500)
     robominnie.save_raw_images(output_dir)
-    nb = robominnie.run_coppafish(include_omp=False)
-    get_robominnie_scores(robominnie, include_omp=False)
+    nb = robominnie.run_coppafish()
+    get_robominnie_scores(robominnie)
     del robominnie
     return nb
 
