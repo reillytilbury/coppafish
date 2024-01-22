@@ -9,13 +9,16 @@ from superqt import QRangeSlider
 from PyQt5.QtWidgets import QPushButton, QMainWindow, QLineEdit, QLabel
 from PyQt5.QtGui import QFont
 import matplotlib.gridspec as gridspec
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from ...setup import Notebook
-from skimage.filters import sobel
+from skimage.filters import window, sobel
 from coppafish.register import preprocessing
-from coppafish.register.preprocessing import n_matches_to_frac_matches, yxz_to_zyx_affine, yxz_to_zyx
 from coppafish.register.base import huber_regression, brightness_scale, ols_regression
 from coppafish.utils import tiles_io
 from scipy.ndimage import affine_transform
+from scipy import fft
+import itertools
+
 
 plt.style.use('dark_background')
 
@@ -412,13 +415,14 @@ class RegistrationViewer:
 
     def get_images(self):
         # reset initial target image lists to empty lists
-        use_rounds, use_channels = self.nb.basic_info.use_rounds, self.nb.basic_info.use_channels
+        use_rounds = self.nb.basic_info.use_rounds + self.nb.basic_info.use_preseq * [self.nb.basic_info.pre_seq_round]
+        use_channels = self.nb.basic_info.use_channels
         self.target_round_image, self.target_channel_image = [], []
         t = self.tile
         # populate target arrays
         for r in use_rounds:
             file = 't' + str(t) + 'r' + str(r) + 'c' + str(self.round_registration_channel) + '.npy'
-            affine = yxz_to_zyx_affine(A=self.transform[t, r, self.c_ref],
+            affine = preprocessing.yxz_to_zyx_affine(A=self.transform[t, r, self.c_ref],
                                        new_origin=self.new_origin)
             # Reset the spline interpolation order to 1 to speed things up
             self.target_round_image.append(affine_transform(np.load(os.path.join(self.output_dir, file)),
@@ -426,7 +430,7 @@ class RegistrationViewer:
 
         for c in use_channels:
             file = 't' + str(t) + 'r' + str(self.r_mid) + 'c' + str(c) + '.npy'
-            affine = yxz_to_zyx_affine(A=self.transform[t, self.r_mid, c], new_origin=self.new_origin)
+            affine = preprocessing.yxz_to_zyx_affine(A=self.transform[t, self.r_mid, c], new_origin=self.new_origin)
             self.target_channel_image.append(affine_transform(np.load(os.path.join(self.output_dir, file)),
                                                               affine, order=1))
         # populate anchor image
@@ -436,54 +440,64 @@ class RegistrationViewer:
         self.base_image = np.load(os.path.join(self.output_dir, base_file_anchor))
 
     def plot_images(self):
-        use_rounds, use_channels = self.nb.basic_info.use_rounds, self.nb.basic_info.use_channels
+        use_rounds = self.nb.basic_info.use_rounds + self.nb.basic_info.use_preseq * [self.nb.basic_info.pre_seq_round]
+        use_channels = self.nb.basic_info.use_channels
+        n_rounds, n_channels = len(use_rounds), len(use_channels)
 
-        # We will add a point on top of each image and add features to it
-        features = {'r': np.repeat(np.append(use_rounds, np.ones(len(use_channels)) * self.r_mid), 10).astype(int),
-                    'c': np.repeat(np.append(np.ones(len(use_rounds)) * self.round_registration_channel,
-                                             use_channels), 10).astype(int)}
-        features_anchor = {'r': np.repeat(np.ones(len(use_rounds) + len(use_channels)) * self.r_ref, 10).astype(int),
-                           'c': np.repeat(np.ones(len(use_rounds) +
-                                                  len(use_channels)) * self.round_registration_channel, 10).astype(int)}
+        # we have 10 z planes. So we need 10 times as many labels as we have rounds and channels
+        features_base_round_reg = {'r': np.ones(10 * n_rounds).astype(int) * self.r_ref,
+                                   'c': np.ones(10 * n_rounds).astype(int) * self.round_registration_channel}
+        features_target_round_reg = {'r': np.repeat(use_rounds, 10).astype(int),
+                                     'c': np.ones(10 * n_rounds).astype(int) * self.round_registration_channel}
+        features_base_channel_reg = {'r': np.ones(10 * n_channels).astype(int) * self.r_ref,
+                                     'c': np.ones(10 * n_channels).astype(int) * self.c_ref}
+        features_target_channel_reg = {'r': np.ones(10 * n_channels).astype(int) * self.r_mid,
+                                       'c': np.repeat(use_channels, 10).astype(int)}
 
         # Define text
-        text = {
-            'string': 'R: {r} C: {c}',
-            'size': 8,
-            'color': 'green'}
-        text_anchor = {
+        text_base = {
             'string': 'R: {r} C: {c}',
             'size': 8,
             'color': 'red'}
+        text_target = {
+            'string': 'R: {r} C: {c}',
+            'size': 8,
+            'color': 'green'}
 
         # Now go on to define point coords. Napari only allows us to plot text with points, so will plot points that
         # are not visible and attach text to them
-        points = []
+        round_reg_points = []
+        channel_reg_points = []
 
-        for r in use_rounds:
+        for r in range(n_rounds):
             self.viewer.add_image(self.base_image_dapi, blending='additive', colormap='red',
-                                  translate=[0, 0, 1_000 * r],
-                                  name='Anchor')
+                                  translate=[0, 0, 1_000 * r])
             self.viewer.add_image(self.target_round_image[r], blending='additive', colormap='green',
-                                  translate=[0, 0, 1_000 * r],
-                                  name='Round ' + str(r) + ', Channel ' + str(self.round_registration_channel))
+                                  translate=[0, 0, 1_000 * r])
             # Add this to all z planes so still shows up when scrolling
             for z in range(10):
-                points.append([z, -50, 250 + 1_000 * r])
+                round_reg_points.append([z, -50, 250 + 1_000 * r])
 
-        for c in range(len(use_channels)):
-            self.viewer.add_image(self.base_image, blending='additive', colormap='red', translate=[0, 1_000, 1_000 * c],
-                                  name='Anchor')
+        for c in range(n_channels):
+            self.viewer.add_image(self.base_image, blending='additive', colormap='red',
+                                  translate=[0, 1_000, 1_000 * c])
             self.viewer.add_image(self.target_channel_image[c], blending='additive', colormap='green',
-                                  translate=[0, 1_000, 1_000 * c],
-                                  name='Round ' + str(self.r_mid) + ', Channel ' + str(use_channels[c]))
+                                  translate=[0, 1_000, 1_000 * c])
             for z in range(10):
-                points.append([z, 950, 250 + 1_000 * c])
+                channel_reg_points.append([z, 950, 250 + 1_000 * c])
 
-        points = np.array(points)
+        round_reg_points, channel_reg_points = np.array(round_reg_points), np.array(channel_reg_points)
+
         # Add text to image
-        self.viewer.add_points(points, features=features, text=text, size=1)
-        self.viewer.add_points(points - [0, 100, 0], features=features_anchor, text=text_anchor, size=1)
+        anchor_offset = np.array([0, 100, 0])
+        self.viewer.add_points(round_reg_points - anchor_offset, features=features_base_round_reg,
+                               text=text_base, size=0)
+        self.viewer.add_points(round_reg_points, features=features_target_round_reg,
+                               text=text_target, size=0)
+        self.viewer.add_points(channel_reg_points - anchor_offset, features=features_base_channel_reg,
+                               text=text_base, size=0)
+        self.viewer.add_points(channel_reg_points, features=features_target_channel_reg,
+                               text=text_target, size=0)
 
 
 class ButtonMethodWindow(QMainWindow):
@@ -781,7 +795,7 @@ def view_round_regression_scatter(nb: Notebook, t: int, r: int):
     corr = nb.register_debug.round_shift_corr[t, r]
     position = nb.register_debug.position[t, r]
     initial_transform = nb.register_debug.round_transform_raw[t, r]
-    icp_transform = yxz_to_zyx_affine(A=nb.register.transform[t, r, nb.basic_info.anchor_channel])
+    icp_transform = preprocessing.yxz_to_zyx_affine(A=nb.register.transform[t, r, nb.basic_info.anchor_channel])
 
     r_thresh = nb.get_config()['register']['pearson_r_thresh']
     shift = shift[corr > r_thresh].T
@@ -1285,7 +1299,7 @@ def view_icp_n_matches(nb: Notebook, t: int):
     n_matches = nbp_register_debug.n_matches[t, use_rounds][:, use_channels]
     # delete column 1 from n_matches as it is incorrect
     n_matches = np.delete(n_matches, 1, axis=2)
-    frac_matches = n_matches_to_frac_matches(n_matches=n_matches,
+    frac_matches = preprocessing.n_matches_to_frac_matches(n_matches=n_matches,
                                              spot_no=nbp_find_spots.spot_no[t, use_rounds][:, use_channels])
     n_iters = n_matches.shape[2]
 
@@ -1380,9 +1394,9 @@ def view_icp_deviations(nb: Notebook, t: int):
     transform = np.zeros((len(use_rounds), len(use_channels), 3, 4))
     for r in range(len(use_rounds)):
         for c in range(len(use_channels)):
-            initial_transform[r, c] = yxz_to_zyx_affine(
+            initial_transform[r, c] = preprocessing.yxz_to_zyx_affine(
                 A=nbp_register.initial_transform[t, use_rounds[r], use_channels[c]])
-            transform[r, c] = yxz_to_zyx_affine(A=nbp_register.transform[t, use_rounds[r], use_channels[c]])
+            transform[r, c] = preprocessing.yxz_to_zyx_affine(A=nbp_register.transform[t, use_rounds[r], use_channels[c]])
 
     # Define the axes
     fig, axes = plt.subplots(len(use_rounds), len(use_channels))
@@ -1451,12 +1465,12 @@ def view_entire_overlay(nb: Notebook, t: int, r: int, c: int, filter=False):
         filter: whether to apply sobel filter to images
     """
     # Initialise frequent variables
-    anchor = yxz_to_zyx(tiles_io.load_image(nb.file_names, nb.basic_info, t, nb.basic_info.anchor_round,
+    anchor = preprocessing.yxz_to_zyx(tiles_io.load_image(nb.file_names, nb.basic_info, t, nb.basic_info.anchor_round,
                                   nb.basic_info.anchor_channel, apply_shift=False))
-    target = yxz_to_zyx(tiles_io.load_image(nb.file_names, nb.basic_info, t, r, c, apply_shift=False))
+    target = preprocessing.yxz_to_zyx(tiles_io.load_image(nb.file_names, nb.basic_info, t, r, c, apply_shift=False))
     if not (r == nb.basic_info.anchor_round and c == nb.basic_info.dapi_channel):
         target = preprocessing.offset_pixels_by(target, -nb.basic_info.tile_pixel_value_shift)
-    transform = yxz_to_zyx_affine(nb.register.transform[t, r, c])
+    transform = preprocessing.yxz_to_zyx_affine(nb.register.transform[t, r, c])
     target_transfromed = affine_transform(target, transform, order=1)
     # plot in napari
     if filter:
@@ -1486,18 +1500,18 @@ def view_background_overlay(nb: Notebook, t: int, r: int, c: int):
     """
 
     if c in nb.basic_info.use_channels:
-        transform_preseq = yxz_to_zyx_affine(nb.register.transform[t, nb.basic_info.pre_seq_round, c])
-        transform_seq = yxz_to_zyx_affine(nb.register.transform[t, r, c])
+        transform_preseq = preprocessing.yxz_to_zyx_affine(nb.register.transform[t, nb.basic_info.pre_seq_round, c])
+        transform_seq = preprocessing.yxz_to_zyx_affine(nb.register.transform[t, r, c])
     elif c == 0:
-        transform_preseq = yxz_to_zyx_affine(nb.register.round_transform[t, nb.basic_info.pre_seq_round])
+        transform_preseq = preprocessing.yxz_to_zyx_affine(nb.register.round_transform[t, nb.basic_info.pre_seq_round])
         if r == nb.basic_info.anchor_round:
             transform_seq = np.eye(4)
         else:
-            transform_seq = yxz_to_zyx_affine(nb.register.round_transform[t, r])
-    seq = yxz_to_zyx(tiles_io.load_image(nb.file_names,nb.basic_info, nb.extract.file_type, t, r, c, apply_shift=False))
+            transform_seq = preprocessing.yxz_to_zyx_affine(nb.register.round_transform[t, r])
+    seq = preprocessing.yxz_to_zyx(tiles_io.load_image(nb.file_names,nb.basic_info, nb.extract.file_type, t, r, c, apply_shift=False))
     if not (r == nb.basic_info.anchor_round and c == nb.basic_info.dapi_channel):
         seq = preprocessing.offset_pixels_by(seq, -nb.basic_info.tile_pixel_value_shift)
-    preseq = yxz_to_zyx(
+    preseq = preprocessing.yxz_to_zyx(
         tiles_io.load_image(
             nb.file_names,nb.basic_info, nb.extract.file_type, t, nb.basic_info.pre_seq_round, c, apply_shift=False, 
         )
@@ -1521,10 +1535,10 @@ def view_background_brightness_correction(nb: Notebook, t: int, r: int, c: int, 
                                           sub_image_size: int = 500, bg_blur: bool = True):
     print(f"Computing background scale for tile {t}, round {r}, channel {c}")
     num_z = nb.basic_info.tile_centre[2].astype(int)
-    transform_pre = yxz_to_zyx_affine(nb.register.transform[t, nb.basic_info.pre_seq_round, c],
+    transform_pre = preprocessing.yxz_to_zyx_affine(nb.register.transform[t, nb.basic_info.pre_seq_round, c],
                                       new_origin=np.array([num_z - 5, 0, 0]))
-    transform_seq = yxz_to_zyx_affine(nb.register.transform[t, r, c], new_origin=np.array([num_z - 5, 0, 0]))
-    preseq = yxz_to_zyx(
+    transform_seq = preprocessing.yxz_to_zyx_affine(nb.register.transform[t, r, c], new_origin=np.array([num_z - 5, 0, 0]))
+    preseq = preprocessing.yxz_to_zyx(
         tiles_io.load_image(
             nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=nb.basic_info.pre_seq_round, c=c, 
             yxz=[None, None, np.arange(num_z - 5, num_z + 5)], suffix='_raw' * (1-bg_blur), apply_shift=False, 
@@ -1532,7 +1546,7 @@ def view_background_brightness_correction(nb: Notebook, t: int, r: int, c: int, 
     )
     if not (nb.basic_info.pre_seq_round == nb.basic_info.anchor_round and c == nb.basic_info.dapi_channel):
         preseq = preprocessing.offset_pixels_by(preseq, -nb.basic_info.tile_pixel_value_shift)
-    seq = yxz_to_zyx(tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=c,
+    seq = preprocessing.yxz_to_zyx(tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=c,
                                yxz=[None, None, np.arange(num_z - 5, num_z + 5)]))
     if not (r == nb.basic_info.anchor_round and c == nb.basic_info.dapi_channel):
         seq = preprocessing.offset_pixels_by(seq, -nb.basic_info.tile_pixel_value_shift)
@@ -1620,3 +1634,203 @@ def view_camera_correction(nb: Notebook):
                          colormap=colours[c], blending='additive', visible=True)
 
     napari.run()
+
+
+def view_shifts_and_scales(nb: Notebook, t: int, bg_on: bool = False):
+    """
+    Plots the shifts and scales for tile t for each round and channel
+    Args:
+        nb: Notebook
+        t: tile
+        bg_on: boolean indicating whether to plot shifts and scales for preseq registration
+   """
+    use_rounds = [nb.basic_info.anchor_round + 1] * nb.basic_info.use_preseq * bg_on + nb.basic_info.use_rounds
+    use_channels = nb.basic_info.use_channels
+    transform_yxz = nb.register.transform[t][np.ix_(use_rounds, use_channels)]
+    transform_zyx = np.zeros((len(use_rounds), len(use_channels), 3, 4))
+    for r in range(len(use_rounds)):
+        for c in range(len(use_channels)):
+            transform_zyx[r, c] = preprocessing.yxz_to_zyx_affine(transform_yxz[r, c])
+    scale = np.zeros((len(use_rounds), len(use_channels), 3))
+    shift = np.zeros((len(use_rounds), len(use_channels), 3))
+    # populate scale and shift
+    for r in range(len(use_rounds)):
+        for c in range(len(use_channels)):
+            scale[r, c] = np.diag(transform_zyx[r, c, :3, :3])
+            shift[r, c] = transform_zyx[r, c, :3, 3]
+
+    # create plots
+    fig, ax = plt.subplots(2, 3, figsize=(15, 10))
+    coord_label = ['Z', 'Y', 'X']
+    plot_label = ['Scale', 'Shift']
+    image = [scale, shift]
+
+    for i in range(2):
+        for j in range(3):
+            # plot the image
+            ax[i, j].imshow(image[i][:, :, j].T)
+            ax[i, j].set_xticks(np.arange(len(use_rounds)))
+            ax[i, j].set_xticklabels(use_rounds)
+            ax[i, j].set_yticks(np.arange(len(use_channels)))
+            ax[i, j].set_yticklabels(use_channels)
+            ax[i, j].set_title(plot_label[i] + ' in ' + coord_label[j])
+            # for each subplot, assign a colour bar
+            divider = make_axes_locatable(ax[i, j])
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            fig.colorbar(ax[i, j].get_images()[0], cax=cax)
+
+            if j == 0:
+                ax[i, j].set_ylabel('Channel')
+            if i == 1:
+                ax[i, j].set_xlabel('Round')
+    plt.suptitle('Shifts and scales for tile ' + str(t))
+    plt.show()
+
+
+class ViewSubvolReg:
+    def __init__(self, nb: Notebook, t: int = None, r: int = None):
+        """
+            Class to view the subvolume registration for a given tile, round, channel.
+            Args:
+                nb: Notebook
+                t: tile
+                r: round
+        """
+        self.nb, self.t, self.r = nb, t, r
+        if self.t is None:
+            self.t = nb.basic_info.use_tiles[0]
+        if self.r is None:
+            self.r = nb.basic_info.use_rounds[0]
+        # load in shifts
+        self.shift = nb.register_debug.round_shift[self.t, self.r]
+        self.shift_corr = nb.register_debug.round_shift_corr[self.t, self.r]
+        self.position = nb.register_debug.position[self.t, self.r]
+        # load in subvolumes
+        self.subvol_base, self.subvol_target = None, None
+        self.subvol_z, self.subvol_y, self.subvol_x = None, None, None
+        self.box_z, self.box_y, self.box_x = None, None, None
+        self.load_subvols()
+        # reshape shifts
+        self.shift = self.shift.reshape((self.subvol_z, self.subvol_y, self.subvol_x, 3))
+        self.shift_corr = self.shift_corr.reshape((self.subvol_z, self.subvol_y, self.subvol_x))
+        self.position = self.position.reshape((self.subvol_z, self.subvol_y, self.subvol_x, 3)).astype(int)
+
+    def load_subvols(self):
+        """
+        Load in subvolumes for the given tile and round
+        """
+        # load in images
+        config = self.nb.get_config()['register']
+        round_registration_channel = config['round_registration_channel']
+        anchor_image = preprocessing.yxz_to_zyx(tiles_io.load_image(self.nb.file_names, self.nb.basic_info, self.nb.extract.file_type,
+                                                      self.t, self.nb.basic_info.anchor_round,
+                                                      round_registration_channel, apply_shift=False))
+        round_image = preprocessing.yxz_to_zyx(tiles_io.load_image(self.nb.file_names, self.nb.basic_info, self.nb.extract.file_type,
+                                                     self.t, self.r, round_registration_channel, apply_shift=False))
+
+        # split images into subvolumes
+        z_subvols, y_subvols, x_subvols = config['subvols']
+        z_box, y_box, x_box = config['box_size']
+        subvol_base, _ = preprocessing.split_3d_image(image=anchor_image,
+                                        z_subvolumes=z_subvols, y_subvolumes=y_subvols, x_subvolumes=x_subvols,
+                                        z_box=z_box, y_box=y_box, x_box=x_box)
+        subvol_target, _ = preprocessing.split_3d_image(image=round_image,
+                                          z_subvolumes=z_subvols, y_subvolumes=y_subvols, x_subvolumes=x_subvols,
+                                          z_box=z_box, y_box=y_box, x_box=x_box)
+        self.subvol_z, self.subvol_y, self.subvol_x = int(z_subvols), int(y_subvols), int(x_subvols)
+        self.box_z, self.box_y, self.box_x = int(z_box), int(y_box), int(x_box)
+        # To save space, scale down images to uint8
+        base_max = np.max(subvol_base)
+        target_max = np.max(subvol_target)
+        for z, y, x in np.ndindex(self.subvol_z, self.subvol_y, self.subvol_x):
+            subvol_base[z, y, x] = (subvol_base[z, y, x] / base_max * 255).astype(np.uint8)
+            subvol_target[z, y, x] = (subvol_target[z, y, x] / target_max * 255).astype(np.uint8)
+        self.subvol_base, self.subvol_target = subvol_base, subvol_target
+
+    def view_single_subvol(self, z: int = 0, y: int = 0, x: int = 0):
+        """
+        View a single subvolume for the given tile and round
+        Args:
+            z: z index of subvolume
+            y: y index of subvolume
+            x: x index of subvolume
+        """
+        # create viewer
+        viewer = napari.Viewer()
+        # add images
+        base_z_indices = np.arange(max(0, z - 1), min(self.subvol_z, z + 1) + 1)
+        # add base images
+        for z_index in base_z_indices:
+            viewer.add_image(self.subvol_base[z_index, y, x], name=f'Base z={z_index} y={y} x={x}, shift = '
+                                                                   f'{np.round(self.shift[z_index, y, x], 2)}',
+                             colormap='red', blending='translucent', visible=False,
+                             translate=self.position[z_index, y, x] + self.shift[z_index, y, x])
+        # add target image
+        viewer.add_image(self.subvol_target[z, y, x], name=f'Target. z = {z}, y = {y}, x = {x}',
+                         colormap='green', blending='additive', visible=True, translate=self.position[z, y, x])
+        nz = viewer.dims.range[0][1]
+        viewer.dims.set_point(0, nz // 2) # set z to middle
+        viewer.window.qt_viewer.dockLayerControls.setVisible(False)
+        # make the layer list window bigger
+        viewer.window.qt_viewer.dockLayerList.setMinimumWidth(500)
+        napari.run()
+
+    def view_subvol_cross_corr(self, z: int = 0, y: int = 0, x: int = 0):
+        """
+        View the cross correlation for a single subvolume for the given tile and round
+        Args:
+            z: z index of subvolume
+            y: y index of subvolume
+            x: x index of subvolume
+        """
+        z_start, z_end = int(max(0, z - 1)), int(min(self.subvol_z, z + 1) + 1)
+        merged_subvol_target = preprocessing.merge_subvols(position=self.position[z_start:z_end, y, x].copy(),
+                                                           subvol=self.subvol_target[z_start:z_end, y, x])
+        merged_subvol_target = preprocessing.window_image(merged_subvol_target)
+        merged_subvol_base = np.zeros_like(merged_subvol_target)
+        merged_subvol_min_z = self.position[z_start, y, x][0]
+        current_box_min_z = self.position[z, y, x][0]
+        merged_subvol_start_z = current_box_min_z - merged_subvol_min_z
+        merged_subvol_base[merged_subvol_start_z:merged_subvol_start_z + self.box_z] = (
+            preprocessing.window_image(self.subvol_base[z, y, x]))
+
+        # compute cross correlation
+        im_centre = np.array(merged_subvol_base.shape) // 2
+        f_hat = fft.fftn(merged_subvol_base)
+        g_hat = fft.fftn(merged_subvol_target)
+        cross = f_hat * np.conj(g_hat)
+        cross_ifft = fft.fftshift(np.abs(fft.ifftn(cross)))
+        phase_cross = f_hat * np.conj(g_hat) / (np.abs(f_hat) * np.abs(g_hat))
+        phase_cross_ifft = fft.fftshift(np.abs(fft.ifftn(phase_cross)))
+        cross_shift = -(np.unravel_index(np.argmax(cross_ifft), cross_ifft.shape) - im_centre)
+        phase_cross_shift = -(np.unravel_index(np.argmax(phase_cross_ifft), phase_cross_ifft.shape) - im_centre)
+
+        # create viewer
+        viewer = napari.Viewer()
+        # add images
+        y_size, x_size = merged_subvol_base.shape[1:]
+        viewer.add_image(phase_cross_ifft, name=f'Phase cross correlation. z = {z}, y = {y}, x = {x}')
+        viewer.add_points([-phase_cross_shift + im_centre], name='Phase cross correlation shift', size=5,
+                          face_color='blue', symbol='cross')
+        # add overlays below this
+        translation_offset = np.array([0, 1.1 * y_size, 0])
+        viewer.add_image(merged_subvol_target, name=f'Target. z = {z}, y = {y}, x = {x}', colormap='green',
+                         blending='additive', translate=translation_offset)
+        viewer.add_image(merged_subvol_base, name=f'Base. Shift = {phase_cross_shift}', colormap='red',
+                         blending='additive', translate=translation_offset + phase_cross_shift)
+        # Do the same for the cross correlation
+        translation_offset = np.array([0, 0, 1.1 * x_size])
+        viewer.add_image(cross_ifft, name=f'Cross correlation. z = {z}, y = {y}, x = {x}', translate=translation_offset)
+        viewer.add_points([-cross_shift + im_centre], name='Cross correlation shift', size=5, face_color='blue',
+                          symbol='cross', translate=translation_offset)
+        # add overlays below this
+        translation_offset = np.array([0, 1.1 * y_size, 1.1 * x_size])
+        viewer.add_image(merged_subvol_target, name=f'Target. z = {z}, y = {y}, x = {x}', colormap='green',
+                         blending='additive', translate=translation_offset)
+        viewer.add_image(merged_subvol_base, name=f'Base. Shift = {cross_shift}', colormap='red',
+                         blending='additive', translate=translation_offset + cross_shift)
+        viewer.window.qt_viewer.dockLayerControls.setVisible(False)
+        # make the layer list window bigger
+        viewer.window.qt_viewer.dockLayerList.setMinimumWidth(500)
+
+        napari.run()

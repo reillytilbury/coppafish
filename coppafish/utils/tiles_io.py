@@ -257,7 +257,7 @@ def load_image(
     r: int,
     c: int,
     yxz: Optional[Union[List, Tuple, np.ndarray, jnp.ndarray]] = None,
-    apply_shift: bool = True,
+    apply_shift: bool = False,
     suffix: str = "",
 ) -> npt.NDArray[Union[np.int32, np.uint16]]:
     """

@@ -128,7 +128,6 @@ def register(
                     if not (use_dapi and r == nbp_basic.anchor_round):
                         round_image.append(
                             preprocessing.yxz_to_zyx(
-                                preprocessing.offset_pixels_by(
                                     tiles_io.load_image(
                                         nbp_file,
                                         nbp_basic,
@@ -136,10 +135,7 @@ def register(
                                         t=t,
                                         r=r,
                                         c=round_registration_channel,
-                                        suffix="_raw" if r == nbp_basic.pre_seq_round else "",
-                                        apply_shift=False,
-                                    ),
-                                    -nbp_basic.tile_pixel_value_shift,
+                                        suffix="_raw" if r == nbp_basic.pre_seq_round else ""
                                 )
                             )
                         )
@@ -295,7 +291,8 @@ def register(
     nbp.initial_transform = registration_data["initial_transform"]
     # combine icp transform, channel transform and initial transform to get final transform
     transform = np.zeros((n_tiles, n_rounds + nbp_basic.use_anchor + nbp_basic.use_preseq, n_channels, 4, 3))
-    transform[:, use_rounds] = registration_data["icp"]["transform"][:, use_rounds]
+    use_rounds_new = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
+    transform[:, use_rounds_new] = registration_data["icp"]["transform"][:, use_rounds_new]
     nbp.transform = transform
 
     # Load in the middle z-plane of each tile and compute the scale factors to be used when removing background
