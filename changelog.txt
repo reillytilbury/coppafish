@@ -7,6 +7,8 @@
     matrix if there are too few genes to compute with.
  * Config variable n_background_scale_threads in register renamed to max_background_scale_cores
  * Tile, round, channel indexing for extract, filter and find_spots now originates from functions in utils/indexing.py.
+ * requirements.txt and requirements-optimised.txt files for python==3.9 fixed.
+ * Removed call_spots bleed_matrix.py unused code.
  * Removed outdated 2d pipeline code.
 
 
