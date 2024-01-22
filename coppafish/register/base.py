@@ -76,12 +76,27 @@ def find_z_tower_shifts(subvol_base, subvol_target, position, pearson_r_threshol
         z_start, z_end = int(max(0, z - z_neighbours)), int(min(z_subvolumes, z + z_neighbours + 1))
         merged_subvol_target = preprocessing.merge_subvols(position=np.copy(position[z_start:z_end]), 
                                                            subvol=subvol_target[z_start:z_end])
-        merged_subvol_base = np.zeros(merged_subvol_target.shape)
-        box_bottom = position[z_start, 0]
-        merged_subvol_base[position[z, 0] - box_bottom:position[z, 0] - box_bottom + z_box] = subvol_base[z]
+        merged_subvol_target = preprocessing.window_image(merged_subvol_target)
+        merged_subvol_base = np.zeros_like(merged_subvol_target)
+        merged_subvol_min_z = position[z_start, 0]
+        current_box_min_z = position[z, 0]
+        merged_subvol_start_z = current_box_min_z - merged_subvol_min_z
+        merged_subvol_base[merged_subvol_start_z:merged_subvol_start_z + z_box] = (
+            preprocessing.window_image(subvol_base[z]))
         # Now we have the merged subvolumes, we can compute the shift
-        shift[z], shift_corr[z] = find_zyx_shift(subvol_base=merged_subvol_base, subvol_target=merged_subvol_target,
-                                                 pearson_r_threshold=pearson_r_threshold)
+        shift[z], _, _ = skimage.registration.phase_cross_correlation(reference_image=merged_subvol_target,
+                                                                      moving_image=merged_subvol_base,
+                                                                      upsample_factor=10, disambiguate=True,
+                                                                      overlap_ratio=0.5)
+        # compute pearson correlation coefficient
+        shift_base = preprocessing.custom_shift(merged_subvol_base, shift[z].astype(int))
+        mask = shift_base != 0
+        if np.sum(mask) == 0:
+            shift_corr[z] = 0
+        else:
+            shift_corr[z] = np.corrcoef(shift_base[mask], merged_subvol_target[mask])[0, 1]
+        if shift_corr[z] < pearson_r_threshold:
+            shift[z] = np.array([np.nan, np.nan, np.nan])
 
     return shift, shift_corr
 
@@ -102,7 +117,7 @@ def find_zyx_shift(subvol_base, subvol_target, pearson_r_threshold=0.9):
     """
     if subvol_base.shape != subvol_target.shape:
         raise ValueError("Subvolume arrays have different shapes")
-    shift, _, _ = skimage.registration.phase_cross_correlation(reference_image=subvol_target, moving_image=subvol_base, 
+    shift, _, _ = skimage.registration.phase_cross_correlation(reference_image=subvol_target, moving_image=subvol_base,
                                                                upsample_factor=10)
     alt_shift = np.copy(shift)
     # now anti alias the shift in z. To do this, consider that the other possible aliased z shift is the either one
@@ -262,14 +277,6 @@ def round_registration(anchor_image: np.ndarray, round_image: list, config: dict
         # Find the subvolume shifts
         shift, corr = find_shift_array(subvol_base, subvol_target, position=position.copy(), r_threshold=r_thresh)
         transform = huber_regression(shift, position, predict_shift=False)
-        # The global shift correction should already be accounted for in the affine transform, however, as it is
-        # the most important part of the transform, we will fit any residual global shift correction here
-        # NB: This is only reliable if using dapi so don't do it otherwise
-        if config['round_registration_channel'] == 0:
-            adjusted_target = scipy.ndimage.affine_transform(round_image[r], transform, order=3)
-            global_shift_correction = skimage.registration.phase_cross_correlation(reference_image=adjusted_target, 
-                                                                                  moving_image=anchor_image)[0]
-            transform[:, 3] += global_shift_correction
         # Append these arrays to the round_shift, round_shift_corr, round_transform and position storage
         round_registration_data['shift'].append(shift)
         round_registration_data['shift_corr'].append(corr)

@@ -9,6 +9,7 @@ from .. import call_spots
 from .. import spot_colors
 from .. import utils
 from .. import scale
+from scipy.sparse.linalg import svds
 from ..call_spots import get_spot_intensity
 
 
@@ -134,6 +135,7 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
     bg_colours = nbp_ref_spots.bg_colours.astype(float)
     spot_tile = nbp_ref_spots.tile
     n_spots, n_rounds, n_channels_use = colours.shape
+    n_dyes = initial_bleed_matrix.shape[1]
     n_tiles, use_channels = nbp_basic.n_tiles, nbp_basic.use_channels
     colour_norm_factor = np.ones((n_tiles, n_rounds, n_channels_use))
     gene_efficiency = np.ones((n_genes, n_rounds))
@@ -170,21 +172,45 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
     gene_no = np.argmax(gene_prob, axis=1)
     gene_prob_score = np.max(gene_prob, axis=1)
 
-    # Part 3: Update our colour norm factor. To do this, we will sample dyes from each tile and round - generating
-    # a new un-normalised bleed matrix for each tile and round. We will then use least squares to find the best colour
-    # scaling factors omega = (w_1, ..., w_7) for each tile and round such that
+    # Part 3: Update our colour norm factor and bleed matrix. To do this, we will sample dyes from each tile and round
+    # - generating a new un-normalised bleed matrix for each tile and round. We will then use least squares to find the
+    # best colour scaling factors omega = (w_1, ..., w_7) for each tile and round such that
     # omega_i * initial_bleed_matrix[i] ~ bleed_matrix[t, r, i] for all i. We can then assimilate these scaling factors
     # into our colour norm factor.
     gene_prob_bleed_thresh = min(np.percentile(gene_prob_score, 80), 0.8)
     bg_percentile = 50
     bg_strength = np.linalg.norm(bg_codes, axis=(1, 2))
+    # first, estimate bleed matrix
+    for d in tqdm(range(n_dyes), desc='Estimating bleed matrix'):
+        colours_d = np.zeros((0, n_channels_use))
+        for r in range(n_rounds):
+            my_genes = [g for g in range(n_genes) if gene_codes[g, r] == d]
+            keep = ((gene_prob_score > gene_prob_bleed_thresh) *
+                    (bg_strength < np.percentile(bg_strength, bg_percentile))) * np.isin(gene_no, my_genes)
+            colours_d = colours[keep, r, :]
+            is_positive = np.sum(colours_d, axis=1) > 0
+            colours_d = colours_d[is_positive]
+            if len(colours_d) == 0:
+                continue
+            # Now we have colours_d, we can estimate the bleed matrix for this dye
+            u, s, v = svds(colours_d, k=1)
+            v = v[0]
+            v *= np.sign(v[np.argmax(np.abs(v))])  # Make sure the largest element is positive
+            bleed_matrix[iter, :, d] = v
+
+    # now get pseudo bleed matrix for each tile and round
     for t, r in product(nbp_basic.use_tiles, range(n_rounds)):
-        keep = ((spot_tile == t) * (gene_prob_score > gene_prob_bleed_thresh) *
-                (bg_strength < np.percentile(bg_strength, bg_percentile)))
-        colours_tr = colours[keep, r, :]
-        print('Tile ' + str(t) + ' Round ' + str(r) + ' has ' + str(len(colours_tr)) + ' spots.')
-        pseudo_bleed_matrix[t, r] = call_spots.compute_bleed_matrix(initial_bleed_matrix=bleed_matrix,
-                                                                    spot_colours=colours_tr, dye_score_thresh=0.7)
+        for d in range(n_dyes):
+            my_genes = [g for g in range(n_genes) if gene_codes[g, r] == d]
+            keep = ((spot_tile == t) * (gene_prob_score > gene_prob_bleed_thresh) *
+                    (bg_strength < np.percentile(bg_strength, bg_percentile))) * np.isin(gene_no, my_genes)
+            colours_trd = colours[keep, r, :]
+            print('Tile ' + str(t) + ' Round ' + str(r) + 'Dye' + str(d) + ' has ' + str(len(colours_trd)) + ' spots.')
+            if len(colours_trd) == 0:
+                pseudo_bleed_matrix[t, r, :, d] = bleed_matrix[:, d]
+            else:
+                pseudo_bleed_matrix[t, r, :, d] = np.mean(colours_trd, axis=0)
+
     # We'll use these to update our colour norm factor
     colour_norm_factor_update = np.ones_like(colour_norm_factor)
     for t, r, c in product(nbp_basic.use_tiles, range(n_rounds), range(n_channels_use)):
