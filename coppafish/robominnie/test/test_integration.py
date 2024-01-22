@@ -49,6 +49,31 @@ def test_integration_smallest() -> Notebook:
 
 
 @pytest.mark.integration
+def test_integration_small_two_tile():
+    """
+    Summary of input data: random spots and pink noise.
+
+    Includes anchor round, sequencing rounds, one `10x100x100` tile.
+
+    Returns:
+        Notebook: complete coppafish Notebook.
+    """
+    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "integration_dir")
+    if not os.path.isdir(output_dir):
+        os.mkdir(output_dir)
+
+    robominnie = RoboMinnie(n_channels=4, n_planes=5, n_tile_yx=(100, 100), n_tiles_y=2)
+    robominnie.generate_gene_codes(5)
+    robominnie.generate_pink_noise()
+    robominnie.add_spots(1500)
+    robominnie.save_raw_images(output_dir)
+    nb = robominnie.run_coppafish()
+    get_robominnie_scores(robominnie)
+    del robominnie
+    return nb
+
+
+@pytest.mark.integration
 @pytest.mark.slow
 def test_integration_002() -> None:
     """
@@ -189,6 +214,6 @@ def test_pdf_builder() -> None:
 
 
 if __name__ == "__main__":
-    test_integration_non_symmetric()
+    test_integration_small_two_tile()
     test_pdf_builder()
     test_viewers()
