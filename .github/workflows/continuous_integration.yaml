@@ -43,7 +43,7 @@ jobs:
         run: pytest -m 'not slow and not optimised and not integration'
 
       - name: Run non-optimised integration tests
-        run: pytest -m 'integration and not slow'
+        run: pytest -m 'integration and not slow and not optimised'
 
       - name: Install optimised dependencies
         run: |

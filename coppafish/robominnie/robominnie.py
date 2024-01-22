@@ -1064,12 +1064,22 @@ class RoboMinnie:
         if not include_stitch:
             return nb
         run.run_stitch(nb)
+        # Keep the stitch information to convert local tiles coordinates into global coordinates when comparing
+        # to true spots
+        self.stitch_tile_origins = nb.stitch.tile_origin
 
         assert nb.has_page("stitch"), f"Stitch not found in notebook at {config_filepath}"
         run.run_reference_spots(nb, overwrite_ref_spots=False)
 
         # Keep reference spot information to compare to true spots, if wanted
         assert nb.has_page("ref_spots"), f"Reference spots not found in notebook at {config_filepath}"
+
+        if save_ref_spots_data:
+            self.ref_spots_scores = nb.ref_spots.score
+            self.ref_spots_local_positions_yxz = nb.ref_spots.local_yxz
+            self.ref_spots_intensities = nb.ref_spots.intensity
+            self.ref_spots_gene_indices = nb.ref_spots.gene_no
+            self.ref_spots_tile = nb.ref_spots.tile
 
         if include_omp == False:
             return nb
@@ -1103,17 +1113,6 @@ class RoboMinnie:
             )
 
         assert nb.has_page("omp"), f"OMP not found in notebook at {config_filepath}"
-
-        # Keep the stitch information to convert local tiles coordinates into global coordinates when comparing
-        # to true spots
-        self.stitch_tile_origins = nb.stitch.tile_origin
-
-        if save_ref_spots_data:
-            self.ref_spots_scores = nb.ref_spots.score
-            self.ref_spots_local_positions_yxz = nb.ref_spots.local_yxz
-            self.ref_spots_intensities = nb.ref_spots.intensity
-            self.ref_spots_gene_indices = nb.ref_spots.gene_no
-            self.ref_spots_tile = nb.ref_spots.tile
         # Keep the OMP spot intensities, assigned gene, assigned tile number and the spot positions in the class
         # instance
         self.omp_spot_intensities = nb.omp.intensity

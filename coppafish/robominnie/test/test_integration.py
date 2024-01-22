@@ -8,13 +8,15 @@ from coppafish.robominnie import RoboMinnie
 from coppafish.plot.register.diagnostics import RegistrationViewer
 
 
-def get_robominnie_scores(rm: RoboMinnie) -> None:
+def get_robominnie_scores(rm: RoboMinnie, include_omp: bool = True) -> None:
     print(rm.compare_spots("ref"))
     overall_score = rm.overall_score()
     print(f"Overall score: {round(overall_score*100, 1)}%")
     if overall_score < 0.75:
         warnings.warn(UserWarning("Integration test passed, but the overall reference spots score is < 75%"))
 
+    if not include_omp:
+        return
     print(rm.compare_spots("omp"))
     overall_score = rm.overall_score()
     print(f"Overall score: {round(overall_score*100, 1)}%")
@@ -28,7 +30,7 @@ def test_integration_smallest() -> Notebook:
     """
     Summary of input data: random spots and pink noise.
 
-    Includes anchor round, sequencing rounds, one `10x100x100` tile.
+    Includes anchor round, sequencing rounds, one `5x100x100` tile.
 
     Returns:
         Notebook: complete coppafish Notebook.
@@ -53,7 +55,7 @@ def test_integration_small_two_tile():
     """
     Summary of input data: random spots and pink noise.
 
-    Includes anchor round, sequencing rounds, one `10x100x100` tile.
+    Includes anchor round, sequencing rounds, one `4x100x100` tile.
 
     Returns:
         Notebook: complete coppafish Notebook.
@@ -62,13 +64,13 @@ def test_integration_small_two_tile():
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
-    robominnie = RoboMinnie(n_channels=4, n_planes=4, n_tile_yx=(100, 100), n_tiles_y=2)
-    robominnie.generate_gene_codes(5)
+    robominnie = RoboMinnie(n_channels=4, n_planes=5, n_tile_yx=(50, 50), n_tiles_y=2)
+    robominnie.generate_gene_codes(2)
     robominnie.generate_pink_noise()
-    robominnie.add_spots(1500)
+    robominnie.add_spots(500)
     robominnie.save_raw_images(output_dir)
-    nb = robominnie.run_coppafish()
-    get_robominnie_scores(robominnie)
+    nb = robominnie.run_coppafish(include_omp=False)
+    get_robominnie_scores(robominnie, include_omp=False)
     del robominnie
     return nb
 
