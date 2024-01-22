@@ -10,7 +10,7 @@ is added to a NotebookPage, in addition to saving the value, it saves the time
 at which the entry was added.  Likewise, the time at which a NotebookPage is
 created, and the time at which it is added to the lab book, are also recorded
 automatically.  This both serves as a record of what was done, as well as a
-source for debugging and optimization.
+source for debugging and optimisation.
 
 Conceptually, the idea is that a Notebook is like a lab notebook.  In a lab
 notebook, you write things in a separate section (here, page) for each part of
@@ -29,7 +29,6 @@ the user does not need to think about types, which should be used seamlessly
 and silently in the background.  (If a new type is needed, see the
 documentation near the TYPES variable in the code below for how to add a new
 type.)
-
 """
 import numpy as np
 import hashlib
