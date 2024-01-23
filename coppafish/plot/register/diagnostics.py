@@ -1452,7 +1452,7 @@ def view_icp_deviations(nb: Notebook, t: int):
                                                                    'right column is zyx shift difference.')
 
 
-def view_entire_overlay(nb: Notebook, t: int, r: int, c: int, filter=False):
+def view_entire_overlay(nb: Notebook, t: int, r: int, c: int, filter=False, initial=False):
     """
     Plots the entire image for a given tile t, round r, channel c, and overlays the SVR transformed image on top of the
     ICP transformed image. The SVR transformed image is in red, and the ICP transformed image is in green.
@@ -1463,25 +1463,35 @@ def view_entire_overlay(nb: Notebook, t: int, r: int, c: int, filter=False):
         r: round
         c: channel
         filter: whether to apply sobel filter to images
+        initial: whether to use initial transform or final transform
     """
     # Initialise frequent variables
-    anchor = preprocessing.yxz_to_zyx(tiles_io.load_image(nb.file_names, nb.basic_info, t, nb.basic_info.anchor_round,
-                                  nb.basic_info.anchor_channel, apply_shift=False))
-    target = preprocessing.yxz_to_zyx(tiles_io.load_image(nb.file_names, nb.basic_info, t, r, c, apply_shift=False))
-    if not (r == nb.basic_info.anchor_round and c == nb.basic_info.dapi_channel):
-        target = preprocessing.offset_pixels_by(target, -nb.basic_info.tile_pixel_value_shift)
-    transform = preprocessing.yxz_to_zyx_affine(nb.register.transform[t, r, c])
-    target_transfromed = affine_transform(target, transform, order=1)
+    anchor = preprocessing.yxz_to_zyx(tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t,
+                                                          nb.basic_info.anchor_round, nb.basic_info.anchor_channel,
+                                                          apply_shift=False))
+    anchor = anchor.astype(np.int32)
+    anchor -= nb.basic_info.tile_pixel_value_shift
+    anchor = anchor.astype(np.float32)
+    target = preprocessing.yxz_to_zyx(tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t, r, c,
+                                                          apply_shift=False))
+    target = target.astype(np.int32)
+    target -= nb.basic_info.tile_pixel_value_shift
+    target = target.astype(np.float32)
+    if initial:
+        transform = preprocessing.yxz_to_zyx_affine(nb.register.initial_transform[t, r, c])
+    else:
+        transform = preprocessing.yxz_to_zyx_affine(nb.register.transform[t, r, c])
+    target_transformed = affine_transform(target, transform, order=1)
     # plot in napari
     if filter:
         anchor = sobel(anchor)
         target = sobel(target)
-        target_transfromed = sobel(target_transfromed)
+        target_transformed = sobel(target_transformed)
 
     viewer = napari.Viewer()
     viewer.add_image(anchor, name='Tile ' + str(t) + ', round ' + str(nb.basic_info.anchor_round) + ', channel ' +
                                   str(nb.basic_info.anchor_channel), colormap='red', blending='additive')
-    viewer.add_image(target_transfromed, name='Tile ' + str(t) + ', round ' + str(r) + ', channel ' + str(c) +
+    viewer.add_image(target_transformed, name='Tile ' + str(t) + ', round ' + str(r) + ', channel ' + str(c) +
                                               ' transformed', colormap='green', blending='additive')
     viewer.add_image(target, name='Tile ' + str(t) + ', round ' + str(r) + ', channel ' + str(c), colormap='blue',
                      blending='additive', opacity=0)
@@ -1746,34 +1756,6 @@ class ViewSubvolReg:
             subvol_base[z, y, x] = (subvol_base[z, y, x] / base_max * 255).astype(np.uint8)
             subvol_target[z, y, x] = (subvol_target[z, y, x] / target_max * 255).astype(np.uint8)
         self.subvol_base, self.subvol_target = subvol_base, subvol_target
-
-    def view_single_subvol(self, z: int = 0, y: int = 0, x: int = 0):
-        """
-        View a single subvolume for the given tile and round
-        Args:
-            z: z index of subvolume
-            y: y index of subvolume
-            x: x index of subvolume
-        """
-        # create viewer
-        viewer = napari.Viewer()
-        # add images
-        base_z_indices = np.arange(max(0, z - 1), min(self.subvol_z, z + 1) + 1)
-        # add base images
-        for z_index in base_z_indices:
-            viewer.add_image(self.subvol_base[z_index, y, x], name=f'Base z={z_index} y={y} x={x}, shift = '
-                                                                   f'{np.round(self.shift[z_index, y, x], 2)}',
-                             colormap='red', blending='translucent', visible=False,
-                             translate=self.position[z_index, y, x] + self.shift[z_index, y, x])
-        # add target image
-        viewer.add_image(self.subvol_target[z, y, x], name=f'Target. z = {z}, y = {y}, x = {x}',
-                         colormap='green', blending='additive', visible=True, translate=self.position[z, y, x])
-        nz = viewer.dims.range[0][1]
-        viewer.dims.set_point(0, nz // 2) # set z to middle
-        viewer.window.qt_viewer.dockLayerControls.setVisible(False)
-        # make the layer list window bigger
-        viewer.window.qt_viewer.dockLayerList.setMinimumWidth(500)
-        napari.run()
 
     def view_subvol_cross_corr(self, z: int = 0, y: int = 0, x: int = 0):
         """
