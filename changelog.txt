@@ -8,6 +8,10 @@
  * Config variable n_background_scale_threads in register renamed to max_background_scale_cores
  * Tile, round and channel indexing now originates from multi-purpose functions in coppafish/utils/indexing.py.
  * Removed outdated 2d pipeline code.
+ * The notebook duplicates itself before adding and saving with a new notebook page included. This way if the code is 
+    user interrupted during a save, a backup notebook is available to revert to that will not be corrupted. The backup 
+    will automatically be deleted after the new save is fully complete.
+ * New notebook tile by tile combining functionality reimplemented.
 
 
 2024/01/12 Alpha Update (v0.8.0):

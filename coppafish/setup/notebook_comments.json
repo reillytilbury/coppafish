@@ -126,13 +126,13 @@
             "Number of dyes used"
         ],
         "tile_centre": [
-            "eq",
+            "close",
             "Numpy float array [3]",
             "`[y, x, z]` location of tile centre in units of `[yx_pixels, yx_pixels, z_pixels]`.",
             "For *2D* pipeline, `tile_centre[2] = 0`"
         ],
         "tilepos_yx_nd2": [
-            "tileindex_0",
+            "tile_0",
             "Numpy integer array [n_tiles x 2]",
             "`tilepos_yx_nd2[i, :]` is the $yx$ position of tile with *fov* index $i$ in the *nd2* file.",
             "",
@@ -141,7 +141,7 @@
             "Index 1 refers to `YX = [0, 1]` if `MaxX > 0`"
         ],
         "tilepos_yx": [
-            "tileindex_0",
+            "tile_0",
             "Numpy integer array [n_tiles x 2]",
             "`tilepos_yx[i, :]` is the $yx$ position of tile with tile directory (*npy* files) index $i$.",
             "Equally, `tilepos_yx[use_tiles[i], :]` is $yx$ position of tile `use_tiles[i]`.",
@@ -151,12 +151,12 @@
             "Index 1 refers to `YX = [MaxY, MaxX - 1]` if `MaxX > 0`"
         ],
         "pixel_size_xy": [
-            "eq",
+            "close",
             "Float",
             "$yx$ pixel size in microns"
         ],
         "pixel_size_z": [
-            "eq",
+            "close",
             "Float",
             "$z$ pixel size in microns"
         ],
@@ -181,7 +181,7 @@
             "Coppafish version, as given by *coppafish/_version.py*"
         ],
         "revision_hash": [
-            "eq",
+            "ignore",
             "String",
             "Hash of the latest git commit when the pipeline was run"
         ]
@@ -361,7 +361,7 @@
         ],
 
         "r_smooth": [
-            "eq",
+            "close",
             "Float or None",
             "Radius of averaging filter to do smoothing of filtered image."
         ],
@@ -384,7 +384,7 @@
             "*Typical: 6*"
         ],
         "scale": [
-            "eq",
+            "close",
             "Float",
             "Multiplier applied to filtered *nd2* imaging round images before saving as *npy* so full *uint16* occupied."
         ],
@@ -404,7 +404,7 @@
             "z plane of image that scale was found from. `None` if `config['scale']['scale']` provided."
         ],
         "scale_anchor": [
-            "eq",
+            "close",
             "Float or None",
             "Multiplier applied to filtered *nd2* anchor round images before saving as *npy* so full *uint16* occupied.",
             "`None` if `use_anchor = False`."
@@ -427,7 +427,7 @@
             "Coppafish version, as given by *coppafish/_version.py*"
         ],
         "revision_hash": [
-            "eq",
+            "ignore",
             "String",
             "Hash of the latest git commit when the pipeline was run"
         ]
@@ -443,18 +443,22 @@
         ],
 
         "file_type": [
+            "eq",
             "String",
             "File type used to save tiles after extraction."
         ],
         "continuous_dapi": [
+            "eq",
             "Bool",
             "Whether or not we have a dapi image in each round"
         ],
         "software_version": [
+            "eq",
             "String",
             "Coppafish version, as given by *coppafish/_version.py*"
         ],
         "revision_hash": [
+            "ignore",
             "String",
             "Hash of the latest git commit when the pipeline was run"
         ]
@@ -469,6 +473,7 @@
         ],
 
         "time_taken": [
+            "add",
             "Float",
             "Time taken to run through the extract section, in seconds."
         ]
@@ -482,21 +487,25 @@
         ],
 
         "auto_thresh": [
+            "tile_0",
             "Numpy int array `[n_tiles x (n_rounds + n_extra_rounds) x n_channels]`",
             "`auto_thresh[t, r, c]` is the threshold spot intensity for tile $t$, round $r$, channel $c$",
             "used for spot detection in the `find_spots` step of the pipeline."
         ],
         "bg_scale": [
+            "tile_0",
             "Numpy float array `[n_tiles x n_rounds x n_channels]`",
             "`bg_scale[t, r, c]` is the scale factor applied to the preseq round of tile $t$, channel $c$",
             "to match the colour profile of the sequencing image in tile t, round r, channel c.",
             "None if not using preseq round."
         ],
         "software_version": [
+            "eq",
             "String",
             "Coppafish version, as given by *coppafish/_version.py*"
         ],
         "revision_hash": [
+            "ignore",
             "String",
             "Hash of the latest git commit when the pipeline was run"
         ]
@@ -511,16 +520,19 @@
         ],
 
         "n_clip_pixels": [
+            "tile_0",
             "Numpy integer array [n_tiles x (n_rounds + n_extra_rounds) x n_channels]",
             "`n_clip_pixels[t, r, c]` is the number of pixels in the saved *npy* tile for tile $t$, round $r$, channel $c$",
             "which had intensity exceeding max *uint16* value and so had to be clipped."
         ],
         "clip_extract_scale": [
+            "tile_0",
             "Numpy float array [n_tiles x (n_rounds + n_extra_rounds) x n_channels]",
             "`clip_extract_scale[t, r, c]` is the recommended value for extract_scale such that for tile $t$, round $r$, channel $c$",
             "`n_clip_pixels[t, r, c]` would be 0. Only computed for images where `n_clip_pixels[t, r, c] > 0`"
         ],
         "r_dapi": [
+            "eq",
             "Integer or None",
             "Filtering for *DAPI* images is a tophat with `r_dapi` radius.",
             "Should be approx radius of object of interest.",
@@ -528,26 +540,31 @@
             "By default, it is `None` meaning *DAPI* not filtered at all and *npy* file not saved."
         ],
         "psf": [
+            "close",
             "Numpy float array [psf_shape[0] x psf_shape[1] x psf_shape[2]] or None (psf_shape is in config file)",
             "Average shape of spot from individual raw spot images normalised so max is 1 and min is 0.",
             "`None` if `config['deconvolve'] = False`."
         ],
         "psf_intensity_thresh": [
+            "close",
             "Float",
             "Intensity threshold used to detect spots in raw images which were used to make the psf.",
             "None if `config['deconvolve'] = False` or psf provided without spot detection."
         ],
         "psf_tiles_used": [
+            "eq",
             "Integer list or None",
             "Tiles where spots for psf calculation came from.",
             "`None` if `config['deconvolve'] = False` or psf provided without spot detection."
         ],
         "z_info": [
+            "eq",
             "Integer",
             "z plane in *npy* file from which `auto_thresh` and `hist_counts` were calculated. By default, this is the mid ",
             "plane."
         ],
         "time_taken": [
+            "add",
             "Float",
             "Time taken to run through the filter section, in seconds."
         ]
@@ -561,6 +578,7 @@
         ],
 
         "isolation_thresh": [
+            "tile_0",
             "Numpy float array [n_tiles]",
             "Spots found on tile $t$, `ref_round`, `ref_channel` are isolated if annular filtered image",
             "is below `isolation_thresh[t]` at spot location.",
@@ -568,23 +586,28 @@
             "*Typical: 0*"
         ],
         "spot_no": [
+            "tile_0",
             "Numpy int32 array [n_tiles x (n_rounds + n_extra_rounds) x n_channels]",
             "`spot_no[t, r, c]` is the number of spots found on tile $t$, round $r$, channel $c$"
         ],
         "spot_yxz": [
+            "append_0",
             "Numpy int16 array [n_total_spots x 3]",
             "`spot_yxz[i,:]` is `[y, x, z]` for spot $i$",
             "$y$, $x$ gives the local tile coordinates in yx-pixels. $z$ gives local tile coordinate in z-pixels (0 if *2D*)"
         ],
         "isolated_spots": [
+            "append_0",
             "Boolean Array [n_anchor_spots x 1]",
             "isolated spots[s] returns a 1 if anchor spot s is isolated and 0 o/w"
         ],
         "software_version": [
+            "eq",
             "String",
             "Coppafish version, as given by *coppafish/_version.py*"
         ],
         "revision_hash": [
+            "ignore",
             "String",
             "Hash of the latest git commit when the pipeline was run"
         ]
@@ -600,95 +623,114 @@
         ],
 
         "tile_origin": [
+            "tile_0",
             "Numpy float array [n_tiles x 3]",
             "`tile_origin[t,:]` is the bottom left $yxz$ coordinate of tile $t$.",
             "$yx$ coordinates in yx-pixels and z coordinate in z-pixels."
         ],
         "north_start_shift_search": [
+            "eq",
             "Numpy integer array [3 x 3]",
             "Initial search range used to find overlap between north neighbouring tiles",
             "`[i, :]` is the `[min, max, step]` of the search in direction $i$ (0 is $y$, 1 is $x$, 2 is $z$).",
             "`[2,:]` is in units of z-pixels and is 0 if *2D*."
         ],
         "east_start_shift_search": [
+            "eq",
             "Numpy integer array [3 x 3]",
             "Initial search range used to find overlap between east neighbouring tiles",
             "`[i, :]` is the `[min, max, step]` of the search in direction $i$ (0 is $y$, 1 is $x$, 2 is $z$).",
             "`[2,:]` is in units of z-pixels and is 0 if *2D*."
         ],
         "north_final_shift_search": [
+            "eq",
             "Numpy integer array [3 x 3]",
             "Final search range used to find overlap between north neighbouring tiles",
             "`[i, :]` is the `[min, max, step]` of the search in direction $i$ (0 is $y$, 1 is $x$, 2 is $z$).",
             "`[2,:]` is in units of z-pixels and is 0 if *2D*."
         ],
         "east_final_shift_search": [
+            "eq",
             "Numpy integer array [3 x 3]",
             "Final search range used to find overlap between east neighbouring tiles",
             "`[i, :]` is the `[min, max, step]` of the search in direction $i$ (0 is $y$, 1 is $x$, 2 is $z$).",
             "`[2,:]` is in units of z-pixels and is 0 if *2D*."
         ],
         "north_pairs": [
+            "append_0",
             "Numpy integer array [n_north_overlap x 2]",
             "`north_pairs[i, 1]` is the tile to the north of `north_pairs[i, 0]`"
         ],
         "east_pairs": [
+            "append_0",
             "Numpy integer array [n_east_overlap x 2]",
             "`east_pairs[i, 1]` is the tile to the east of `east_pairs[i, 0]`"
         ],
         "north_shifts": [
+            "append_0",
             "Numpy integer array [n_north_overlap x 3]",
             "`north_shifts[i, :]` is the $yxz$ shift found that is applied to `north_pairs[i, 0]` to take it to `north_pairs[i, 1]`",
             "",
             "Units: `[yx_pixels, yx_pixels, z_pixels]`, `[:, 2] = 0` if *2D*."
         ],
         "east_shifts": [
+            "append_0",
             "Numpy integer array [n_east_overlap x 3]",
             "`east_shifts[i, :]` is the $yxz$ shift found that is applied to `east_pairs[i, 0]` to take it to `east_pairs[i, 1]`",
             "",
             "Units: `[yx_pixels, yx_pixels, z_pixels]`, `[:, 2] = 0` if *2D*."
         ],
         "north_score": [
-            "Numpy float array [n_north_overlap]",
+            "append_0",
+            "Numpy float array [n_north_overlap x 1]",
             "`north_score[i]` is approximately the number of matches found for `north_shifts[i, :]`"
         ],
         "east_score": [
-            "Numpy float array [n_east_overlap]",
+            "append_0",
+            "Numpy float array [n_east_overlap x 1]",
             "`east_score[i]` is approximately the number of matches found for `east_shifts[i, :]`"
         ],
         "north_score_thresh": [
-            "Numpy float array [n_north_overlap]",
+            "append_0",
+            "Numpy float array [n_north_overlap x 1]",
             "If `north_score[i]` is below `north_score_thresh[i]`, it indicates `north_shifts[i]` may be incorrect."
         ],
         "east_score_thresh": [
-            "Numpy float array [n_east_overlap]",
+            "append_0",
+            "Numpy float array [n_east_overlap x 1]",
             "If `east_score[i]` is below `east_score_thresh[i]`, it indicates `east_shifts[i]` found may be incorrect."
         ],
         "north_outlier_shifts": [
+            "append_0",
             "Numpy integer array [n_north_overlap x 3]",
             "If `north_score[i]` was below `north_score_thresh[i]`, `north_shifts[i]` was found again",
             "and old shift recorded as `north_outlier_shifts[i]`. Will be zero if this did not happen."
         ],
         "east_outlier_shifts": [
+            "append_0",
             "Numpy integer array [n_east_overlap x 3]",
             "If `east_score[i]` was below `east_score_thresh[i]`, `east_shifts[i]` was found again",
             "and old shift recorded as `east_outlier_shifts[i]`. Will be zero if this did not happen."
         ],
         "north_outlier_score": [
-            "Numpy float array [n_north_overlap]",
+            "append_0",
+            "Numpy float array [n_north_overlap x 1]",
             "If `north_score[i]` was below `north_score_thresh[i]`, `north_shifts[i]` was found again",
             "and old score recorded as `north_outlier_score[i]`. Will be zero if this did not happen."
         ],
         "east_outlier_score": [
-            "Numpy float array [n_east_overlap]",
+            "append_0",
+            "Numpy float array [n_east_overlap x 1]",
             "If `east_score[i]` was below `east_score_thresh[i]`, `east_shifts[i]` was found again",
             "and old score recorded as `east_outlier_score[i]`. Will be zero if this did not happen."
         ],
         "software_version": [
+            "eq",
             "String",
             "Coppafish version, as given by *coppafish/_version.py*"
         ],
         "revision_hash": [
+            "ignore",
             "String",
             "Hash of the latest git commit when the pipeline was run"
         ]
@@ -702,28 +744,34 @@
         ],
 
         "initial_transform": [
-            " n_tiles x n_rounds x n_channels x 4 x 3 ndarray",
+            "",
+            "(n_tiles x n_rounds x n_channels x 4 x 3) ndarray[float]",
             " affine transforms taking $(t, r_{ref}, c_{ref})$ to $(t, r, c)$ for each tile $t$, round $r $ and channel $c$.",
             " These are computed from start_transform and corrected via an ICP algorithm."
         ],
         "transform": [
-            " n_tiles x n_rounds x n_channels x 4 x 3 ndarray",
+            "",
+            "(n_tiles x n_rounds x n_channels x 4 x 3) ndarray[float]",
             " affine transforms taking $(t, r_{ref}, c_{ref})$ to $(t, r, c)$ for each tile $t$, round $r $ and channel $c$.",
             " These are computed from start_transform and corrected via an ICP algorithm."
         ],
         "round_transform": [
-            " n_tiles x n_rounds x 3 x 4 ndarray:",
+            "",
+            "(n_tiles x n_rounds x 3 x 4) ndarray[float]",
             " affine transforms taking $(t, r_{ref}, c_{ref})$ to $(t, r, c_{ref})$ for each tile $t$ and round $r $."
         ],
         "channel_transform": [
+            "",
             "[n_channels x 3 x 4 ndarray]",
             " affine transforms taking $(t, r_{mid}, c_{ref})$ to $(t, r_{mid}, c)$ for each tile $t$ and channel $c$."
         ],
         "software_version": [
+            "",
             "String",
             "Coppafish version, as given by *coppafish/_version.py*"
         ],
         "revision_hash": [
+            "",
             "String",
             "Hash of the latest git commit when the pipeline was run"
         ]
@@ -736,38 +784,46 @@
         ],
 
         "n_matches": [
+            "",
             "Numpy integer array [n_tiles x n_rounds x n_channels x n_iters]",
             "Number of matches found for each transform at each iteration",
             "A match is when distance between points is less than `config['register']['neighb_dist_thresh']`."
         ],
         "mse": [
+            "",
             "Numpy float array [n_tiles x n_rounds x n_channels x n_iters]",
             "Average distance between neighbours closer than `config['register']['neighb_dist_thresh']` for each transform",
             "at each iteration"
         ],
         "converged": [
+            "",
             "Numpy boolean array [n_tiles x n_rounds x n_channels]",
             "This is `False` for transforms where the *ICP* algorithm reached `config['register']['n_iter']` iterations",
             "before transform converged."
         ],
         "round_shift": [
+            "",
             "[n_tiles x n_rounds x (z_subvols * y_subvols * x_subvols) x 3]",
             " Shift of sub-volumes used for the round registration. Specifically, round_shift[t, r, z, y, x] is the shift",
             " taking sub-volume  [z, y, x] from $(t, r_{ref}, c_{ref})$ to its corresponding sub-volume in $(t, r, c_{ref})$."
         ],
         "round_shift_corr": [
+            "",
             "n_tiles x n_rounds x (z_subvols * y_subvols * x_subvols)]",
             " score of shift of sub-volumes used for the round registration. "
         ],
         "position": [
+            "",
             "n_tiles x n_rounds x (z_subvols * y_subvols * x_subvols) x 3:",
             "Position of each subvolume in z y x local tile coords"
         ],
         "round_transform_raw": [
+            "",
             "[n_tiles x n_rounds x 3 x 4 ndarray]",
             " affine transforms taking $(t, r_{ref}, c_{ref})$ to $(t, r, c_{ref})$ for each tile $t$ and round $r $."
         ],
         "channel_transform": [
+            "",
             "[n_channels x 3 x 4 ndarray]",
             " affine transforms taking $(r_{mid}, c_{ref})$ to $(r_{mid}, c)$ for each tile $t$ and channel $c$."
         ]
@@ -786,61 +842,75 @@
         ],
 
         "local_yxz": [
+            "",
             "Numpy int16 array [n_spots x 3]",
             "`local_yxz[s]` are the $yxz$ coordinates of spot $s$ found on `tile[s]`, `ref_round`, `ref_channel`.",
             "To get `global_yxz`, add `nb.stitch.tile_origin[tile[s]]`."
         ],
         "isolated": [
+            "",
             "Numpy boolean array [n_spots]",
             "`True` for spots that are well isolated i.e. surroundings have low intensity so no nearby spots."
         ],
         "tile": [
+            "",
             "Numpy int16 array [n_spots]",
             "Tile each spot was found on."
         ],
         "colors": [
+            "",
             "Numpy int32 array [n_spots x n_rounds x n_channels]",
             "`[s, r, c]` is the intensity of spot $s$ on round $r$, channel $c$.",
             "`-tile_pixel_value_shift` if that round/channel not used otherwise integer."
         ],
         "gene_no": [
+            "",
             "Numpy int16 array [n_spots]",
             "Gene number assigned to each spot. `None` if not assigned."
         ],
         "score": [
+            "",
             "Numpy float array [n_spots]",
             "`score[s]' is the highest gene coef of spot s."
         ],
         "score_diff": [
+            "",
             "Numpy float array [n_spots]",
             "`score_diff[s]` is the difference between the highest and second highest gene score of spot s."
         ],
         "intensity": [
+            "",
             "Numpy float32 array [n_spots]",
             "$\\chi_s = \\underset{r}{\\mathrm{median}}(\\max_c\\zeta_{s_{rc}})$",
             "where $\\pmb{\\zeta}_s=$ `colors[s, r]/color_norm_factor[r]`."
         ],
         "background_strength": [
+            "",
             "Numpy float32 array [n_spots x n_channels_use]",
             "Background strength of each spot. Calculated as the median of the channel across rounds."
         ],
         "gene_probs": [
+            "",
             "Numpy float array [n_spots x n_genes]",
             "Probability that spot $s$ is gene $g$."
         ],
         "dye_strengths": [
+            "",
             "Numpy float array [n_spots x n_rounds x n_dyes]",
             "Strength of each dye in each round for each spot."
         ],
         "bg_colours": [
+            "",
             "Numpy int32 array [n_spots x n_rounds x n_channels]",
             "Background colour of each spot. Calculated as the median of the channel across rounds."
         ],
         "software_version": [
+            "",
             "String",
             "Coppafish version, as given by *coppafish/_version.py*"
         ],
         "revision_hash": [
+            "",
             "String",
             "Hash of the latest git commit when the pipeline was run"
         ]
@@ -853,34 +923,41 @@
         ],
 
         "gene_names": [
+            "",
             "Numpy string array [n_genes]",
             "Names of all genes in the code book provided."
         ],
         "gene_codes": [
+            "",
             "Numpy integer array [n_genes x n_rounds]",
             "`gene_codes[g, r]` indicates the dye that should be present for gene $g$ in round $r$."
         ],
         "color_norm_factor": [
+            "",
             "Numpy float array [n_tiles x n_rounds x n_channels]",
             "Normalisation such that dividing `colors` by `color_norm_factor` equalizes intensity of channels.",
             "`config['call_spots']['bleed_matrix_method']` indicates whether normalisation is for rounds and channels or just channels."
         ],
         "abs_intensity_percentile": [
+            "",
             "Numpy float array [100]]",
             "Percentile of `intensity` to use for thresholding in omp."
         ],
         "initial_bleed_matrix": [
+            "",
             "Numpy float array [n_channels x n_dyes]",
             "Starting point for determination of bleed matrix.",
             "If separate dye for each channel, `initial_bleed_matrix[r]` will be the identity matrix for each $r$.",
             "Otherwise, it will be `initial_raw_bleed_matrix` divided by `color_norm_factor`."
         ],
         "bleed_matrix": [
+            "",
             "Numpy float array [n_channels x n_dyes]",
             "For a spot, $s$, which should be dye $d$ in round $r$, we expect `color[s, r]/color_norm_factor[r]`",
             "to be a constant multiple of `bleed_matrix[r, :, d]`"
         ],
         "bled_codes": [
+            "",
             "Numpy float array [n_genes x n_rounds x n_channels]",
             "`color[s, r]/color_norm_factor[r]` of spot, $s$, corresponding to gene $g$",
             "is expected to be a constant multiple of `bled_codes[g, r]` in round $r$.",
@@ -888,6 +965,7 @@
             "All codes have L2 norm = 1 when summed across all `use_rounds` and `use_channels`."
         ],
         "bled_codes_ge": [
+            "",
             "Numpy float array [n_genes x n_rounds x n_channels]",
             "`color[s, r]/color_norm_factor[r]` of spot, $s$, corresponding to gene $g$",
             "is expected to be a constant multiple of `bled_codes[g, r]` in round $r$.",
@@ -895,6 +973,7 @@
             "All codes have L2 norm = 1 when summed across all `use_rounds` and `use_channels`."
         ],
         "gene_efficiency": [
+            "",
             "Numpy float array [n_genes x n_rounds]",
             "`gene_efficiency[g,r]` gives the expected intensity of gene $g$ in round $r$ compared to that expected by the `bleed_matrix`.",
             "It is computed based on the average of isolated spot_colors assigned to that gene",
@@ -903,13 +982,16 @@
             "`nan` if $r$ outside `use_rounds` and 1 if `gene_codes[g,r]` outside `use_dyes`."
         ],
         "use_ge": [
+            "",
             "Bool [n_spots] Mask for all spots used in gene efficiency calculation."
         ],
         "software_version": [
+            "",
             "String",
             "Coppafish version, as given by *coppafish/_version.py*"
         ],
         "revision_hash": [
+            "",
             "String",
             "Hash of the latest git commit when the pipeline was run"
         ]
@@ -926,6 +1008,7 @@
         ],
 
         "initial_intensity_thresh": [
+            "",
             "Float",
             "To save time in `call_spots_omp`, coefficients only found for pixels with `intensity` ",
             "of absolute `spot_colors` greater than `initial_intensity_thresh`.",
@@ -934,32 +1017,38 @@
             "It is also clamped between the min and max values given in config file."
         ],
         "shape_tile": [
+            "",
             "Integer or None",
             "`spot_shape` was found from spots detected on this tile.",
             "`None` if `spot_shape` not computed in this experiment."
         ],
         "shape_spot_local_yxz": [
+            "",
             "Numpy integer array [n_shape_spots x 3] or None",
             "$yxz$ coordinates on `shape_tile`, `ref_round`/`ref_channel` of spots used to compute `spot_shape`",
             "`None` if `spot_shape` not computed in this experiment."
         ],
         "shape_spot_gene_no": [
+            "",
             "Numpy integer array [n_shape_spots] or None",
             "`shape_spot_gene_no[s]` is the gene that the spot at `shape_spot_local_yxz[s]` was assigned to.",
             "`None` if `spot_shape` not computed in this experiment."
         ],
         "spot_shape_float": [
+            "",
             "Numpy float array [shape_max_size[0] x shape_max_size[1] x shape_max_size[2]] or None",
             "Mean of *OMP* coefficient sign in neighbourhood centered on spot.",
             "`None` if `spot_shape` not computed in this experiment."
         ],
         "initial_pos_neighbour_thresh": [
+            "",
             "Integer",
             "Only spots with number of positive coefficient neighbours greater than this are saved to notebook.",
             "",
             "Typical = 4 in *2D* and 40 in *3D* (set to 10% of max number by default)."
         ],
         "spot_shape": [
+            "",
             "Numpy integer array [shape_size_y x shape_size_y x shape_size_x]",
             "Expected sign of *OMP* coefficient in neighbourhood centered on spot.",
             "",
@@ -970,43 +1059,52 @@
             "0 means unsure of expected sign."
         ],
         "local_yxz": [
+            "",
             "Numpy int16 array [n_spots, 3]",
             "`local_yxz[s]` are the $yxz$ coordinates of spot $s$ found on `tile[s]`, `ref_round`, `ref_channel`.",
             "To get `global_yxz`, add `nb.stitch.tile_origin[tile[s]]`."
         ],
         "tile": [
+            "",
             "Numpy int16 array [n_spots]",
             "Tile each spot was found on."
         ],
         "colors": [
+            "",
             "Numpy int32 array [n_spots x n_rounds x n_channels]",
             "`[s, r, c]` is the intensity of spot $s$ on round $r$, channel $c$.",
             "It will be `-tile_pixel_value_shift` if that round/channel not used otherwise integer."
         ],
         "gene_no": [
+            "",
             "Numpy int16 array [n_spots]",
             "`gene_no[s]` is the index of the gene assigned to spot $s$."
         ],
         "n_neighbours_pos": [
+            "",
             "Numpy int16 array [n_spots]",
             "Number of positive pixels around each spot in neighbourhood given by `spot_shape==1`.",
             "Max is `sum(spot_shape==1)`."
         ],
         "n_neighbours_neg": [
+            "",
             "Numpy int16 array [n_spots]",
             "Number of negative pixels around each spot in neighbourhood given by `spot_shape==-1`.",
             "Max is `sum(spot_shape==-1)`."
         ],
         "intensity": [
+            "",
             "Numpy float32 array [n_spots]",
             "$\\chi_s = \\underset{r}{\\mathrm{median}}(\\max_c\\zeta_{s_{rc}})$",
             "where $\\pmb{\\zeta}_s=$ `colors[s, r]/color_norm_factor[r]`."
         ],
         "software_version": [
+            "",
             "String",
             "Coppafish version, as given by *coppafish/_version.py*"
         ],
         "revision_hash": [
+            "",
             "String",
             "Hash of the latest git commit when the pipeline was run"
         ]
@@ -1021,6 +1119,7 @@
         ],
 
         "intensity": [
+            "",
             "Float",
             "Final accepted reference and OMP spots require `intensity > thresholds[intensity]`.",
             "This is copied from `config[thresholds]` and if not given there, will be set to ",
@@ -1028,6 +1127,7 @@
             "intensity for a really intense spot is about 1 so intensity_thresh should be less than this."
         ],
         "score_ref": [
+            "",
             "Float",
             "Final accepted reference spots are those which pass `quality_threshold` which is:",
             "",
@@ -1037,6 +1137,7 @@
             "Max score is 1 so `score_ref` should be less than this."
         ],
         "score_omp": [
+            "",
             "Float",
             "Final accepted *OMP* spots are those which pass `quality_threshold` which is:",
             "",
@@ -1051,6 +1152,7 @@
             "Max score is 1 so `score_thresh` should be less than this."
         ],
         "score_omp_multiplier": [
+            "",
             "Float",
             "Final accepted OMP spots are those which pass quality_threshold which is:",
             "",
