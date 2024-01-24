@@ -608,9 +608,10 @@ def icp(yxz_base, yxz_target, dist_thresh, start_transform, n_iters, robust=Fals
 def brightness_scale(preseq: np.ndarray, seq: np.ndarray, intensity_percentile: float, sub_image_size: int = 500, 
                      ) -> Tuple[float, np.ndarray, np.ndarray]:
     """
-    Function to find scale factor m and constant c such that m * preseq + c ~ seq. First, the preseq and seq images are 
-    aligned using phase cross correlation. Then apply regression on the pixels of `brightness < 
-    brightness_thresh_percentile` as these likely won't be spots. The regression is done by least squares.
+    Function to find scale factor m and such that m * preseq ~ seq. First, the preseq and seq images are
+    aligned using phase cross correlation. Then apply regression on the pixels of `preseq' which are above the
+    `intensity_percentile` percentile. This is because we want to use the brightest pixels for regression as these
+    are the pixels which are likely to be background in the preseq image and foreground in the seq image.
     
     Args:
         preseq: (n_z x n_y x n_x) ndarray of presequence image.
@@ -629,47 +630,41 @@ def brightness_scale(preseq: np.ndarray, seq: np.ndarray, intensity_percentile: 
         - This function isn't really part of registration but needs registration to be run before it can be used and 
             here seems like a good place to put it.
     """
-    # Find the bottom intensity_percentile pixels from the image to linear regress with to exclude any spots
-    # Create 2 masks, and take the intersection of them
-    # Super important to have very well registered images for this to work, so to do this, we'll scan through 
-    # small sub-images, and find the shifts between them. We'll then do the brightness matching on the best 
-    # registered sub-images
     assert preseq.shape == seq.shape, "Presequence and sequence images must have the same shape"
     tile_size = seq.shape[-1]
     n_sub_images = max(1, int(tile_size / sub_image_size))
-    sub_image_shifts = np.zeros((n_sub_images, n_sub_images, 3))
-    sub_image_shift_score = np.zeros((n_sub_images, n_sub_images))
-    for i in range(n_sub_images):
-        for j in range(n_sub_images):
-            sub_image_preseq = preseq[:, i * sub_image_size:(i + 1) * sub_image_size,
-                              j * sub_image_size:(j + 1) * sub_image_size]
-            sub_image_seq = seq[:, i * sub_image_size:(i + 1) * sub_image_size,
-                            j * sub_image_size:(j + 1) * sub_image_size]
-            sub_image_seq_windowed = preprocessing.window_image(sub_image_seq)
-            sub_image_preseq_windowed = preprocessing.window_image(sub_image_preseq)
-            sub_image_shifts[i, j] = skimage.registration.phase_cross_correlation(sub_image_preseq_windowed,
-                                                                                  sub_image_seq_windowed)[0]
-            # skip calculation if any of the images are all zeros
-            if min(np.max(sub_image_seq), np.max(sub_image_preseq)) == 0:
-                sub_image_shift_score[i, j] = 0
-                continue
-            sub_image_shift_score[i, j] = np.corrcoef(
-                sub_image_preseq.ravel(),
-                preprocessing.custom_shift(sub_image_seq, sub_image_shifts[i, j].astype(int)).ravel()
-            )[0, 1]
+    sub_image_shifts, sub_image_shift_score = (np.zeros((n_sub_images, n_sub_images, 2)),
+                                               np.zeros((n_sub_images, n_sub_images)))
+    window = skimage.filters.window('hann', (sub_image_size, sub_image_size))
+    for i, j in np.ndindex((n_sub_images, n_sub_images)):
+        y_range = np.arange(i * sub_image_size, (i + 1) * sub_image_size)
+        x_range = np.arange(j * sub_image_size, (j + 1) * sub_image_size)
+        yx_range = np.ix_(y_range, x_range)
+        sub_image_preseq, sub_image_seq = preseq[yx_range], seq[yx_range]
+        sub_image_seq_windowed = sub_image_seq * window
+        sub_image_preseq_windowed = sub_image_preseq * window
+        sub_image_shifts[i, j] = skimage.registration.phase_cross_correlation(sub_image_preseq_windowed,
+                                                                              sub_image_seq_windowed,
+                                                                              overlap_ratio=0.75,
+                                                                              disambiguate=True)[0]
+        # skip calculation of correlation coefficient if all pixels of either image are 0
+        if min(np.max(sub_image_seq), np.max(sub_image_preseq)) == 0:
+            sub_image_shift_score[i, j] = 0
+        else:
+            # Now calculate the correlation coefficient
+            sub_image_seq_shifted = preprocessing.custom_shift(sub_image_seq, sub_image_shifts[i, j].astype(int))
+            sub_image_shift_score[i, j] = np.corrcoef(sub_image_preseq.ravel(), sub_image_seq_shifted.ravel())[0, 1]
     # Now find the best sub-image
-    if np.sum(np.isnan(sub_image_shift_score)) == n_sub_images ** 2:
-        print('Warning: No sub-image shifts found. Setting scale to 1 and returning original images.')
-        return 1., sub_image_seq, sub_image_preseq
-    best_sub_image = np.argwhere(sub_image_shift_score == np.nanmax(sub_image_shift_score))[0]
-    sub_image_seq = seq[:, best_sub_image[0] * sub_image_size:(best_sub_image[0] + 1) * sub_image_size,
-                        best_sub_image[1] * sub_image_size:(best_sub_image[1] + 1) * sub_image_size]
-    sub_image_preseq = preseq[:, best_sub_image[0] * sub_image_size:(best_sub_image[0] + 1) * sub_image_size,
-                              best_sub_image[1] * sub_image_size:(best_sub_image[1] + 1) * sub_image_size]
-    sub_image_seq = preprocessing.custom_shift(sub_image_seq, sub_image_shifts[best_sub_image[0], 
-                                                                               best_sub_image[1]].astype(int))
+    max_score = np.max(sub_image_shift_score)
+    i_max, j_max = np.argwhere(sub_image_shift_score == max_score)[0]
+    shift_max_score = sub_image_shifts[i_max, j_max]
+    y_range = np.arange(i_max * sub_image_size, (i_max + 1) * sub_image_size)
+    x_range = np.arange(j_max * sub_image_size, (j_max + 1) * sub_image_size)
+    yx_range = np.ix_(y_range, x_range)
+    sub_image_preseq, sub_image_seq = preseq[yx_range], seq[yx_range]
+    sub_image_seq = preprocessing.custom_shift(sub_image_seq, shift_max_score.astype(int))
 
-    # Now find the top intensity_percentile pixels from the image to linear regress with any background
+    # Now find the top intensity_percentile pixels from the preseq image and use these for regression
     mask = sub_image_preseq > np.percentile(sub_image_preseq, intensity_percentile)
 
     sub_image_preseq_flat = sub_image_preseq[mask].ravel()
