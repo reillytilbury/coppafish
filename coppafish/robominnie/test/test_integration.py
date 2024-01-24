@@ -26,6 +26,7 @@ def get_robominnie_scores(rm: RoboMinnie, include_omp: bool = True) -> None:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 def test_integration_smallest() -> Notebook:
     """
     Summary of input data: random spots and pink noise.
@@ -39,10 +40,10 @@ def test_integration_smallest() -> Notebook:
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
-    robominnie = RoboMinnie(n_planes=5, n_tile_yx=(100, 100), include_presequence=False, include_dapi=False)
-    robominnie.generate_gene_codes()
+    robominnie = RoboMinnie(n_planes=5, n_tile_yx=(150, 150), include_presequence=False, include_dapi=False)
+    robominnie.generate_gene_codes(4)
     robominnie.generate_pink_noise()
-    robominnie.add_spots()
+    robominnie.add_spots(5000)
     robominnie.save_raw_images(output_dir)
     nb = robominnie.run_coppafish()
     get_robominnie_scores(robominnie)
