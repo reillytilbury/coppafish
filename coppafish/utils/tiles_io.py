@@ -300,6 +300,8 @@ def load_image(
     if nbp_basic.is_3d:
         file_path = nbp_file.tile[t][r][c]
         file_path = file_path[: file_path.index(file_type)] + suffix + file_type
+    if not image_exists(file_path, file_type):
+        raise FileNotFoundError(f"Could not find image at {file_path} to load from")
     if yxz is not None:
         # Use mmap when only loading in part of image
         if isinstance(yxz, (list, tuple)):
