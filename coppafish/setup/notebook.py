@@ -35,6 +35,7 @@ import hashlib
 import os
 import time
 import json
+import shutil
 import warnings
 
 try:
@@ -497,11 +498,18 @@ class Notebook:
     def add_page(self, page):
         """Insert the page `page` into the `Notebook`.
 
-        This function automatically triggers a save.
+        This function automatically triggers a save. During saving, a notebook could become corrupted if it is
+        interrupted by the user. For this reason we save a backup of the notebook before the page is added. The backup
+        is then deleted once the new save is complete.
         """
         if not isinstance(page, NotebookPage):
-            raise ValueError("Only NotebookPage objects may be added to a notebook.")
+            raise TypeError("Only NotebookPage objects may be added to a notebook.")
+        backup_path = os.path.join(os.path.dirname(self._file), "notebook_backup.npz")
+        if os.path.isfile(self._file):
+            shutil.copyfile(self._file, backup_path)
         self.__setattr__(page.name, page)
+        if os.path.isfile(backup_path):
+            os.remove(backup_path)
 
     def has_page(self, page_name):
         """A check to see if notebook includes a page called page_name.
