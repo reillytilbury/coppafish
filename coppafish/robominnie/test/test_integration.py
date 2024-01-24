@@ -148,7 +148,7 @@ def test_integration_004() -> None:
     robominnie.generate_gene_codes()
     robominnie.generate_pink_noise()
     # Add spots to DAPI image as larger spots
-    robominnie.add_spots(spot_size_pixels_dapi=np.array([9, 9, 9]), include_dapi=True, spot_amplitude_dapi=0.05)
+    robominnie.add_spots(15000, spot_size_pixels_dapi=np.array([9, 9, 9]), include_dapi=True, spot_amplitude_dapi=0.05)
     robominnie.save_raw_images(output_dir=output_dir, register_with_dapi=False)
     robominnie.run_coppafish()
     get_robominnie_scores(robominnie)
