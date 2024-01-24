@@ -40,7 +40,6 @@ def register(
         config: Register part of the config dictionary.
         tile_origin: n_tiles x 3 ndarray of tile origins.
         pre_seq_blur_radius: Radius of gaussian blur to apply to pre-seq round images.
-        num_rotations: Number of rotations to apply to each tile.
 
     Returns:
         - nbp (NotebookPage): register notebook page.
