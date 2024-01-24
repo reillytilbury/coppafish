@@ -40,7 +40,6 @@ def register(
         config: Register part of the config dictionary.
         tile_origin: n_tiles x 3 ndarray of tile origins.
         pre_seq_blur_radius: Radius of gaussian blur to apply to pre-seq round images.
-        num_rotations: Number of rotations to apply to each tile.
 
     Returns:
         - nbp (NotebookPage): register notebook page.
@@ -125,14 +124,14 @@ def register(
                     if not (use_dapi and r == nbp_basic.anchor_round):
                         round_image.append(
                             preprocessing.yxz_to_zyx(
-                                    tiles_io.load_image(
-                                        nbp_file,
-                                        nbp_basic,
-                                        nbp_extract.file_type,
-                                        t=t,
-                                        r=r,
-                                        c=round_registration_channel,
-                                        suffix="_raw" if r == nbp_basic.pre_seq_round else ""
+                                tiles_io.load_image(
+                                    nbp_file,
+                                    nbp_basic,
+                                    nbp_extract.file_type,
+                                    t=t,
+                                    r=r,
+                                    c=round_registration_channel,
+                                    suffix="_raw" if r == nbp_basic.pre_seq_round else "",
                                 )
                             )
                         )
@@ -271,8 +270,11 @@ def register(
         r_pre = nbp_basic.pre_seq_round
         use_rounds = nbp_basic.use_rounds
         mid_z = nbp_basic.use_z[len(nbp_basic.use_z) // 2]
-        for t, c in tqdm(itertools.product(use_tiles, use_channels), desc="Computing background scale factors",
-                         total=len(use_tiles) * len(use_channels)):
+        for t, c in tqdm(
+            itertools.product(use_tiles, use_channels),
+            desc="Computing background scale factors",
+            total=len(use_tiles) * len(use_channels),
+        ):
             # load in pre-seq round
             transform_pre = preprocessing.invert_affine(preprocessing.yxz_to_zyx_affine(transform[t, r_pre, c]))
             z_scale_pre = transform_pre[0, 0]

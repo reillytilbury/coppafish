@@ -196,7 +196,7 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
             u, s, v = svds(colours_d, k=1)
             v = v[0]
             v *= np.sign(v[np.argmax(np.abs(v))])  # Make sure the largest element is positive
-            bleed_matrix[iter, :, d] = v
+            bleed_matrix[:, d] = v
 
     # now get pseudo bleed matrix for each tile and round
     for t, r in product(nbp_basic.use_tiles, range(n_rounds)):

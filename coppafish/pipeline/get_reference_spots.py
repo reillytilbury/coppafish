@@ -126,11 +126,11 @@ def get_reference_spots(
     for t in nbp_basic.use_tiles:
         n_spots = np.sum(nd_local_tile == t)
         for r in nbp_basic.use_rounds:
-            for c in nbp_basic.use_channels:
-                in_bounds[t, r, c] = np.sum(nd_spot_colors_use[nd_local_tile == t, r, c] == invalid_value) / n_spots
+            for ci, c in enumerate(nbp_basic.use_channels):
+                in_bounds[t, r, c] = np.sum(nd_spot_colors_use[(nd_local_tile == t), r, ci] == invalid_value) / n_spots
         if nbp_basic.use_preseq:
-            for c in nbp_basic.use_channels:
-                in_bounds[t, -1, c] = np.sum(bg_colours[nd_local_tile == t, c] == invalid_value) / n_spots
+            for ci, c in enumerate(nbp_basic.use_channels):
+                in_bounds[t, -1, c] = np.sum(bg_colours[nd_local_tile == t, ci] == invalid_value) / n_spots
     good_local_yxz = nd_local_yxz[good]
     good_isolated = nd_isolated[good]
     good_local_tile = nd_local_tile[good]
