@@ -210,6 +210,8 @@ def compose_affine(A1, A2):
     Returns:
         A1 * A2: Composed Affine transform
     """
+    assert A1.shape == (3, 4)
+    assert A2.shape == (3, 4)
     # Add Final row, compose and then get rid of final row
     A1 = np.vstack((A1, np.array([0, 0, 0, 1])))
     A2 = np.vstack((A2, np.array([0, 0, 0, 1])))
@@ -380,13 +382,17 @@ def generate_reg_images(nb, t: int, r: int, c: int, filter: bool = False, image_
     tile_centre = np.array([yx_centre[0], yx_centre[1]])
 
     # Get the image for the tile and channel
-    im = yxz_to_zyx(tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t, r, c,
-                    [
-                        np.arange(tile_centre[0] - yx_radius, tile_centre[0] + yx_radius), 
-                        np.arange(tile_centre[1] - yx_radius, tile_centre[1] + yx_radius), 
-                        np.asarray(z_planes) - np.min(nb.basic_info.use_z),
-                    ],
-                    apply_shift=False))
+    im = yxz_to_zyx(
+        tiles_io.load_image(
+            nb.file_names, nb.basic_info, nb.extract.file_type, t, r, c, 
+            [
+                np.arange(tile_centre[0] - yx_radius, tile_centre[0] + yx_radius), 
+                np.arange(tile_centre[1] - yx_radius, tile_centre[1] + yx_radius), 
+                np.asarray(z_planes) - np.min(nb.basic_info.use_z),
+            ],
+            apply_shift=False,
+        )
+    )
     # Clip the image to the specified range if required
     if image_value_range is None:
         image_value_range = (np.min(im), np.max(im))
