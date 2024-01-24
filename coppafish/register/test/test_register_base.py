@@ -1,9 +1,5 @@
-import os
-import itertools
 import numpy as np
 
-from coppafish.utils import tiles_io
-from coppafish.setup import NotebookPage
 from coppafish.register import base as reg_base
 from coppafish.register import preprocessing as reg_pre
 
