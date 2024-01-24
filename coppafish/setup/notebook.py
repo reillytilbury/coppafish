@@ -434,7 +434,7 @@ class Notebook:
 
     def __eq__(self, other):
         """
-        Test if two `Notebooks` are identical. For two `Notebooks` to be identical, only the notebook page variables 
+        Test if two `Notebooks` are identical. For two `Notebooks` to be identical, only the notebook page variables
         must be identical, not including internal variables like notebook creation time.
         """
         page_names_0 = self.get_page_names()
@@ -544,10 +544,10 @@ class Notebook:
         if os.path.isfile(new_path):
             warnings.warn(f"Combined notebook at {new_path} already exists, replacing...")
             os.remove(new_path)
-        
+
         tile_indices = [self.basic_info.use_tiles, other.basic_info.use_tiles]
         nb_combined = Notebook(new_path, self._config_file)
-        # Page names are given in alphabetical order, but we want file_names to be added before basic_info because of 
+        # Page names are given in alphabetical order, but we want file_names to be added before basic_info because of
         # some weird code in the Notebook (not my fault lol)
         for page_name in self.get_page_names()[::-1]:
             nbp_1: NotebookPage = self.__getattribute__(page_name)
@@ -761,7 +761,7 @@ class NotebookPage:
 
     def __eq__(self, other):
         """
-        Check that two notebook pages are equal based only on variables actually added during the pipeline run, not 
+        Check that two notebook pages are equal based only on variables actually added during the pipeline run, not
         internal attributes like the time the notebook was created. This is useful for integration/unit testing.
         """
         for attribute_0, attribute_1 in zip(self, other):
@@ -858,7 +858,7 @@ class NotebookPage:
         if name in self._times:
             # extra bit if _is_result_key
             del self._times[name]
-            
+
     def __iter__(self):
         attribute_names = [v for v in dir(self) if not v.startswith("_") and not callable(getattr(self, v))]
         for attribute_name in attribute_names:
@@ -922,6 +922,86 @@ class NotebookPage:
             n._times[k] = float(d[k + cls._TIMEMETA])
         return n
 
+    def _combine_variables(
+        self, combine_info: List[str], variable_name: str, var_0: Any, var_1: Any, tile_indices: List[List[int]]
+    ) -> Any:
+        """
+        Combine two variables from different notebook pages.
+
+        Args:
+            combine_info (List[str]): combining information from the notebook comments, split by '_'.
+            variable_name (str): name of the variable.
+            var_0 (Any): first variable.
+            var_1 (Any): second variable.
+            tile_indices (list of list[int]): `tile_indices[0]` is a list of tile indices in var_0, `tile_indices[1]`
+                is a list of tile indices in var_1.
+
+        Returns:
+            Any: combined variable.
+        """
+        combine_type = combine_info[0]
+        tiles_0, tiles_1 = tile_indices[0], tile_indices[1]
+        valid_types = ["eq", "add", "close", "ignore", "append", "tile"]
+        assert (
+            combine_type in valid_types
+        ), f"Unexpected keyword {combine_type} in notebook comments for {variable_name}"
+        if combine_type == "eq":
+            if not (np.asarray(var_0) == np.asarray(var_1)).all():
+                raise ValueError(f"The notebook pages cannot be combined; variables {variable_name} are not equal")
+            combined_var = var_0
+        elif combine_type == "add":
+            combined_var = var_0 + var_1
+        elif combine_type == "close":
+            if not (np.allclose(var_0, var_1, equal_nan=True) or (var_0 is None and var_1 is None)):
+                raise ValueError(f"The notebook pages cannot be combined; variables {variable_name} are not close")
+            combined_var = var_0
+        elif combine_type == "ignore":
+            combined_var = var_0
+        elif combine_type == "append":
+            axis_no = int(combine_info[1])
+            if not isinstance(var_0, np.ndarray):
+                raise TypeError(f"To append variables, they must be of type np.ndarray, got {type(var_0)}")
+            for t in tiles_0:
+                if t in tiles_1:
+                    raise ValueError(f"Tile {t} is in both notebook pages, so cannot append {variable_name} data")
+            combined_var = np.append(var_0, var_1, axis=axis_no)
+        elif combine_type == "tile":
+            axis_no = int(combine_info[1])
+            if not isinstance(var_0, np.ndarray):
+                raise TypeError(f"To combine by tile axis, variables must be of type np.ndarray, got {type(var_0)}")
+            n_tiles = 1 + np.max(tile_indices)
+            combined_var = np.zeros(var_0.shape[:axis_no] + (n_tiles,) + var_0.shape[axis_no + 1 :], var_0.dtype)
+            added_tiles = []
+            for t in tiles_0:
+                var_0_t = np.take(var_0, indices=[t], axis=axis_no)
+                if t in added_tiles:
+                    if not np.allclose(var_0_t, np.take(combined_var, indices=[t], axis=axis_no), equal_nan=True):
+                        raise ValueError(
+                            f"A shared tile {t} in notebook pages are not close in value for {variable_name}"
+                        )
+                    continue
+                # Place tile t data along axis axis_no
+                np.put_along_axis(
+                    combined_var, indices=np.asarray([t]).reshape((1,) * var_0.ndim), values=var_0_t, axis=axis_no
+                )
+                added_tiles.append(t)
+            for t in tiles_1:
+                var_1_t = np.take(var_1, indices=[t], axis=axis_no)
+                if t in added_tiles:
+                    if not np.allclose(var_1_t, np.take(combined_var, indices=[t], axis=axis_no), equal_nan=True):
+                        raise ValueError(
+                            f"A shared tile {t} in notebook pages are not close in value for {variable_name}"
+                        )
+                    continue
+                # Place tile t data along axis axis_no
+                np.put_along_axis(
+                    combined_var, indices=np.asarray([t]).reshape((1,) * var_0.ndim), values=var_1_t, axis=axis_no
+                )
+                added_tiles.append(t)
+        else:
+            raise AttributeError(f"Unknown keyword {combine_type} given for {variable_name}")
+        return combined_var
+
     def combine_with_page(self, other, tile_indices: List[List[int]]):
         """
         Combine self and other notebook pages using the keywords in notebook_comments.json for the appropriate page.
@@ -934,12 +1014,13 @@ class NotebookPage:
         Returns:
             NotebookPage: a new, combined notebook page.
         """
-        #TODO: Create a complimentary function to split notebook into separate notebooks for tiles, probably will not 
+        # TODO: Create a complimentary function to split notebook into separate notebooks for tiles, probably will not
         # need this though
         assert self.name == other.name, "Can only combine pages with the same name"
         with open(self._comments_file) as f:
-            json_comments: dict = json.load(f)
-        assert self.name in json_comments, f"Page {self.name} not found in {self._comments_file}"
+            notebook_comments: dict = json.load(f)
+        if self.name not in notebook_comments:
+            raise LookupError(f"Page {self.name} not found in {self._comments_file}")
 
         combined_page = NotebookPage(self.name)
         variable_names = [v for v in dir(self) if not v.startswith("_") and not callable(getattr(self, v))]
@@ -948,58 +1029,7 @@ class NotebookPage:
                 continue
             var_0 = self.__getattribute__(variable_name)
             var_1 = self.__getattribute__(variable_name)
-            tiles_0 = tile_indices[0]
-            tiles_1 = tile_indices[1]
-            combine_type = json_comments[self.name][variable_name][0].split("_")[0]
-            valid_types = ["eq", "add", "close", "ignore", "append", "tile"]
-            assert (
-                combine_type in valid_types
-            ), f"Unexpected keyword {combine_type} in notebook comments for variable {variable_name}"
-            if combine_type == "eq":
-                if not (np.asarray(var_0) == np.asarray(var_1)).all():
-                    raise ValueError(f"The notebook pages cannot be combined; variables {variable_name} are not equal")
-                combined_var = var_0
-            elif combine_type == "add":
-                combined_var = var_0 + var_1
-            elif combine_type == "close":
-                if not (np.allclose(var_0, var_1, equal_nan=True) or (var_0 is None and var_1 is None)):
-                    raise ValueError(f"The notebook pages cannot be combined; variables {variable_name} are not close")
-                combined_var = var_0
-            elif combine_type == "ignore":
-                combined_var = var_0
-            elif combine_type == "append":
-                axis_no = int(json_comments[self.name][variable_name][0].split("_")[1])
-                if not isinstance(var_0, np.ndarray):
-                    raise TypeError(f"To append variables, they must be of type np.ndarray, got {type(var_0)}")
-                for t in tiles_0:
-                    if t in tiles_1:
-                        raise ValueError(f"Tile {t} is in both notebook pages, so cannot append {variable_name} data")
-                combined_var = np.append(var_0, var_1, axis=axis_no)
-            elif combine_type == "tile":
-                axis_no = int(json_comments[self.name][variable_name][0].split("_")[1])
-                if not isinstance(var_0, np.ndarray):
-                    raise TypeError(f"To combine by tile axis, variables must be of type np.ndarray, got {type(var_0)}")
-                n_tiles = 1 + np.max(tile_indices)
-                combined_var = np.zeros(var_0.shape[:axis_no] + (n_tiles,) + var_0.shape[axis_no + 1 :], var_0.dtype)
-                added_tiles = []
-                for t in tiles_0:
-                    if t in added_tiles:
-                        if not np.allclose(var_0, var_1, equal_nan=True):
-                            raise ValueError(
-                                f"A shared tile {t} in notebook pages are not close in value for {variable_name}"
-                            )
-                        continue
-                    # Place tile t data along axis axis_no
-                    var_0_t = np.take(var_0, indices=[t], axis=axis_no).reshape(
-                        var_0.shape[:axis_no] + var_0.shape[axis_no + 1 :]
-                    )
-                    np.put_along_axis(
-                        combined_var, indices=np.asarray([t]).reshape((1,) * var_0.ndim), values=var_0_t, axis=axis_no
-                    )
-                    added_tiles.append(t)
-            else:
-                raise AttributeError(
-                    f"Unknown keyword {combine_type} given for {variable_name} in {self._comments_file}"
-                )
+            combine_info = notebook_comments[self.name][variable_name][0].split("_")
+            combined_var = self._combine_variables(combine_info, variable_name, var_0, var_1, tile_indices)
             combined_page.__setattr__(variable_name, combined_var)
         return combined_page
