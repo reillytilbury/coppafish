@@ -1542,30 +1542,45 @@ def view_background_overlay(nb: Notebook, t: int, r: int, c: int):
 
 
 def view_background_brightness_correction(nb: Notebook, t: int, r: int, c: int, percentile: int = 99,
-                                          sub_image_size: int = 500, bg_blur: bool = True):
+                                          sub_image_size: int = 500):
     print(f"Computing background scale for tile {t}, round {r}, channel {c}")
-    num_z = nb.basic_info.tile_centre[2].astype(int)
-    transform_pre = preprocessing.yxz_to_zyx_affine(nb.register.transform[t, nb.basic_info.pre_seq_round, c],
-                                      new_origin=np.array([num_z - 5, 0, 0]))
-    transform_seq = preprocessing.yxz_to_zyx_affine(nb.register.transform[t, r, c], new_origin=np.array([num_z - 5, 0, 0]))
-    preseq = preprocessing.yxz_to_zyx(
-        tiles_io.load_image(
-            nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=nb.basic_info.pre_seq_round, c=c, 
-            yxz=[None, None, np.arange(num_z - 5, num_z + 5)], suffix='_raw' * (1-bg_blur), apply_shift=False, 
-        )
-    )
-    if not (nb.basic_info.pre_seq_round == nb.basic_info.anchor_round and c == nb.basic_info.dapi_channel):
-        preseq = preprocessing.offset_pixels_by(preseq, -nb.basic_info.tile_pixel_value_shift)
-    seq = preprocessing.yxz_to_zyx(tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=c,
-                               yxz=[None, None, np.arange(num_z - 5, num_z + 5)]))
-    if not (r == nb.basic_info.anchor_round and c == nb.basic_info.dapi_channel):
-        seq = preprocessing.offset_pixels_by(seq, -nb.basic_info.tile_pixel_value_shift)
-    preseq = affine_transform(preseq, transform_pre, order=5)
-    seq = affine_transform(seq, transform_seq, order=5)
-    # Apply background scale. Don't subtract bg from pixels that are <= 0 in seq as blurring in preseq can cause
-    # negative values in seq
+    mid_z = nb.basic_info.use_z[len(nb.basic_info.use_z) // 2]
+    transform = nb.register.transform
+    r_pre = nb.basic_info.pre_seq_round
+
+    # Load in preseq
+    transform_pre = preprocessing.invert_affine(preprocessing.yxz_to_zyx_affine(transform[t, r_pre, c]))
+    z_scale_pre = transform_pre[0, 0]
+    z_shift_pre = transform_pre[0, 3]
+    mid_z_pre = int((mid_z - z_shift_pre) / z_scale_pre)
+    yxz = [None, None, mid_z_pre]
+    preseq = tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r_pre, c=c, yxz=yxz)
+    preseq = preseq.astype(np.int32)
+    preseq = preseq - nb.basic_info.tile_pixel_value_shift
+    preseq = preseq.astype(np.float32)
+    # we have to load in inverse transform to use scipy.ndimage.affine_transform
+    inv_transform_pre_yx = preprocessing.yxz_to_zyx_affine(transform[t, r_pre, c])[1:, 1:]
+    preseq = affine_transform(preseq, inv_transform_pre_yx)
+
+    # load in seq
+    transform_seq = preprocessing.invert_affine(preprocessing.yxz_to_zyx_affine(transform[t, r, c]))
+    z_scale_seq = transform_seq[0, 0]
+    z_shift_seq = transform_seq[0, 3]
+    mid_z_seq = int((mid_z - z_shift_seq) / z_scale_seq)
+    yxz = [None, None, mid_z_seq]
+    seq = tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=c, yxz=yxz)
+    seq = seq.astype(np.int32)
+    seq = seq - nb.basic_info.tile_pixel_value_shift
+    seq = seq.astype(np.float32)
+    # we have to load in inverse transform to use scipy.ndimage.affine_transform
+    inv_transform_seq_yx = preprocessing.yxz_to_zyx_affine(transform[t, r, c])[1:, 1:]
+    seq = affine_transform(seq, inv_transform_seq_yx)
+
+    # compute bg scaling
     bg_scale, sub_seq, sub_preseq = brightness_scale(preseq, seq, percentile, sub_image_size)
-    mask = sub_preseq > np.percentile(sub_preseq, percentile)
+    high_preseq = sub_preseq > np.percentile(sub_preseq, percentile)
+    positive = (sub_seq > 0) * (sub_preseq > 0)
+    mask = high_preseq * positive
     diff = sub_seq - bg_scale * sub_preseq
     ratio = sub_seq[mask] / sub_preseq[mask]
     estimate_scales = np.percentile(ratio, [25, 75])
@@ -1593,7 +1608,7 @@ def view_background_brightness_correction(nb: Notebook, t: int, r: int, c: int, 
     plt.plot(x, estimate_scales[1] * x, 'g')
     plt.xlabel('Preseq')
     plt.ylabel('Seq')
-    plt.title('Regression of preseq vs seq. Scale = ' + str(np.round(bg_scale[0], 3)))
+    plt.title('Regression of preseq vs seq. Scale = ' + str(np.round(bg_scale, 3)))
 
     plt.subplot(1, 2, 2)
     plt.hist(sub_seq[mask] / sub_preseq[mask], bins=100)
@@ -1602,7 +1617,7 @@ def view_background_brightness_correction(nb: Notebook, t: int, r: int, c: int, 
     plt.vlines(estimate_scales, 0, max_bin_val, colors='g')
     plt.xlabel('Seq / Preseq')
     plt.ylabel('Frequency')
-    plt.title('Histogram of seq / preseq. Scale = ' + str(np.round(bg_scale[0], 3)))
+    plt.title('Histogram of seq / preseq. Scale = ' + str(np.round(bg_scale, 3)))
     plt.show()
 
     napari.run()

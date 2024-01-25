@@ -655,7 +655,7 @@ def brightness_scale(
     seq: np.ndarray,
     intensity_percentile: float,
     sub_image_size: Optional[int] = None,
-) -> Tuple[float, np.ndarray, np.ndarray]:
+    ) -> Tuple[float, np.ndarray, np.ndarray]:
     """
     Function to find scale factor m and such that m * preseq ~ seq. First, the preseq and seq images are
     aligned using phase cross correlation. Then apply regression on the pixels of `preseq' which are above the
