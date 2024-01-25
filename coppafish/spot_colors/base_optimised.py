@@ -92,7 +92,7 @@ def get_spot_colors(yxz_base: jnp.ndarray, t: int, transforms: jnp.ndarray, nbp_
         - `yxz_base` - `int16 [n_spots_in_bounds x 3]`.
             If `return_in_bounds`, the `yxz_base` corresponding to spots in bounds for all `use_rounds` / `use_channels`
             will be returned. It is likely that `n_spots_in_bounds` won't be the same as `n_spots`
-        - `bg_colours` - only returned if use_bg = True. `int32 [n_spots x n_channels_use]`.
+        - `bg_colours` - only returned if use_bg = True. `int32 [n_spots x n_rounds x n_channels_use]`.
 
 
     Notes:
