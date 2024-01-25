@@ -183,6 +183,9 @@ def run_filter(
                     "exists": str(filtered_image_exists).lower(),
                 }
             )
+            if filtered_image_exists and hist_counts_values_exists and c == nbp_basic.dapi_channel:
+                pbar.update()
+                continue
             if filtered_image_exists and hist_counts_values_exists[t, r, c] and auto_thresh[t, r, c] != -1:
                 # We already have everything we need for this tile, round, channel image.
                 pbar.update()
@@ -225,13 +228,13 @@ def run_filter(
                 )
                 np.savez(auto_thresh_path, auto_thresh)
                 # Deal with pixels outside uint16 range when saving
-                if c != nbp_basic.dapi_channel and nbp_debug.n_clip_pixels[t, r, c] > config["n_clip_warn"]:
+                if nbp_debug.n_clip_pixels[t, r, c] > config["n_clip_warn"]:
                     warnings.warn(
                         f"\nTile {t}, round {r}, channel {c} has "
                         f"{nbp_debug.n_clip_pixels[t, r, c]} pixels\n"
                         f"that will be clipped when converting to uint16."
                     )
-                if c != nbp_basic.dapi_channel and nbp_debug.n_clip_pixels[t, r, c] > config["n_clip_error"]:
+                if nbp_debug.n_clip_pixels[t, r, c] > config["n_clip_error"]:
                     raise ValueError(f"{t=}, {r=}, {c=} filter image clipped {nbp_debug.n_clip_pixels[t, r, c]} pixels")
             # Delay gaussian blurring of preseq until after reg to give it a better chance
             saved_im = tiles_io.save_image(
