@@ -183,7 +183,7 @@ def run_filter(
                     "exists": str(filtered_image_exists).lower(),
                 }
             )
-            if filtered_image_exists and hist_counts_values_exists and c == nbp_basic.dapi_channel:
+            if filtered_image_exists and hist_counts_values_exists[t, r, c] and c == nbp_basic.dapi_channel:
                 pbar.update()
                 continue
             if filtered_image_exists and hist_counts_values_exists[t, r, c] and auto_thresh[t, r, c] != -1:
