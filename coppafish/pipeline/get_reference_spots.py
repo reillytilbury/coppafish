@@ -125,12 +125,12 @@ def get_reference_spots(
     good = (nd_spot_colors_use != invalid_value).all(axis=(1, 2))
     for t in nbp_basic.use_tiles:
         n_spots = np.sum(nd_local_tile == t)
-        for r in nbp_basic.use_rounds:
-            for ci, c in enumerate(nbp_basic.use_channels):
+        for ci, c in enumerate(nbp_basic.use_channels):
+            for r in nbp_basic.use_rounds:
                 in_bounds[t, r, c] = np.sum(nd_spot_colors_use[(nd_local_tile == t), r, ci] == invalid_value) / n_spots
-        if nbp_basic.use_preseq:
-            for ci, c in enumerate(nbp_basic.use_channels):
-                in_bounds[t, -1, c] = np.sum(bg_colours[nd_local_tile == t, ci] == invalid_value) / n_spots
+            if nbp_basic.use_preseq:
+                # bg_colours repeats over rounds (axis 1) so just check for invalid values on one round
+                in_bounds[t, -1, c] = np.sum(bg_colours[nd_local_tile == t, 0, ci] == invalid_value) / n_spots
     good_local_yxz = nd_local_yxz[good]
     good_isolated = nd_isolated[good]
     good_local_tile = nd_local_tile[good]
