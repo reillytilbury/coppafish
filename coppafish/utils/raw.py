@@ -125,6 +125,7 @@ def load_dask(nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int) -> Tuple[
         elif nbp_file.raw_extension == '.npy':
             round_dask_array = dask.array.from_npy_stack(round_file)
     else:
+        #TODO: Combine all metadata from the jobs nd2 files for each round.
         # Now deal with the case where files are split by laser
         if nbp_basic.use_anchor:
             # always have anchor as first round after imaging rounds
@@ -176,7 +177,7 @@ def load_dask(nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int) -> Tuple[
                         tile_dask_array.append(new_dask_array)
                         del new_dask_array
                     else:
-                        tile_dask_array.append(dask.array.zeros(latest_shape))
+                        tile_dask_array.append(dask.array.zeros(latest_shape, dtype=np.uint16))
                         # TODO find a better fix for nz. here it is different because of basic_info use_z
                         # Ideally it should have the same shape as the array for dapi
 

@@ -37,8 +37,6 @@ import os
 import time
 import json
 import warnings
-import copy
-from pathlib import PurePath
 try:
     import importlib_resources
 except ModuleNotFoundError:

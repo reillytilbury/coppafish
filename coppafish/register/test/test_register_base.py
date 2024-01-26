@@ -1,9 +1,5 @@
-import os
-import itertools
 import numpy as np
 
-from coppafish.utils import tiles_io
-from coppafish.setup import NotebookPage
 from coppafish.register import base as reg_base
 from coppafish.register import preprocessing as reg_pre
 
@@ -22,10 +18,7 @@ def test_find_shift_array():
     # Test that the shape is correct
     assert shift_array.shape == (2 * 2, 3)
     # Test that the values are correct
-    assert np.allclose(shift_array, np.array([[0, 10, 10],
-                                              [0, 10, 10],
-                                              [0, 10, 10],
-                                              [0, 10, 10]]))
+    assert np.allclose(shift_array, np.array([[0, 10, 10], [0, 10, 10], [0, 10, 10], [0, 10, 10]]))
     assert np.allclose(shift_corr, np.array([1, 1, 1, 1]))
 
 
@@ -74,9 +67,7 @@ def test_ols_regression():
     # Test that the shape is correct
     assert transform.shape == (3, 4)
     # Test that the values are correct
-    assert np.allclose(transform, np.array([[5, 0, 0, 0],
-                                            [0, 5, 0, 0],
-                                            [0, 0, 5, 0]]))
+    assert np.allclose(transform, np.array([[5, 0, 0, 0], [0, 5, 0, 0], [0, 0, 5, 0]]))
 
 
 def test_huber_regression():
@@ -88,18 +79,15 @@ def test_huber_regression():
     # Test that the shape is correct
     assert transform.shape == (3, 4)
     # Test that the values are correct
-    assert np.allclose(transform, np.array([[5, 0, 0, 0],
-                                            [0, 5, 0, 0],
-                                            [0, 0, 5, 0]]), atol=2e-6)
+    assert np.allclose(transform, np.array([[5, 0, 0, 0], [0, 5, 0, 0], [0, 0, 5, 0]]), atol=2e-6)
 
 
 def test_brightness_scale():
     rng = np.random.RandomState(0)
-    nx = 4
-    ny = 5
-    nz = 6
-    seq = rng.randint(2**8, dtype=np.int32, size=(nz, ny, nx))
-    preseq = reg_pre.custom_shift(seq, [1, 2, 0]) * 4 + 1
+    nx = 40
+    ny = 40
+    seq = rng.randint(2**8, dtype=np.int32, size=(ny, nx))
+    preseq = reg_pre.custom_shift(seq, [1, 2]) * 4
     scale, sub_image_seq, sub_image_preseq = reg_base.brightness_scale(preseq, seq, intensity_percentile=0.5)
     assert isinstance(scale, float), "Expected scale to be type float"
     assert isinstance(sub_image_seq, np.ndarray), "Expected sub_image_seq to be type ndarray"

@@ -1,13 +1,11 @@
 from tqdm import tqdm
 import numpy as np
 import itertools
-import numpy.typing as npt
-from typing import Optional
 
 from .. import find_spots as fs
 from .. import utils
 from ..setup.notebook import NotebookPage
-from ..utils import tiles_io
+from ..utils import tiles_io, indexing
 
 
 def find_spots(
@@ -19,11 +17,10 @@ def find_spots(
     auto_thresh: np.ndarray,
 ) -> NotebookPage:
     """
-    This function turns each tiff file in the tile directory into a point cloud, saving the results
-    as `spot_details` in the `find_spots` notebook page.
+    Turn each image in the filtered tile directory into a point cloud, saving the results as `spot_details` in the 
+    `find_spots` notebook page.
 
-    See `'find_spots'` section of `notebook_comments.json` file
-    for description of the variables in the page.
+    See `'find_spots'` section of `notebook_comments.json` file for description of the variables in the page.
 
     Args:
         config (dict): Dictionary obtained from `'find_spots'` section of config file.
@@ -81,12 +78,10 @@ def find_spots(
         (nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.use_anchor + nbp_basic.use_preseq, nbp_basic.n_channels),
         dtype=bool,
     )
-    for t, r, c in itertools.product(
-        use_tiles, use_rounds + nbp_basic.use_preseq * [nbp_basic.pre_seq_round], use_channels
+    for t, r, c in indexing.create(
+        nbp_basic, include_preseq_round=True, include_anchor_round=True, include_anchor_channel=True
     ):
         use_indices[t, r, c] = True
-    for t in use_tiles:
-        use_indices[t, nbp_basic.anchor_round, nbp_basic.anchor_channel] = True
 
     uncompleted = np.logical_and(use_indices, np.logical_not(spot_info["completed"]))
 

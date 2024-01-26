@@ -91,8 +91,9 @@ def get_spot_colors(yxz_base: jnp.ndarray, t: int, transforms: jnp.ndarray, nbp_
             `spot_colors[s, r, c]` is the spot color for spot `s` in round `use_rounds[r]`, channel `use_channels[c]`.
         - `yxz_base` - `int16 [n_spots_in_bounds x 3]`.
             If `return_in_bounds`, the `yxz_base` corresponding to spots in bounds for all `use_rounds` / `use_channels`
-            will be returned. It is likely that `n_spots_in_bounds` won't be the same as `n_spots`.
-        - `bg_colours` - only returned if use_bg = True. `int32 [n_spots x n_channels_use]`.
+            will be returned. It is likely that `n_spots_in_bounds` won't be the same as `n_spots`
+        - `bg_colours` - only returned if use_bg = True. `int32 [n_spots x n_rounds x n_channels_use]`.
+
 
     Notes:
         - Returned spot colors have dimension `n_spots x len(nbp_basic.use_rounds) x len(nbp_basic.use_channels)` not
@@ -197,7 +198,6 @@ def get_spot_colors(yxz_base: jnp.ndarray, t: int, transforms: jnp.ndarray, nbp_
             yxz_base = yxz_base[good]
         else:
             spot_colors[good] = (spot_colors - bg_colours)[good]
-            spot_colors[~good] = invalid_value
     elif not use_bg:
         good = colours_valid
         if return_in_bounds:

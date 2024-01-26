@@ -257,7 +257,7 @@ def load_image(
     r: int,
     c: int,
     yxz: Optional[Union[List, Tuple, np.ndarray, jnp.ndarray]] = None,
-    apply_shift: bool = True,
+    apply_shift: bool = False,
     suffix: str = "",
 ) -> npt.NDArray[Union[np.int32, np.uint16]]:
     """
@@ -299,7 +299,11 @@ def load_image(
 
     if nbp_basic.is_3d:
         file_path = nbp_file.tile[t][r][c]
+        if r == nbp_basic.pre_seq_round:
+            suffix = "_raw"
         file_path = file_path[: file_path.index(file_type)] + suffix + file_type
+    if not image_exists(file_path, file_type):
+        raise FileNotFoundError(f"Could not find image at {file_path} to load from")
     if yxz is not None:
         # Use mmap when only loading in part of image
         if isinstance(yxz, (list, tuple)):
