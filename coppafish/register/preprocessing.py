@@ -412,7 +412,8 @@ def generate_reg_images(nb, t: int, r: int, c: int, filter: bool = False, image_
 
 def window_image(image: np.ndarray) -> np.ndarray:
     """
-    Window the image by a hann window in y and x and a triangular window in z.
+    Window the image by a hann window in y and x and a Tukey window in z.
+
     Args:
         image: image to be windowed. (z, y, x)
 
@@ -421,6 +422,8 @@ def window_image(image: np.ndarray) -> np.ndarray:
     """
     window_yx = skimage.filters.window('hann', image.shape[1:])
     window_z = signal.windows.tukey(image.shape[0], alpha=0.33)
+    if (window_z == 0).all():
+        window_z[...] = 1
     window = window_z[:, None, None] * window_yx[None, :, :]
     image = image * window
     return image
