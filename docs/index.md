@@ -63,4 +63,4 @@ pip install -e .
 ```
 
 If you do not wish to keep a local copy of coppafish (i.e. not interested in updating versions later) then remove the 
-`-e` from the pip install.
+`-e` from the pip install. Then the source code can be deleted after installing.

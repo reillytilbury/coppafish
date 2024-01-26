@@ -1,7 +1,106 @@
-## Data format
+## Input data
 
-Coppafish requires raw, `uint16` microscope images. We currently support raw data in ND2, JOBs, or numpy format. If 
-your data is not already in one of these formats, we recommend configuring your data into numpy format.
+Coppafish requires raw, `uint16` microscope images, metadata, and a configuration file. We currently only support raw 
+data in ND2, JOBs, or numpy format. If your data is not already in one of these formats, we recommend configuring your 
+data into numpy format (see below).
 
 ### Numpy
 
+Each round is separated between directories. Label sequencing round directories `0`, `1`, etc. We recommend using 
+[dask](https://docs.dask.org), this is installed in your coppafish environment by default. The code to save data in the 
+right format would look something like
+
+```python
+import os
+import dask.array
+
+raw_path = "/path/to/raw/data"
+dask_chunks = (1, n_total_channels, n_y, n_x, n_z)
+for r in range(n_seq_rounds):
+    save_path = os.path.join(raw_path, f"{r}")
+    image_dask = dask.array.from_array(seq_image_tiles[r], chunks=dask_chunks)
+    dask.array.to_npy_stack(save_path, image_dask)
+
+# Anchor round
+save_path = os.path.join(raw_path, "anchor")
+image_dask = dask.array.from_array(anchor_image, chunks=dask_chunks)
+dask.array.to_npy_stack(save_path, image_dask)
+
+# Presequence round (optional)
+save_path = os.path.join(raw_path, "presequence")
+image_dask = dask.array.from_array(preseq_image, chunks=dask_chunks)
+dask.array.to_npy_stack(save_path, image_dask)
+```
+
+where `n_...` variables represent counts (integers), `n_total_channels` can include other channels other than the 
+sequencing channel (e.g. a DAPI channel). `seq_image_tiles` is a numpy array of shape 
+`(n_seq_rounds, n_tiles, n_total_channels, n_y, n_x, n_z)`, while `anchor_image` and `preseq_image` are numpy arrays of 
+shape `(n_tiles, n_total_channels, n_y, n_x, n_z)`. Note that `n_y` must be equal to `n_x`.
+
+
+### Metadata
+
+The metadata can be saved using python:
+
+```python
+import json
+
+metadata = {
+    "n_tiles": n_tiles,
+    "n_rounds": n_rounds,
+    "n_channels": n_total_channels,
+    "tile_sz": n_y, # or n_x
+    "pixel_size_xy": 0.26,
+    "pixel_size_z": 0.9,
+    "tile_centre": [n_y / 2, n_x / 2, n_z / 2],
+    "tilepos_yx": tile_origins_yx,
+    "tilepos_yx_nd2": list(reversed(tile_origins_yx)),
+    "channel_camera": [1] * n_total_channels,
+    "channel_laser": [1] * n_total_channels,
+    "xy_pos": tile_xy_pos,
+    "nz": n_z,
+}
+metadata_filepath = os.path.join(output_dir, "metadata.json")
+with open(metadata_filepath, "w") as f:
+    json.dump(metadata, f, indent=4)
+```
+
+### Code book
+
+A code book is a `.txt` file that tells coppafish the expected gene codes for every gene type. An example of a 4 gene 
+code book is
+```
+gene_0 0123012
+gene_1 1230123
+gene_2 2301230
+gene_3 3012301
+```
+the names (`gene_0`, `gene_1`, ...) can be changed.
+
+### Configuration
+
+There are configuration variables used throughout the coppafish pipeline. Most of these have reasonable default values, 
+but some must be set by the user and you may wish to tweak other values for better performance. Save the config file as 
+something like `config.ini`. The config file should contain, at the minimum:
+```
+[file_names]
+input_dir = path/to/input/data
+output_dir = path/to/output/directory
+tile_dir = path/to/tile/output
+round = 0, 1, 2, 3, 4, 5, 6 ; Go up to the number of sequencing rounds used
+anchor = anchor
+pre_seq = presequence
+raw_extension = .npy
+raw_metadata = path/to/metadata.json
+
+[basic_info]
+is_3d = True
+dye_names = dye_0, dye_1, dye_2, dye_3 ; Does not have to be set if n_seq_channels == n_dyes
+use_rounds = 0, 1, 2, 3, 4, 5, 6
+use_z = 0, 1, 2, 3, 4
+use_tiles = 0, 1
+anchor_round = 7
+use_channels = 1, 2, 3, 4
+anchor_channel = 1
+dapi_channel = 0
+```

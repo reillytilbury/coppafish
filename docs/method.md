@@ -8,6 +8,8 @@
 
 ## Register
 
+## Stitch
+
 ## Call spots
 
 ## Orthogonal Matching Pursuit
