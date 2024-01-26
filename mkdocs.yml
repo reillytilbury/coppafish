@@ -1,7 +1,7 @@
 site_name: Coppafish Documentation
 repo_url: https://github.com/reillytilbury/coppafish
-theme:
 
+theme:
   name: material
   features:
     - navigation.tabs
@@ -23,7 +23,20 @@ theme:
       toggle:
         icon: material/weather-sunny
         name: Switch to dark mode
+
 nav:
   - Getting started: index.md
-  - Basic usage: basic_usage.md
+  - Usage: basic_usage.md
+  - Method: method.md
+  - Diagnostics: diagnostics.md
   - Glossary: glossary.md
+
+# This part allows mathematics to be displayed LaTeX style, by using $...$ for in line or $$...$$ for multi-line.
+markdown_extensions:
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_javascript:
+  - javascripts/config.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js

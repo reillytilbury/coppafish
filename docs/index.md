@@ -1,3 +1,11 @@
+## Coppafish
+
+Coppafish is an open source data analysis software for Combinatorial padlOck-Probe-Amplified Fluorescence In Situ 
+Hybridization (coppafish) datasets. A series of microscope images are arranged in tiles, rounds and channels. Some 
+words are used throughout the documentation, see the [glossary](glossary.md) for definitions. For each sequencing 
+round, every gene being considered is fluoresced by a dye. Then, by the end of all rounds, each gene type has a unique 
+sequence of dyes, called the gene code.
+
 ## Installation
 
 ### Prerequisites
@@ -19,13 +27,12 @@ conda create -n coppafish python=3.10
 conda activate coppafish
 ```
 
-#### Venv
+#### venv
 
-in `venv`:
 ```console
 python -m venv /path/to/new/virtual/environment
 ```
-in Linux and MacOS:
+then, in Linux and MacOS:
 ```console
 source /path/to/new/virtual/environment/bin/activate
 ```
