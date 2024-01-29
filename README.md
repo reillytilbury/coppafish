@@ -23,10 +23,11 @@ Python 3.9 or 3.10
 ## Installation
 
 Like many python programs, coppafish requires specific versions of library packages.  To use coppafish without altering
-your existing python installation, create an environment specifically for it using a tool like [anaconda](https://www.anaconda.com/download).  
+your existing python installation, create an environment specifically for it using a tool like 
+[anaconda](https://www.anaconda.com/download).  
 To create a conda environment for coppafish and activate it, type these commands into a terminal:
 ```console
-conda create -n coppafish python=3.9
+conda create -n coppafish python=3.10
 conda activate coppafish
 ```
 
@@ -35,19 +36,20 @@ To download the latest alpha version and install all required packages into your
 
 ```console
 git clone --depth 1 https://github.com/reillytilbury/coppafish
-pip install -r ./coppafish/requirements.txt
-pip install ./coppafish[plotting,optimised]
+pip install -r ./coppafish/requirements-optimised.txt
+pip install ./coppafish[optimised]
 ```
 
-After installing, you can run the code from the terminal by typing ```python -m coppafish experiment.ini```, where ```experiment.ini``` 
-should be replaced by the name of the configuration file for your experiment.
+After installing, you can run the code from the terminal by typing ```python -m coppafish experiment.ini```, where 
+```experiment.ini``` should be replaced by the name of the configuration file for your experiment.
 
-An alternative way of installing is to run the coppafish code from the directory in which you downloaded it.  This allows you
-to edit the code and checkout different versions from github, so is more suitable for people who want the latest versions. To do this, type
+An alternative way of installing is to run the coppafish code from the directory in which you downloaded it.  This 
+allows you to edit the code and checkout different versions from github, so is more suitable for people who want the 
+latest versions. To do this, type
 ```console
 git clone https://github.com/reillytilbury/coppafish
-pip install -r ./coppafish/requirements.txt
-pip install -e ./coppafish[plotting,optimised]
+pip install -r ./coppafish/requirements-optimised.txt
+pip install -e ./coppafish[optimised]
 ```
 
 

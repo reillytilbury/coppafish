@@ -8,13 +8,15 @@ from coppafish.robominnie import RoboMinnie
 from coppafish.plot.register.diagnostics import RegistrationViewer
 
 
-def get_robominnie_scores(rm: RoboMinnie) -> None:
+def get_robominnie_scores(rm: RoboMinnie, include_omp: bool = True) -> None:
     print(rm.compare_spots("ref"))
     overall_score = rm.overall_score()
     print(f"Overall score: {round(overall_score*100, 1)}%")
     if overall_score < 0.75:
         warnings.warn(UserWarning("Integration test passed, but the overall reference spots score is < 75%"))
 
+    if not include_omp:
+        return
     print(rm.compare_spots("omp"))
     overall_score = rm.overall_score()
     print(f"Overall score: {round(overall_score*100, 1)}%")
@@ -24,11 +26,12 @@ def get_robominnie_scores(rm: RoboMinnie) -> None:
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 def test_integration_smallest() -> Notebook:
     """
     Summary of input data: random spots and pink noise.
 
-    Includes anchor round, sequencing rounds, one `10x100x100` tile.
+    Includes anchor round, sequencing rounds, one `5x100x100` tile.
 
     Returns:
         Notebook: complete coppafish Notebook.
@@ -37,10 +40,35 @@ def test_integration_smallest() -> Notebook:
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
-    robominnie = RoboMinnie(n_planes=5, n_tile_yx=(100, 100), include_presequence=False, include_dapi=False)
-    robominnie.generate_gene_codes()
+    robominnie = RoboMinnie(n_planes=5, n_tile_yx=(150, 150), include_presequence=False, include_dapi=False)
+    robominnie.generate_gene_codes(4)
     robominnie.generate_pink_noise()
-    robominnie.add_spots()
+    robominnie.add_spots(5000)
+    robominnie.save_raw_images(output_dir)
+    nb = robominnie.run_coppafish()
+    get_robominnie_scores(robominnie)
+    del robominnie
+    return nb
+
+
+@pytest.mark.integration
+def test_integration_small_two_tile():
+    """
+    Summary of input data: random spots and pink noise.
+
+    Includes anchor round, sequencing rounds, one `4x100x100` tile.
+
+    Returns:
+        Notebook: complete coppafish Notebook.
+    """
+    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "integration_dir")
+    if not os.path.isdir(output_dir):
+        os.mkdir(output_dir)
+
+    robominnie = RoboMinnie(n_channels=4, n_planes=5, n_tile_yx=(100, 100), n_tiles_y=2)
+    robominnie.generate_gene_codes(4)
+    robominnie.generate_pink_noise()
+    robominnie.add_spots(1500)
     robominnie.save_raw_images(output_dir)
     nb = robominnie.run_coppafish()
     get_robominnie_scores(robominnie)
@@ -121,7 +149,7 @@ def test_integration_004() -> None:
     robominnie.generate_gene_codes()
     robominnie.generate_pink_noise()
     # Add spots to DAPI image as larger spots
-    robominnie.add_spots(spot_size_pixels_dapi=np.array([9, 9, 9]), include_dapi=True, spot_amplitude_dapi=0.05)
+    robominnie.add_spots(15000, spot_size_pixels_dapi=np.array([9, 9, 9]), include_dapi=True, spot_amplitude_dapi=0.05)
     robominnie.save_raw_images(output_dir=output_dir, register_with_dapi=False)
     robominnie.run_coppafish()
     get_robominnie_scores(robominnie)
@@ -189,6 +217,6 @@ def test_pdf_builder() -> None:
 
 
 if __name__ == "__main__":
-    test_integration_non_symmetric()
+    test_integration_small_two_tile()
     test_pdf_builder()
     test_viewers()

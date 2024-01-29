@@ -3,6 +3,7 @@ import pickle
 import skimage
 import numpy as np
 import numpy.typing as npt
+from scipy import signal
 from typing import Optional, Tuple
 
 from ..setup import NotebookPage
@@ -172,7 +173,7 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
     # intervals. Then use integer division. e.g actual unit distance is 12.5, this gives a unit distance of 12 so
     # should never overshoot
     if z_subvolumes > 1:
-        z_unit = (z_image - z_box) // (z_subvolumes - 1)
+        z_unit = min(z_box, (z_image - z_box) // (z_subvolumes - 1))
     else:
         z_unit = 0
     y_unit = (y_image - y_box) // (y_subvolumes - 1)
@@ -185,16 +186,14 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
     position = np.zeros((z_subvolumes, y_subvolumes, x_subvolumes, 3))
 
     # Split the image into subvolumes and store them in the array
-    for z in range(z_subvolumes):
-        for y in range(y_subvolumes):
-            for x in range(x_subvolumes):
-                z_centre, y_centre, x_centre = z_box//2 + z * z_unit, y_box//2 + y * y_unit, x_box//2 + x * x_unit
-                z_start, z_end = z_centre - z_box//2, z_centre + z_box//2
-                y_start, y_end = y_centre - y_box//2, y_centre + y_box//2
-                x_start, x_end = x_centre - x_box//2, x_centre + x_box//2
+    for z, y, x in np.ndindex(z_subvolumes, y_subvolumes, x_subvolumes):
+        z_centre, y_centre, x_centre = z_box//2 + z * z_unit, y_box//2 + y * y_unit, x_box//2 + x * x_unit
+        z_start, z_end = z_centre - z_box//2, z_centre + z_box//2
+        y_start, y_end = y_centre - y_box//2, y_centre + y_box//2
+        x_start, x_end = x_centre - x_box//2, x_centre + x_box//2
 
-                subvolume[z, y, x] = image[z_start:z_end, y_start:y_end, x_start:x_end]
-                position[z, y, x] = np.array([(z_start + z_end)//2, (y_start + y_end)//2, (x_start + x_end)//2])
+        subvolume[z, y, x] = image[z_start:z_end, y_start:y_end, x_start:x_end]
+        position[z, y, x] = np.array([(z_start + z_end)//2, (y_start + y_end)//2, (x_start + x_end)//2])
 
     # Reshape the position array
     position = np.reshape(position, (z_subvolumes * y_subvolumes * x_subvolumes, 3))
@@ -211,6 +210,8 @@ def compose_affine(A1, A2):
     Returns:
         A1 * A2: Composed Affine transform
     """
+    assert A1.shape == (3, 4)
+    assert A2.shape == (3, 4)
     # Add Final row, compose and then get rid of final row
     A1 = np.vstack((A1, np.array([0, 0, 0, 1])))
     A2 = np.vstack((A2, np.array([0, 0, 0, 1])))
@@ -381,13 +382,17 @@ def generate_reg_images(nb, t: int, r: int, c: int, filter: bool = False, image_
     tile_centre = np.array([yx_centre[0], yx_centre[1]])
 
     # Get the image for the tile and channel
-    im = yxz_to_zyx(tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t, r, c,
-                    [
-                        np.arange(tile_centre[0] - yx_radius, tile_centre[0] + yx_radius), 
-                        np.arange(tile_centre[1] - yx_radius, tile_centre[1] + yx_radius), 
-                        np.asarray(z_planes) - np.min(nb.basic_info.use_z),
-                    ],
-                    apply_shift=False))
+    im = yxz_to_zyx(
+        tiles_io.load_image(
+            nb.file_names, nb.basic_info, nb.extract.file_type, t, r, c, 
+            [
+                np.arange(tile_centre[0] - yx_radius, tile_centre[0] + yx_radius), 
+                np.arange(tile_centre[1] - yx_radius, tile_centre[1] + yx_radius), 
+                np.asarray(z_planes) - np.min(nb.basic_info.use_z),
+            ],
+            apply_shift=False,
+        )
+    )
     # Clip the image to the specified range if required
     if image_value_range is None:
         image_value_range = (np.min(im), np.max(im))
@@ -403,3 +408,22 @@ def generate_reg_images(nb, t: int, r: int, c: int, filter: bool = False, image_
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
     np.save(os.path.join(output_dir, 't' + str(t) + 'r' + str(r) + 'c' + str(c)), im)
+
+
+def window_image(image: np.ndarray) -> np.ndarray:
+    """
+    Window the image by a hann window in y and x and a Tukey window in z.
+
+    Args:
+        image: image to be windowed. (z, y, x)
+
+    Returns:
+        image: windowed image.
+    """
+    window_yx = skimage.filters.window('hann', image.shape[1:])
+    window_z = signal.windows.tukey(image.shape[0], alpha=0.33)
+    if (window_z == 0).all():
+        window_z[...] = 1
+    window = window_z[:, None, None] * window_yx[None, :, :]
+    image = image * window
+    return image

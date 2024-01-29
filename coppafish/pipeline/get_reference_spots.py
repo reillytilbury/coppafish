@@ -71,6 +71,8 @@ def get_reference_spots(
     all_local_yxz = np.zeros((0, 3), dtype=np.int16)
     all_isolated = np.zeros(0, dtype=bool)
     all_local_tile = np.zeros(0, dtype=np.int16)
+    in_bounds = np.zeros((nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.n_extra_rounds * nbp_basic.use_preseq,
+                          nbp_basic.n_channels))
 
     # Now we start looping through tiles and recording the local_yxz spots on this tile and the isolated status of each
     # We then append this to our all_local_yxz, ... arrays
@@ -111,17 +113,24 @@ def get_reference_spots(
             print(f"Tile {np.where(use_tiles==t)[0][0]+1}/{n_use_tiles}")
             # this line will return invalid_value for spots outside tile bounds on particular r/c.
             if nbp_basic.use_preseq:
-                nd_spot_colors_use[in_tile], _, bg_colours[in_tile] = spot_colors_base.get_spot_colors(
+                nd_spot_colors_use[in_tile], yxz_base, bg_colours[in_tile] = spot_colors_base.get_spot_colors(
                     jnp.asarray(nd_local_yxz[in_tile]), t, transform, nbp_file, nbp_basic, nbp_extract, nbp_filter
                 )
             if not nbp_basic.use_preseq:
-                nd_spot_colors_use[in_tile], _ = spot_colors_base.get_spot_colors(
+                nd_spot_colors_use[in_tile], yxz_base = spot_colors_base.get_spot_colors(
                     jnp.asarray(nd_local_yxz[in_tile]), t, transform, nbp_file, nbp_basic, nbp_extract, nbp_filter
                 )
 
     # good means all spots that were in bounds of tile on every imaging round and channel that was used.
     good = (nd_spot_colors_use != invalid_value).all(axis=(1, 2))
-
+    for t in nbp_basic.use_tiles:
+        n_spots = np.sum(nd_local_tile == t)
+        for ci, c in enumerate(nbp_basic.use_channels):
+            for r in nbp_basic.use_rounds:
+                in_bounds[t, r, c] = np.sum(nd_spot_colors_use[(nd_local_tile == t), r, ci] == invalid_value) / n_spots
+            if nbp_basic.use_preseq:
+                # bg_colours repeats over rounds (axis 1) so just check for invalid values on one round
+                in_bounds[t, -1, c] = np.sum(bg_colours[nd_local_tile == t, 0, ci] == invalid_value) / n_spots
     good_local_yxz = nd_local_yxz[good]
     good_isolated = nd_isolated[good]
     good_local_tile = nd_local_tile[good]
@@ -136,6 +145,7 @@ def get_reference_spots(
     nbp.tile = good_local_tile
     nbp.colors = good_spot_colors
     nbp.bg_colours = good_bg_colors
+    nbp.in_bounds = in_bounds
 
     # Set variables added in call_reference_spots to None so can save to Notebook.
     # I.e. if call_reference_spots hit error, but we did not do this, we would have to run get_reference_spots again.

@@ -1,12 +1,9 @@
 import os
-import math
+import scipy
 import pickle
-import warnings
 import itertools
 import numpy as np
 from tqdm import tqdm
-from skimage import filters
-from multiprocessing.pool import Pool
 from typing import Tuple
 
 from ..setup import NotebookPage
@@ -43,7 +40,6 @@ def register(
         config: Register part of the config dictionary.
         tile_origin: n_tiles x 3 ndarray of tile origins.
         pre_seq_blur_radius: Radius of gaussian blur to apply to pre-seq round images.
-        num_rotations: Number of rotations to apply to each tile.
 
     Returns:
         - nbp (NotebookPage): register notebook page.
@@ -128,18 +124,14 @@ def register(
                     if not (use_dapi and r == nbp_basic.anchor_round):
                         round_image.append(
                             preprocessing.yxz_to_zyx(
-                                preprocessing.offset_pixels_by(
-                                    tiles_io.load_image(
-                                        nbp_file,
-                                        nbp_basic,
-                                        nbp_extract.file_type,
-                                        t=t,
-                                        r=r,
-                                        c=round_registration_channel,
-                                        suffix="_raw" if r == nbp_basic.pre_seq_round else "",
-                                        apply_shift=False,
-                                    ),
-                                    -nbp_basic.tile_pixel_value_shift,
+                                tiles_io.load_image(
+                                    nbp_file,
+                                    nbp_basic,
+                                    nbp_extract.file_type,
+                                    t=t,
+                                    r=r,
+                                    c=round_registration_channel,
+                                    suffix="_raw" if r == nbp_basic.pre_seq_round else "",
                                 )
                             )
                         )
@@ -247,34 +239,6 @@ def register(
         # Save registration data externally
         with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
             pickle.dump(registration_data, f)
-
-    # Now blur the pre seq round images
-    if registration_data["blur"] is False and nbp_basic.use_preseq:
-        for t, c in tqdm(itertools.product(use_tiles, use_channels + [nbp_basic.dapi_channel])):
-            print(f" Blurring pre-seq tile {t}, channel {c}")
-            # Load in the pre-seq round image, blur it and save it under a different name (dropping the _raw suffix)
-            im = tiles_io.load_image(
-                nbp_file,
-                nbp_basic,
-                nbp_extract.file_type,
-                t=t,
-                r=nbp_basic.pre_seq_round,
-                c=c,
-                suffix="_raw",
-                apply_shift=False,
-            )
-            if not (nbp_basic.pre_seq_round == nbp_basic.anchor_round and c == nbp_basic.dapi_channel):
-                im = preprocessing.offset_pixels_by(im, -nbp_basic.tile_pixel_value_shift)
-            if pre_seq_blur_radius > 0:
-                for z in tqdm(range(len(nbp_basic.use_z))):
-                    im[:, :, z] = filters.gaussian(im[:, :, z], pre_seq_blur_radius, truncate=3, preserve_range=True)
-            # Save the blurred image (no need to rotate this, as the rotation was done in extract)
-            tiles_io.save_image(nbp_file, nbp_basic, nbp_extract.file_type, im, t, r, c)
-        registration_data["blur"] = True
-
-    # Save registration data externally
-    with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
-        pickle.dump(registration_data, f)
     # Add round statistics to debugging page.
     nbp_debug.position = registration_data["round_registration"]["position"]
     nbp_debug.round_shift = registration_data["round_registration"]["shift"]
@@ -295,86 +259,51 @@ def register(
     nbp.initial_transform = registration_data["initial_transform"]
     # combine icp transform, channel transform and initial transform to get final transform
     transform = np.zeros((n_tiles, n_rounds + nbp_basic.use_anchor + nbp_basic.use_preseq, n_channels, 4, 3))
-    transform[:, use_rounds] = registration_data["icp"]["transform"][:, use_rounds]
+    use_rounds_new = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
+    transform[:, use_rounds_new] = registration_data["icp"]["transform"][:, use_rounds_new]
     nbp.transform = transform
 
-    # Load in the middle z-plane of each tile and compute the scale factors to be used when removing background
+    # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
     # fluorescence
     if nbp_basic.use_preseq:
-        use_rounds = nbp_basic.use_rounds
         bg_scale = np.zeros((n_tiles, n_rounds, n_channels))
-        mid_z = len(nbp_basic.use_z) // 2
-        z_rad = np.min([len(nbp_basic.use_z) // 2, 5])
-        yxz = [
-            None,
-            None,
-            np.asarray(nbp_basic.use_z.copy())[np.arange(mid_z - z_rad, mid_z + z_rad)] - min(nbp_basic.use_z),
-        ]
-        max_cores = config["max_background_scale_cores"]
-        # Maximum cores physically possible could be bottlenecked by available RAM
-        n_cores = max(system.get_core_count(), 1)
-        n_image_bytes = (2 * z_rad + 1) * nbp_basic.tile_sz * nbp_basic.tile_sz * 4
-        memory_core_limit = math.floor(system.get_available_memory() * 7e7 / n_image_bytes)
-        if memory_core_limit < 1:
-            warnings.warn(
-                f"Available memory is low, if coppafish crashes, try freeing up memory before re-running pipeline"
-            )
-            memory_core_limit = 1
-        n_cores = min([n_cores, memory_core_limit, 999 if max_cores is None else max_cores])
-        # Each tuple in the list is a processes args
-        process_args = []
-        final_index = len(use_tiles) * len(use_rounds) * len(use_channels) - 1
-        with tqdm(
-            total=math.ceil((final_index + 1) / n_cores), desc="Computing background scales", unit="batch"
-        ) as pbar:
-            for i, trc in enumerate(itertools.product(use_tiles, use_rounds, use_channels)):
-                t, r, c = trc
-                # We run brightness_scale calculations in parallel to speed up the pipeline
-                image_seq = tiles_io.load_image(
-                    nbp_file,
-                    nbp_basic,
-                    nbp_extract.file_type,
-                    t=t,
-                    r=r,
-                    c=c,
-                    yxz=yxz,
-                    apply_shift=False,
-                )
-                if not (r == nbp_basic.anchor_round and c == nbp_basic.dapi_channel):
-                    image_seq = preprocessing.offset_pixels_by(image_seq, -nbp_basic.tile_pixel_value_shift)
-                image_preseq = tiles_io.load_image(
-                    nbp_file,
-                    nbp_basic,
-                    nbp_extract.file_type,
-                    t=t,
-                    r=nbp_basic.pre_seq_round,
-                    c=c,
-                    yxz=yxz,
-                    apply_shift=False,
-                )
-                if not (nbp_basic.pre_seq_round == nbp_basic.anchor_round and c == nbp_basic.dapi_channel):
-                    image_preseq = preprocessing.offset_pixels_by(image_preseq, -nbp_basic.tile_pixel_value_shift)
-                process_args.append(
-                    (
-                        image_seq.copy(),
-                        image_preseq.copy(),
-                        nbp.transform.copy(),
-                        mid_z,
-                        z_rad,
-                        nbp_basic.pre_seq_round,
-                        t,
-                        r,
-                        c,
-                    )
-                )
-                if len(process_args) == n_cores or i == final_index:
-                    # Start processes
-                    with Pool() as pool:
-                        for result in pool.starmap(register_base.compute_brightness_scale, process_args):
-                            scale, t_i, r_i, c_i = result
-                            bg_scale[t_i, r_i, c_i] = scale
-                    process_args = []
-                    pbar.update(1)
+        r_pre = nbp_basic.pre_seq_round
+        use_rounds = nbp_basic.use_rounds
+        mid_z = nbp_basic.use_z[len(nbp_basic.use_z) // 2]
+        for t, c in tqdm(
+            itertools.product(use_tiles, use_channels),
+            desc="Computing background scale factors",
+            total=len(use_tiles) * len(use_channels),
+        ):
+            # load in pre-seq round
+            transform_pre = preprocessing.invert_affine(preprocessing.yxz_to_zyx_affine(transform[t, r_pre, c]))
+            z_scale_pre = transform_pre[0, 0]
+            z_shift_pre = transform_pre[0, 3]
+            mid_z_pre = int((mid_z - z_shift_pre) / z_scale_pre)
+            yxz = [None, None, mid_z_pre]
+            image_preseq = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r_pre, c=c, yxz=yxz)
+            image_preseq = image_preseq.astype(np.int32)
+            image_preseq = image_preseq - nbp_basic.tile_pixel_value_shift
+            image_preseq = image_preseq.astype(np.float32)
+            # we have to load in inverse transform to use scipy.ndimage.affine_transform
+            inv_transform_pre_yx = preprocessing.yxz_to_zyx_affine(transform[t, r_pre, c])[1:, 1:]
+            image_preseq = scipy.ndimage.affine_transform(image_preseq, inv_transform_pre_yx)
+            for r in use_rounds:
+                transform_seq = preprocessing.invert_affine(preprocessing.yxz_to_zyx_affine(transform[t, r, c]))
+                z_scale_seq = transform_seq[0, 0]
+                z_shift_seq = transform_seq[0, 3]
+                mid_z_seq = int((mid_z - z_shift_seq) / z_scale_seq)
+                yxz = [None, None, mid_z_seq]
+                image_seq = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r, c=c, yxz=yxz)
+                image_seq = image_seq.astype(np.int32)
+                image_seq = image_seq - nbp_basic.tile_pixel_value_shift
+                image_seq = image_seq.astype(np.float32)
+                # we have to load in inverse transform to use scipy.ndimage.affine_transform
+                inv_transform_seq_yx = preprocessing.yxz_to_zyx_affine(transform[t, r, c])[1:, 1:]
+                image_seq = scipy.ndimage.affine_transform(image_seq, inv_transform_seq_yx)
+                # Now compute the scale factor
+                bg_scale[t, r, c] = register_base.brightness_scale(image_preseq, image_seq, 99)[0]
+        # Now add the bg_scale to the nbp_filter page. To do this we need to delete the bg_scale attribute.
         nbp_filter.finalized = False
         del nbp_filter.bg_scale
         nbp_filter.bg_scale = bg_scale
