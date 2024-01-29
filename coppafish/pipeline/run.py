@@ -161,11 +161,10 @@ def run_extract(nb: Notebook) -> None:
     """
     if not nb.has_page("extract") or not nb.has_page("extract_debug"):
         config = nb.get_config()
-        nbp, nbp_debug = extract_run.run_extract(
+        nbp = extract_run.run_extract(
             config['extract'], nb.file_names, nb.basic_info, nb.scale,
         )
         nb += nbp
-        nb += nbp_debug
     else:
         warnings.warn('extract', utils.warnings.NotebookPageWarning)
         warnings.warn('extract_debug', utils.warnings.NotebookPageWarning)

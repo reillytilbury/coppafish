@@ -7,7 +7,7 @@ from tqdm import tqdm
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
-from typing import Union, Optional, Tuple, Any
+from typing import Union, Optional, Tuple
 
 from ..setup import Notebook, NotebookPage
 

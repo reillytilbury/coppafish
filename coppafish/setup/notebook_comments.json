@@ -456,19 +456,6 @@
             "Hash of the latest git commit when the pipeline was run"
         ]
     },
-    "extract_debug": {
-        "DESCRIPTION": [
-            "*extract_debug* page stores variables from `extract_and_filter` step which are not needed later ",
-            "in the pipeline but may be useful for debugging purposes.",
-            "",
-            "Page added to *Notebook* in *pipeline/extract_run.py*"
-        ],
-        "time_taken": [
-            "add",
-            "Float",
-            "Time taken to run through the extract section, in seconds."
-        ]
-    },
     "filter": {
         "DESCRIPTION": [
             "*filter* page contains information about the image filtering.",

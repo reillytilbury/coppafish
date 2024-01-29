@@ -218,5 +218,5 @@ def test_pdf_builder() -> None:
 
 if __name__ == "__main__":
     test_integration_small_two_tile()
-    test_pdf_builder()
+    # test_pdf_builder()
     test_viewers()
