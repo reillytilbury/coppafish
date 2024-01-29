@@ -2,7 +2,7 @@
  * The default config value for r_smooth in filter section is now 1, 1, 2.
  * The notebook now backs itself up before re-saving itself. Therefore, there is always a fully complete notebook saved 
     in case the new one being saved gets corrupted.
- * bug fix
+ * Comparing spot colour and predicted code in Viewer bug fixed.
  * Removed 'extract_debug' notebook page.
 
 
