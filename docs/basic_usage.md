@@ -111,4 +111,6 @@ where the `dapi_channel` is the index in the numpy arrays that the dapi channel 
 the `anchor_channel` in this case because the anchor channel can also be used as a sequencing channel in the sequencing 
 rounds. `dye_names` does not have to be set explicitly if `n_seq_channels == n_dyes`. `expected_overlap` is the 
 fraction of the tile in x (y) dimension that is overlapping between adjacent tiles, typically `0.1-0.15`. More details 
-about every config variable can be found at `coppafish/setup/settings.default.ini` in the source code.
+about every config variable can be found at 
+<a href="https://github.com/reillytilbury/coppafish/blob/alpha/coppafish/setup/settings.default.ini" target="_blank">
+`coppafish/setup/settings.default.ini`</a> in the source code.

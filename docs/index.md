@@ -67,7 +67,7 @@ If you do not wish to keep a local copy of coppafish (i.e. not interested in upd
 
 ## Running
 
-Coppafish can be run with a config file by running in the terminal
+Coppafish can be run with a config file. In the terminal
 ```console
 python -m coppafish /path/to/config.ini
 ```

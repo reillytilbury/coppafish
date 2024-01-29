@@ -36,6 +36,10 @@ nb.basic_info.describe("use_tiles")
 
 * Spot - A fluorescing gene. A spot is spherical in shape and these are what need to be identified by coppafish.
 
+* PSF - Stands for Point Spread Function and is used during image filtering. It is used in the Wiener deconvolution 
+which is applied to try and deblur images which is caused by noise at frequencies with a low signal-to-noise ratio. See 
+<a href="https://en.wikipedia.org/wiki/Wiener_deconvolution" target="_blank">here</a> for more details.
+
 [^1]:
     There are some cases of a notebook being "rewritten", but these are done only by the developers. This includes 
     the combining of single tile notebooks into a multi-tile notebook.
