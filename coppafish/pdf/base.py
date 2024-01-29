@@ -31,7 +31,7 @@ class BuildPDF:
         auto_open: bool = True,
     ) -> None:
         """
-        Build a diagnostic PDF of coppafish results for each relevant section. A section pdf is not re-generated if the 
+        Build a diagnostic PDF of coppafish results for each relevant section. A section pdf is not re-generated if the
         file was found inside output_dir.
 
         Args:
@@ -49,29 +49,31 @@ class BuildPDF:
         output_dir = os.path.abspath(output_dir)
         assert os.path.isdir(output_dir), "output_dir must be a valid directory"
 
+        # Light theme
+        plt.style.use("default")
+        self.use_channels_anchor = [
+            c for c in [nb.basic_info.dapi_channel, nb.basic_info.anchor_channel] if c is not None
+        ]
+        self.use_channels_anchor.sort()
+        self.use_channels_plus_dapi = nb.basic_info.use_channels.copy()
+        if nb.basic_info.dapi_channel is not None:
+            self.use_channels_plus_dapi += [nb.basic_info.dapi_channel]
+        self.use_channels_plus_dapi.sort()
+        self.use_channels_all = self.use_channels_plus_dapi.copy()
+        if nb.basic_info.anchor_channel is not None:
+            self.use_channels_all += [nb.basic_info.anchor_channel]
+        self.use_channels_all = list(set(self.use_channels_all))
+        self.use_channels_all.sort()
+        self.use_rounds_all = (
+            nb.basic_info.use_rounds.copy()
+            + nb.basic_info.use_anchor * [nb.basic_info.anchor_round]
+            + nb.basic_info.use_preseq * [nb.basic_info.pre_seq_round]
+        )
+        self.use_rounds_all.sort()
+
         if not os.path.isfile(os.path.join(output_dir, "_basic_info.pdf")):
             with PdfPages(os.path.join(output_dir, "_basic_info.pdf")) as pdf:
-                self.use_channels_anchor = [
-                    c for c in [nb.basic_info.dapi_channel, nb.basic_info.anchor_channel] if c is not None
-                ]
-                self.use_channels_anchor.sort()
-                self.use_channels_plus_dapi = nb.basic_info.use_channels.copy()
-                if nb.basic_info.dapi_channel is not None:
-                    self.use_channels_plus_dapi += [nb.basic_info.dapi_channel]
-                self.use_channels_all = self.use_channels_plus_dapi.copy()
-                if nb.basic_info.anchor_channel is not None:
-                    self.use_channels_all += [nb.basic_info.anchor_channel]
-                self.use_channels_all = list(set(self.use_channels_all))
-                self.use_channels_all.sort()
-                self.use_channels_plus_dapi.sort()
-                self.use_rounds_all = (
-                    nb.basic_info.use_rounds.copy()
-                    + nb.basic_info.use_anchor * [nb.basic_info.anchor_round]
-                    + nb.basic_info.use_preseq * [nb.basic_info.pre_seq_round]
-                )
-                self.use_rounds_all.sort()
                 mpl.rcParams.update(mpl.rcParamsDefault)
-
                 # Build a pdf with data from scale, extract, filter, find_spots, register, stitch, OMP
                 pbar.set_postfix_str("Basic info")
                 text_intro_info = self.get_basic_info(nb.basic_info, nb.file_names)
@@ -106,7 +108,7 @@ class BuildPDF:
                 if nb.has_page("extract"):
                     fig, axes = self.create_empty_page(1, 1)
                     text_extract_info = ""
-                    text_extract_info += self.get_extract_text_info(nb.extract, nb.extract_debug)
+                    text_extract_info += self.get_extract_text_info(nb.extract)
                     axes[0, 0].set_title(text_extract_info, fontdict=INFO_FONTDICT, y=0.5)
                     extract_image_dtype = np.uint16
                     self.empty_plot_ticks(axes[0, 0])
@@ -148,7 +150,7 @@ class BuildPDF:
                         # Versions >=0.5.0
                         text_filter_info += self.get_filter_info(nb.filter, nb.filter_debug)
                     else:
-                        text_filter_info += self.get_filter_info(nb.extract, nb.extract_debug)
+                        text_filter_info += self.get_filter_info(nb.extract)
                     axes[0, 0].set_title(text_filter_info, fontdict=INFO_FONTDICT, y=0.5)
                     self.empty_plot_ticks(axes[0, 0])
                     pdf.savefig(fig)
@@ -199,7 +201,8 @@ class BuildPDF:
                         ax: plt.Axes = axes[0, 0]
                         channels_to_index = {c: i for i, c in enumerate(self.use_channels_all)}
                         X = np.zeros(
-                            (nb.basic_info.n_rounds + nb.basic_info.n_extra_rounds, len(channels_to_index)), dtype=np.int32
+                            (nb.basic_info.n_rounds + nb.basic_info.n_extra_rounds, len(channels_to_index)),
+                            dtype=np.int32,
                         )
                         ticks_channels = np.arange(X.shape[1])
                         ticks_channels_labels = ["" for _ in range(ticks_channels.size)]
@@ -208,7 +211,9 @@ class BuildPDF:
                         for r in self.use_rounds_all:
                             if nb.basic_info.use_anchor and r == nb.basic_info.anchor_round:
                                 use_channels = [
-                                    c for c in [nb.basic_info.dapi_channel, nb.basic_info.anchor_channel] if c is not None
+                                    c
+                                    for c in [nb.basic_info.dapi_channel, nb.basic_info.anchor_channel]
+                                    if c is not None
                                 ]
                             else:
                                 use_channels = nb.basic_info.use_channels.copy()
@@ -252,7 +257,9 @@ class BuildPDF:
                     gene_probs = nb.ref_spots.gene_probs
                     # bg colour was subtracted if use_preseq
                     colours = nb.ref_spots.colors[
-                        np.ix_(range(nb.ref_spots.colors.shape[0]), nb.basic_info.use_rounds, nb.basic_info.use_channels)
+                        np.ix_(
+                            range(nb.ref_spots.colors.shape[0]), nb.basic_info.use_rounds, nb.basic_info.use_channels
+                        )
                     ]
                     n_genes = gene_probs.shape[1]
                     gene_names = nb.call_spots.gene_names
@@ -264,11 +271,17 @@ class BuildPDF:
                         g_probs = gene_probs[g_spots, g]
                         g_bled_code = nb.call_spots.bled_codes[g][:, nb.basic_info.use_channels]  # (rounds, channels)
                         g_bled_code /= np.linalg.norm(g_bled_code, axis=1)[:, None]
+                        g_bled_code_ge = nb.call_spots.bled_codes[g][
+                            :, nb.basic_info.use_channels
+                        ]  # (rounds, channels)
+                        g_bled_code_ge /= np.linalg.norm(g_bled_code_ge, axis=1)[:, None]
                         g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code[None, :, :], axis=2))
                         fig, axes = self.create_empty_page(2, 2, gridspec_kw={"width_ratios": [2, 1]})
                         self.empty_plot_ticks(axes[1, 1])
                         fig.suptitle(f"{gene_names[g]}", size=NORMAL_FONTSIZE)
-                        im = axes[0, 0].imshow(g_r_dot_products[g_spots[:N_GENES_SHOW], :].T, vmin=0, vmax=1, aspect="auto")
+                        im = axes[0, 0].imshow(
+                            g_r_dot_products[g_spots[:N_GENES_SHOW], :].T, vmin=0, vmax=1, aspect="auto"
+                        )
                         axes[0, 0].set_yticks(range(n_rounds))
                         axes[0, 0].set_ylim([n_rounds - 0.5, -0.5])
                         axes[0, 0].set_ylabel("round")
@@ -291,7 +304,15 @@ class BuildPDF:
                         axes[0, 1].set_xticks(
                             range(len(nb.basic_info.use_channels)), labels=(str(c) for c in nb.basic_info.use_channels)
                         )
+                        axes[1, 1].imshow(g_bled_code_ge, vmin=0, vmax=1)
+                        axes[1, 1].set_title("bled code GE")
+                        axes[1, 1].set_xlabel("channels")
+                        axes[1, 1].set_xticks(
+                            range(len(nb.basic_info.use_channels)), labels=(str(c) for c in nb.basic_info.use_channels)
+                        )
                         cbar = fig.colorbar(im, ax=axes[0, 1], orientation="vertical")
+                        cbar.ax.set_ylabel("Score", rotation=-90, va="bottom")
+                        cbar = fig.colorbar(im, ax=axes[1, 1], orientation="vertical")
                         cbar.ax.set_ylabel("Score", rotation=-90, va="bottom")
                         fig.tight_layout()
                         pdf.savefig(fig)
@@ -408,11 +429,9 @@ class BuildPDF:
         output += f"{wrapped_output}\n"
         return output
 
-    def get_extract_text_info(self, extract_page: NotebookPage, extract_debug_page: NotebookPage) -> str:
+    def get_extract_text_info(self, extract_page: NotebookPage) -> str:
         output = "Extract\n \n"
         output += self.get_version_from_page(extract_page)
-        time_taken = self.get_time_taken_from_page(extract_debug_page)
-        output += time_taken
         return output
 
     def get_filter_info(self, filter_page: NotebookPage, filter_debug_page: Optional[NotebookPage] = None) -> str:
