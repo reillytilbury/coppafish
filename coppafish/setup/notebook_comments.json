@@ -5,7 +5,6 @@
             "",
             "Page added to *Notebook* in *pipeline/basic_info.py*"
         ],
-
         "anchor_channel": [
             "eq",
             "Integer or None",
@@ -186,7 +185,6 @@
             "Hash of the latest git commit when the pipeline was run"
         ]
     },
-
     "file_names": {
         "DESCRIPTION": [
             "*file_names* page contains all files that are used throughout the pipeline.",
@@ -194,7 +192,6 @@
             "",
             "Page added to *Notebook* automatically as soon as *basic_info* page added."
         ],
-
         "input_dir": [
             "eq",
             "Directory",
@@ -352,14 +349,12 @@
             "Location of initial bleed matrix file. `None` if one is not given, then use default bleed matrix"
         ]
     },
-
     "scale": {
         "DESCRIPTION": [
             "The *scale* page contains the scale factors applied to the raw anchor and sequence images so ",
             "that the extracted images can take up the full range of `np.uint16`. The scale factor values are also stored ",
             "in a `.txt` file in case the notebook corrupts. The notebook values here are for user convenience."
         ],
-
         "r_smooth": [
             "close",
             "Float or None",
@@ -432,7 +427,6 @@
             "Hash of the latest git commit when the pipeline was run"
         ]
     },
-
     "extract": {
         "DESCRIPTION": [
             "The *extract* page contains variables from `extract_and_filter` step which are used later in the ",
@@ -441,7 +435,6 @@
             "",
             "Page added to *Notebook* in *pipeline/extract_run.py*"
         ],
-
         "file_type": [
             "eq",
             "String",
@@ -463,7 +456,6 @@
             "Hash of the latest git commit when the pipeline was run"
         ]
     },
-
     "extract_debug": {
         "DESCRIPTION": [
             "*extract_debug* page stores variables from `extract_and_filter` step which are not needed later ",
@@ -471,21 +463,18 @@
             "",
             "Page added to *Notebook* in *pipeline/extract_run.py*"
         ],
-
         "time_taken": [
             "add",
             "Float",
             "Time taken to run through the extract section, in seconds."
         ]
     },
-
     "filter": {
         "DESCRIPTION": [
             "*filter* page contains information about the image filtering.",
             "",
             "Page added to *Notebook* in *pipeline/filter_run.py*"
         ],
-
         "auto_thresh": [
             "tile_0",
             "Numpy int array `[n_tiles x (n_rounds + n_extra_rounds) x n_channels]`",
@@ -510,7 +499,6 @@
             "Hash of the latest git commit when the pipeline was run"
         ]
     },
-
     "filter_debug": {
         "DESCRIPTION": [
             "*filter_debug* page contains information about filtered images not needed later in the ",
@@ -518,7 +506,6 @@
             "",
             "Page added to *Notebook* in *pipeline/filter_run.py*"
         ],
-
         "n_clip_pixels": [
             "tile_0",
             "Numpy integer array [n_tiles x (n_rounds + n_extra_rounds) x n_channels]",
@@ -569,14 +556,12 @@
             "Time taken to run through the filter section, in seconds."
         ]
     },
-
     "find_spots": {
         "DESCRIPTION": [
             "*find_spots* page contains information about spots found on all tiles, rounds and channels.",
             "",
             "Page added to *Notebook* in *pipeline/find_spots.py*"
         ],
-
         "isolation_thresh": [
             "tile_0",
             "Numpy float array [n_tiles]",
@@ -612,7 +597,6 @@
             "Hash of the latest git commit when the pipeline was run"
         ]
     },
-
     "stitch": {
         "DESCRIPTION": [
             "*stitch* page contains information about how tiles were stitched together to give global coordinates.",
@@ -621,7 +605,6 @@
             "",
             "Page added to *Notebook* in *pipeline/stitch.py*"
         ],
-
         "tile_origin": [
             "tile_0",
             "Numpy float array [n_tiles x 3]",
@@ -735,14 +718,12 @@
             "Hash of the latest git commit when the pipeline was run"
         ]
     },
-
     "register": {
         "DESCRIPTION": [
             "*register* page contains the affine transforms to go from the ref round/channel",
             "to each imaging round/channel for every tile.",
             "Page added to *Notebook* in *pipeline/register.py*"
         ],
-
         "initial_transform": [
             "",
             "(n_tiles x n_rounds x n_channels x 4 x 3) ndarray[float]",
@@ -776,13 +757,11 @@
             "Hash of the latest git commit when the pipeline was run"
         ]
     },
-
     "register_debug": {
         "DESCRIPTION": [
             "*register_debug* page contains information on how the affine transforms in *register* page were calculated.",
             "Page added to *Notebook* in *pipeline/register.py*"
         ],
-
         "n_matches": [
             "",
             "Numpy integer array [n_tiles x n_rounds x n_channels x n_iters]",
@@ -828,7 +807,6 @@
             " affine transforms taking $(r_{mid}, c_{ref})$ to $(r_{mid}, c)$ for each tile $t$ and channel $c$."
         ]
     },
-
     "ref_spots": {
         "DESCRIPTION": [
             "*ref_spots* page contains gene assignments and info for spots found on reference round.",
@@ -840,7 +818,6 @@
             "`call_reference_spots` should then be run to give their actual values. This is so if there is an error in ",
             "`call_reference_spots`, `get_reference_spots` won't have to be re-run."
         ],
-
         "local_yxz": [
             "",
             "Numpy int16 array [n_spots x 3]",
@@ -904,6 +881,11 @@
             "Numpy int32 array [n_spots x n_rounds x n_channels]",
             "Background colour of each spot. Calculated as the median of the channel across rounds."
         ],
+        "in_bounds": [
+            "",
+            "Numpy boolean array [n_tiles, n_rounds, n_channels]",
+            "fraction of each tile that is in bounds"
+        ],
         "software_version": [
             "",
             "String",
@@ -915,13 +897,11 @@
             "Hash of the latest git commit when the pipeline was run"
         ]
     },
-
     "call_spots": {
         "DESCRIPTION": [
             "*call_spots* page contains `bleed_matrix` and expected code for each gene.",
             "Page added to *Notebook* in *pipeline/call_reference_spots.py*"
         ],
-
         "gene_names": [
             "",
             "Numpy string array [n_genes]",
@@ -996,7 +976,6 @@
             "Hash of the latest git commit when the pipeline was run"
         ]
     },
-
     "omp": {
         "DESCRIPTION": [
             "*omp* page contains gene assignments and info for ",
@@ -1006,7 +985,6 @@
             "",
             "Page added to *Notebook* in *pipeline/call_spots_omp.py*"
         ],
-
         "initial_intensity_thresh": [
             "",
             "Float",
@@ -1109,7 +1087,6 @@
             "Hash of the latest git commit when the pipeline was run"
         ]
     },
-
     "thresholds": {
         "DESCRIPTION": [
             "*thresholds* page contains quality thresholds which affect which spots plotted",
@@ -1117,7 +1094,6 @@
             "",
             "Page added to *Notebook* when *utils/pciseq/export_to_pciseq* is run."
         ],
-
         "intensity": [
             "",
             "Float",
