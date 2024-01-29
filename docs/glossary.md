@@ -30,6 +30,8 @@ For example, you can read the `use_tiles` variable from the `basic_info` section
 print(nb.basic_info.use_tiles)
 ```
 
+* Spot - A fluorescing gene. A spot is spherical in shape and these are what need to be identified by coppafish.
+
 [^1]:
     There are some cases of a notebook being "rewritten", but these are done only by the developers. This includes 
     the combining of single tile notebooks into a multi-tile notebook.

@@ -103,7 +103,11 @@ anchor_round = 7
 use_channels = 1, 2, 3, 4
 anchor_channel = 1
 dapi_channel = 0
+
+[stitch]
+expected_overlap = 0.15
 ```
 where the `dapi_channel` is the index in the numpy arrays that the dapi channel is stored at. `use_channels` includes 
 the `anchor_channel` in this case because the anchor channel can also be used as a sequencing channel in the sequencing 
-rounds. `dye_names` does not have to be set explicitly if `n_seq_channels == n_dyes`.
+rounds. `dye_names` does not have to be set explicitly if `n_seq_channels == n_dyes`. `expected_overlap` is the 
+fraction of the tile in x (y) dimension that is overlapping between adjacent tiles, typically `0.1-0.15`.
