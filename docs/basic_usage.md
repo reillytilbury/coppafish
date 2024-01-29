@@ -33,7 +33,7 @@ dask.array.to_npy_stack(save_path, image_dask)
 ```
 
 where `n_...` variables represent counts (integers), `n_total_channels` can include other channels other than the 
-sequencing channel (e.g. a DAPI channel). `seq_image_tiles` is a numpy array of shape 
+sequencing channel (e.g. a DAPI channel and anchor channel). `seq_image_tiles` is a numpy array of shape 
 `(n_seq_rounds, n_tiles, n_total_channels, n_y, n_x, n_z)`, while `anchor_image` and `preseq_image` are numpy arrays of 
 shape `(n_tiles, n_total_channels, n_y, n_x, n_z)`. Note that `n_y` must be equal to `n_x`.
 
@@ -60,15 +60,15 @@ metadata = {
     "xy_pos": tile_xy_pos,
     "nz": n_z,
 }
-metadata_filepath = os.path.join(output_dir, "metadata.json")
-with open(metadata_filepath, "w") as f:
+file_path = os.path.join(raw_path, "metadata.json")
+with open(file_path, "w") as f:
     json.dump(metadata, f, indent=4)
 ```
 
 ### Code book
 
-A code book is a `.txt` file that tells coppafish the expected gene codes for every gene type. An example of a 4 gene 
-code book is
+A code book is a `.txt` file that tells coppafish the expected gene codes for every gene type. An example of a four 
+gene code book is
 ```
 gene_0 0123012
 gene_1 1230123
@@ -95,7 +95,7 @@ raw_metadata = path/to/metadata.json
 
 [basic_info]
 is_3d = True
-dye_names = dye_0, dye_1, dye_2, dye_3 ; Does not have to be set if n_seq_channels == n_dyes
+dye_names = dye_0, dye_1, dye_2, dye_3
 use_rounds = 0, 1, 2, 3, 4, 5, 6
 use_z = 0, 1, 2, 3, 4
 use_tiles = 0, 1
@@ -104,3 +104,6 @@ use_channels = 1, 2, 3, 4
 anchor_channel = 1
 dapi_channel = 0
 ```
+where the `dapi_channel` is the index in the numpy arrays that the dapi channel is stored at. `use_channels` includes 
+the `anchor_channel` in this case because the anchor channel can also be used as a sequencing channel in the sequencing 
+rounds. `dye_names` does not have to be set explicitly if `n_seq_channels == n_dyes`.

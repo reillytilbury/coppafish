@@ -6,8 +6,11 @@ theme:
   logo: images/logo.svg
 
   features:
+    # Cool section selection at top
     - navigation.tabs
+    # Code blocks
     - content.code.annotation
+    # Copy code button
     - content.code.copy
   
   language: en
@@ -39,6 +42,8 @@ nav:
 markdown_extensions:
   - pymdownx.arithmatex:
       generic: true
+  # Footnote support
+  - footnotes
 extra_javascript:
   - javascripts/config.js
   - https://polyfill.io/v3/polyfill.min.js?features=es6

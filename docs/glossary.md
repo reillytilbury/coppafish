@@ -1,5 +1,6 @@
-* Tile - A subset of the microscope image, split into cuboids of size $n_z \times n_y \times n_x$ in z, y, and x, where 
-$n_y = n_x$. Typically, $n_z\sim50$.
+* Tile - A cuboid subset of the microscope image of size $n_z \times n_y \times n_x$ in z, y, and x, where $n_y = n_x$. 
+Typically, $n_z\le58$. Usually, all adjacent tiles overlap by $10\%-15\%$ to give coppafish information on how to best 
+align tiles (see [method](method.md) for details).
 
 * Sequencing round - A series of images across all channels taken when the genes are fluorescing.
 
@@ -17,4 +18,18 @@ generated, see our own gene code generator `reed_solomon_codes` in
 * DAPI - The dapi is an additional, optional channel that causes fluorescence on and around cells. It is used as an 
 overlay in the Viewer for [diagnostics](diagnostics.md).
 
-* Notebook - 
+* Notebook - A write-once[^1] compressed file that stores all important outputs from coppafish. The notebook is used 
+to plot many [diagnostics](diagnostics.md). Variables from the notebook can be directly read by:
+```python
+from coppafish import Notebook
+
+nb = Notebook("path/to/notebook.npz")
+```
+For example, you can read the `use_tiles` variable from the `basic_info` section by
+```python
+print(nb.basic_info.use_tiles)
+```
+
+[^1]:
+    There are some cases of a notebook being "rewritten", but these are done only by the developers. This includes 
+    the combining of single tile notebooks into a multi-tile notebook.
