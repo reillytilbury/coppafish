@@ -64,3 +64,17 @@ pip install -e .
 
 If you do not wish to keep a local copy of coppafish (i.e. not interested in updating versions later) then remove the 
 `-e` from the pip install. Then the source code can be deleted after installing.
+
+## Running
+
+Coppafish can be run with a config file by running in the terminal
+```console
+python -m coppafish /path/to/config.ini
+```
+
+Or using a python script
+```python
+from coppafish import run_pipeline
+
+run_pipeline("/path/to/config.ini")
+```

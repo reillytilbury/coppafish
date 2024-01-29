@@ -29,6 +29,10 @@ For example, you can read the `use_tiles` variable from the `basic_info` section
 ```python
 print(nb.basic_info.use_tiles)
 ```
+Each variable also has a description, which can be printed by
+```python
+nb.basic_info.describe("use_tiles")
+```
 
 * Spot - A fluorescing gene. A spot is spherical in shape and these are what need to be identified by coppafish.
 
