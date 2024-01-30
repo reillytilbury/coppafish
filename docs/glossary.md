@@ -28,8 +28,8 @@ gene intensities would not combine linearly.
 spots.
 
 * PSF - Stands for Point Spread Function and is used during image filtering. It is used in the Wiener deconvolution 
-which is applied to try and deblur images which is caused by noise at frequencies with a low signal-to-noise ratio. See 
-<a href="https://en.wikipedia.org/wiki/Wiener_deconvolution" target="_blank">here</a> for more details.
+which is applied to try and deblur images from noise which is caused by frequencies with a low signal-to-noise ratio. 
+See <a href="https://en.wikipedia.org/wiki/Wiener_deconvolution" target="_blank">here</a> for more details.
 
 * Sequencing round - A series of images across all channels taken when the genes are fluorescing.
 
