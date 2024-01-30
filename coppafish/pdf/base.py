@@ -273,7 +273,7 @@ class BuildPDF:
                         # Bled codes are of shape (rounds, channels, )
                         g_bled_code = nb.call_spots.bled_codes[g][:, nb.basic_info.use_channels]
                         g_bled_code /= np.linalg.norm(g_bled_code, axis=1)[:, None]
-                        g_bled_code_ge = nb.call_spots.bled_codes[g][:, nb.basic_info.use_channels]
+                        g_bled_code_ge = nb.call_spots.bled_codes_ge[g][:, nb.basic_info.use_channels]
                         g_bled_code_ge /= np.linalg.norm(g_bled_code_ge, axis=1)[:, None]
                         g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code_ge[None, :, :], axis=2))
                         thresh_spots = gene_probs[:, g] > GENE_PROB_THRESHOLD
@@ -316,7 +316,7 @@ class BuildPDF:
                             range(len(nb.basic_info.use_channels)), labels=(str(c) for c in nb.basic_info.use_channels)
                         )
                         axes[1, 1].imshow(colours_mean.T, vmin=0, vmax=1)
-                        axes[1, 1].set_title(f"mean spot colour\nwith prob > {GENE_PROB_THRESHOLD}")
+                        axes[1, 1].set_title(f"mean spot colour\nspots with prob > {GENE_PROB_THRESHOLD}")
                         axes[1, 1].set_xlabel("rounds")
                         axes[1, 1].set_xticks(
                             range(len(nb.basic_info.use_rounds)), labels=(str(r) for r in nb.basic_info.use_rounds)
