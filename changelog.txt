@@ -4,6 +4,7 @@
     in case the new one being saved gets corrupted.
  * Comparing spot colour and predicted code in Viewer bug fixed.
  * The mean spot colour for probabilities > 0.7 now plotted.
+ * New documentation (https://reillytilbury.github.io/coppafish/) for users.
  * Removed 'extract_debug' notebook page.
 
 

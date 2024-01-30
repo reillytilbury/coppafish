@@ -1,1 +1,0 @@
-::: coppafish.register.base

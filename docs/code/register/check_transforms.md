@@ -1,1 +1,0 @@
-::: coppafish.register.check_transforms
