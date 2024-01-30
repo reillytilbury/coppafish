@@ -3,7 +3,7 @@
  * The notebook now backs itself up before re-saving itself. Therefore, there is always a fully complete notebook saved 
     in case the new one being saved gets corrupted.
  * Comparing spot colour and predicted code in Viewer bug fixed.
- * The mean spot colour for probabilities > 0.7 now plotted.
+ * The mean spot colour for probabilities > 0.7 now plotted in ref_spots.pdf.
  * New documentation (https://reillytilbury.github.io/coppafish/) for users.
  * Removed 'extract_debug' notebook page.
 
