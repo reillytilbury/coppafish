@@ -35,14 +35,13 @@ def fit_coefs(bled_codes: npt.NDArray, pixel_colors: npt.NDArray, genes: npt.NDA
 
     """
     n_pixels = pixel_colors.shape[1]
-    residual = np.zeros((n_pixels, pixel_colors.shape[0]))
+    residuals = np.zeros((n_pixels, pixel_colors.shape[0]))
     coefs = np.zeros_like(genes, dtype=float)
-    #TODO: Eliminate for loop with numpy magic
     for p in range(n_pixels):
         coefs[p] = np.linalg.lstsq(bled_codes[:, genes[p]], pixel_colors[:, p], rcond=None)[0]
-        residual[p] = pixel_colors[:, p] - bled_codes[:, genes[p]] @ coefs[p]
+        residuals[p] = pixel_colors[:, p] - bled_codes[:, genes[p]] @ coefs[p]
     
-    return residual, coefs
+    return residuals.astype(np.float32), coefs.astype(np.float32)
 
 
 def fit_coefs_weight(bled_codes: np.ndarray, pixel_colors: np.ndarray, genes: np.ndarray,
@@ -72,7 +71,6 @@ def fit_coefs_weight(bled_codes: np.ndarray, pixel_colors: np.ndarray, genes: np
     n_pixels, n_genes_add = genes.shape
     n_rounds_channels = bled_codes.shape[0]
 
-    #TODO: Eliminate for loop with numpy magic
     residuals = np.zeros((n_pixels, n_rounds_channels), dtype=np.float32)
     coefs = np.zeros((n_pixels, n_genes_add), dtype=np.float32)
     for p in range(n_pixels):
@@ -166,7 +164,6 @@ def get_best_gene_first_iter(residual_pixel_colors: np.ndarray, all_bled_codes: 
     # Ensure bled_codes are normalised for each gene
     all_bled_codes /= np.linalg.norm(all_bled_codes, axis=1, keepdims=True)
     background_vars = np.square(background_coefs) @ np.square(all_bled_codes[background_genes]) * alpha + beta ** 2
-    #TODO: Eliminate for loop with numpy magic
     for p in range(n_pixels):
         best_gene, pass_score_thresh = get_best_gene_base(residual_pixel_colors[p], all_bled_codes, norm_shift, 
                                                           score_thresh, 1 / background_vars[p], background_genes)
@@ -231,7 +228,6 @@ def get_best_gene(residual_pixel_colors: npt.NDArray, all_bled_codes: npt.NDArra
     # Ensure bled_codes are normalised for each gene
     all_bled_codes /= np.linalg.norm(all_bled_codes, axis=1, keepdims=True)
 
-    #TODO: Eliminate for loop with numpy magic
     for p in range(n_pixels):
         inverse_var = 1 / (np.square(coefs[p]) @ np.square(all_bled_codes[genes_added[p]]) * alpha + background_var[p])
         # calculate score including background genes as if best gene is background, then stop iteration.

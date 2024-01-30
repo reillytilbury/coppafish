@@ -70,10 +70,9 @@ def test_integration_small_two_tile():
     robominnie.generate_pink_noise()
     robominnie.add_spots(1500)
     robominnie.save_raw_images(output_dir)
-    nb = robominnie.run_coppafish()
+    robominnie.run_coppafish()
     get_robominnie_scores(robominnie)
     del robominnie
-    return nb
 
 
 @pytest.mark.integration

@@ -2,5 +2,6 @@
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: integration tests",
-    "optimised: tests with this mark only work with optimised packages installed"
+    "optimised: tests with this mark only work with optimised packages installed",
+    "pytorch: tests requiring the pytorch installation option"
 ]
