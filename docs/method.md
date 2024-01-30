@@ -11,11 +11,11 @@ pixel value precision.
 
 ## Extract
 
-Save all raw data again at the `tile_dir` in the `extract` config section. Coppafish does this to: 
+Save all raw data again at the `tile_dir` in the `extract` config section. Coppafish does this for: 
 
-* support file compression.
-* re-saving the raw data in a universal way that can then be used by multiple versions of our software.
-* we re-save in a way that is more optimised for data retrieval speed. The default file type is using 
+* file compression support.
+* raw data in a universal format that can then be used by multiple versions of our software.
+* more optimised for data retrieval speed. The default file type is using 
 [zarr](https://zarr.readthedocs.io/) arrays, but we also support saving as uncompressed numpy arrays by setting 
 `file_type` to `.npy` in the extract config section.
 
