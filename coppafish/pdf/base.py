@@ -276,7 +276,8 @@ class BuildPDF:
                         g_bled_code_ge = nb.call_spots.bled_codes_ge[g][:, nb.basic_info.use_channels]
                         g_bled_code_ge /= np.linalg.norm(g_bled_code_ge, axis=1)[:, None]
                         g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code_ge[None, :, :], axis=2))
-                        thresh_spots = gene_probs[:, g] > GENE_PROB_THRESHOLD
+                        thresh_spots = np.argmax(gene_probs, axis=1) == g
+                        thresh_spots = thresh_spots * (np.max(gene_probs) > GENE_PROB_THRESHOLD)
                         thresh_tile = nb.ref_spots.tile[thresh_spots]
                         colours = (
                             nb.ref_spots.colors[
