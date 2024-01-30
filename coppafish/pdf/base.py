@@ -21,6 +21,7 @@ SMALLER_FONTSIZE = 10
 TINY_FONTSIZE = 4
 INFO_FONTDICT = {"fontsize": NORMAL_FONTSIZE, "verticalalignment": "center"}
 N_GENES_SHOW = 40
+GENE_PROB_THRESHOLD = 0.7
 
 
 class BuildPDF:
@@ -269,13 +270,23 @@ class BuildPDF:
                         g_spots = np.argsort(-gene_probs[:, g])
                         # Sorted probabilities, with greatest score at index 0
                         g_probs = gene_probs[g_spots, g]
-                        g_bled_code = nb.call_spots.bled_codes[g][:, nb.basic_info.use_channels]  # (rounds, channels)
+                        # Bled codes are of shape (rounds, channels, )
+                        g_bled_code = nb.call_spots.bled_codes[g][:, nb.basic_info.use_channels]
                         g_bled_code /= np.linalg.norm(g_bled_code, axis=1)[:, None]
-                        g_bled_code_ge = nb.call_spots.bled_codes[g][
-                            :, nb.basic_info.use_channels
-                        ]  # (rounds, channels)
+                        g_bled_code_ge = nb.call_spots.bled_codes[g][:, nb.basic_info.use_channels]
                         g_bled_code_ge /= np.linalg.norm(g_bled_code_ge, axis=1)[:, None]
-                        g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code[None, :, :], axis=2))
+                        g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code_ge[None, :, :], axis=2))
+                        thresh_spots = gene_probs[:, g] > GENE_PROB_THRESHOLD
+                        thresh_tile = nb.ref_spots.tile[thresh_spots]
+                        colours = (
+                            nb.ref_spots.colors[
+                                np.ix_(thresh_spots, nb.basic_info.use_rounds, nb.basic_info.use_channels)
+                            ]
+                            / nb.call_spots.color_norm_factor[
+                                np.ix_(thresh_tile, nb.basic_info.use_rounds, nb.basic_info.use_channels)
+                            ]
+                        )
+                        colours_mean = np.mean(colours, axis=0)
                         fig, axes = self.create_empty_page(2, 2, gridspec_kw={"width_ratios": [2, 1]})
                         self.empty_plot_ticks(axes[1, 1])
                         fig.suptitle(f"{gene_names[g]}", size=NORMAL_FONTSIZE)
@@ -298,16 +309,20 @@ class BuildPDF:
                         axes[1, 0].set_yticks([0, 0.25, 0.5, 0.75, 1])
                         axes[1, 0].grid(True)
                         axes[0, 0].autoscale(enable=True, axis="x", tight=True)
-                        axes[0, 1].imshow(g_bled_code, vmin=0, vmax=1)
-                        axes[0, 1].set_title("bled code")
+                        axes[0, 1].imshow(g_bled_code_ge, vmin=0, vmax=1)
+                        axes[0, 1].set_title("bled code GE")
                         axes[0, 1].set_xlabel("channels")
                         axes[0, 1].set_xticks(
                             range(len(nb.basic_info.use_channels)), labels=(str(c) for c in nb.basic_info.use_channels)
                         )
-                        axes[1, 1].imshow(g_bled_code_ge, vmin=0, vmax=1)
-                        axes[1, 1].set_title("bled code GE")
-                        axes[1, 1].set_xlabel("channels")
+                        axes[1, 1].imshow(colours_mean.T, vmin=0, vmax=1)
+                        axes[1, 1].set_title(f"mean spot colour\nwith prob > {GENE_PROB_THRESHOLD}")
+                        axes[1, 1].set_xlabel("rounds")
                         axes[1, 1].set_xticks(
+                            range(len(nb.basic_info.use_rounds)), labels=(str(r) for r in nb.basic_info.use_rounds)
+                        )
+                        axes[1, 1].set_ylabel("channels")
+                        axes[1, 1].set_yticks(
                             range(len(nb.basic_info.use_channels)), labels=(str(c) for c in nb.basic_info.use_channels)
                         )
                         cbar = fig.colorbar(im, ax=axes[0, 1], orientation="vertical")
