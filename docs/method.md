@@ -1,3 +1,7 @@
+The coppafish pipeline is separated into distinct sections. Some of these are for image pre-processing (scale, extract, 
+filter), image alignment (register, stitch) and spot detection/gene calling (find spots, call spots, orthogonal 
+matching pursuit). Below, each section is given in chronological order.
+
 ## Scale
 
 Computes a scale factor for sequencing images and the anchor round. These numbers are typically between 1 and 10. All 
@@ -7,15 +11,20 @@ pixel value precision.
 
 ## Extract
 
-This saves all raw data again at the `tile_dir` in the `extract` config section. Coppafish does this to: 
-* support file compression
-* re-saving the raw data in a universal way that can then be used by multiple versions of our software 
-* we re-save in a way that is more optimised for data retrieval speed. 
-This section also saves metadata inside of the `tile_dir` directory if the raw files are ND2 format.
+Save all raw data again at the `tile_dir` in the `extract` config section. Coppafish does this to: 
+
+* support file compression.
+* re-saving the raw data in a universal way that can then be used by multiple versions of our software.
+* we re-save in a way that is more optimised for data retrieval speed. The default file type is using 
+[zarr](https://zarr.readthedocs.io/) arrays, but we also support saving as uncompressed numpy arrays by setting 
+`file_type` to `.npy` in the extract config section.
+
+Extract also saves metadata inside of the `tile_dir` directory if the raw files are ND2 format.
 
 ## Filter
 
 All images are filtered to help us boost signal-to-noise ratio and exaggerate spots. The parts to this are:
+
 * calculating a Point Spread Function (PSF) using “good” spot shapes which is used to apply a Wiener filtering on every 
 image if `deconvolve` in the `filter` config settings is set to true (default is false).
 * applying a smoothing kernel to every image by setting `r_smooth` in the `filter` config section. By default, each 
@@ -24,6 +33,14 @@ pixel is averaged with one other pixel along the z direction.
 top hat filter (which is just a 2D top hat kernel) if `r_dapi` is set to a number in the config.
 
 ## Find spots
+
+Point clouds (a series of spot x, y, and z locations) are generated for each filtered image. These are found by 
+detecting local maxima in image intensity around the rough spot size (specified by config variables `radius_xy` and 
+`radius_z` in the `find_spots` section). If two local maxima are the same value and in the same spot region, then one 
+is chosen at random. Warnings and errors are raised at this section if there are too few spots detected in a 
+round/channel, these can be customised, see `find_spots` section in the 
+<a href="https://github.com/reillytilbury/coppafish/blob/alpha/coppafish/setup/settings.default.ini" target="_blank">
+config</a> default file.
 
 ## Register
 
