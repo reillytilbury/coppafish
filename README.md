@@ -16,7 +16,7 @@ and channels. *coppafish* then determines the distribution of genes via
 
 ## Installation
 
-Latest installation instructions are given [here](https://paulshuker.github.io/coppafish)
+Latest installation instructions are given [here](https://reillytilbury.github.io/coppafish)
 
 
 ## Documentation
