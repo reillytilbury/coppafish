@@ -25,7 +25,7 @@ def test_fit_coefs_equality():
     assert coefs.shape == (n_pixels, n_genes_add), 'Unexpected output coefs shape'
     assert np.allclose(residual, residual_optimised, atol=1e-4), \
         'Expected similar residual from optimised and non-optimised OMP'
-    assert np.allclose(coefs,    coefs_optimised,    atol=1e-4), \
+    assert np.allclose(coefs, coefs_optimised, atol=1e-4), \
         'Expected similar coefs from optimised and non-optimised OMP'
 
 
@@ -56,7 +56,7 @@ def test_fit_coefs_weight_equality():
     assert coefs_optimised.shape == (n_pixels, n_genes_add), 'Unexpected output coefs shape'
     assert np.allclose(residual, residual_optimised, atol=1e-4), \
         'Expected similar residual from optimised and non-optimised OMP'
-    assert np.allclose(coefs,    coefs_optimised,    atol=1e-4), \
+    assert np.allclose(coefs, coefs_optimised, atol=1e-4), \
         'Expected similar coefs from optimised and non-optimised OMP'
 
 
