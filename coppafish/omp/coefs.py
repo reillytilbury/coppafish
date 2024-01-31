@@ -312,7 +312,9 @@ def get_all_coefs(pixel_colors: npt.NDArray, bled_codes: npt.NDArray, background
 
     # Fit background and override initial pixel_colors
     gene_coefs = np.zeros((n_pixels, n_genes), dtype=np.float32)  # coefs of all genes and background
-    pixel_colors, background_coefs, background_codes = call_spots.fit_background(pixel_colors, background_shift)
+    pixel_colors, background_coefs, background_codes = call_spots.background.fit_background(
+        pixel_colors, background_shift
+    )
 
     background_genes = np.arange(n_genes, n_genes + n_channels)
 

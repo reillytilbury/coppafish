@@ -1,6 +1,10 @@
+import tqdm
 import torch
-from typing import Tuple
+import scipy
+import numpy as np
+from typing import Tuple, Union, List, Any 
 
+from . import coefs
 from .. import call_spots
 from .. import utils
 from .. import spot_colors
@@ -200,7 +204,7 @@ def get_best_gene_first_iter(
         residual_pixel_colors, all_bled_codes, norm_shift, score_thresh, 1 / background_vars, background_genes
     )
 
-    return best_genes, pass_score_threshes, background_vars.astype(torch.float32)
+    return best_genes, pass_score_threshes, background_vars.type(torch.float32)
 
 
 def get_best_gene(
@@ -275,7 +279,8 @@ def get_best_gene(
     for p in range(n_pixels):
         # ? This could probably be vectorised. But the equation is an absolute mess so I am not going to touch this
         inverse_vars[p] = 1 / (
-            torch.square(coefs[p]) @ torch.square(all_bled_codes[genes_added[p]]) * alpha + background_var[p]
+            torch.square(coefs[p]) @ torch.square(all_bled_codes[genes_added[p]]) * alpha
+            + background_var[p]
         )
     # Similar function to numpy's .repeat
     ignore_genes = torch.repeat_interleave(background_genes[None], n_pixels, dim=0)
@@ -291,3 +296,244 @@ def get_best_gene(
     )
 
     return best_genes, pass_score_threshes, inverse_vars
+
+
+def get_all_coefs(
+    pixel_colors: torch.Tensor,
+    bled_codes: torch.Tensor,
+    background_shift: float,
+    dp_shift: float,
+    dp_thresh: float,
+    alpha: float,
+    beta: float,
+    max_genes: int,
+    weight_coef_fit: bool = False,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    This performs omp on every pixel, the stopping criterion is that the dot_product_score when selecting the next gene
+    to add exceeds dp_thresh or the number of genes added to the pixel exceeds max_genes.
+
+    Args:
+        pixel_colors: `float [n_pixels x n_rounds x n_channels]`.
+            Pixel colors normalised to equalise intensities between channels (and rounds).
+        bled_codes: `float [n_genes x n_rounds x n_channels]`.
+            `bled_codes` such that `spot_color` of a gene `g`
+            in round `r` is expected to be a constant multiple of `bled_codes[g, r]`.
+        background_shift: When fitting background,
+            this is applied to weighting of each background vector to limit boost of weak pixels.
+        dp_shift: When finding `dot_product_score` between residual `pixel_colors` and `bled_codes`,
+            this is applied to normalisation of `pixel_colors` to limit boost of weak pixels.
+        dp_thresh: `dot_product_score` of the best gene for a pixel must exceed this
+            for that gene to be added at each iteration.
+        alpha: Used for `fitting_standard_deviation`, by how much to increase variance as genes added.
+        beta: Used for `fitting_standard_deviation`, the variance with no genes added (`coef=0`) is `beta**2`.
+        max_genes: Maximum number of genes that can be added to a pixel i.e. number of iterations of OMP.
+        weight_coef_fit: If False, coefs are found through normal least squares fitting.
+            If True, coefs are found through weighted least squares fitting using 1/sigma as the weight factor.
+
+    Returns:
+        - gene_coefs - `float32 [n_pixels x n_genes]`.
+            `gene_coefs[s, g]` is the weighting of pixel `s` for gene `g` found by the omp algorithm. Most are zero.
+        - background_coefs - `float32 [n_pixels x n_channels]`.
+            coefficient value for each background vector found for each pixel.
+
+    Notes:
+        - Background vectors are fitted first and then not updated again.
+    """
+    n_pixels = pixel_colors.shape[0]
+    torch.manual_seed(0)
+    check_spot = torch.randint(0, n_pixels, size=(1,))[0].item()
+    diff_to_int = torch.round(pixel_colors[check_spot]).to(int) - pixel_colors[check_spot]
+    if torch.abs(diff_to_int).max() == 0:
+        raise ValueError(
+            f"pixel_coefs should be found using normalised pixel_colors."
+            f"\nBut for pixel {check_spot}, pixel_colors given are integers indicating they are "
+            f"the raw intensities."
+        )
+
+    n_genes, n_rounds, n_channels = bled_codes.shape
+    if not utils.errors.check_shape(pixel_colors, [n_pixels, n_rounds, n_channels]):
+        raise utils.errors.ShapeError("pixel_colors", pixel_colors.shape, (n_pixels, n_rounds, n_channels))
+    no_verbose = n_pixels < 1000  # show progress bar with more than 1000 pixels.
+
+    # Fit background and override initial pixel_colors
+    gene_coefs = torch.zeros((n_pixels, n_genes), dtype=torch.float32)  # coefs of all genes and background
+    pixel_colors, background_coefs, background_codes = call_spots.fit_background(pixel_colors, background_shift)
+
+    background_genes = torch.arange(n_genes, n_genes + n_channels)
+
+    # colors and codes for get_best_gene function
+    # Includes background as if background is the best gene, iteration ends.
+    # uses residual color as used to find next gene to add.
+    bled_codes = bled_codes.reshape((n_genes, -1))
+    all_codes = torch.concatenate((bled_codes, background_codes.reshape(n_channels, -1)))
+    bled_codes = bled_codes.T
+
+    # colors and codes for fit_coefs function (No background as this is not updated again).
+    # always uses post background color as coefficients for all genes re-estimated at each iteration.
+    pixel_colors = pixel_colors.reshape((n_pixels, -1))
+
+    continue_pixels = torch.arange(n_pixels)
+    with tqdm.tqdm(total=max_genes, disable=no_verbose, desc="Finding OMP coefficients for each pixel") as pbar:
+        for i in range(max_genes):
+            if i == 0:
+                # Background coefs don't change, hence contribution to variance won't either.
+                added_genes, pass_score_thresh, background_variance = get_best_gene_first_iter(
+                    pixel_colors, all_codes, background_coefs, dp_shift, dp_thresh, alpha, beta, background_genes
+                )
+                inverse_var = 1 / background_variance
+                pixel_colors = pixel_colors.T
+            else:
+                # only continue with pixels for which dot product score exceeds threshold
+                i_added_genes, pass_score_thresh, inverse_var = get_best_gene(
+                    residual_pixel_colors,
+                    all_codes,
+                    i_coefs,
+                    added_genes,
+                    dp_shift,
+                    dp_thresh,
+                    alpha,
+                    background_genes,
+                    background_variance,
+                )
+
+                # For pixels with at least one non-zero coef, add to final gene_coefs when fail the thresholding.
+                fail_score_thresh = torch.logical_not(pass_score_thresh)
+                # gene_coefs[torch.asarray(continue_pixels[fail_score_thresh])] = torch.asarray(i_coefs[fail_score_thresh])
+                gene_coefs[
+                    torch.asarray(continue_pixels[fail_score_thresh])[:, None],
+                    torch.asarray(added_genes[fail_score_thresh]),
+                ] = torch.asarray(i_coefs[fail_score_thresh])
+
+            continue_pixels = continue_pixels[pass_score_thresh]
+            n_continue = continue_pixels.size
+            pbar.set_postfix({"n_pixels": n_continue})
+            if n_continue == 0:
+                break
+            if i == 0:
+                added_genes = added_genes[pass_score_thresh, None]
+            else:
+                added_genes = torch.hstack((added_genes[pass_score_thresh], i_added_genes[pass_score_thresh, None]))
+            pixel_colors = pixel_colors[:, pass_score_thresh]
+            background_variance = background_variance[pass_score_thresh]
+            inverse_var = inverse_var[pass_score_thresh]
+
+            # Maybe add different fit_coefs for i==0 i.e. can do multiple pixels at once for same gene added.
+            if weight_coef_fit:
+                residual_pixel_colors, i_coefs = fit_coefs_weight(
+                    bled_codes, pixel_colors, added_genes, torch.sqrt(inverse_var)
+                )
+            else:
+                residual_pixel_colors, i_coefs = fit_coefs(bled_codes, pixel_colors, added_genes)
+
+            if i == max_genes - 1:
+                # Add pixels to final gene_coefs when reach end of iteration.
+                gene_coefs[torch.asarray(continue_pixels)[:, None], torch.asarray(added_genes)] = torch.asarray(i_coefs)
+
+            pbar.update()
+
+    return gene_coefs.type(torch.float32), background_coefs.type(torch.float32)
+
+
+def get_pixel_coefs_yxz(
+    nbp_basic: NotebookPage,
+    nbp_file: NotebookPage,
+    nbp_extract: NotebookPage,
+    nbp_filter: NotebookPage,
+    config: dict,
+    tile: int,
+    use_z: List[int],
+    z_chunk_size: int,
+    n_genes: int,
+    transform: Union[torch.Tensor, torch.Tensor],
+    color_norm_factor: Union[torch.Tensor, torch.Tensor],
+    initial_intensity_thresh: float,
+    bled_codes: Union[torch.Tensor, torch.Tensor],
+    dp_norm_shift: Union[int, float],
+) -> Tuple[np.ndarray, Any]:
+    """
+    Get each pixel OMP coefficients for a particular tile.
+
+    Args:
+        nbp_basic (NotebookPage): notebook page for 'basic_info'.
+        nbp_file (NotebookPage): notebook page for 'file_names'.
+        nbp_extract (NotebookPage): notebook page for 'extract'.
+        config (dict): config settings for 'omp'.
+        tile (int): tile index.
+        use_z (list of int): list of z planes to calculate on.
+        z_chunk_size (int): size of each z chunk.
+        n_genes (int): the number of genes.
+        transform (`[n_tiles x n_rounds x n_channels x 4 x 3] ndarray[float]`): `transform[t, r, c]` is the affine
+            transform to get from tile `t`, `ref_round`, `ref_channel` to tile `t`, round `r`, channel `c`.
+        color_norm_factor (`[n_rounds x n_channels] ndarray[float]`): Normalisation factors to divide colours by to
+            equalise channel intensities.
+        initial_intensity_thresh (float): pixel intensity threshold, only keep ones above the threshold to save memory
+            and storage space.
+        bled_codes (`[n_genes x n_rounds x n_channels] ndarray[float]`): bled codes.
+        dp_norm_shift (int or float): when finding `dot_product_score` between residual `pixel_colors` and
+            `bled_codes`, this is applied to normalisation of `pixel_colors` to limit boost of weak pixels.
+
+    Returns:
+        - (`[n_pixels x 3] ndarray[int]`): `pixel_yxz_t` is the y, x and z pixel positions of the gene coefficients
+            found.
+        - (`[n_pixels x n_genes]`): `pixel_coefs_t` contains the gene coefficients for each pixel.
+    """
+    #FIXME: I think this is not returning the same thing as non-jax or jax version. All other pytorch functions have 
+    # been unit tested so we know they are working. This must be doing something different to the numpy counterpart
+    pixel_yxz_t = np.zeros((0, 3), dtype=np.int16)
+    pixel_coefs_t = scipy.sparse.csr_matrix(np.zeros((0, n_genes), dtype=np.float32))
+
+    z_chunks = len(use_z) // z_chunk_size + 1
+    for z_chunk in range(z_chunks):
+        print(f"z_chunk {z_chunk + 1}/{z_chunks}")
+        # While iterating through tiles, only save info for rounds/channels using
+        # - add all rounds/channels back in later. This returns colors in use_rounds/channels only and no invalid.
+        pixel_yxz_tz, pixel_colors_tz = coefs.get_pixel_colours(
+            nbp_basic,
+            nbp_file,
+            nbp_extract,
+            nbp_filter,
+            int(tile),
+            z_chunk,
+            z_chunk_size,
+            np.asarray(transform),
+            np.asarray(color_norm_factor),
+        )
+        pixel_yxz_tz = torch.from_numpy(pixel_yxz_tz)
+        pixel_colors_tz = torch.from_numpy(pixel_colors_tz)
+
+        # Only keep pixels with significant absolute intensity to save memory.
+        # absolute because important to find negative coefficients as well.
+        pixel_intensity_tz = torch.from_numpy(call_spots.get_spot_intensity(torch.abs(pixel_colors_tz)))
+        keep = pixel_intensity_tz > initial_intensity_thresh
+        if not keep.any():
+            continue
+        pixel_colors_tz = pixel_colors_tz[keep]
+        pixel_yxz_tz = pixel_yxz_tz[keep]
+        del pixel_intensity_tz, keep
+
+        bled_codes = torch.asarray(bled_codes, dtype=torch.float32)
+        pixel_coefs_tz = get_all_coefs(
+            pixel_colors_tz,
+            bled_codes,
+            0,
+            dp_norm_shift,
+            config["dp_thresh"],
+            config["alpha"],
+            config["beta"],
+            config["max_genes"],
+            config["weight_coef_fit"],
+        )[0]
+        pixel_coefs_tz = torch.asarray(pixel_coefs_tz, dtype=torch.float32)
+        del pixel_colors_tz
+        # Only keep pixels for which at least one gene has non-zero coefficient.
+        keep = (torch.abs(pixel_coefs_tz).max(dim=1)[0] > 0).nonzero()[0]  # nonzero as is sparse matrix.
+        if len(keep) == 0:
+            continue
+        pixel_yxz_t = np.append(pixel_yxz_t, np.asarray(pixel_yxz_tz[keep]), axis=0)
+        pixel_coefs_t = scipy.sparse.vstack(
+            (pixel_coefs_t, scipy.sparse.csr_matrix(np.asarray(pixel_coefs_tz[keep], np.float32)))
+        )
+        del pixel_yxz_tz, pixel_coefs_tz, keep
+
+    return pixel_yxz_t, pixel_coefs_t
