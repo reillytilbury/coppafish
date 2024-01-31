@@ -78,12 +78,13 @@ def fit_coefs_weight(
     residuals = torch.zeros((n_pixels, n_rounds_channels), dtype=torch.float32)
     coefs = torch.zeros((n_pixels, n_genes_add), dtype=torch.float32)
 
+    # (n_pixels, n_rounds_channels, n_genes_add)
+    bled_codes_weighted = bled_codes[:, genes].swapaxes(0, 1) * weight[..., None]
+    # (n_pixels, n_rounds_channels)
+    pixel_colors_weighted = pixel_colors.T * weight
+    coefs = torch.linalg.lstsq(bled_codes_weighted, pixel_colors_weighted, rcond=-1, driver="gelss")[0]
     for p in range(n_pixels):
-        pixel_colour = pixel_colors[:,p]
-        gene = genes[p]
-        w = weight[p]
-        coefs[p] = torch.linalg.lstsq(bled_codes[:, gene] * w[:, None], pixel_colour * w, rcond=-1)[0]
-        residuals[p] = pixel_colour * w - torch.matmul((bled_codes[:, gene] * w[:, None]).type(torch.float32), coefs[p])
+        residuals[p] = pixel_colors_weighted[p] - torch.matmul(bled_codes_weighted[p], coefs[p])
     residuals = residuals / weight
-
+    
     return residuals.type(torch.float32), coefs.type(torch.float32)

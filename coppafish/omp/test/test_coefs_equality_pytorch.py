@@ -34,7 +34,7 @@ def test_fit_coefs_equality_pytorch():
     assert np.allclose(coefs, coefs_torch, atol=1e-4), "Expected similar coefs from optimised and non-optimised OMP"
 
 
-@pytest.mark.optimised
+@pytest.mark.pytorch
 def test_fit_coefs_weight_equality_pytorch():
     import torch
     from coppafish.omp.coefs import fit_coefs_weight
@@ -67,6 +67,3 @@ def test_fit_coefs_weight_equality_pytorch():
         residual, residual_optimised, atol=1e-4
     ), "Expected similar residual from optimised and non-optimised OMP"
     assert np.allclose(coefs, coefs_optimised, atol=1e-4), "Expected similar coefs from optimised and non-optimised OMP"
-
-
-test_fit_coefs_weight_equality_pytorch()
