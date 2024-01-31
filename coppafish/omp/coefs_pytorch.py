@@ -4,7 +4,7 @@ from typing import Tuple
 from .. import call_spots
 from .. import utils
 from .. import spot_colors
-from ..call_spots import dot_product
+from ..call_spots import dot_product_pytorch as dot_product
 from ..setup import NotebookPage
 
 
@@ -87,3 +87,63 @@ def fit_coefs_weight(
     residuals = residuals / weight
 
     return residuals.type(torch.float32), coefs.type(torch.float32)
+
+
+def get_best_gene_base(
+    residual_pixel_colours: torch.Tensor,
+    all_bled_codes: torch.Tensor,
+    norm_shift: float,
+    score_thresh: float,
+    inverse_var: torch.Tensor,
+    ignore_genes: torch.Tensor,
+) -> Tuple[int, bool]:
+    """
+    Computes the `dot_product_score` between `residual_pixel_color` and each code in `all_bled_codes`. If `best_score`
+    is less than `score_thresh` or if the corresponding `best_gene` is in `ignore_genes`, then `pass_score_thresh` will
+    be False.
+
+    Args:
+        residual_pixel_colours (`(n_pixels x (n_rounds * n_channels)) ndarray[float]`): residual pixel colors from
+            previous iteration of omp.
+        all_bled_codes (`[n_genes x (n_rounds * n_channels)] ndarray[float]`): `bled_codes` such that `spot_color` of a
+            gene `g` in round `r` is expected to be a constant multiple of `bled_codes[g, r]`. Includes codes of genes
+            and background.
+        norm_shift (float): shift to apply to normalisation of spot_colors to limit boost of weak spots.
+        score_thresh (float): `dot_product_score` of the best gene for a pixel must exceed this for that gene to be
+            added in the current iteration.
+        inverse_var (`(n_pixels x (n_rounds * n_channels)) ndarray[float]`): inverse of variance in each round/channel
+            for each pixel based on genes fit on previous iteration. Used as `weight_squared` when computing
+            `dot_product_score`.
+        ignore_genes (`(n_genes_ignore) or (n_pixels x n_genes_ignore) ndarray[int]`): if `best_gene` is one of these,
+            `pass_score_thresh` will be `False`. If no pixel axis, then the same genes are ignored for each pixel
+            (useful for the first iteration of OMP edge case).
+
+    Returns:
+        - best_genes (n_pixels ndarray[int]): The best gene to add next for each pixel.
+        - pass_score_threshes (n_pixels ndarray[bool]): `True` if `best_score > score_thresh` and `best_gene` not in
+            `ignore_genes`.
+    """
+    assert residual_pixel_colours.ndim == 2, "`residual_pixel_colors` must be two dimensional"
+    assert all_bled_codes.ndim == 2, "`all_bled_codes` must be two dimensional"
+    assert inverse_var.ndim == 2, "`inverse_var` must be two dimensional"
+    assert ignore_genes.ndim == 1 or ignore_genes.ndim == 2, "`ignore_genes` must be one or two dimensional"
+    n_pixels = residual_pixel_colours.shape[0]
+    if ignore_genes.ndim == 2:
+        assert ignore_genes.shape[0] == n_pixels, "`ignore_genes` must have n_pixels in first axis if two dimensional"
+
+    # Calculate score including background genes as if best gene is background, then stop iteration. all_scores has
+    # shape (n_pixels, n_genes)
+    all_scores = dot_product.dot_product_score(residual_pixel_colours, all_bled_codes, inverse_var, norm_shift)[3]
+    # best_genes has shape (n_pixels, )
+    best_genes = torch.argmax(torch.abs(all_scores), dim=1)
+    # Take the best gene score for each pixel.
+    best_scores = all_scores[range(n_pixels), best_genes]
+    # If best_gene is in ignore_genes, set score below score_thresh, i.e. set the score to zero.
+    if ignore_genes.ndim == 1:
+        best_scores *= torch.isin(best_genes, ignore_genes, invert=True)
+    else:
+        # TODO: Vectorise this
+        for p in range(n_pixels):
+            best_scores[p] *= torch.isin(best_genes[p], ignore_genes[p], invert=True)
+    pass_score_threshes = torch.abs(best_scores) > score_thresh
+    return best_genes, pass_score_threshes

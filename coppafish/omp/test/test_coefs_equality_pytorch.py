@@ -67,3 +67,55 @@ def test_fit_coefs_weight_equality_pytorch():
         residual, residual_optimised, atol=1e-4
     ), "Expected similar residual from optimised and non-optimised OMP"
     assert np.allclose(coefs, coefs_optimised, atol=1e-4), "Expected similar coefs from optimised and non-optimised OMP"
+
+
+@pytest.mark.pytorch
+def test_get_best_gene_base_equality():
+    import torch
+    from coppafish.omp.coefs import get_best_gene_base
+    from coppafish.omp.coefs_pytorch import get_best_gene_base as get_best_gene_base_torch
+
+    rng = np.random.RandomState(98)
+    n_rounds = 3
+    n_channels = 4
+    n_genes = 7
+    # We test on one pixel because the jax code does a single pixel at a time
+    residual_pixel_colors = rng.rand(n_rounds * n_channels)
+    all_bled_codes = rng.rand(n_genes, n_rounds * n_channels)
+    norm_shift = rng.rand()
+    score_thresh = rng.rand() * 0.01
+    inverse_var = rng.rand(n_rounds * n_channels)
+    ignore_genes = np.asarray([1], dtype=int)
+    # We add an axis for pixels
+    best_gene_1, pass_score_thresh_1 = get_best_gene_base(
+        residual_pixel_colors[None], all_bled_codes, norm_shift, score_thresh, inverse_var[None], ignore_genes
+    )
+    best_gene_2, pass_score_thresh_2 = get_best_gene_base(
+        residual_pixel_colors[None], all_bled_codes, norm_shift, score_thresh, inverse_var[None], ignore_genes[None]
+    )
+    best_gene_optimised_1, pass_score_thresh_optimised_1 = get_best_gene_base_torch(
+        torch.from_numpy(residual_pixel_colors[None]),
+        torch.from_numpy(all_bled_codes),
+        norm_shift,
+        score_thresh,
+        torch.from_numpy(inverse_var[None]),
+        torch.from_numpy(ignore_genes),
+    )
+    best_gene_optimised_2, pass_score_thresh_optimised_2 = get_best_gene_base_torch(
+        torch.from_numpy(residual_pixel_colors[None]),
+        torch.from_numpy(all_bled_codes),
+        norm_shift,
+        score_thresh,
+        torch.from_numpy(inverse_var[None]),
+        torch.from_numpy(ignore_genes[None]),
+    )
+    best_gene_optimised_1 = best_gene_optimised_1.numpy()
+    best_gene_optimised_2 = best_gene_optimised_2.numpy()
+    pass_score_thresh_optimised_1 = pass_score_thresh_optimised_1.numpy()
+    pass_score_thresh_optimised_2 = pass_score_thresh_optimised_2.numpy()
+    assert best_gene_1 == best_gene_2
+    assert best_gene_optimised_1 == best_gene_optimised_2
+    assert best_gene_1 == best_gene_optimised_1, "Expected the same gene as the result"
+    assert pass_score_thresh_1 == pass_score_thresh_2
+    assert pass_score_thresh_optimised_1 == pass_score_thresh_optimised_2
+    assert pass_score_thresh_1 == pass_score_thresh_optimised_1, "Expected the same boolean pass result"
