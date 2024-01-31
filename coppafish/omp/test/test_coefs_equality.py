@@ -102,7 +102,7 @@ def test_get_best_gene_first_iter_equality():
 def test_get_best_gene_base_equality():
     from coppafish.omp.coefs import get_best_gene_base
     from coppafish.omp.coefs_optimised import get_best_gene_base as get_best_gene_base_jax
-
+    # NOTE: The jax version of this function does not allow for multiple pixels at once to be computed.
     rng = np.random.RandomState(98)
     n_rounds = 3
     n_channels = 4
@@ -113,13 +113,20 @@ def test_get_best_gene_base_equality():
     norm_shift = rng.rand()
     score_thresh = rng.rand() * 0.01
     inverse_var = rng.rand(n_rounds * n_channels)
-    ignore_genes = np.asarray([[]], dtype=int)
-    best_gene, pass_score_thresh = \
-        get_best_gene_base(residual_pixel_colors, all_bled_codes, norm_shift, score_thresh, inverse_var, ignore_genes)
+    ignore_genes = np.asarray([], dtype=int)
+    # We add an axis for pixels
+    best_gene_1, pass_score_thresh_1 = get_best_gene_base(
+        residual_pixel_colors[None], all_bled_codes, norm_shift, score_thresh, inverse_var[None], ignore_genes
+    )
+    best_gene_2, pass_score_thresh_2 = get_best_gene_base(
+        residual_pixel_colors[None], all_bled_codes, norm_shift, score_thresh, inverse_var[None], ignore_genes[None]
+    )
     best_gene_optimised, pass_score_thresh_optimised = \
         get_best_gene_base_jax(residual_pixel_colors, all_bled_codes, norm_shift, score_thresh, inverse_var, ignore_genes)
-    assert best_gene == best_gene_optimised, 'Expected the same gene as the result'
-    assert pass_score_thresh == pass_score_thresh_optimised, 'Expected the same boolean pass result'
+    assert best_gene_1 == best_gene_optimised, 'Expected the same gene as the result'
+    assert best_gene_2 == best_gene_optimised, 'Expected the same gene as the result'
+    assert pass_score_thresh_1 == pass_score_thresh_optimised, 'Expected the same boolean pass result'
+    assert pass_score_thresh_2 == pass_score_thresh_optimised, 'Expected the same boolean pass result'
 
 
 @pytest.mark.optimised
@@ -137,7 +144,10 @@ def test_get_best_gene_equality():
     all_bled_codes = rng.rand(n_genes, n_rounds * n_channels)
     coefs = rng.rand(n_pixels, n_genes_added)
     genes_added = np.zeros((n_pixels, n_genes_added), dtype=int)
-    genes_added[:,1] = 1
+    genes_added[:, 1] = 1
+    genes_added[0, 0] = 3
+    genes_added[0, 1] = 5
+    genes_added[6, 0] = 2
     norm_shift = rng.rand()
     score_thresh = rng.rand() * 0.01
     alpha = rng.rand()
