@@ -124,6 +124,48 @@ def get_best_gene_base(residual_pixel_color: npt.NDArray, all_bled_codes: npt.ND
     return best_gene, pass_score_thresh
 
 
+def get_best_gene_base_new(residual_pixel_colours: npt.NDArray, all_bled_codes: npt.NDArray,
+                       norm_shift: float, score_thresh: float, inverse_var: npt.NDArray,
+                       ignore_genes: npt.NDArray) -> Tuple[int, bool]:
+    """
+    Computes the `dot_product_score` between `residual_pixel_color` and each code in `all_bled_codes`. If `best_score` 
+    is less than `score_thresh` or if the corresponding `best_gene` is in `ignore_genes`, then `pass_score_thresh` will 
+    be False.
+
+    Args:
+        residual_pixel_colours (`(n_pixels x (n_rounds * n_channels)) ndarray[float]`): residual pixel colors from 
+            previous iteration of omp.
+        all_bled_codes (`[n_genes x (n_rounds * n_channels)] ndarray[float]`): `bled_codes` such that `spot_color` of a 
+            gene `g` in round `r` is expected to be a constant multiple of `bled_codes[g, r]`. Includes codes of genes 
+            and background.
+        norm_shift (float): shift to apply to normalisation of spot_colors to limit boost of weak spots.
+        score_thresh (float): `dot_product_score` of the best gene for a pixel must exceed this for that gene to be 
+            added in the current iteration.
+        inverse_var (`(n_pixels x (n_rounds * n_channels)) ndarray[float]`): inverse of variance in each round/channel 
+            for each pixel based on genes fit on previous iteration. Used as `weight_squared` when computing 
+            `dot_product_score`.
+        ignore_genes (`[n_genes_ignore] ndarray[int]`): if `best_gene` is one of these, `pass_score_thresh` will be 
+            `False`.
+
+    Returns:
+        - best_genes (n_pixels ndarray[int]): The best gene to add next for each pixel.
+        - pass_score_threshes (n_pixels ndarray[bool]): `True` if `best_score > score_thresh` and `best_gene` not in 
+            `ignore_genes`.
+    """
+    assert residual_pixel_colours.ndim == 2, '`residual_pixel_colors` must be two dimensional'
+    assert all_bled_codes.ndim == 2, '`all_bled_codes` must be two dimensional'
+    assert inverse_var.ndim == 1, '`inverse_var` must be one dimensional'
+    
+    # Calculate score including background genes as if best gene is background, then stop iteration. all_scores has 
+    # shape (n_pixels, n_genes)
+    all_scores = dot_product.dot_product_score(residual_pixel_colours, all_bled_codes, inverse_var, norm_shift)[3]
+    best_genes = np.argmax(np.abs(all_scores), axis=1)
+    # if best_gene is background, set score below score_thresh.
+    best_scores = all_scores[best_genes] * np.isin(best_genes, ignore_genes, invert=True)
+    pass_score_threshes = np.abs(best_scores) > score_thresh
+    return best_genes, pass_score_threshes
+
+
 def get_best_gene_first_iter(residual_pixel_colors: np.ndarray, all_bled_codes: np.ndarray,
                              background_coefs: np.ndarray, norm_shift: float, score_thresh: float, alpha: float, 
                              beta: float, background_genes: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -164,11 +206,9 @@ def get_best_gene_first_iter(residual_pixel_colors: np.ndarray, all_bled_codes: 
     # Ensure bled_codes are normalised for each gene
     all_bled_codes /= np.linalg.norm(all_bled_codes, axis=1, keepdims=True)
     background_vars = np.square(background_coefs) @ np.square(all_bled_codes[background_genes]) * alpha + beta ** 2
-    for p in range(n_pixels):
-        best_gene, pass_score_thresh = get_best_gene_base(residual_pixel_colors[p], all_bled_codes, norm_shift, 
-                                                          score_thresh, 1 / background_vars[p], background_genes)
-        best_genes[p] = best_gene
-        pass_score_threshes[p] = pass_score_thresh
+    best_genes, pass_score_threshes = get_best_gene_base_new(
+        residual_pixel_colors, all_bled_codes, norm_shift, score_thresh, 1 / background_vars, background_genes
+    )
     
     return best_genes, pass_score_threshes, background_vars.astype(np.float32)
 
