@@ -1730,6 +1730,9 @@ class ViewSubvolReg:
         self.shift = nb.register_debug.round_shift[self.t, self.r]
         self.shift_corr = nb.register_debug.round_shift_corr[self.t, self.r]
         self.position = nb.register_debug.position[self.t, self.r]
+        shift_prediction_matrix = huber_regression(self.shift, self.position)
+        self.predicted_shift = np.pad(self.position, ((0, 0), (0, 1)), constant_values=1) @ shift_prediction_matrix.T
+        self.shift_residual = np.linalg.norm(self.shift - self.predicted_shift, axis=-1)
         # load in subvolumes
         self.subvol_base, self.subvol_target = None, None
         self.subvol_z, self.subvol_y, self.subvol_x = None, None, None
@@ -1739,6 +1742,11 @@ class ViewSubvolReg:
         self.shift = self.shift.reshape((self.subvol_z, self.subvol_y, self.subvol_x, 3))
         self.shift_corr = self.shift_corr.reshape((self.subvol_z, self.subvol_y, self.subvol_x))
         self.position = self.position.reshape((self.subvol_z, self.subvol_y, self.subvol_x, 3)).astype(int)
+        self.predicted_shift = self.predicted_shift.reshape((self.subvol_z, self.subvol_y, self.subvol_x, 3))
+        self.shift_residual = self.shift_residual.reshape((self.subvol_z, self.subvol_y, self.subvol_x))
+        # create viewer
+        self.viewer = napari.Viewer()
+        napari.run()
 
     def load_subvols(self):
         """
@@ -1764,12 +1772,6 @@ class ViewSubvolReg:
                                           z_box=z_box, y_box=y_box, x_box=x_box)
         self.subvol_z, self.subvol_y, self.subvol_x = int(z_subvols), int(y_subvols), int(x_subvols)
         self.box_z, self.box_y, self.box_x = int(z_box), int(y_box), int(x_box)
-        # To save space, scale down images to uint8
-        base_max = np.max(subvol_base)
-        target_max = np.max(subvol_target)
-        for z, y, x in np.ndindex(self.subvol_z, self.subvol_y, self.subvol_x):
-            subvol_base[z, y, x] = (subvol_base[z, y, x] / base_max * 255).astype(np.uint8)
-            subvol_target[z, y, x] = (subvol_target[z, y, x] / target_max * 255).astype(np.uint8)
         self.subvol_base, self.subvol_target = subvol_base, subvol_target
 
     def view_subvol_cross_corr(self, z: int = 0, y: int = 0, x: int = 0):
@@ -1783,51 +1785,76 @@ class ViewSubvolReg:
         z_start, z_end = int(max(0, z - 1)), int(min(self.subvol_z, z + 1) + 1)
         merged_subvol_target = preprocessing.merge_subvols(position=self.position[z_start:z_end, y, x].copy(),
                                                            subvol=self.subvol_target[z_start:z_end, y, x])
-        merged_subvol_target = preprocessing.window_image(merged_subvol_target)
+        merged_subvol_target_windowed = preprocessing.window_image(merged_subvol_target)
         merged_subvol_base = np.zeros_like(merged_subvol_target)
+        merged_subvol_base_windowed = np.zeros_like(merged_subvol_target)
         merged_subvol_min_z = self.position[z_start, y, x][0]
         current_box_min_z = self.position[z, y, x][0]
         merged_subvol_start_z = current_box_min_z - merged_subvol_min_z
         merged_subvol_base[merged_subvol_start_z:merged_subvol_start_z + self.box_z] = (
+            self.subvol_base[z, y, x])
+        merged_subvol_base_windowed[merged_subvol_start_z:merged_subvol_start_z + self.box_z] = (
             preprocessing.window_image(self.subvol_base[z, y, x]))
 
         # compute cross correlation
-        im_centre = np.array(merged_subvol_base.shape) // 2
-        f_hat = fft.fftn(merged_subvol_base)
-        g_hat = fft.fftn(merged_subvol_target)
-        cross = f_hat * np.conj(g_hat)
-        cross_ifft = fft.fftshift(np.abs(fft.ifftn(cross)))
+        im_centre = np.array(merged_subvol_base_windowed.shape) // 2
+        f_hat = fft.fftn(merged_subvol_base_windowed)
+        g_hat = fft.fftn(merged_subvol_target_windowed)
         phase_cross = f_hat * np.conj(g_hat) / (np.abs(f_hat) * np.abs(g_hat))
         phase_cross_ifft = fft.fftshift(np.abs(fft.ifftn(phase_cross)))
-        cross_shift = -(np.unravel_index(np.argmax(cross_ifft), cross_ifft.shape) - im_centre)
         phase_cross_shift = -(np.unravel_index(np.argmax(phase_cross_ifft), phase_cross_ifft.shape) - im_centre)
 
-        # create viewer
-        viewer = napari.Viewer()
         # add images
         y_size, x_size = merged_subvol_base.shape[1:]
-        viewer.add_image(phase_cross_ifft, name=f'Phase cross correlation. z = {z}, y = {y}, x = {x}')
-        viewer.add_points([-phase_cross_shift + im_centre], name='Phase cross correlation shift', size=5,
+        self.viewer.add_image(phase_cross_ifft, name=f'Phase cross correlation. z = {z}, y = {y}, x = {x}')
+        self.viewer.add_points([-phase_cross_shift + im_centre], name='Phase cross correlation shift', size=5,
                           face_color='blue', symbol='cross')
         # add overlays below this
         translation_offset = np.array([0, 1.1 * y_size, 0])
-        viewer.add_image(merged_subvol_target, name=f'Target. z = {z}, y = {y}, x = {x}', colormap='green',
+        self.viewer.add_image(merged_subvol_target, name=f'Target. z = {z}, y = {y}, x = {x}', colormap='green',
                          blending='additive', translate=translation_offset)
-        viewer.add_image(merged_subvol_base, name=f'Base. Shift = {phase_cross_shift}', colormap='red',
+        self.viewer.add_image(merged_subvol_base, name=f'Base. Shift = {phase_cross_shift}', colormap='red',
                          blending='additive', translate=translation_offset + phase_cross_shift)
-        # Do the same for the cross correlation
-        translation_offset = np.array([0, 0, 1.1 * x_size])
-        viewer.add_image(cross_ifft, name=f'Cross correlation. z = {z}, y = {y}, x = {x}', translate=translation_offset)
-        viewer.add_points([-cross_shift + im_centre], name='Cross correlation shift', size=5, face_color='blue',
-                          symbol='cross', translate=translation_offset)
-        # add overlays below this
+        # add predicted shift
         translation_offset = np.array([0, 1.1 * y_size, 1.1 * x_size])
-        viewer.add_image(merged_subvol_target, name=f'Target. z = {z}, y = {y}, x = {x}', colormap='green',
+        self.viewer.add_image(merged_subvol_target, name=f'Target. z = {z}, y = {y}, x = {x}', colormap='green',
                          blending='additive', translate=translation_offset)
-        viewer.add_image(merged_subvol_base, name=f'Base. Shift = {cross_shift}', colormap='red',
-                         blending='additive', translate=translation_offset + cross_shift)
-        viewer.window.qt_viewer.dockLayerControls.setVisible(False)
+        self.viewer.add_image(merged_subvol_base, name=f'Base. Predicted Shift = {np.rint(self.predicted_shift[z, y, x])}',
+                         colormap='red', blending='additive',
+                         translate=translation_offset + self.predicted_shift[z, y, x])
+        self.viewer.window.qt_viewer.dockLayerControls.setVisible(False)
         # make the layer list window bigger
-        viewer.window.qt_viewer.dockLayerList.setMinimumWidth(500)
-
+        self.viewer.window.qt_viewer.dockLayerList.setMinimumWidth(500)
         napari.run()
+
+
+class ButtonSubvolWindow(QMainWindow):
+    def __init__(self, nz: int, ny: int, nx: int, active_button: list = [0, 0, 0]):
+        super().__init__()
+        # Loop through subvolumes and create a button for each
+        for z, y, x in np.ndindex(nz, ny, nx):
+            # Create a button for each subvol
+            button = QPushButton(str([z, y, x]), self)
+            # set the button to be checkable iff t in use_tiles
+            button.setCheckable(True)
+            button.setGeometry(500 * z + y * 70, x * 40, 50, 28)
+            # set active button as checked
+            if active_button == [z, y, x]:
+                button.setChecked(True)
+                self.subvol = [z, y, x]
+            # Set button color = grey when hovering over
+            # set colour of tiles in use to blue amd not in use to red
+            button.setStyleSheet("QPushButton"
+                                 "{"
+                                 "background-color : rgb(135, 206, 250);"
+                                 "}"
+                                 "QPushButton::hover"
+                                 "{"
+                                 "background-color : lightgrey;"
+                                 "}"
+                                 "QPushButton::pressed"
+                                 "{"
+                                 "background-color : white;"
+                                 "}")
+            # Finally add this button as an attribute to self
+            self.__setattr__(str([z, y, x]), button)

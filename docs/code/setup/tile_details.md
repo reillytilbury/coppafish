@@ -1,1 +1,0 @@
-::: coppafish.setup.tile_details
