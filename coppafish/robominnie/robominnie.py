@@ -962,9 +962,6 @@ class RoboMinnie:
         anchor_channel = {self.anchor_channel if self.include_anchor else ''}
         dapi_channel = {self.dapi_channel if self.include_dapi else ''}
         
-        [scale]
-        r_smooth = {'1, 1, 2' if is_3d else ''}
-        
         [extract]
         file_type = .zarr
         continuous_dapi = {self.include_dapi}

@@ -257,7 +257,7 @@ class view_codes(ColorPlotBase):
             colour = self.spot_color_pb
         else:
             colour = self.spot_color
-        super().__init__([colour, gene_color], color_norm.T, slider_pos=[0.85, 0.2, 0.01, 0.75],
+        super().__init__([colour, gene_color], color_norm, slider_pos=[0.85, 0.2, 0.01, 0.75],
                          cbar_pos=[0.9, 0.2, 0.03, 0.75])
         self.ax[0].set_title(f'Spot {spot_no}: match {str(np.around(spot_score, 2))} '
                              f'to {gene_name}')

@@ -28,10 +28,6 @@ def run_extract(
     Returns:
         - `NotebookPage[extract]`: page containing `auto_thresh` for use in turning images to point clouds and
             `hist_values`, `hist_counts` required for normalisation between channels.
-        - `NotebookPage[extract_debug]`: page containing variables which are not needed later in the pipeline but may
-            be useful for debugging purposes.
-        - (`(n_rounds x n_channels x nz x ny x nx) ndarray[uint16]` or None): If running on a single tile, returns all
-            extracted images, otherwise returns None.
 
     Notes:
         - See `'extract'` and `'extract_debug'` sections of `notebook_comments.json` file for description of the
@@ -42,11 +38,9 @@ def run_extract(
         # config["deconvolve"] = False  # only deconvolve if 3d pipeline
         raise NotImplementedError(f"coppafish 2d is not in a stable state, please contact a dev to add this. Sorry! ;(")
 
-    start_time = time.time()
     nbp = NotebookPage("extract")
     nbp.software_version = utils.system.get_software_verison()
     nbp.revision_hash = utils.system.get_git_revision_hash()
-    nbp_debug = NotebookPage("extract_debug")
     nbp.file_type = config["file_type"]
     nbp.continuous_dapi = config["continuous_dapi"]
 
@@ -124,6 +118,4 @@ def run_extract(
             del im
             pbar.update()
             del round_dask_array
-    end_time = time.time()
-    nbp_debug.time_taken = end_time - start_time
-    return nbp, nbp_debug
+    return nbp
