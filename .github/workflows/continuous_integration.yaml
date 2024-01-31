@@ -1,4 +1,4 @@
-name: CI
+name: optimised CI
 
 # Trigger on any push or pull requests
 on:

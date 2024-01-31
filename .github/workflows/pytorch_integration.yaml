@@ -1,4 +1,4 @@
-name: CI
+name: pytorch CI
 
 # Trigger on any push or pull requests
 on:
