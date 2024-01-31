@@ -57,6 +57,8 @@ def gene_prob_score(spot_colours: np.ndarray, bled_codes: np.ndarray, kappa: flo
         probability: np.ndarray of gene probabilities [n_spots, n_genes]
     """
     n_spots, n_genes = spot_colours.shape[0], bled_codes.shape[0]
+    # TODO: Flip the signs of spot colours when they have entirely negative values for all channels in a specific 
+    # spot/round
     # First, normalise spot_colours so that for each spot s and round r, norm(spot_colours[s, r, :]) = 1
     spot_colours = spot_colours / np.linalg.norm(spot_colours, axis=2)[:, :, None]
     # Do the same for bled_codes
