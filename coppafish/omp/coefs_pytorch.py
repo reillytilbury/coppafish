@@ -103,24 +103,24 @@ def get_best_gene_base(
     be False.
 
     Args:
-        residual_pixel_colours (`(n_pixels x (n_rounds * n_channels)) ndarray[float]`): residual pixel colors from
+        residual_pixel_colours (`(n_pixels x (n_rounds * n_channels)) tensor[float]`): residual pixel colors from
             previous iteration of omp.
-        all_bled_codes (`[n_genes x (n_rounds * n_channels)] ndarray[float]`): `bled_codes` such that `spot_color` of a
+        all_bled_codes (`[n_genes x (n_rounds * n_channels)] tensor[float]`): `bled_codes` such that `spot_color` of a
             gene `g` in round `r` is expected to be a constant multiple of `bled_codes[g, r]`. Includes codes of genes
             and background.
         norm_shift (float): shift to apply to normalisation of spot_colors to limit boost of weak spots.
         score_thresh (float): `dot_product_score` of the best gene for a pixel must exceed this for that gene to be
             added in the current iteration.
-        inverse_var (`(n_pixels x (n_rounds * n_channels)) ndarray[float]`): inverse of variance in each round/channel
+        inverse_var (`(n_pixels x (n_rounds * n_channels)) tensor[float]`): inverse of variance in each round/channel
             for each pixel based on genes fit on previous iteration. Used as `weight_squared` when computing
             `dot_product_score`.
-        ignore_genes (`(n_genes_ignore) or (n_pixels x n_genes_ignore) ndarray[int]`): if `best_gene` is one of these,
+        ignore_genes (`(n_genes_ignore) or (n_pixels x n_genes_ignore) tensor[int]`): if `best_gene` is one of these,
             `pass_score_thresh` will be `False`. If no pixel axis, then the same genes are ignored for each pixel
             (useful for the first iteration of OMP edge case).
 
     Returns:
-        - best_genes (n_pixels ndarray[int]): The best gene to add next for each pixel.
-        - pass_score_threshes (n_pixels ndarray[bool]): `True` if `best_score > score_thresh` and `best_gene` not in
+        - best_genes (n_pixels tensor[int]): The best gene to add next for each pixel.
+        - pass_score_threshes (n_pixels tensor[bool]): `True` if `best_score > score_thresh` and `best_gene` not in
             `ignore_genes`.
     """
     assert residual_pixel_colours.ndim == 2, "`residual_pixel_colors` must be two dimensional"
@@ -147,3 +147,147 @@ def get_best_gene_base(
             best_scores[p] *= torch.isin(best_genes[p], ignore_genes[p], invert=True)
     pass_score_threshes = torch.abs(best_scores) > score_thresh
     return best_genes, pass_score_threshes
+
+
+def get_best_gene_first_iter(
+    residual_pixel_colors: torch.Tensor,
+    all_bled_codes: torch.Tensor,
+    background_coefs: torch.Tensor,
+    norm_shift: float,
+    score_thresh: float,
+    alpha: float,
+    beta: float,
+    background_genes: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Finds the `best_gene` to add next based on the dot product score with each `bled_code`.
+    If `best_gene` is in `background_genes` or `best_score < score_thresh` then `pass_score_thresh = False`.
+    Different for first iteration as no actual non-zero gene coefficients to consider when computing variance
+    or genes that can be added which will cause `pass_score_thresh` to be `False`.
+
+    Args:
+        residual_pixel_colors (`(n_pixels x (n_rounds * n_channels)) tensor[float]`): residual pixel color from
+            previous iteration of omp.
+        all_bled_codes (`(n_genes x (n_rounds * n_channels)) tensor[float]`): `bled_codes` such that `spot_color` of a
+            gene `g` in round `r` is expected to be a constant multiple of `bled_codes[g, r]`. Includes codes of genes
+            and background.
+        background_coefs (`(n_pixels x n_channels) tensor[float]`): `coefs[g]` is the weighting for gene
+            `background_genes[g]` found by the omp algorithm. All are non-zero.
+        norm_shift (float): shift to apply to normalisation of spot_colors to limit boost of weak spots.
+        score_thresh (float): `dot_product_score` of the best gene for a pixel must exceed this for that gene to be
+            added in the current iteration.
+        alpha (float): Used for `fitting_variance`, by how much to increase variance as genes added.
+        beta (float): Used for `fitting_variance`, the variance with no genes added (`coef=0`) is `beta**2`.
+        background_genes (`(n_channels) tensor[int]`): Indices of codes in `all_bled_codes` which correspond to
+            background. If the best gene for pixel `s` is set to one of `background_genes`, `pass_score_thresh[s]`
+            will be `False`.
+
+    Returns:
+        - best_gene (`(n_pixels) tensor[int]`): `best_gene[s]` is the best gene to add to pixel `s` next.
+        - pass_score_thresh (`(n_pixels) tensor[bool]`): true if `best_score > score_thresh`.
+        - background_var (`(n_pixels x (n_rounds * n_channels)) tensor[float]`): variance in each round/channel based
+            on just the background.
+    """
+    n_pixels = residual_pixel_colors.shape[0]
+    best_genes = torch.zeros(n_pixels, dtype=int)
+    pass_score_threshes = torch.zeros(n_pixels, dtype=bool)
+    # Ensure bled_codes are normalised for each gene
+    all_bled_codes /= all_bled_codes.norm(dim=1, keepdim=True)
+    background_vars = (
+        torch.square(background_coefs) @ torch.square(all_bled_codes[background_genes]) * alpha + beta**2
+    )
+    best_genes, pass_score_threshes = get_best_gene_base(
+        residual_pixel_colors, all_bled_codes, norm_shift, score_thresh, 1 / background_vars, background_genes
+    )
+
+    return best_genes, pass_score_threshes, background_vars.astype(torch.float32)
+
+
+def get_best_gene(
+    residual_pixel_colors: torch.Tensor,
+    all_bled_codes: torch.Tensor,
+    coefs: torch.Tensor,
+    genes_added: torch.Tensor,
+    norm_shift: float,
+    score_thresh: float,
+    alpha: float,
+    background_genes: torch.Tensor,
+    background_var: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Finds the `best_gene` to add next to each pixel based on the dot product score with each `bled_code`.
+    If `best_gene[s]` is in `background_genes`, already in `genes_added[s]` or `best_score[s] < score_thresh`,
+    then `pass_score_thresh[s] = False`.
+
+    Args:
+        residual_pixel_colors: `float [n_pixels x (n_rounds * n_channels)]`.
+            Residual pixel colors from previous iteration of omp.
+        all_bled_codes: `float [n_genes x (n_rounds * n_channels)]`.
+            `bled_codes` such that `spot_color` of a gene `g`
+            in round `r` is expected to be a constant multiple of `bled_codes[g, r]`.
+            Includes codes of genes and background.
+        coefs: `float [n_pixels x n_genes_added]`.
+            `coefs[s, g]` is the weighting of pixel `s` for gene `genes_added[g]` found by the omp algorithm on previous
+            iteration. All are non-zero.
+        genes_added: `int [n_pixels x n_genes_added]`
+            Indices of genes added to each pixel from previous iteration of omp.
+            If the best gene for pixel `s` is set to one of `genes_added[s]`, `pass_score_thresh[s]` will be False.
+        norm_shift: shift to apply to normalisation of spot_colors to limit boost of weak spots.
+        score_thresh: `dot_product_score` of the best gene for a pixel must exceed this
+            for that gene to be added in the current iteration.
+        alpha: Used for `fitting_variance`, by how much to increase variance as genes added.
+        background_genes: `int [n_channels]`.
+            Indices of codes in all_bled_codes which correspond to background.
+            If the best gene for pixel `s` is set to one of `background_genes`, `pass_score_thresh[s]` will be False.
+        background_var: `float [n_pixels x (n_rounds * n_channels)]`.
+            Contribution of background genes to variance (which does not change throughout omp iterations)  i.e.
+            `background_coefs**2 @ all_bled_codes[background_genes]**2 * alpha + beta ** 2`.
+
+    Returns:
+        - best_gene - `int [n_pixels]`.
+            `best_gene[s]` is the best gene to add to pixel `s` next.
+        - pass_score_thresh - `bool [n_pixels]`.
+            `True` if `best_score > score_thresh`.
+        - inverse_var - `float [n_pixels x (n_rounds * n_channels)]`.
+            Inverse of variance of each pixel in each round/channel based on genes fit on previous iteration.
+            Includes both background and gene contribution.
+
+    Notes:
+        - The variance computed is based on maximum likelihood estimation - it accounts for all genes and background
+            fit in each round/channel. The more genes added, the greater the variance so if the inverse is used as a
+            weighting for omp fitting or choosing the next gene, the rounds/channels which already have genes in will
+            contribute less.
+    """
+    assert residual_pixel_colors.ndim == 2
+    assert all_bled_codes.ndim == 2
+    assert coefs.ndim == 2
+    assert genes_added.ndim == 2
+    assert background_genes.ndim == 1
+
+    n_pixels, n_rounds_channels = residual_pixel_colors.shape
+    n_channels, n_genes_added = background_genes.size, genes_added.shape[1]
+    best_genes = torch.zeros((n_pixels), dtype=int)
+    pass_score_threshes = torch.zeros((n_pixels), dtype=bool)
+    inverse_vars = torch.zeros((n_pixels, n_rounds_channels), dtype=torch.float32)
+    # Ensure bled_codes are normalised for each gene
+    all_bled_codes /= all_bled_codes.norm(dim=1, keepdim=True)
+
+    for p in range(n_pixels):
+        # ? This could probably be vectorised. But the equation is an absolute mess so I am not going to touch this
+        inverse_vars[p] = 1 / (
+            torch.square(coefs[p]) @ torch.square(all_bled_codes[genes_added[p]]) * alpha + background_var[p]
+        )
+    # Similar function to numpy's .repeat
+    ignore_genes = torch.repeat_interleave(background_genes[None], n_pixels, dim=0)
+    ignore_genes = torch.concatenate((ignore_genes, genes_added), dim=1)
+    # calculate score including background genes as if best gene is background, then stop iteration.
+    best_genes, pass_score_threshes = get_best_gene_base(
+        residual_pixel_colors,
+        all_bled_codes,
+        norm_shift,
+        score_thresh,
+        inverse_vars,
+        ignore_genes,
+    )
+
+    return best_genes, pass_score_threshes, inverse_vars

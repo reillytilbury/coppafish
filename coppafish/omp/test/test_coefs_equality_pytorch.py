@@ -70,7 +70,7 @@ def test_fit_coefs_weight_equality_pytorch():
 
 
 @pytest.mark.pytorch
-def test_get_best_gene_base_equality():
+def test_get_best_gene_base_equality_pytorch():
     import torch
     from coppafish.omp.coefs import get_best_gene_base
     from coppafish.omp.coefs_pytorch import get_best_gene_base as get_best_gene_base_torch
@@ -119,3 +119,58 @@ def test_get_best_gene_base_equality():
     assert pass_score_thresh_1 == pass_score_thresh_2
     assert pass_score_thresh_optimised_1 == pass_score_thresh_optimised_2
     assert pass_score_thresh_1 == pass_score_thresh_optimised_1, "Expected the same boolean pass result"
+
+
+@pytest.mark.pytorch
+def test_get_best_gene_equality_pytorch():
+    import torch
+    from coppafish.omp.coefs import get_best_gene
+    from coppafish.omp.coefs_pytorch import get_best_gene as get_best_gene_torch
+
+    rng = np.random.RandomState(131)
+    n_rounds = 3
+    n_channels = 4
+    n_genes = 7
+    n_genes_added = 2
+    n_pixels = 9
+    residual_pixel_colors = rng.rand(n_pixels, n_rounds * n_channels)
+    all_bled_codes = rng.rand(n_genes, n_rounds * n_channels)
+    coefs = rng.rand(n_pixels, n_genes_added)
+    genes_added = np.zeros((n_pixels, n_genes_added), dtype=int)
+    genes_added[:, 1] = 1
+    genes_added[0, 0] = 3
+    genes_added[0, 1] = 5
+    genes_added[6, 0] = 2
+    norm_shift = rng.rand()
+    score_thresh = rng.rand() * 0.01
+    alpha = rng.rand()
+    background_genes = rng.randint(n_genes, size=(n_channels))
+    background_var = rng.rand(n_pixels, n_rounds * n_channels)
+    best_gene, pass_score_thresh, inverse_var = get_best_gene(
+        residual_pixel_colors,
+        all_bled_codes,
+        coefs,
+        genes_added,
+        norm_shift,
+        score_thresh,
+        alpha,
+        background_genes,
+        background_var,
+    )
+    best_gene_optimised, pass_score_thresh_optimised, inverse_var_optimised = get_best_gene_torch(
+        torch.from_numpy(residual_pixel_colors),
+        torch.from_numpy(all_bled_codes),
+        torch.from_numpy(coefs),
+        torch.from_numpy(genes_added),
+        norm_shift,
+        score_thresh,
+        alpha,
+        torch.from_numpy(background_genes),
+        torch.from_numpy(background_var),
+    )
+    best_gene_optimised = best_gene_optimised.numpy()
+    pass_score_thresh_optimised = pass_score_thresh_optimised.numpy()
+    inverse_var_optimised = inverse_var_optimised.numpy()
+    assert np.allclose(best_gene, best_gene_optimised, atol=1e-4), "Expected the same `best_genes` output"
+    assert np.all(pass_score_thresh == pass_score_thresh_optimised), "Expected the same `pass_score_thresh` output"
+    assert np.allclose(inverse_var, inverse_var_optimised), "Expected similar `inverse_var` output"
