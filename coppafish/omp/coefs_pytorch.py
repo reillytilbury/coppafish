@@ -405,7 +405,7 @@ def get_all_coefs(
                 ] = torch.asarray(i_coefs[fail_score_thresh])
 
             continue_pixels = continue_pixels[pass_score_thresh]
-            n_continue = continue_pixels.size
+            n_continue = continue_pixels.size()
             pbar.set_postfix({"n_pixels": n_continue})
             if n_continue == 0:
                 break
