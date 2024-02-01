@@ -2,7 +2,7 @@ import tqdm
 import torch
 import scipy
 import numpy as np
-from typing import Tuple, Union, List, Any 
+from typing import Tuple, Union, List, Any
 
 from . import coefs
 from .. import call_spots
@@ -279,8 +279,7 @@ def get_best_gene(
     for p in range(n_pixels):
         # ? This could probably be vectorised. But the equation is an absolute mess so I am not going to touch this
         inverse_vars[p] = 1 / (
-            torch.square(coefs[p]) @ torch.square(all_bled_codes[genes_added[p]]) * alpha
-            + background_var[p]
+            torch.square(coefs[p]) @ torch.square(all_bled_codes[genes_added[p]]) * alpha + background_var[p]
         )
     # Similar function to numpy's .repeat
     ignore_genes = torch.repeat_interleave(background_genes[None], n_pixels, dim=0)
@@ -478,7 +477,7 @@ def get_pixel_coefs_yxz(
             found.
         - (`[n_pixels x n_genes]`): `pixel_coefs_t` contains the gene coefficients for each pixel.
     """
-    #FIXME: I think this is not returning the same thing as non-jax or jax version. All other pytorch functions have 
+    # FIXME: I think this is not returning the same thing as non-jax or jax version. All other pytorch functions have
     # been unit tested so we know they are working. This must be doing something different to the numpy counterpart
     pixel_yxz_t = np.zeros((0, 3), dtype=np.int16)
     pixel_coefs_t = scipy.sparse.csr_matrix(np.zeros((0, n_genes), dtype=np.float32))
@@ -499,8 +498,8 @@ def get_pixel_coefs_yxz(
             np.asarray(transform),
             np.asarray(color_norm_factor),
         )
-        pixel_yxz_tz = torch.from_numpy(pixel_yxz_tz)
-        pixel_colors_tz = torch.from_numpy(pixel_colors_tz)
+        pixel_yxz_tz = torch.from_numpy(pixel_yxz_tz).type(torch.int16)
+        pixel_colors_tz = torch.from_numpy(pixel_colors_tz).type(torch.float32)
 
         # Only keep pixels with significant absolute intensity to save memory.
         # absolute because important to find negative coefficients as well.
@@ -527,7 +526,7 @@ def get_pixel_coefs_yxz(
         pixel_coefs_tz = torch.asarray(pixel_coefs_tz, dtype=torch.float32)
         del pixel_colors_tz
         # Only keep pixels for which at least one gene has non-zero coefficient.
-        keep = (torch.abs(pixel_coefs_tz).max(dim=1)[0] > 0).nonzero()[0]  # nonzero as is sparse matrix.
+        keep = (torch.abs(pixel_coefs_tz).max(dim=1)[0] > 0).nonzero(as_tuple=True)[0]  # nonzero as is sparse matrix.
         if len(keep) == 0:
             continue
         pixel_yxz_t = np.append(pixel_yxz_t, np.asarray(pixel_yxz_tz[keep]), axis=0)
