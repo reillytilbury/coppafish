@@ -9,3 +9,4 @@ coppafish.egg-info
 **/.vscode
 **/temp/**
 **/temp.*
+.editorconfig
