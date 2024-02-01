@@ -41,3 +41,6 @@ jobs:
 
       - name: Run pytorch unit tests
         run: pytest -m 'pytorch and not slow'
+
+      - name: Run integration tests
+        run: pytest -m 'integration and not slow and not optimised'

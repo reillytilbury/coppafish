@@ -42,5 +42,5 @@ jobs:
       - name: Run optimised unit tests
         run: pytest -m 'not slow and not integration and not pytorch'
 
-      - name: Run optimised integration tests
+      - name: Run integration tests
         run: pytest -m 'integration and not slow and not pytorch'
