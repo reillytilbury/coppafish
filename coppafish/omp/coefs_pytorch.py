@@ -132,12 +132,46 @@ def get_best_gene_base(
     assert inverse_var.ndim == 2, "`inverse_var` must be two dimensional"
     assert ignore_genes.ndim == 1 or ignore_genes.ndim == 2, "`ignore_genes` must be one or two dimensional"
     n_pixels = residual_pixel_colours.shape[0]
+    n_genes = all_bled_codes.shape[0]
     if ignore_genes.ndim == 2:
         assert ignore_genes.shape[0] == n_pixels, "`ignore_genes` must have n_pixels in first axis if two dimensional"
 
     # Calculate score including background genes as if best gene is background, then stop iteration. all_scores has
     # shape (n_pixels, n_genes)
-    all_scores = dot_product.dot_product_score(residual_pixel_colours, all_bled_codes, inverse_var, norm_shift)[3]
+    multiprocess = n_pixels > 1_000_000
+    if multiprocess:
+        # Since the dot product score can be slow, we are separating n_pixels by the number of CPU cores available and 
+        # then running each batch in parallel on multiple processes.
+        n_cores = utils.system.get_core_count()
+        n_pixels_new = int(n_pixels)
+        residual_pixel_colours_batch = residual_pixel_colours.detach().clone()
+        inverse_var_batch = inverse_var.detach().clone()
+        while (n_pixels_new % n_cores != 0):
+            residual_pixel_colours_batch = torch.cat(
+                (residual_pixel_colours_batch, torch.ones((1, residual_pixel_colours.shape[1]))), 
+                dim=0
+            )
+            inverse_var_batch = torch.cat((inverse_var_batch, torch.ones(1, inverse_var.shape[1])), dim=0)
+            n_pixels_new += 1
+        residual_pixel_colours_batch = residual_pixel_colours_batch.reshape(
+            (n_cores, n_pixels_new // n_cores, residual_pixel_colours_batch.shape[1])
+        )
+        inverse_var_batch = inverse_var_batch.reshape((n_cores, n_pixels_new // n_cores, inverse_var_batch.shape[1]))
+        parameters = [
+            {
+                "spot_colours": residual_pixel_colours_batch[i].detach().clone(),
+                "bled_codes": all_bled_codes.detach().clone(), 
+                "weight_squared": inverse_var_batch[i].detach().clone(), 
+                "norm_shift": norm_shift
+            } for i in range(n_cores)
+        ]
+        results = utils.multiprocess_pytorch.multiprocess_function(dot_product.dot_product_score_one_param, parameters)
+        all_scores = torch.ones((0, n_genes), dtype=torch.float32)
+        for result in results:
+            all_scores = torch.cat((all_scores, result[3]), dim=0)
+        all_scores = all_scores[:n_pixels]
+    else:
+        all_scores = dot_product.dot_product_score(residual_pixel_colours, all_bled_codes, inverse_var, norm_shift)[3]
     # best_genes has shape (n_pixels, )
     best_genes = torch.argmax(torch.abs(all_scores), dim=1)
     # Take the best gene score for each pixel.
@@ -405,7 +439,7 @@ def get_all_coefs(
                 ] = torch.asarray(i_coefs[fail_score_thresh])
 
             continue_pixels = continue_pixels[pass_score_thresh]
-            n_continue = continue_pixels.size()
+            n_continue = len(continue_pixels)
             pbar.set_postfix({"n_pixels": n_continue})
             if n_continue == 0:
                 break

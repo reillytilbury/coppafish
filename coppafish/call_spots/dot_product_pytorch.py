@@ -1,5 +1,27 @@
 import torch
-from typing import Tuple
+from typing import Tuple, Dict
+
+
+def dot_product_score_one_param(parameters: Dict) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Same as the `dot_product_score` function, except all the parameters are wrapped in a single dictionary. Useful for 
+    use in `utils/multiprocess_pytorch.py`.
+
+    Args:
+        parameters (dict): dictionary containing keys that are the parameter names in `dot_product_score`.
+
+    Returns:
+        see `dot_product_score` function for returns.
+    """
+    if "norm_shift" not in parameters:
+        return dot_product_score(parameters["spot_colours"], parameters["bled_codes"], parameters["weight_squared"])
+    else:
+        return dot_product_score(
+            parameters["spot_colours"], 
+            parameters["bled_codes"], 
+            parameters["weight_squared"], 
+            parameters["norm_shift"]
+        )
 
 
 def dot_product_score(
