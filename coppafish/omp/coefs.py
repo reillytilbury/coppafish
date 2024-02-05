@@ -36,11 +36,14 @@ def fit_coefs(
 
     """
     n_pixels = pixel_colors.shape[1]
-    residuals = np.zeros((n_pixels, pixel_colors.shape[0]))
     coefs = np.zeros_like(genes, dtype=float)
     for p in range(n_pixels):
         coefs[p] = np.linalg.lstsq(bled_codes[:, genes[p]], pixel_colors[:, p], rcond=None)[0]
-        residuals[p] = pixel_colors[:, p] - bled_codes[:, genes[p]] @ coefs[p]
+    residuals = np.swapaxes(
+        pixel_colors - np.swapaxes(np.matmul(np.swapaxes(bled_codes[:, genes], 0, 1), coefs[..., None])[..., 0], 0, 1),
+        0,
+        1,
+    )
 
     return residuals.astype(np.float32), coefs.astype(np.float32)
 
@@ -71,16 +74,18 @@ def fit_coefs_weight(
             Coefficients found through least squares fitting for each gene.
     """
     n_pixels, n_genes_add = genes.shape
-    n_rounds_channels = bled_codes.shape[0]
 
-    residuals = np.zeros((n_pixels, n_rounds_channels), dtype=np.float32)
+    # (n_pixels, n_rounds_channels, n_genes_add)
+    bled_codes_weighted = bled_codes[:, genes].swapaxes(0, 1) * weight[..., None]
+    # (n_pixels, n_rounds_channels)
+    pixel_colors_weighted = pixel_colors.T * weight
     coefs = np.zeros((n_pixels, n_genes_add), dtype=np.float32)
     for p in range(n_pixels):
         pixel_colour = pixel_colors[:, p]
         gene = genes[p]
         w = weight[p]
         coefs[p] = np.linalg.lstsq(bled_codes[:, gene] * w[:, np.newaxis], pixel_colour * w, rcond=-1)[0]
-        residuals[p] = pixel_colour * w - np.matmul(bled_codes[:, gene] * w[:, np.newaxis], coefs[p])
+    residuals = pixel_colors_weighted - np.matmul(bled_codes_weighted, coefs[..., None])[..., 0]
     residuals = residuals / weight
 
     return residuals.astype(np.float32), coefs.astype(np.float32)
@@ -268,11 +273,10 @@ def get_best_gene(
     # Ensure bled_codes are normalised for each gene
     all_bled_codes /= np.linalg.norm(all_bled_codes, axis=1, keepdims=True)
 
-    for p in range(n_pixels):
-        # ? This could probably be vectorised. But the equation is an absolute mess so I am not going to touch this
-        inverse_vars[p] = 1 / (
-            np.square(coefs[p]) @ np.square(all_bled_codes[genes_added[p]]) * alpha + background_var[p]
-        )
+    # See Josh's OMP documentation for details about this exact equation
+    inverse_vars = np.reciprocal(
+        np.matmul((coefs**2)[:, None], all_bled_codes[genes_added] ** 2 * alpha)[:, 0] + background_var
+    )
     ignore_genes = np.repeat(background_genes[None], n_pixels, axis=0)
     ignore_genes = np.append(ignore_genes, genes_added, axis=1)
     # calculate score including background genes as if best gene is background, then stop iteration.
