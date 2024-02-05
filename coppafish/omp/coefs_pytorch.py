@@ -86,8 +86,8 @@ def fit_coefs_weight(
     # (n_pixels, n_rounds_channels)
     pixel_colors_weighted = pixel_colors.T * weight
     coefs = torch.linalg.lstsq(bled_codes_weighted, pixel_colors_weighted, rcond=-1, driver="gelss")[0]
-    for p in range(n_pixels):
-        residuals[p] = pixel_colors_weighted[p] - torch.matmul(bled_codes_weighted[p], coefs[p])
+    # Using pytorch's batch matrix multiplication to eliminate a need for a for loop
+    residuals = pixel_colors_weighted - torch.bmm(bled_codes_weighted, coefs[..., None])[..., 0]
     residuals = residuals / weight
 
     return residuals.type(torch.float32), coefs.type(torch.float32)
