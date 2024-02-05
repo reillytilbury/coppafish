@@ -1,3 +1,4 @@
+import multiprocessing
 from typing import Callable, List, Any
 
 
@@ -18,11 +19,10 @@ def multiprocess_function(fn: Callable, args: List[Any]) -> List[Any]:
         - This function will not check that the number of CPU cores is large enough to spawn so many processes, that
             must be thought about before calling.
     """
-    from torch import multiprocessing
-
     multiprocessing.set_start_method("spawn", force=True)
     with multiprocessing.Pool(len(args)) as p:
         results = p.map_async(fn, args)
-        # Two minutes then the multiprocess pool gives up waiting for subprocess
-        results.wait(120)
-    return results.get()
+        # Wait three minutes then the multiprocess pool gives up waiting for subprocess and returns a TimeoutError. 
+        # Avoids the creation of "zombie" subprocesses stuck in the OS.
+        results.wait(180)
+    return results.get(0.5)

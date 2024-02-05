@@ -138,30 +138,34 @@ def get_best_gene_base(
 
     # Calculate score including background genes as if best gene is background, then stop iteration. all_scores has
     # shape (n_pixels, n_genes)
-    multiprocess = n_pixels > 1_000_000
+    # multiprocess = n_pixels > 1_000
+    multiprocess = False
     if multiprocess:
         # Since the dot product score can be slow, we are separating n_pixels by the number of CPU cores available and 
         # then running each batch in parallel on multiple processes.
-        n_cores = utils.system.get_core_count()
+        #FIXME: For some reason multiprocessing pytorch is being slower than without multi-processing... so we will 
+        # stick to single CPU core pytorch for now
+        n_cores = utils.system.get_core_count() // 2
         n_pixels_new = int(n_pixels)
         residual_pixel_colours_batch = residual_pixel_colours.detach().clone()
         inverse_var_batch = inverse_var.detach().clone()
         while (n_pixels_new % n_cores != 0):
+            n_pixels_new += 1
+        if n_pixels_new > n_pixels:
             residual_pixel_colours_batch = torch.cat(
-                (residual_pixel_colours_batch, torch.ones((1, residual_pixel_colours.shape[1]))), 
+                (residual_pixel_colours_batch, torch.ones((n_pixels_new - n_pixels, residual_pixel_colours.shape[1]))), 
                 dim=0
             )
-            inverse_var_batch = torch.cat((inverse_var_batch, torch.ones(1, inverse_var.shape[1])), dim=0)
-            n_pixels_new += 1
+            inverse_var_batch = torch.cat((inverse_var_batch, torch.ones(n_pixels_new - n_pixels, inverse_var.shape[1])), dim=0)
         residual_pixel_colours_batch = residual_pixel_colours_batch.reshape(
             (n_cores, n_pixels_new // n_cores, residual_pixel_colours_batch.shape[1])
         )
         inverse_var_batch = inverse_var_batch.reshape((n_cores, n_pixels_new // n_cores, inverse_var_batch.shape[1]))
         parameters = [
             {
-                "spot_colours": residual_pixel_colours_batch[i].detach().clone(),
+                "spot_colours": residual_pixel_colours_batch[i],
                 "bled_codes": all_bled_codes.detach().clone(), 
-                "weight_squared": inverse_var_batch[i].detach().clone(), 
+                "weight_squared": inverse_var_batch[i], 
                 "norm_shift": norm_shift
             } for i in range(n_cores)
         ]
