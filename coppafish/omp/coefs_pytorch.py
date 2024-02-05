@@ -46,8 +46,13 @@ def fit_coefs(
         rcond=None,
         driver="gelss",
     )[0][:, :, 0]
-    for p in range(n_pixels):
-        residuals[p] = pixel_colors[:, p] - bled_codes[:, genes[p]] @ coefs[p]
+    # Using pytorch's handy batch matrix multiply to batch over n_pixels for optimised code
+    residuals = torch.swapaxes(
+        pixel_colors
+        - torch.swapaxes(torch.bmm(torch.swapaxes(bled_codes[:, genes], 0, 1), coefs[..., None])[..., 0], 0, 1),
+        0,
+        1,
+    )
 
     return residuals.type(torch.float32), coefs.type(torch.float32)
 
@@ -76,11 +81,6 @@ def fit_coefs_weight(
         - coefs - (`[n_pixels x n_genes_add] tensor[float32]`): coefficients found through least squares fitting for
             each gene.
     """
-    n_pixels, n_genes_add = genes.shape
-    n_rounds_channels = bled_codes.shape[0]
-
-    residuals = torch.zeros((n_pixels, n_rounds_channels), dtype=torch.float32)
-    coefs = torch.zeros((n_pixels, n_genes_add), dtype=torch.float32)
     # (n_pixels, n_rounds_channels, n_genes_add)
     bled_codes_weighted = bled_codes[:, genes].swapaxes(0, 1) * weight[..., None]
     # (n_pixels, n_rounds_channels)
@@ -141,22 +141,24 @@ def get_best_gene_base(
     # multiprocess = n_pixels > 1_000
     multiprocess = False
     if multiprocess:
-        # Since the dot product score can be slow, we are separating n_pixels by the number of CPU cores available and 
+        # Since the dot product score can be slow, we are separating n_pixels by the number of CPU cores available and
         # then running each batch in parallel on multiple processes.
-        #FIXME: For some reason multiprocessing pytorch is being slower than without multi-processing... so we will 
+        # FIXME: For some reason multiprocessing pytorch is being slower than without multi-processing... so we will
         # stick to single CPU core pytorch for now
         n_cores = utils.system.get_core_count() // 2
         n_pixels_new = int(n_pixels)
         residual_pixel_colours_batch = residual_pixel_colours.detach().clone()
         inverse_var_batch = inverse_var.detach().clone()
-        while (n_pixels_new % n_cores != 0):
+        while n_pixels_new % n_cores != 0:
             n_pixels_new += 1
         if n_pixels_new > n_pixels:
             residual_pixel_colours_batch = torch.cat(
-                (residual_pixel_colours_batch, torch.ones((n_pixels_new - n_pixels, residual_pixel_colours.shape[1]))), 
-                dim=0
+                (residual_pixel_colours_batch, torch.ones((n_pixels_new - n_pixels, residual_pixel_colours.shape[1]))),
+                dim=0,
             )
-            inverse_var_batch = torch.cat((inverse_var_batch, torch.ones(n_pixels_new - n_pixels, inverse_var.shape[1])), dim=0)
+            inverse_var_batch = torch.cat(
+                (inverse_var_batch, torch.ones(n_pixels_new - n_pixels, inverse_var.shape[1])), dim=0
+            )
         residual_pixel_colours_batch = residual_pixel_colours_batch.reshape(
             (n_cores, n_pixels_new // n_cores, residual_pixel_colours_batch.shape[1])
         )
@@ -164,10 +166,11 @@ def get_best_gene_base(
         parameters = [
             {
                 "spot_colours": residual_pixel_colours_batch[i],
-                "bled_codes": all_bled_codes.detach().clone(), 
-                "weight_squared": inverse_var_batch[i], 
-                "norm_shift": norm_shift
-            } for i in range(n_cores)
+                "bled_codes": all_bled_codes.detach().clone(),
+                "weight_squared": inverse_var_batch[i],
+                "norm_shift": norm_shift,
+            }
+            for i in range(n_cores)
         ]
         results = utils.multiprocess_pytorch.multiprocess_function(dot_product.dot_product_score_one_param, parameters)
         all_scores = torch.ones((0, n_genes), dtype=torch.float32)
@@ -235,9 +238,7 @@ def get_best_gene_first_iter(
     pass_score_threshes = torch.zeros(n_pixels, dtype=bool)
     # Ensure bled_codes are normalised for each gene
     all_bled_codes /= all_bled_codes.norm(dim=1, keepdim=True)
-    background_vars = (
-        torch.square(background_coefs) @ torch.square(all_bled_codes[background_genes]) * alpha + beta**2
-    )
+    background_vars = torch.square(background_coefs) @ torch.square(all_bled_codes[background_genes]) * alpha + beta**2
     best_genes, pass_score_threshes = get_best_gene_base(
         residual_pixel_colors, all_bled_codes, norm_shift, score_thresh, 1 / background_vars, background_genes
     )
