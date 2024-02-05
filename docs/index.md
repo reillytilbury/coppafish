@@ -51,15 +51,15 @@ git clone --depth 1 https://github.com/reillytilbury/coppafish
 then install coppafish with our optimised jax code (Linux only)
 ```console
 cd coppafish
-pip install -r requirements-optimised.txt
-pip install -e .[optimised]
+python -m pip install -r requirements-optimised.txt
+python -m pip install -e .[optimised]
 ```
 
 for the non-optimised code (Windows support), instead do
 ```console
 cd coppafish
-pip install -r requirements.txt
-pip install -e .
+python -m pip install -r requirements.txt
+python -m pip install -e .
 ```
 
 If you do not wish to keep a local copy of coppafish (i.e. not interested in updating versions later) then remove the 
