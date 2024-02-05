@@ -109,6 +109,15 @@ def test_get_best_gene_base_equality_pytorch():
         torch.from_numpy(inverse_var[None]),
         torch.from_numpy(ignore_genes[None]),
     )
+    n_pixels = 8
+    get_best_gene_base_torch(
+        torch.from_numpy(rng.rand(n_pixels, n_rounds * n_channels)),
+        torch.from_numpy(all_bled_codes),
+        norm_shift,
+        score_thresh,
+        torch.from_numpy(rng.rand(n_pixels, n_rounds * n_channels)),
+        torch.from_numpy(rng.randint(2, size=(n_pixels, 2))),
+    )
     best_gene_optimised_1 = best_gene_optimised_1.numpy()
     best_gene_optimised_2 = best_gene_optimised_2.numpy()
     pass_score_thresh_optimised_1 = pass_score_thresh_optimised_1.numpy()
