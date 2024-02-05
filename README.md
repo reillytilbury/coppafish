@@ -28,6 +28,5 @@
 
 
 ## Documentation
-For more information on usage, please see the 
-[documentation](https://jduffield65.github.io/coppafish/).
-
+For more information on coppafish's method, please see the 
+[documentation](https://jduffield65.github.io/coppafish/) (some of this information will be out-dated).
