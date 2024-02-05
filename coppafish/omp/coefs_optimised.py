@@ -6,7 +6,7 @@ import os
 import jax
 import jax.numpy as jnp
 
-from . import coefs
+from . import base
 from .. import utils
 from .. import call_spots
 from ..setup import NotebookPage
@@ -694,7 +694,7 @@ def get_pixel_coefs_yxz(
         print(f"z_chunk {z_chunk + 1}/{z_chunks}")
         # While iterating through tiles, only save info for rounds/channels using
         # - add all rounds/channels back in later. This returns colors in use_rounds/channels only and no invalid.
-        pixel_yxz_tz, pixel_colors_tz = coefs.get_pixel_colours(
+        pixel_yxz_tz, pixel_colors_tz = base.get_pixel_colours(
             nbp_basic,
             nbp_file,
             nbp_extract,
