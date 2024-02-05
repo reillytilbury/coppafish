@@ -110,24 +110,39 @@ def test_get_best_gene_base_equality_pytorch():
         torch.from_numpy(ignore_genes[None]),
     )
     n_pixels = 8
-    get_best_gene_base_torch(
-        torch.from_numpy(rng.rand(n_pixels, n_rounds * n_channels)),
+    residual_pixel_colors = rng.rand(n_pixels, n_rounds * n_channels)
+    inverse_var = rng.rand(n_pixels, n_rounds * n_channels)
+    ignore_genes = rng.randint(2, size=(n_pixels, 2))
+    best_gene_3, pass_score_thresh_3 = get_best_gene_base(
+        residual_pixel_colors,
+        all_bled_codes,
+        norm_shift,
+        score_thresh,
+        inverse_var,
+        ignore_genes,
+    )
+    best_gene_optimised_3, pass_score_thresh_optimised_3 = get_best_gene_base_torch(
+        torch.from_numpy(residual_pixel_colors),
         torch.from_numpy(all_bled_codes),
         norm_shift,
         score_thresh,
-        torch.from_numpy(rng.rand(n_pixels, n_rounds * n_channels)),
-        torch.from_numpy(rng.randint(2, size=(n_pixels, 2))),
+        torch.from_numpy(inverse_var),
+        torch.from_numpy(ignore_genes),
     )
     best_gene_optimised_1 = best_gene_optimised_1.numpy()
     best_gene_optimised_2 = best_gene_optimised_2.numpy()
+    best_gene_optimised_3 = best_gene_optimised_3.numpy()
     pass_score_thresh_optimised_1 = pass_score_thresh_optimised_1.numpy()
     pass_score_thresh_optimised_2 = pass_score_thresh_optimised_2.numpy()
+    pass_score_thresh_optimised_3 = pass_score_thresh_optimised_3.numpy()
     assert best_gene_1 == best_gene_2
     assert best_gene_optimised_1 == best_gene_optimised_2
     assert best_gene_1 == best_gene_optimised_1, "Expected the same gene as the result"
+    assert (best_gene_3 == best_gene_optimised_3).all(), "Expected the same gene as the result"
     assert pass_score_thresh_1 == pass_score_thresh_2
     assert pass_score_thresh_optimised_1 == pass_score_thresh_optimised_2
-    assert pass_score_thresh_1 == pass_score_thresh_optimised_1, "Expected the same boolean pass result"
+    assert pass_score_thresh_1 == pass_score_thresh_optimised_1, "Expected the same boolean pass score result"
+    assert (pass_score_thresh_3 == pass_score_thresh_optimised_3).all(), "Expected the same boolean pass score result"
 
 
 @pytest.mark.pytorch

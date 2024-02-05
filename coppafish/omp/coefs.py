@@ -125,6 +125,7 @@ def get_best_gene_base(
     assert inverse_var.ndim == 2, "`inverse_var` must be two dimensional"
     assert ignore_genes.ndim == 1 or ignore_genes.ndim == 2, "`ignore_genes` must be one or two dimensional"
     n_pixels = residual_pixel_colours.shape[0]
+    n_genes_ignore = ignore_genes.shape[-1]
     if ignore_genes.ndim == 2:
         assert ignore_genes.shape[0] == n_pixels, "`ignore_genes` must have n_pixels in first axis if two dimensional"
 
@@ -139,9 +140,7 @@ def get_best_gene_base(
     if ignore_genes.ndim == 1:
         best_scores *= np.isin(best_genes, ignore_genes, invert=True)
     else:
-        # TODO: Vectorise this code
-        for p in range(n_pixels):
-            best_scores[p] *= np.isin(best_genes[p], ignore_genes[p], invert=True)
+        best_scores *= np.logical_not((np.repeat(best_genes[:, None], n_genes_ignore, axis=1) == ignore_genes).any(1))
     pass_score_threshes = np.abs(best_scores) > score_thresh
     return best_genes, pass_score_threshes
 
