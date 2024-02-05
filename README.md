@@ -29,4 +29,4 @@
 
 ## Documentation
 For more information on coppafish's method, please see the 
-[documentation](https://jduffield65.github.io/coppafish/) (some of this information will be out-dated).
+[documentation](https://jduffield65.github.io/coppafish/) here (some of this information will be out-dated).
