@@ -44,7 +44,7 @@ def fit_coefs(
         bled_codes[:, genes].transpose(0, 1),
         pixel_colors.T[..., None],
         rcond=None,
-        driver="gelsy",
+        driver="gelss",
     )[0][:, :, 0]
     # Using pytorch's handy batch matrix multiply to batch over n_pixels for optimised code
     residuals = torch.swapaxes(
@@ -85,7 +85,7 @@ def fit_coefs_weight(
     bled_codes_weighted = bled_codes[:, genes].swapaxes(0, 1) * weight[..., None]
     # (n_pixels, n_rounds_channels)
     pixel_colors_weighted = pixel_colors.T * weight
-    coefs = torch.linalg.lstsq(bled_codes_weighted, pixel_colors_weighted, rcond=-1, driver="gelsy")[0]
+    coefs = torch.linalg.lstsq(bled_codes_weighted, pixel_colors_weighted, rcond=-1, driver="gelss")[0]
     # Using pytorch's batch matrix multiplication to eliminate a need for a for loop
     residuals = pixel_colors_weighted - torch.bmm(bled_codes_weighted, coefs[..., None])[..., 0]
     residuals = residuals / weight
