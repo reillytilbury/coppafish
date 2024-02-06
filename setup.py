@@ -20,7 +20,7 @@ setup(
     maintainer_email="reillytilbury@gmail.com",
     license="MIT",
     python_requires=">3.8, <3.11",
-    url="https://jduffield65.github.io/coppafish/",
+    url="https://reillytilbury.github.io/coppafish/",
     packages=packages,
     install_requires=[
         "numpy",
@@ -45,7 +45,6 @@ setup(
         "napari[all]<=0.4.17",
         "pydantic<=1.10.13",
     ],
-    extras_require={"optimised": ["jax[cpu]"]},
     package_data={
         "coppafish.setup": [
             "settings.default.ini",

@@ -13,7 +13,7 @@ def get_software_verison() -> str:
         str: software version.
     """
     with open(PurePath(os.path.dirname(os.path.realpath(__file__))).parent.joinpath("_version.py"), "r") as f:
-        version_tag = f.read().split("'")[1]
+        version_tag = f.read().split('"')[1]
     return version_tag
 
 

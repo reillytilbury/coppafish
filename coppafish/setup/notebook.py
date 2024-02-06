@@ -772,19 +772,26 @@ class NotebookPage:
         Check that two notebook pages are equal based only on variables actually added during the pipeline run, not
         internal attributes like the time the notebook was created. This is useful for integration/unit testing.
         """
+        equal = True
         for attribute_0, attribute_1 in zip(self, other):
             if not isinstance(attribute_0, (np.ndarray, list)):
                 if attribute_0 != attribute_1:
-                    return False
+                    equal = False
             elif np.asarray(attribute_0).dtype.type is np.str_:
                 if not (np.asarray(attribute_0) == np.asarray(attribute_1)).all():
-                    return False
+                    equal = False
+            elif np.asarray(attribute_0).dtype.type is np.float_:
+                if not np.allclose(np.asarray(attribute_0), np.asarray(attribute_1)):
+                    equal = False
             elif np.isnan(attribute_0).any():
                 if not np.array_equal(attribute_0, attribute_1, equal_nan=True):
-                    return False
+                    equal = False
             elif not np.array_equal(attribute_0, attribute_1):
-                return False
-        return True
+                equal = False
+            if not equal:
+                print(f"{attribute_0} != {attribute_1}")
+                return equal
+        return equal
 
     def __ne__(self, other):
         return not self.__eq__(other)
