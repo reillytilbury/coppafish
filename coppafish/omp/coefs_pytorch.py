@@ -475,8 +475,6 @@ def get_pixel_coefs_yxz(
             found.
         - (`[n_pixels x n_genes]`): `pixel_coefs_t` contains the gene coefficients for each pixel.
     """
-    # FIXME: I think this is not returning the same thing as non-jax or jax version. All other pytorch functions have
-    # been unit tested so we know they are working. This must be doing something different to the numpy counterpart
     pixel_yxz_t = np.zeros((0, 3), dtype=np.int16)
     pixel_coefs_t = scipy.sparse.csr_matrix(np.zeros((0, n_genes), dtype=np.float32))
 
