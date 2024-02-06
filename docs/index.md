@@ -10,14 +10,14 @@ type has a unique sequence of dyes, called the gene code. Some vocabulary might 
 
 ### Prerequisites
 
-* At least 48GB of RAM (recommended for tile sizes `58x2048x2048`).
+* At least 48GB of RAM for tile sizes `58x2048x2048`.
 * Python version 3.9 or 3.10.
 * [Git](https://git-scm.com/) (optional) is used to store more precise versioning, i.e. a hash, to detect any changes 
     in software version.
 
 ### Environment
 
-We suggest installing your coppafish software within an environment. This can be a `venv` or a `conda` (recommended).
+Install coppafish software from within an environment. This can be a `venv` or `conda` (recommended) environment.
 
 #### Conda
 
@@ -48,33 +48,39 @@ Our latest coppafish release can be cloned locally
 git clone --depth 1 https://github.com/reillytilbury/coppafish
 ```
 
-then install coppafish with our optimised jax code (Linux only)
+to install the optimised, [pytorch](https://github.com/pytorch) GPU code (Windows and Linux support)
 ```console
 cd coppafish
-pip install -r requirements-optimised.txt
-pip install -e .[optimised]
+python -m pip install --upgrade pip
+python -m pip install -r requirements-pytorchgpu.txt
+python -m pip install -e .
 ```
 
-for the non-optimised code (Windows support), instead do
+or for the optimised, [pytorch](https://github.com/pytorch) GPU code (Windows and Linux support)
 ```console
 cd coppafish
-pip install -r requirements.txt
-pip install -e .
+python -m pip install --upgrade pip
+python -m pip install -r requirements-pytorch.txt
+python -m pip install -e .
 ```
 
-If you do not wish to keep a local copy of coppafish (i.e. not interested in updating versions later) then remove the 
-`-e` from the pip install. Then the source code can be deleted after installing.
-
-## Running
-
-Coppafish can be run with a config file. In the terminal
+or for the optimised [jax](https://github.com/google/jax) code (Linux only and can be less stable for some computers)
 ```console
-python -m coppafish /path/to/config.ini
+cd coppafish
+python -m pip install --upgrade pip
+python -m pip install -r requirements-optimised.txt
+python -m pip install -e .
 ```
 
-Or using a python script
-```python
-from coppafish import run_pipeline
-
-run_pipeline("/path/to/config.ini")
+or for the slower, numpy-only reliant code (Windows and Linux support)
+```console
+cd coppafish
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -e .
 ```
+this can be useful for people with limited disk space for large packages like jax and pytorch who do not mind 
+sacrificing computation speed.
+
+If you do not wish to keep a local copy of coppafish (i.e. not interested in `git pull`ing higher coppafish versions 
+later) then remove the `-e` option. The source code can then be deleted after installing.

@@ -1,6 +1,7 @@
 build
 coppafish.egg-info
 **/__pycache__
+.editorconfig
 **/integration_dir*
 **/unit_test_dir
 **/*.egg
@@ -9,4 +10,5 @@ coppafish.egg-info
 **/.vscode
 **/temp/**
 **/temp.*
-.editorconfig
+**/.venv/**
+**/.idea/**
