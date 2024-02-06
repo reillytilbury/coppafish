@@ -726,3 +726,62 @@ def brightness_scale(
     m = np.linalg.lstsq(sub_image_preseq_flat[:, None], sub_image_seq_flat, rcond=None)[0]
 
     return m.item(), sub_image_seq, sub_image_preseq
+
+
+def get_single_affine_transform(spot_yxz_base: np.ndarray, spot_yxz_transform: np.ndarray, z_scale_base: float,
+                                z_scale_transform: float, start_transform: np.ndarray,
+                                neighb_dist_thresh: float, tile_centre: np.ndarray, n_iter: int = 100,
+                                reg_constant_scale: Optional[float] = None, reg_constant_shift: Optional[float] = None,
+                                reg_transform: Optional[np.ndarray] = None) -> Tuple[np.ndarray, int, float, bool]:
+    """
+    Finds the affine transform taking `spot_yxz_base` to `spot_yxz_transform`.
+
+    Args:
+        spot_yxz_base: Point cloud want to find the shift from.
+            spot_yxz_base[:, 2] is the z coordinate in units of z-pixels.
+        spot_yxz_transform: Point cloud want to find the shift to.
+            spot_yxz_transform[:, 2] is the z coordinate in units of z-pixels.
+        z_scale_base: Scaling to put z coordinates in same units as yx coordinates for spot_yxz_base.
+        z_scale_transform: Scaling to put z coordinates in same units as yx coordinates for spot_yxz_base.
+        start_transform: `float [4 x 3]`.
+            Start affine transform for iterative closest point.
+            Typically, `start_transform[:3, :]` is identity matrix and
+            `start_transform[3]` is approx yxz shift (z shift in units of xy pixels).
+        neighb_dist_thresh: Distance between 2 points must be less than this to be constituted a match.
+        tile_centre: int [3].
+            yxz coordinates of centre of image where spot_yxz found on.
+        n_iter: Max number of iterations to perform of ICP.
+        reg_constant_scale: Constant used for scaling and rotation when doing regularized least squares.
+            `None` means no regularized least squares performed.
+            Typical = `5e8`.
+        reg_constant_shift: Constant used for shift when doing regularized least squares.
+            `None` means no regularized least squares performed.
+            Typical = `500`
+        reg_transform: `float [4 x 3]`.
+            Transform to regularize to when doing regularized least squares.
+            `None` means no regularized least squares performed.
+
+    Returns:
+        - `transform` - `float [4 x 3]`.
+            `transform` is the final affine transform found.
+        - `n_matches` - Number of matches found for each transform.
+        - `error` - Average distance between neighbours below `neighb_dist_thresh`.
+        - `is_converged` - `False` if max iterations reached before transform converged.
+    """
+    #? Is this function needed or is it copying similar knowledge used in other functions? Is used in a ICP plot only
+    spot_yxz_base = (spot_yxz_base - tile_centre) * [1, 1, z_scale_base]
+    spot_yxz_transform = (spot_yxz_transform - tile_centre) * [1, 1, z_scale_transform]
+    tree_transform = scipy.spatial.KDTree(spot_yxz_transform)
+    neighbour = np.zeros(spot_yxz_base.shape[0], dtype=int)
+    transform = start_transform.copy()
+    for _ in range(n_iter):
+        neighbour_last = neighbour.copy()
+        transform, neighbour, n_matches, error = \
+            get_transform(spot_yxz_base, transform, spot_yxz_transform, neighb_dist_thresh,
+                          tree_transform, reg_constant_scale, reg_constant_shift, reg_transform)
+
+        is_converged = np.abs(neighbour - neighbour_last).max() == 0
+        if is_converged:
+            break
+
+    return transform, n_matches, error, is_converged

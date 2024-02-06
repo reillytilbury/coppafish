@@ -257,14 +257,27 @@ class BuildPDF:
                     # Create a page for every gene
                     gene_probs = nb.ref_spots.gene_probs
                     # bg colour was subtracted if use_preseq
-                    colours = nb.ref_spots.colors[
-                        np.ix_(
-                            range(nb.ref_spots.colors.shape[0]), nb.basic_info.use_rounds, nb.basic_info.use_channels
-                        )
-                    ]
+                    colours = (
+                        nb.ref_spots.colors[
+                            np.ix_(
+                                range(nb.ref_spots.colors.shape[0]),
+                                nb.basic_info.use_rounds,
+                                nb.basic_info.use_channels,
+                            )
+                        ]
+                        / nb.call_spots.color_norm_factor[
+                            np.ix_(
+                                nb.ref_spots.tile,
+                                nb.basic_info.use_rounds,
+                                nb.basic_info.use_channels,
+                            )
+                        ]
+                    )
                     n_genes = gene_probs.shape[1]
                     gene_names = nb.call_spots.gene_names
                     spot_colours_rnorm = colours / np.linalg.norm(colours, axis=2)[:, :, None]
+                    signs = np.sign(np.sum(spot_colours_rnorm, axis=(1, 2)))
+                    spot_colours_rnorm *= signs[:, None, None]
                     n_rounds = spot_colours_rnorm.shape[1]
                     for g in range(n_genes):
                         g_spots = np.argsort(-gene_probs[:, g])
@@ -276,17 +289,9 @@ class BuildPDF:
                         g_bled_code_ge = nb.call_spots.bled_codes_ge[g][:, nb.basic_info.use_channels]
                         g_bled_code_ge /= np.linalg.norm(g_bled_code_ge, axis=1)[:, None]
                         g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code_ge[None, :, :], axis=2))
-                        thresh_spots = gene_probs[:, g] > GENE_PROB_THRESHOLD
-                        thresh_tile = nb.ref_spots.tile[thresh_spots]
-                        colours = (
-                            nb.ref_spots.colors[
-                                np.ix_(thresh_spots, nb.basic_info.use_rounds, nb.basic_info.use_channels)
-                            ]
-                            / nb.call_spots.color_norm_factor[
-                                np.ix_(thresh_tile, nb.basic_info.use_rounds, nb.basic_info.use_channels)
-                            ]
-                        )
-                        colours_mean = np.mean(colours, axis=0)
+                        thresh_spots = np.argmax(gene_probs, axis=1) == g
+                        thresh_spots = thresh_spots * (np.max(gene_probs) > GENE_PROB_THRESHOLD)
+                        colours_mean = np.mean(colours[thresh_spots], axis=0)
                         fig, axes = self.create_empty_page(2, 2, gridspec_kw={"width_ratios": [2, 1]})
                         self.empty_plot_ticks(axes[1, 1])
                         fig.suptitle(f"{gene_names[g]}", size=NORMAL_FONTSIZE)
@@ -315,14 +320,14 @@ class BuildPDF:
                         axes[0, 1].set_xticks(
                             range(len(nb.basic_info.use_channels)), labels=(str(c) for c in nb.basic_info.use_channels)
                         )
-                        axes[1, 1].imshow(colours_mean.T, vmin=0, vmax=1)
+                        axes[1, 1].imshow(colours_mean, vmin=0, vmax=1)
                         axes[1, 1].set_title(f"mean spot colour\nspots with prob > {GENE_PROB_THRESHOLD}")
-                        axes[1, 1].set_xlabel("rounds")
-                        axes[1, 1].set_xticks(
+                        axes[1, 1].set_ylabel("rounds")
+                        axes[1, 1].set_yticks(
                             range(len(nb.basic_info.use_rounds)), labels=(str(r) for r in nb.basic_info.use_rounds)
                         )
-                        axes[1, 1].set_ylabel("channels")
-                        axes[1, 1].set_yticks(
+                        axes[1, 1].set_xlabel("channels")
+                        axes[1, 1].set_xticks(
                             range(len(nb.basic_info.use_channels)), labels=(str(c) for c in nb.basic_info.use_channels)
                         )
                         cbar = fig.colorbar(im, ax=axes[0, 1], orientation="vertical")
