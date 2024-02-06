@@ -40,6 +40,9 @@ def fit_coefs(
     # The arguments given are of shapes (n_pixels, (n_rounds * n_channels), n_genes_add) and
     # (n_pixels, (n_rounds * n_channels), 1). Pytorch then knows to batch over pixels
     # Coefs is shape (n_pixels, n_genes_add)
+    # We use the driver "gels" here because this is the only option for GPU torch. This assumes that 
+    # bled_codes_weighted is full-rank, which I think it always is in real data examples (at least it very well should 
+    # be!)
     coefs = torch.linalg.lstsq(
         bled_codes[:, genes].transpose(0, 1),
         pixel_colors.T[..., None],
@@ -85,6 +88,9 @@ def fit_coefs_weight(
     bled_codes_weighted = bled_codes[:, genes].swapaxes(0, 1) * weight[..., None]
     # (n_pixels, n_rounds_channels)
     pixel_colors_weighted = pixel_colors.T * weight
+    # We use the driver "gels" here because this is the only option for GPU torch. This assumes that 
+    # bled_codes_weighted is full-rank, which I think it always is in real data examples (at least it very well should 
+    # be!)
     coefs = torch.linalg.lstsq(bled_codes_weighted, pixel_colors_weighted, rcond=-1, driver="gels")[0]
     # Using pytorch's batch matrix multiplication to eliminate a need for a for loop
     residuals = pixel_colors_weighted - torch.bmm(bled_codes_weighted, coefs[..., None])[..., 0]
