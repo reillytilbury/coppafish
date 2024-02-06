@@ -2,9 +2,11 @@
  * Ref spot PDF plots are now consistent with x and y axes.
  * New install option "pytorch" added for coppafish. Pytorch is a new way to run most of OMP functions and some parts 
     of call spots using CPU.
+ * For a single spot and round, if the largest magnitude spot colour is negative, its sign is flipped before computing 
+    the Von-Mises gene probability.
 
 
-2024/mm/dd Alpha Update (v0.8.2):
+2024/01/31 Alpha Update (v0.8.2):
  * The default config value for r_smooth in filter section is now 1, 1, 2.
  * The notebook now backs itself up before re-saving itself. Therefore, there is always a fully complete notebook saved 
     in case the new one being saved gets corrupted.

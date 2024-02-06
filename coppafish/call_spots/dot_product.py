@@ -55,28 +55,22 @@ def gene_prob_score(spot_colours: np.ndarray, bled_codes: np.ndarray, kappa: flo
         kappa (float, optional), scaling factor for dot product score. Default: 2.
 
     Returns:
-        probability: np.ndarray of gene probabilities [n_spots, n_genes]
+        (`(n_spots x n_genes) ndarray[float]`): gene probabilities.
     """
     n_genes = bled_codes.shape[0]
     n_spots, n_rounds, n_channels_use = spot_colours.shape
     # First, normalise spot_colours so that for each spot s and round r, norm(spot_colours[s, r, :]) = 1
     spot_colours = spot_colours / np.linalg.norm(spot_colours, axis=2)[:, :, None]
-    # spot_colours_expected = spot_colours.copy()
-    # for s in range(n_spots):
-    #     for r in range(n_rounds):
-    #         if (spot_colours_expected[s, r] < 0).all():
-    #             print("Changed")
-    #             spot_colours_expected[s, r] *= -1
-    # TODO: Flip the sign of spot colours for all channels if spot_colours[s, r] < 0 for the greatest magnitude channel.
-    # all_negatives = (spot_colours.reshape((-1, n_channels_use)) < 0).all(1).reshape((n_spots, n_rounds))
-    # spot_colours[all_negatives] *= -1
     # Do the same for bled_codes
     bled_codes = bled_codes / np.linalg.norm(bled_codes, axis=2)[:, :, None]
+    # Flip the sign of a single spot and round if spot_colours[s, r, c] < 0 for the greatest magnitude channel.
+    spot_colours_reshaped = spot_colours.copy().reshape((-1, n_channels_use))
+    negatives = np.take_along_axis(spot_colours_reshaped, np.argmax(spot_colours_reshaped, axis=1)[:, None], 1) < 0
+    spot_colours[negatives.reshape((n_spots, n_rounds))] *= -1
     # At this point, reshape spot_colours to be [n_spots, n_rounds * n_channels_use] and bled_codes to be
     # [n_genes, n_rounds * n_channels_use]
     spot_colours = spot_colours.reshape((n_spots, -1))
     bled_codes = bled_codes.reshape((n_genes, -1))
-
     # Now we can compute the dot products of each spot with each gene, producing a matrix of shape [n_spots, n_genes]
     dot_product = spot_colours @ bled_codes.T
     probability = np.exp(kappa * dot_product)
