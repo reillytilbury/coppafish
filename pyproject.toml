@@ -3,6 +3,6 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: integration tests",
     "optimised: tests requiring requirements-optimised.txt packages",
-    "pytorch: tests requiring requirements-pytorch.txt packages"
+    "pytorch: tests requiring requirements-pytorch.txt packages",
     "pytorchgpu: tests requiring requirements-pytorchgpu.txt packages and an available cuda device"
 ]
