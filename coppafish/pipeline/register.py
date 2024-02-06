@@ -279,7 +279,7 @@ def register(
             transform_pre = preprocessing.invert_affine(preprocessing.yxz_to_zyx_affine(transform[t, r_pre, c]))
             z_scale_pre = transform_pre[0, 0]
             z_shift_pre = transform_pre[0, 3]
-            mid_z_pre = int((mid_z - z_shift_pre) / z_scale_pre)
+            mid_z_pre = int(np.clip((mid_z - z_shift_pre) / z_scale_pre, 0, len(nbp_basic.use_z) - 1))
             yxz = [None, None, mid_z_pre]
             image_preseq = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r_pre, c=c, yxz=yxz)
             image_preseq = image_preseq.astype(np.int32)
@@ -292,7 +292,7 @@ def register(
                 transform_seq = preprocessing.invert_affine(preprocessing.yxz_to_zyx_affine(transform[t, r, c]))
                 z_scale_seq = transform_seq[0, 0]
                 z_shift_seq = transform_seq[0, 3]
-                mid_z_seq = int((mid_z - z_shift_seq) / z_scale_seq)
+                mid_z_seq = int(np.clip((mid_z - z_shift_seq) / z_scale_seq, 0, len(nbp_basic.use_z) - 1))
                 yxz = [None, None, mid_z_seq]
                 image_seq = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r, c=c, yxz=yxz)
                 image_seq = image_seq.astype(np.int32)
