@@ -45,7 +45,6 @@ setup(
         "napari[all]<=0.4.17",
         "pydantic<=1.10.13",
     ],
-    extras_require={"optimised": ["jax[cpu]"], "pytorch": ["torch"], "pytorchgpu": ["torch"]},
     package_data={
         "coppafish.setup": [
             "settings.default.ini",

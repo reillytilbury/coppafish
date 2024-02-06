@@ -1,7 +1,13 @@
 2024/mm/dd Alpha Update (v0.9.0):
  * Ref spot PDF plots are now consistent with x and y axes.
- * New install option "pytorch" added for coppafish. Pytorch is a new way to run most of OMP functions and some parts 
-    of call spots using CPU.
+ * Coppafish no longer has installation options, you just do `pip install -e .` to install coppafish. The appropriate, 
+    tested package versions are installed by `pip install -r requirement...` with the wanted requirements text file.
+ * New support for pytorch on the CPU as a new way to run most of OMP functions and some parts of call spots using CPU. 
+    The appropriate packages can be installed by `pip install -r requirements-pytorch.txt`. 
+ * Pytorch 2.2.0 + cuda 12.1 is supported. The GPU is used to run parts of OMP. In detail, `get_all_coefs` will run 
+    with all tensors on the GPU when looping through OMP iterations. Then, when complete, the returned output will be 
+    on the CPU to not run out of memory on the GPU. The required packages can be installed by 
+    `pip install -r requirements-pytorchgpu.txt`.
  * For a single spot and round, if the largest magnitude spot colour is negative, its sign is flipped before computing 
     the Von-Mises gene probability.
 

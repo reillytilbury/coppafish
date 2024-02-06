@@ -7,10 +7,16 @@ except ImportError:
         from .qual_check import get_spot_intensity
 try:
     import jax
+    
     from .background import fit_background
 except ImportError:
     try:
-        from .background_pytorch import fit_background
+        import torch
+        
+        if torch.cuda.is_available():
+            from .background_pytorchgpu import fit_background
+        else:
+            from .background_pytorch import fit_background
     except ImportError:
         from .background import fit_background
 

@@ -1,15 +1,15 @@
 import numpy as np
-import napari
+import distinctipy
+from typing import Optional, List
+import matplotlib.pyplot as plt
+
 from .shift import view_register_search
 from ...find_spots import spot_yxz, get_isolated_points
-from coppafish.Unsure.register import get_single_affine_transform
+from coppafish.register.base import get_single_affine_transform
 from ...spot_colors.base import apply_transform
 from ..stitch import view_point_clouds
 from ...setup import Notebook
-import distinctipy
-from skimage.filters import sobel
-from typing import Optional, List
-import matplotlib.pyplot as plt
+
 plt.style.use('dark_background')
 
 

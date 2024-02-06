@@ -44,7 +44,7 @@ def fit_coefs(
         bled_codes[:, genes].transpose(0, 1),
         pixel_colors.T[..., None],
         rcond=None,
-        driver="gelsy",
+        driver="gels",
     )[0][:, :, 0]
     # Using pytorch's handy batch matrix multiply to batch over n_pixels for optimised code
     residuals = torch.swapaxes(
@@ -85,7 +85,7 @@ def fit_coefs_weight(
     bled_codes_weighted = bled_codes[:, genes].swapaxes(0, 1) * weight[..., None]
     # (n_pixels, n_rounds_channels)
     pixel_colors_weighted = pixel_colors.T * weight
-    coefs = torch.linalg.lstsq(bled_codes_weighted, pixel_colors_weighted, rcond=-1, driver="gelsy")[0]
+    coefs = torch.linalg.lstsq(bled_codes_weighted, pixel_colors_weighted, rcond=-1, driver="gels")[0]
     # Using pytorch's batch matrix multiplication to eliminate a need for a for loop
     residuals = pixel_colors_weighted - torch.bmm(bled_codes_weighted, coefs[..., None])[..., 0]
     residuals = residuals / weight
@@ -192,10 +192,14 @@ def get_best_gene_first_iter(
         - pass_score_thresh (`(n_pixels) tensor[bool]`): true if `best_score > score_thresh`.
         - background_var (`(n_pixels x (n_rounds * n_channels)) tensor[float]`): variance in each round/channel based
             on just the background.
+    
+    Notes:
+        - The returned tensors are placed on the same device as the parameters' device.
     """
+    device = residual_pixel_colors.device
     n_pixels = residual_pixel_colors.shape[0]
-    best_genes = torch.zeros(n_pixels, dtype=int)
-    pass_score_threshes = torch.zeros(n_pixels, dtype=bool)
+    best_genes = torch.zeros(n_pixels, dtype=int, device=device)
+    pass_score_threshes = torch.zeros(n_pixels, dtype=bool, device=device)
     # Ensure bled_codes are normalised for each gene
     all_bled_codes /= all_bled_codes.norm(dim=1, keepdim=True)
     background_vars = torch.square(background_coefs) @ torch.square(all_bled_codes[background_genes]) * alpha + beta**2
@@ -260,6 +264,7 @@ def get_best_gene(
             fit in each round/channel. The more genes added, the greater the variance so if the inverse is used as a
             weighting for omp fitting or choosing the next gene, the rounds/channels which already have genes in will
             contribute less.
+        - Returned variables are on the same device as the parameters' device.
     """
     assert residual_pixel_colors.ndim == 2
     assert all_bled_codes.ndim == 2
@@ -336,8 +341,13 @@ def get_all_coefs(
 
     Notes:
         - Background vectors are fitted first and then not updated again.
+        - All variables used in the for loop over OMP iterations is kept in GPU memory. They are then moved to the CPU 
+            device when all iterations are complete.
     """
+    cuda, cpu = torch.device("cuda"), torch.device("cpu")
     n_pixels = pixel_colors.shape[0]
+    pixel_colors = pixel_colors
+    bled_codes = bled_codes
     torch.manual_seed(0)
     check_spot = torch.randint(0, n_pixels, size=(1,))[0].item()
     diff_to_int = torch.round(pixel_colors[check_spot]).to(int) - pixel_colors[check_spot]
@@ -368,9 +378,15 @@ def get_all_coefs(
 
     # colors and codes for fit_coefs function (No background as this is not updated again).
     # always uses post background color as coefficients for all genes re-estimated at each iteration.
-    pixel_colors = pixel_colors.reshape((n_pixels, -1))
+    pixel_colors = pixel_colors.reshape((n_pixels, -1)).to(cuda)
+    
+    all_codes = all_codes.to(cuda)
+    background_coefs = background_coefs.to(cuda)
+    background_genes = background_genes.to(cuda)
+    bled_codes = bled_codes.to(cuda)
+    gene_coefs = gene_coefs.to(cuda)
 
-    continue_pixels = torch.arange(n_pixels)
+    continue_pixels = torch.arange(n_pixels, device=cuda)
     with tqdm.tqdm(total=max_genes, disable=no_verbose, desc="Finding OMP coefficients for each pixel") as pbar:
         for i in range(max_genes):
             if i == 0:
@@ -398,9 +414,9 @@ def get_all_coefs(
                 fail_score_thresh = torch.logical_not(pass_score_thresh)
                 # gene_coefs[torch.asarray(continue_pixels[fail_score_thresh])] = torch.asarray(i_coefs[fail_score_thresh])
                 gene_coefs[
-                    torch.asarray(continue_pixels[fail_score_thresh])[:, None],
-                    torch.asarray(added_genes[fail_score_thresh]),
-                ] = torch.asarray(i_coefs[fail_score_thresh])
+                    torch.asarray(continue_pixels[fail_score_thresh], device=cuda)[:, None],
+                    torch.asarray(added_genes[fail_score_thresh], device=cuda),
+                ] = torch.asarray(i_coefs[fail_score_thresh], device=cuda)
 
             continue_pixels = continue_pixels[pass_score_thresh]
             n_continue = len(continue_pixels)
@@ -425,11 +441,16 @@ def get_all_coefs(
 
             if i == max_genes - 1:
                 # Add pixels to final gene_coefs when reach end of iteration.
-                gene_coefs[torch.asarray(continue_pixels)[:, None], torch.asarray(added_genes)] = torch.asarray(i_coefs)
+                gene_coefs[
+                    torch.asarray(continue_pixels, device=cuda)[:, None], torch.asarray(added_genes, device=cuda)
+                ] = torch.asarray(i_coefs, device=cuda)
 
+            # Clear any remaining large GPU tensors in vRAM
+            with torch.no_grad():
+                torch.cuda.empty_cache()
             pbar.update()
 
-    return gene_coefs.type(torch.float32), background_coefs.type(torch.float32)
+    return gene_coefs.type(torch.float32).to(cpu), background_coefs.type(torch.float32).to(cpu)
 
 
 def get_pixel_coefs_yxz(

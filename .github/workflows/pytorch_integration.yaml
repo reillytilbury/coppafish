@@ -37,7 +37,7 @@ jobs:
       - name: Install pytorch dependencies
         run: |
           python -m pip install -r requirements-pytorch.txt
-          python -m pip install .[pytorch]
+          python -m pip install .
 
       - name: Run pytorch unit tests
         run: pytest -m 'pytorch and not slow'

@@ -4,15 +4,10 @@ import os
 import warnings
 from scipy import sparse
 from typing import Optional
-
 try:
     import jax.numpy as jnp
-
-    optimised = True
 except ImportError:
     import numpy as jnp
-
-    optimised = False
 
 from .. import utils
 from ..setup.notebook import NotebookPage
@@ -62,11 +57,7 @@ def call_spots_omp(
 
     Returns:
         `NotebookPage[omp]` - Page contains gene assignments and info for spots using omp.
-
     """
-    if not optimised:
-        warnings.warn("Jax is not installed so call_spots_omp will be slow")
-
     nbp = NotebookPage("omp")
     nbp.software_version = utils.system.get_software_verison()
     nbp.revision_hash = utils.system.get_git_revision_hash()

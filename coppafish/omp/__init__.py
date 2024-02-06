@@ -2,7 +2,12 @@ try:
     from .coefs_optimised import get_pixel_coefs_yxz
 except ImportError:
     try:
-        from .coefs_pytorch import get_pixel_coefs_yxz
+        import torch
+
+        if torch.cuda.is_available():
+            from .coefs_pytorchgpu import get_pixel_coefs_yxz
+        else:
+            from .coefs_pytorch import get_pixel_coefs_yxz
     except ImportError:
         from .coefs import get_pixel_coefs_yxz
 
