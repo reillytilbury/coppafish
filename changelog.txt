@@ -1,5 +1,4 @@
 2024/mm/dd Alpha Update (v0.9.0):
- * Ref spot PDF plots are now consistent with x and y axes.
  * Coppafish no longer has installation options, you just do `pip install -e .` to install coppafish. The appropriate, 
     tested package versions are installed by `pip install -r requirement...` with the wanted requirements text file.
  * New support for pytorch on the CPU as a new way to run most of OMP functions and some parts of call spots using CPU. 
@@ -10,7 +9,9 @@
     `pip install -r requirements-pytorchgpu.txt`.
  * For a single spot and round, if the largest magnitude spot colour is negative, its sign is flipped before computing 
     the Von-Mises gene probability.
+ * OMP call spots colour norm factor applied incorrectly has now been fixed.
  * "extract_debug" notebook page checks still being used are now removed since the page does not exist any more fix.
+ * Ref spot PDF plots are now consistent with x and y axes.
 
 
 2024/02/06 Alpha Update (v0.8.3):
