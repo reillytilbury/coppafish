@@ -404,7 +404,7 @@ def get_all_coefs(
 
             continue_pixels = continue_pixels[pass_score_thresh]
             n_continue = len(continue_pixels)
-            pbar.set_postfix({"n_pixels": n_continue})
+            pbar.set_postfix({"n_pixels": n_continue, "gpu": "false"})
             if n_continue == 0:
                 break
             if i == 0:
