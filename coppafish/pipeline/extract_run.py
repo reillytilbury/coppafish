@@ -38,7 +38,7 @@ def run_extract(
         raise NotImplementedError(f"coppafish 2d is not in a stable state, please contact a dev to add this. Sorry! ;(")
 
     nbp = NotebookPage("extract")
-    nbp.software_version = utils.system.get_software_verison()
+    nbp.software_version = utils.system.get_software_version()
     nbp.revision_hash = utils.system.get_git_revision_hash()
     nbp.file_type = config["file_type"]
     nbp.continuous_dapi = config["continuous_dapi"]

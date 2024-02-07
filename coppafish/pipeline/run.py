@@ -51,6 +51,7 @@ def run_pipeline(
     Returns:
         Notebook: notebook containing all information gathered during the pipeline.
     """
+    print(f" COPPAFISH v{utils.system.get_software_version()} ".center(utils.system.current_terminal_size_xy()[0], "="))
     nb = initialize_nb(config_file)
     if not parallel:
         run_tile_indep_pipeline(nb)
@@ -110,9 +111,9 @@ def initialize_nb(config_file: str) -> Notebook:
         nb += nbp_basic
     else:
         warnings.warn("basic_info", utils.warnings.NotebookPageWarning)
-    if utils.system.get_software_verison() not in nb.get_unique_versions():
+    if utils.system.get_software_version() not in nb.get_unique_versions():
         warnings.warn(
-            f"You are running on software version {utils.system.get_software_verison()}, but the notebook "
+            f"You are running on software version {utils.system.get_software_version()}, but the notebook "
             + f"contains data run on versions {nb.get_unique_versions()}."
         )
         print("Are you sure you want to continue? (y or n) ", end="")

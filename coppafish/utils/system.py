@@ -1,11 +1,13 @@
 import os
+import shutil
 import psutil
 import subprocess
 import numpy as np
 from pathlib import PurePath
+from typing import Tuple
 
 
-def get_software_verison() -> str:
+def get_software_version() -> str:
     """
     Get coppafish's version tag written in _version.py
 
@@ -62,3 +64,14 @@ def get_core_count() -> int:
     n_threads = np.clip(n_threads, 1, 999, dtype=int)
 
     return int(n_threads)
+
+
+def current_terminal_size_xy() -> Tuple[int, int]:
+    """
+    Get the current terminal size in x and y direction. Falls back to a default of `(80, 20)` if cannot be found.
+
+    Returns:
+        - (int): number of terminal columns.
+        - (int): number of terminal rows.
+    """
+    return tuple(shutil.get_terminal_size((80, 20)))
