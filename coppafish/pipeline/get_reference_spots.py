@@ -60,7 +60,7 @@ def get_reference_spots(
     # We create a notebook page for ref_spots which stores information like local coords, isolated info, tile_no of each
     # spot and much more.
     nbp = NotebookPage("ref_spots")
-    nbp.software_version = utils.system.get_software_verison()
+    nbp.software_version = utils.system.get_software_version()
     nbp.revision_hash = utils.system.get_git_revision_hash()
     # The code is going to loop through all tiles, as we expect some anchor spots on each tile but r and c should stay
     # fixed as the value of the reference round and reference channel

@@ -42,7 +42,7 @@ def find_spots(
 
     # Phase 0: Initialisation
     nbp = NotebookPage("find_spots")
-    nbp.software_version = utils.system.get_software_verison()
+    nbp.software_version = utils.system.get_software_version()
     nbp.revision_hash = utils.system.get_git_revision_hash()
     if nbp_basic.is_3d is False:
         # set z details to None if using 2d pipeline

@@ -32,7 +32,7 @@ def compute_scale(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage)
         )
 
     nbp = NotebookPage("scale")
-    nbp.software_version = utils.system.get_software_verison()
+    nbp.software_version = utils.system.get_software_version()
     nbp.revision_hash = utils.system.get_git_revision_hash()
     
     if not os.path.isdir(os.path.dirname(nbp_file.scale)):

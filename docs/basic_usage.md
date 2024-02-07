@@ -114,3 +114,17 @@ fraction of the tile in x (y) dimension that is overlapping between adjacent til
 about every config variable can be found at 
 <a href="https://github.com/reillytilbury/coppafish/blob/alpha/coppafish/setup/settings.default.ini" target="_blank">
 `coppafish/setup/settings.default.ini`</a> in the source code.
+
+## Running
+
+Coppafish can be run with a config file. In the terminal
+```console
+python -m coppafish /path/to/config.ini
+```
+
+Or using a python script
+```python
+from coppafish import run_pipeline
+
+run_pipeline("/path/to/config.ini")
+```

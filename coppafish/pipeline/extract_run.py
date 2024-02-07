@@ -30,8 +30,7 @@ def run_extract(
             `hist_values`, `hist_counts` required for normalisation between channels.
 
     Notes:
-        - See `'extract'` and `'extract_debug'` sections of `notebook_comments.json` file for description of the
-            variables in each page.
+        - See `'extract'` sections of `notebook_comments.json` file for description of the variables in each page.
     """
     # initialise notebook pages
     if not nbp_basic.is_3d:
@@ -39,7 +38,7 @@ def run_extract(
         raise NotImplementedError(f"coppafish 2d is not in a stable state, please contact a dev to add this. Sorry! ;(")
 
     nbp = NotebookPage("extract")
-    nbp.software_version = utils.system.get_software_verison()
+    nbp.software_version = utils.system.get_software_version()
     nbp.revision_hash = utils.system.get_git_revision_hash()
     nbp.file_type = config["file_type"]
     nbp.continuous_dapi = config["continuous_dapi"]

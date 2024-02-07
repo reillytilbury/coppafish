@@ -10,8 +10,9 @@ from ..utils.spot_images import get_spot_images, get_average_spot_image
 from ..find_spots import detect_spots, get_isolated_points
 
 
-def count_spot_neighbours(image: np.ndarray, spot_yxz: np.ndarray,
-                          kernel: np.ndarray) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+def count_spot_neighbours(
+    image: np.ndarray, spot_yxz: np.ndarray, kernel: np.ndarray
+) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Counts the number of positive (and negative) pixels in a neighbourhood about each spot.
     If `filter` contains only 1 and 0, then number of positive pixels returned near each spot.
@@ -36,7 +37,7 @@ def count_spot_neighbours(image: np.ndarray, spot_yxz: np.ndarray,
     # Correct for 2d cases where an empty dimension has been used for some variables.
     if all([image.ndim == spot_yxz.shape[1] - 1, np.max(np.abs(spot_yxz[:, -1])) == 0]):
         # Image 2D but spots 3D
-        spot_yxz = spot_yxz[:, :image.ndim]
+        spot_yxz = spot_yxz[:, : image.ndim]
     if all([image.ndim == spot_yxz.shape[1] + 1, image.shape[-1] == 1]):
         # Image 3D but spots 2D
         image = np.mean(image, axis=image.ndim - 1)  # average over last dimension just means removing it.
@@ -47,7 +48,7 @@ def count_spot_neighbours(image: np.ndarray, spot_yxz: np.ndarray,
     # Check kernel contains right values.
     kernel_vals = np.unique(kernel)
     if not np.isin(kernel_vals, [-1, 0, 1]).all():
-        raise ValueError('filter contains values other than -1, 0 or 1.')
+        raise ValueError("filter contains values other than -1, 0 or 1.")
 
     # Check all spots in image
     max_yxz = np.array(image.shape) - 1
@@ -67,11 +68,12 @@ def count_spot_neighbours(image: np.ndarray, spot_yxz: np.ndarray,
         # Return positive counts
         return utils.morphology.imfilter_coords(image > 0, kernel > 0, spot_yxz).astype(int)
     else:
-        raise ValueError('filter contains only 0.')
+        raise ValueError("filter contains only 0.")
 
 
-def cropped_coef_image(pixel_yxz: np.ndarray,
-                       pixel_coefs: Union[csr_matrix, np.array]) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+def cropped_coef_image(
+    pixel_yxz: np.ndarray, pixel_coefs: Union[csr_matrix, np.array]
+) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     """
     Make cropped coef_image which is smallest possible image such that all non-zero pixel_coefs included.
 
@@ -110,17 +112,24 @@ def cropped_coef_image(pixel_yxz: np.ndarray,
 
         # coef_image at pixels other than nz_pixel_yxz is set to 0.
         if n_z == 1:
-            coef_image = np.zeros((n_y, n_x), dtype = np.float32)
+            coef_image = np.zeros((n_y, n_x), dtype=np.float32)
         else:
-            coef_image = np.zeros((n_y, n_x, n_z), dtype = np.float32)
+            coef_image = np.zeros((n_y, n_x, n_z), dtype=np.float32)
         coef_image[tuple([nz_pixel_yxz[:, j] for j in range(coef_image.ndim)])] = nz_pixel_coefs
         return coef_image, coord_shift
 
 
-def spot_neighbourhood(pixel_coefs: Union[csr_matrix, np.array], pixel_yxz: np.ndarray, spot_yxz: np.ndarray,
-                       spot_gene_no: np.ndarray, max_size: Union[np.ndarray, List], pos_neighbour_thresh: int,
-                       isolation_dist: float, z_scale: float,
-                       mean_sign_thresh: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def spot_neighbourhood(
+    pixel_coefs: Union[csr_matrix, np.array],
+    pixel_yxz: np.ndarray,
+    spot_yxz: np.ndarray,
+    spot_gene_no: np.ndarray,
+    max_size: Union[np.ndarray, List],
+    pos_neighbour_thresh: int,
+    isolation_dist: float,
+    z_scale: float,
+    mean_sign_thresh: float,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Finds the expected sign the coefficient should have in the neighbourhood about a spot.
 
@@ -162,12 +171,10 @@ def spot_neighbourhood(pixel_coefs: Union[csr_matrix, np.array], pixel_yxz: np.n
     # TODO: Maybe provide pixel_coef_sign instead of pixel_coef as less memory or use csr_matrix.
     n_pixels, n_genes = pixel_coefs.shape
     if not utils.errors.check_shape(pixel_yxz, [n_pixels, 3]):
-        raise utils.errors.ShapeError('pixel_yxz', pixel_yxz.shape,
-                                      (n_pixels, 3))
+        raise utils.errors.ShapeError("pixel_yxz", pixel_yxz.shape, (n_pixels, 3))
     n_spots = spot_gene_no.shape[0]
     if not utils.errors.check_shape(spot_yxz, [n_spots, 3]):
-        raise utils.errors.ShapeError('spot_yxz', spot_yxz.shape,
-                                      (n_spots, 3))
+        raise utils.errors.ShapeError("spot_yxz", spot_yxz.shape, (n_spots, 3))
 
     n_z = pixel_yxz.max(axis=0)[2] + 1
 
@@ -180,9 +187,9 @@ def spot_neighbourhood(pixel_coefs: Union[csr_matrix, np.array], pixel_yxz: np.n
     else:
         pos_filter_shape_z = 3
     pos_filter = np.zeros((pos_filter_shape_yx, pos_filter_shape_yx, pos_filter_shape_z), dtype=int)
-    pos_filter[:, :, np.floor(pos_filter_shape_z/2).astype(int)] = 1
+    pos_filter[:, :, np.floor(pos_filter_shape_z / 2).astype(int)] = 1
     if pos_filter_shape_z == 3:
-        mid_yx = np.floor(pos_filter_shape_yx/2).astype(int)
+        mid_yx = np.floor(pos_filter_shape_yx / 2).astype(int)
         pos_filter[mid_yx, mid_yx, 0] = 1
         pos_filter[mid_yx, mid_yx, 2] = 1
 
@@ -218,8 +225,10 @@ def spot_neighbourhood(pixel_coefs: Union[csr_matrix, np.array], pixel_yxz: np.n
                 # nan_to_num sets nan to zero i.e. if out of range of coef_sign_image, coef assumed zero.
                 # This is what we want as have cropped coef_sign_image to exclude zero coefficients.
                 spot_images = np.append(
-                    spot_images, np.nan_to_num(get_spot_images(coef_sign_image, g_spot_yxz[g_use], max_size)
-                                               ).astype(int), axis=0)
+                    spot_images,
+                    np.nan_to_num(get_spot_images(coef_sign_image, g_spot_yxz[g_use], max_size)).astype(int),
+                    axis=0,
+                )
                 spots_used[use] = True
 
     if not spots_used.any():
@@ -227,7 +236,7 @@ def spot_neighbourhood(pixel_coefs: Union[csr_matrix, np.array], pixel_yxz: np.n
     # Compute average spot image from all isolated spots
     isolated = get_isolated_points(spot_yxz[spots_used] * [1, 1, z_scale], isolation_dist)
     # get_average below ignores the nan values.
-    av_spot_image = get_average_spot_image(spot_images[isolated].astype(float), 'mean', 'annulus_3d')
+    av_spot_image = get_average_spot_image(spot_images[isolated].astype(float), "mean", "annulus_3d")
     av_spot_image_float = av_spot_image.copy()
     spot_indices_used = np.where(spots_used)[0][isolated]
 
@@ -242,22 +251,34 @@ def spot_neighbourhood(pixel_coefs: Union[csr_matrix, np.array], pixel_yxz: np.n
     av_spot_image = av_spot_image[~np.all(av_spot_image == 0, axis=(1, 2)), :, :]
 
     if np.sum(av_spot_image == 1) == 0:
-        warnings.warn(f"In av_spot_image, no pixels have a value of 1.\n"
-                      f"Maybe mean_sign_thresh = {mean_sign_thresh} is too high.")
+        warnings.warn(
+            f"In av_spot_image, no pixels have a value of 1.\n"
+            f"Maybe mean_sign_thresh = {mean_sign_thresh} is too high."
+        )
     if np.sum(av_spot_image == -1) == 0:
-        warnings.warn(f"In av_spot_image, no pixels have a value of -1.\n"
-                      f"Maybe mean_sign_thresh = {mean_sign_thresh} is too high.")
+        warnings.warn(
+            f"In av_spot_image, no pixels have a value of -1.\n"
+            f"Maybe mean_sign_thresh = {mean_sign_thresh} is too high."
+        )
     if np.sum(av_spot_image == 0) == 0:
-        warnings.warn(f"In av_spot_image, no pixels have a value of 0.\n"
-                      f"Maybe mean_sign_thresh = {mean_sign_thresh} is too low.")
+        warnings.warn(
+            f"In av_spot_image, no pixels have a value of 0.\n"
+            f"Maybe mean_sign_thresh = {mean_sign_thresh} is too low."
+        )
 
     return av_spot_image, spot_indices_used, av_spot_image_float
 
 
-def get_spots(pixel_coefs: Union[csr_matrix, np.array], pixel_yxz: np.ndarray, radius_xy: int, radius_z: Optional[int],
-              coef_thresh: float = 0, spot_shape: Optional[np.ndarray] = None,
-              pos_neighbour_thresh: int = 0, spot_yxzg: Optional[np.ndarray] = None
-              ) -> Union[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
+def get_spots(
+    pixel_coefs: Union[csr_matrix, np.array],
+    pixel_yxz: np.ndarray,
+    radius_xy: int,
+    radius_z: Optional[int],
+    coef_thresh: float = 0,
+    spot_shape: Optional[np.ndarray] = None,
+    pos_neighbour_thresh: int = 0,
+    spot_yxzg: Optional[np.ndarray] = None,
+) -> Union[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
     """
     Finds all local maxima in `coef_image` of each gene with coefficient exceeding `coef_thresh`
     and returns corresponding `yxz` position and `gene_no`.
@@ -303,22 +324,26 @@ def get_spots(pixel_coefs: Union[csr_matrix, np.array], pixel_yxz: np.ndarray, r
 
     n_pixels, n_genes = pixel_coefs.shape
     if not utils.errors.check_shape(pixel_yxz, [n_pixels, 3]):
-        raise utils.errors.ShapeError('pixel_yxz', pixel_yxz.shape,
-                                      (n_pixels, 3))
+        raise utils.errors.ShapeError("pixel_yxz", pixel_yxz.shape, (n_pixels, 3))
 
     if spot_shape is None:
         spot_info = np.zeros((0, 4), dtype=int)
     else:
         if np.sum(spot_shape == 1) == 0:
-            raise ValueError(f"spot_shape contains no pixels with a value of 1 which indicates the "
-                             f"neighbourhood about a spot where we expect a positive coefficient.")
+            raise ValueError(
+                f"spot_shape contains no pixels with a value of 1 which indicates the "
+                f"neighbourhood about a spot where we expect a positive coefficient."
+            )
         if np.sum(spot_shape == -1) == 0:
-            raise ValueError(f"spot_shape contains no pixels with a value of -1 which indicates the "
-                             f"neighbourhood about a spot where we expect a negative coefficient.")
+            raise ValueError(
+                f"spot_shape contains no pixels with a value of -1 which indicates the "
+                f"neighbourhood about a spot where we expect a negative coefficient."
+            )
         if pos_neighbour_thresh < 0 or pos_neighbour_thresh >= np.sum(spot_shape > 0):
             # Out of bounds if threshold for positive neighbours is above the maximum possible.
-            raise utils.errors.OutOfBoundsError("pos_neighbour_thresh", pos_neighbour_thresh, 0,
-                                                np.sum(spot_shape > 0)-1)
+            raise utils.errors.OutOfBoundsError(
+                "pos_neighbour_thresh", pos_neighbour_thresh, 0, np.sum(spot_shape > 0) - 1
+            )
         spot_info = np.zeros((0, 6), dtype=int)
 
     if spot_yxzg is not None:
@@ -329,13 +354,14 @@ def get_spots(pixel_coefs: Union[csr_matrix, np.array], pixel_yxz: np.ndarray, r
         spot_coefs_check = pixel_coefs[pixel_index, spot_yxzg[spots_to_check, 3]]
         if spot_coefs_check.min() <= coef_thresh:
             bad_spot = spots_to_check[spot_coefs_check.argmin()]
-            raise ValueError(f"spot_yxzg provided but gene {spot_yxzg[bad_spot, 3]} coefficient for spot {bad_spot}\n"
-                             f"at yxz = {spot_yxzg[bad_spot, :3]} is {spot_coefs_check.min()} \n"
-                             f"whereas it should be more than coef_thresh = {coef_thresh} as it is listed as a spot.")
+            raise ValueError(
+                f"spot_yxzg provided but gene {spot_yxzg[bad_spot, 3]} coefficient for spot {bad_spot}\n"
+                f"at yxz = {spot_yxzg[bad_spot, :3]} is {spot_coefs_check.min()} \n"
+                f"whereas it should be more than coef_thresh = {coef_thresh} as it is listed as a spot."
+            )
         del spots_to_check, pixel_index
     # TODO: if 2D can do all genes together.
-    # TODO: Optimise with jax
-    for g in tqdm.trange(n_genes, desc=f'Finding spots for all {n_genes} genes from omp_coef images'):
+    for g in tqdm.trange(n_genes, desc=f"Finding spots for all {n_genes} genes from omp_coef images"):
         # shift nzg_pixel_yxz so min is 0 in each axis so smaller image can be formed.
         # Note size of image will be different for each gene.
         coef_image, coord_shift = cropped_coef_image(pixel_yxz, pixel_coefs[:, g])
@@ -346,7 +372,7 @@ def get_spots(pixel_coefs: Union[csr_matrix, np.array], pixel_yxz: np.ndarray, r
             spot_yxz = detect_spots(coef_image, coef_thresh, radius_xy, radius_z, False)[0]
         else:
             # spot_yxz match pixel_yxz so if crop pixel_yxz need to crop spot_yxz too.
-            spot_yxz = spot_yxzg[spot_yxzg[:, 3] == g,:coef_image.ndim] - coord_shift[:coef_image.ndim]
+            spot_yxz = spot_yxzg[spot_yxzg[:, 3] == g, : coef_image.ndim] - coord_shift[: coef_image.ndim]
         if spot_yxz.shape[0] == 0:
             continue
         if spot_shape is None:
@@ -360,7 +386,7 @@ def get_spots(pixel_coefs: Union[csr_matrix, np.array], pixel_yxz: np.ndarray, r
             spot_info_g[:, 5] = n_neg_neighb[keep]
             del n_pos_neighb, n_neg_neighb
 
-        spot_info_g[:, :coef_image.ndim] = spot_yxz[keep]
+        spot_info_g[:, : coef_image.ndim] = spot_yxz[keep]
         del coef_image, spot_yxz
         spot_info_g[:, :3] = spot_info_g[:, :3] + coord_shift  # shift spot_yxz back
         del coord_shift
