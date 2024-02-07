@@ -9,10 +9,12 @@
     with all tensors on the GPU when looping through OMP iterations. Then, when complete, the returned output will be 
     on the CPU to not run out of memory on the GPU. The required packages can be installed by 
     `pip install -r requirements-pytorchgpu.txt`.
+ * Support for Windows when running coppafish with pytorch, pytorch with a GPU, or numpy-only.
  * For a single spot and round, if the largest magnitude spot colour is negative, its sign is flipped before computing 
     the Von-Mises gene probability.
  * OMP call spots colour norm factor applied incorrectly has now been fixed.
  * "extract_debug" notebook page checks still being used are now removed since the page does not exist any more fix.
+ * Coppafish version number is printed at the start of a pipeline run.
  * Ref spot PDF plots are now consistent with x and y axes.
 
 
