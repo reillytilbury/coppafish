@@ -330,7 +330,7 @@ def call_spots_omp(
     # Only read in used colors first for background/intensity calculation.
     nd_spot_colors_use = np.ones((n_spots, n_rounds_use, n_channels_use), dtype=np.int32) * invalid_value
     spot_colors_norm = np.ones((n_spots, n_rounds_use, n_channels_use), dtype=np.float32) * invalid_value
-    for t in nbp_basic.use_tiles:
+    for i, t in enumerate(nbp_basic.use_tiles):
         in_tile = nbp.tile == t
         if np.sum(in_tile) > 0:
             nd_spot_colors_use[in_tile] = spot_colors.get_spot_colors(
@@ -342,7 +342,7 @@ def call_spots_omp(
                 nbp_extract,
                 nbp_filter,
             )[0]
-            spot_colors_norm[in_tile] = nd_spot_colors_use[in_tile] / color_norm_factor[t]
+            spot_colors_norm[in_tile] = nd_spot_colors_use[in_tile] / color_norm_factor[i]
     nbp.intensity = np.asarray(call_spots.get_spot_intensity(spot_colors_norm))
     del spot_colors_norm
 
