@@ -30,8 +30,7 @@ def run_extract(
             `hist_values`, `hist_counts` required for normalisation between channels.
 
     Notes:
-        - See `'extract'` and `'extract_debug'` sections of `notebook_comments.json` file for description of the
-            variables in each page.
+        - See `'extract'` sections of `notebook_comments.json` file for description of the variables in each page.
     """
     # initialise notebook pages
     if not nbp_basic.is_3d:
