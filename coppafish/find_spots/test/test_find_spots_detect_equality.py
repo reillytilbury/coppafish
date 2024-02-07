@@ -6,7 +6,7 @@ import pytest
 def test_detect_spots_equality():
     from coppafish.find_spots.detect import detect_spots
     from coppafish.find_spots.detect_optimised import detect_spots as detect_spots_jax
-    
+
     rng = np.random.RandomState(8)
     n_x = 9
     n_y = 10
@@ -19,11 +19,12 @@ def test_detect_spots_equality():
         peak_yxz, peak_intensity = detect_spots(image, intensity_thresh, radius_xy, radius_z, remove_duplicates)
         n_peaks = peak_yxz.shape[0]
         assert peak_yxz.shape == (n_peaks, image.ndim)
-        assert peak_intensity.shape == (n_peaks, )
-        peak_yxz_jax, peak_intensity_jax = detect_spots_jax(image, intensity_thresh, radius_xy, radius_z, 
-                                                            remove_duplicates)
+        assert peak_intensity.shape == (n_peaks,)
+        peak_yxz_jax, peak_intensity_jax = detect_spots_jax(
+            image, intensity_thresh, radius_xy, radius_z, remove_duplicates
+        )
         n_peaks = peak_yxz_jax.shape[0]
         assert peak_yxz_jax.shape == (n_peaks, image.ndim)
-        assert peak_intensity_jax.shape == (n_peaks, )
+        assert peak_intensity_jax.shape == (n_peaks,)
         assert np.allclose(peak_yxz, peak_yxz_jax)
         assert np.allclose(peak_intensity, peak_intensity_jax)

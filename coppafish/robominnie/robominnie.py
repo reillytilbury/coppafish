@@ -981,9 +981,6 @@ class RoboMinnie:
 
         [stitch]
         expected_overlap = {self.tile_overlap if self.n_tiles > 1 else 0}
-        shift_max_range = 25, 25, 10
-        shift_score_thresh = {0.2 if self.n_tiles > 1 else ''}
-        auto_n_shifts = 2, 2, 1
 
         [register]
         subvols = {1}, {8}, {8}

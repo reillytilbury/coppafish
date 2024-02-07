@@ -18,8 +18,10 @@ class OutOfBoundsError(Exception):
             min_allowed: Smallest allowed value i.e. `>= min_allowed`.
             max_allowed: Largest allowed value i.e. `<= max_allowed`.
         """
-        self.message = f"\n{var_name} contains the value {oob_val}." \
-                       f"\nThis is outside the expected inclusive range between {min_allowed} and {max_allowed}"
+        self.message = (
+            f"\n{var_name} contains the value {oob_val}."
+            f"\nThis is outside the expected inclusive range between {min_allowed} and {max_allowed}"
+        )
         super().__init__(self.message)
 
 
@@ -86,20 +88,26 @@ class TiffError(Exception):
 
         Args:
             scale_tiff: Scale factor applied to tiff. Found from tiff description.
-            scale_nbp: Scale factor applied to tiff. Found from `nb.extract_debug.scale`.
+            scale_nbp: Scale factor applied to tiff. Found from `nb.scale.scale`.
             shift_tiff: Shift applied to tiff to ensure pixel values positive. Found from tiff description.
             shift_nbp: Shift applied to tiff to ensure pixel values positive.
                 Found from `nb.basic_info.tile_pixel_value_shift`.
         """
-        self.message = f"\nThere are differences between the parameters used to make the tiffs and the parameters " \
-                       f"in the Notebook:"
+        self.message = (
+            f"\nThere are differences between the parameters used to make the tiffs and the parameters "
+            f"in the Notebook:"
+        )
         if scale_tiff != scale_nbp:
-            self.message = self.message + f"\nScale used to make tiff was {scale_tiff}." \
-                                          f"\nCurrent scale in extract_params notebook page is {scale_nbp}."
+            self.message = (
+                self.message + f"\nScale used to make tiff was {scale_tiff}."
+                f"\nCurrent scale in extract_params notebook page is {scale_nbp}."
+            )
         if shift_tiff != shift_nbp:
-            self.message = self.message + f"\nShift used to make tiff was {shift_tiff}." \
-                                          f"\nCurrent tile_pixel_value_shift in basic_info notebook page is " \
-                                          f"{shift_nbp}."
+            self.message = (
+                self.message + f"\nShift used to make tiff was {shift_tiff}."
+                f"\nCurrent tile_pixel_value_shift in basic_info notebook page is "
+                f"{shift_nbp}."
+            )
         super().__init__(self.message)
 
 
@@ -180,8 +188,15 @@ def check_color_nan(colors: np.ndarray, nbp_basic: NotebookPage) -> None:
 
 
 class ColorInvalidError(Exception):
-    def __init__(self, colors: np.ndarray, nbp_basic: NotebookPage, invalid_value: float, round_no: Optional[int] = None,
-                 channel_no: Optional[int] = None, code_no: Optional[int] = None):
+    def __init__(
+        self,
+        colors: np.ndarray,
+        nbp_basic: NotebookPage,
+        invalid_value: float,
+        round_no: Optional[int] = None,
+        channel_no: Optional[int] = None,
+        code_no: Optional[int] = None,
+    ):
         """
         Error raised because `spot_colors` contains a `invalid_value` where it should not.
 
@@ -198,27 +213,41 @@ class ColorInvalidError(Exception):
         """
         n_spots, n_rounds, n_channels = colors.shape
         if round_no is not None and code_no is None:
-            self.message = f"colors contains a value other than invalid_value={invalid_value} in round {round_no}\n" \
-                           f"which is not in use_rounds = {nbp_basic.use_rounds}."
+            self.message = (
+                f"colors contains a value other than invalid_value={invalid_value} in round {round_no}\n"
+                f"which is not in use_rounds = {nbp_basic.use_rounds}."
+            )
         elif channel_no is not None and code_no is None:
-            self.message = f"colors contains a value other than invalid_value={invalid_value} in channel {channel_no}\n" \
-                           f"which is not in use_channels = {nbp_basic.use_channels}."
+            self.message = (
+                f"colors contains a value other than invalid_value={invalid_value} in channel {channel_no}\n"
+                f"which is not in use_channels = {nbp_basic.use_channels}."
+            )
         elif round_no is not None and channel_no is not None and code_no is not None:
-            self.message = f"colors contains a invalid_value={invalid_value} for code {code_no}, round {round_no}, " \
-                           f"channel {channel_no}.\n" \
-                           f"There should be no invalid_values in this round and channel."
+            self.message = (
+                f"colors contains a invalid_value={invalid_value} for code {code_no}, round {round_no}, "
+                f"channel {channel_no}.\n"
+                f"There should be no invalid_values in this round and channel."
+            )
         else:
-            self.message = f"colors has n_rounds = {n_rounds} and n_channels = {n_channels}.\n" \
-                           f"This is neither matches the total_rounds = {nbp_basic.n_rounds} and " \
-                           f"total_channels = {nbp_basic.n_channels}\n" \
-                           f"nor the number of use_rounds = {len(nbp_basic.use_rounds)} and use_channels = " \
-                           f"{len(nbp_basic.use_channels)}"
+            self.message = (
+                f"colors has n_rounds = {n_rounds} and n_channels = {n_channels}.\n"
+                f"This is neither matches the total_rounds = {nbp_basic.n_rounds} and "
+                f"total_channels = {nbp_basic.n_channels}\n"
+                f"nor the number of use_rounds = {len(nbp_basic.use_rounds)} and use_channels = "
+                f"{len(nbp_basic.use_channels)}"
+            )
         super().__init__(self.message)
 
 
-def compare_spots(spot_positions_yxz: npt.NDArray[np.float64], spot_gene_indices: npt.NDArray[np.int_], 
-                   true_spot_positions_yxz: npt.NDArray[np.float64], true_spot_gene_identities: npt.NDArray[np.str_], 
-                   location_threshold_squared: float, codes: Dict[str,str], description: str) -> Tuple[int,int,int,int]:
+def compare_spots(
+    spot_positions_yxz: npt.NDArray[np.float64],
+    spot_gene_indices: npt.NDArray[np.int_],
+    true_spot_positions_yxz: npt.NDArray[np.float64],
+    true_spot_gene_identities: npt.NDArray[np.str_],
+    location_threshold_squared: float,
+    codes: Dict[str, str],
+    description: str,
+) -> Tuple[int, int, int, int]:
     """
     Compare two collections of spots (one is the ground truth) based on their positions and gene identities.
 
@@ -240,7 +269,7 @@ def compare_spots(spot_positions_yxz: npt.NDArray[np.float64], spot_gene_indices
     Notes:
         See ``RoboMinnie.compare_ref_spots`` or ``RoboMinnie.compare_omp_spots`` for more details.
     """
-    true_positives  = 0
+    true_positives = 0
     wrong_positives = 0
     false_positives = 0
     false_negatives = 0
@@ -249,22 +278,25 @@ def compare_spots(spot_positions_yxz: npt.NDArray[np.float64], spot_gene_indices
     true_spot_count = true_spot_positions_yxz.shape[0]
     # Stores the indices of every true spot index that has been paired to a spot already
     true_spots_paired = np.empty(0, dtype=int)
-    for s in tqdm.trange(spot_count, ascii=True, desc=description, unit='spots'):
-        x = spot_positions_yxz[s,1]
-        y = spot_positions_yxz[s,0]
-        z = spot_positions_yxz[s,2]
+    for s in tqdm.trange(spot_count, ascii=True, desc=description, unit="spots"):
+        x = spot_positions_yxz[s, 1]
+        y = spot_positions_yxz[s, 0]
+        z = spot_positions_yxz[s, 2]
         position_s = np.repeat([[y, x, z]], true_spot_count, axis=0)
         # Subtract the spot position along all true spots
         position_delta = np.subtract(true_spot_positions_yxz, position_s)
-        position_delta_squared = \
-            position_delta[:,0] * position_delta[:,0] + \
-            position_delta[:,1] * position_delta[:,1] + \
-            position_delta[:,2] * position_delta[:,2]
-        
+        position_delta_squared = (
+            position_delta[:, 0] * position_delta[:, 0]
+            + position_delta[:, 1] * position_delta[:, 1]
+            + position_delta[:, 2] * position_delta[:, 2]
+        )
+
         # Find true spots close enough and closest to the spot, stored as a boolean array
-        matches = np.logical_and(position_delta_squared <= location_threshold_squared, \
-            position_delta_squared == np.min(position_delta_squared))
-        
+        matches = np.logical_and(
+            position_delta_squared <= location_threshold_squared,
+            position_delta_squared == np.min(position_delta_squared),
+        )
+
         # True spot indices
         matches_indices = np.where(matches)
         delete_indices = []
@@ -280,29 +312,27 @@ def compare_spots(spot_positions_yxz: npt.NDArray[np.float64], spot_gene_indices
         matches_count = np.sum(matches)
 
         if matches_count == 0:
-            # This spot is considered a false positive because there are no true spots close enough to it that 
+            # This spot is considered a false positive because there are no true spots close enough to it that
             # have not already been paired
             false_positives += 1
             continue
         if matches_count == 1:
             # Found a single true spot matching the spot, see if they are the same gene (true positive)
 
-            # Get the spot gene name from the gene number. For some reason coppafish adds a new gene called 
+            # Get the spot gene name from the gene number. For some reason coppafish adds a new gene called
             # Bcl11b, hence the -1
-            spot_gene_name = \
-                str(list(codes.keys())[spot_gene_indices[s]])
+            spot_gene_name = str(list(codes.keys())[spot_gene_indices[s]])
             # Actual true spot gene name as a string
             true_gene_name = str(true_spot_gene_identities[matches][0])
             matching_gene = spot_gene_name == true_gene_name
-            true_positives  += matching_gene
+            true_positives += matching_gene
             wrong_positives += not matching_gene
             true_spots_paired = np.append(true_spots_paired, matches_indices[0])
             continue
-        
+
         # Logic for dealing with multiple, equidistant true spots near the spot
         for match_index in matches_indices:
-            spot_gene_name = \
-                str(list(codes.keys())[spot_gene_indices[s]])
+            spot_gene_name = str(list(codes.keys())[spot_gene_indices[s]])
             # Actual true spot gene names as strings
             true_gene_name = str(true_spot_gene_identities[matches[match_index][0]])
             matching_gene = spot_gene_name == true_gene_name
