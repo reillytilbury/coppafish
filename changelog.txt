@@ -1,6 +1,8 @@
-2024/mm/dd Alpha Update (v0.9.0):
- * Coppafish no longer has installation options, you just do `pip install -e .` to install coppafish. The appropriate, 
-    tested package versions are installed by `pip install -r requirement...` with the wanted requirements text file.
+2024/02/07 Alpha Update (v0.9.0):
+ * The appropriate, tested package versions are installed by `pip install -r requirement...` with the wanted 
+    requirements text file.
+ * Coppafish no longer has installation options, you just do `pip install -e .` to install coppafish after installing a 
+    requirements text file. 
  * New support for pytorch on the CPU as a new way to run most of OMP functions and some parts of call spots using CPU. 
     The appropriate packages can be installed by `pip install -r requirements-pytorch.txt`. 
  * Pytorch 2.2.0 + cuda 12.1 is supported. The GPU is used to run parts of OMP. In detail, `get_all_coefs` will run 
