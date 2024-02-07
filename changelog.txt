@@ -10,6 +10,11 @@
     `pip install -r requirements-pytorchgpu.txt`.
  * For a single spot and round, if the largest magnitude spot colour is negative, its sign is flipped before computing 
     the Von-Mises gene probability.
+ * "extract_debug" notebook page checks still being used are now removed since the page does not exist any more fix.
+
+
+2024/02/06 Alpha Update (v0.8.3):
+ * Out of bounds in z direction image retrieval in register section fix.
 
 
 2024/01/31 Alpha Update (v0.8.2):

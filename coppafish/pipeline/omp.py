@@ -4,6 +4,7 @@ import os
 import warnings
 from scipy import sparse
 from typing import Optional
+
 try:
     import jax.numpy as jnp
 except ImportError:
@@ -178,10 +179,13 @@ def call_spots_omp(
 
     print(f"Finding OMP coefficients for all pixels on tiles {use_tiles}:")
     initial_pos_neighbour_thresh = config["initial_pos_neighbour_thresh"]
-    for t in use_tiles:
+    for i, t in enumerate(use_tiles):
         print(f"Tile {np.where(use_tiles == t)[0][0] + 1}/{len(use_tiles)}")
 
         z_chunk_size = 1
+        # Since colour norm factor has already been indexed over tiles, color_norm_factor[0] is the color_norm_factor
+        # for use_tiles[0]
+        # ? We could probably do with changing how we deal with the color_norm_factor for clarity
         pixel_yxz_t, pixel_coefs_t = omp.get_pixel_coefs_yxz(
             nbp_basic,
             nbp_file,
@@ -193,7 +197,7 @@ def call_spots_omp(
             z_chunk_size,
             n_genes,
             transform,
-            color_norm_factor[t],
+            color_norm_factor[i],
             nbp.initial_intensity_thresh,
             bled_codes,
             dp_norm_shift,
