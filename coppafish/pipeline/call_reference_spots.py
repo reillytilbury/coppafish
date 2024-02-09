@@ -272,7 +272,8 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
     nbp.gene_efficiency = gene_efficiency
 
     # Extract abs intensity percentile
-    central_tile = scale.base.central_tile(nbp_basic.tilepos_yx, nbp_basic.use_tiles)
+    # central_tile = scale.base.central_tile(nbp_basic.tilepos_yx, nbp_basic.use_tiles)
+    central_tile = scale.base.central_tile(nbp_basic.tilepos_yx, [0, 6])
     if nbp_basic.is_3d:
         mid_z = int(nbp_basic.use_z[0] + (nbp_basic.use_z[-1] - nbp_basic.use_z[0]) // 2 - min(nbp_basic.use_z))
     else:
