@@ -81,7 +81,7 @@ def detect_spots(
     consider_intensity = image[consider_yxz]
     consider_yxz = list(consider_yxz)
 
-    paddings = np.asarray([pad_size_y, pad_size_x, pad_size_z])[: image.ndim]
+    paddings = np.asarray([(pad_size_y, pad_size_y), (pad_size_x, pad_size_x), (pad_size_z, pad_size_z)])[: image.ndim]
     keep = np.asarray(
         get_local_maxima(
             image, np.asarray(se_shifts), paddings, np.asarray(consider_yxz), np.asarray(consider_intensity)
@@ -97,7 +97,7 @@ def detect_spots(
 
 def get_local_maxima(
     image: np.ndarray,
-    se_shifts: np.ndarray,
+    se_shifts: Tuple[np.ndarray, np.ndarray, np.ndarray],
     pad_sizes: np.ndarray,
     consider_yxz: np.ndarray,
     consider_intensity: np.ndarray,
@@ -106,31 +106,26 @@ def get_local_maxima(
     Finds the local maxima from a given set of pixels to consider.
 
     Args:
-        image (`(n_y x n_x x n_z) ndarray[float]`): `image` to find spots on.
-        se_shifts (`(image.ndim x n_shifts) ndarray[int]`): y, x, z shifts which indicate neighbourhood about each spot
-            where a local maxima search is carried out.
-        pad_sizes ((image.ndim) ndarray[int]): `pad_sizes[i]` zeroes are added to the image on either end along the
-            `i`th axis. `i=0,1,2` represents y, x and z respectively. This is done so that a spot near the image edge
-            is not wrapped around when a local region is looked at.
-        consider_yxz (`(image.ndim x n_consider) ndarray[int]`): all yxz coordinates where value in image is greater
-            than an intensity threshold.
+        image (`[n_y x n_x x n_z] ndarray[float]`): `image` to find spots on.
+        se_shifts (`[image.ndim x n_consider]` ndarray[int]): y, x, z shifts which indicate neighbourhood about each
+            spot where local maxima search carried out.
+        pad_sizes ([image.ndim] ndarray[list of int]): `pad_sizes[i,0]` represents the top padding amount on the image
+            for dimension `i`, `pad_sizes[i,1]` represents the bottom padding amount. `i=0,1,2` represent y, x and z.
+        consider_yxz (`[3 x n_consider] ndarray[int]`): all yxz coordinates where value in image is greater than an
+            intensity threshold.
         consider_intensity (`[n_consider] ndarray[float]`): value of image at coordinates given by `consider_yxz`.
 
     Returns:
         `[n_consider] ndarray[bool]`: whether each point in `consider_yxz` is a local maxima or not.
     """
-    n_consider = consider_yxz.shape[1]
-    n_shifts = se_shifts.shape[1]
-
-    image = np.pad(image, [(p, p) for p in pad_sizes], mode="constant", constant_values=0)
-    # Local pixel positions of spots must change after padding is added
-    consider_yxz += pad_sizes[:, np.newaxis]
-    # (image.ndim, n_consider, n_shifts) shape
-    consider_yxz_se_shifted = np.repeat(consider_yxz[..., np.newaxis], se_shifts.shape[1], axis=2)
-    consider_yxz_se_shifted += se_shifts[None].transpose((1, 0, 2))
-    # image.ndim items in tuple of `(n_consider * n_shifts) ndarray[int]`
-    consider_yxz_se_shifted = tuple(consider_yxz_se_shifted.reshape((image.ndim, -1)))
-    consider_intensity = np.repeat(consider_intensity[:, np.newaxis], n_shifts, axis=1)
-    keep = (image[consider_yxz_se_shifted].reshape((n_consider, n_shifts)) <= consider_intensity).all(1)
+    image = np.pad(image, pad_sizes, mode="constant", constant_values=0)
+    for i in range(len(pad_sizes)):
+        consider_yxz[i] = consider_yxz[i] + pad_sizes[i][0]
+    keep = np.ones(consider_yxz[0].shape[0], dtype=bool)
+    for i in range(se_shifts[0].shape[0]):
+        # Note that in each iteration, only consider coordinates which can still possibly be local maxima.
+        keep = keep * (
+            image[tuple([consider_yxz[j] + se_shifts[j][i] for j in range(image.ndim)])] <= consider_intensity
+        )
 
     return keep
