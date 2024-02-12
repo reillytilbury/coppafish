@@ -1,6 +1,7 @@
 2024/02/12 Alpha Update (v0.9.1):
  * Vectorised find_spots detect.py numpy code for faster speeds in OMP.
  * The diagnostic PDF is now created after scale, extract, and filter sections for the user to see.
+ * Pre-sequence images are now blurred before computing the background scale and subtracting from sequencing images.
 
 
 2024/02/07 Alpha Update (v0.9.0):
