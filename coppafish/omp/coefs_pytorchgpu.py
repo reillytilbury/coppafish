@@ -40,8 +40,8 @@ def fit_coefs(
     # The arguments given are of shapes (n_pixels, (n_rounds * n_channels), n_genes_add) and
     # (n_pixels, (n_rounds * n_channels), 1). Pytorch then knows to batch over pixels
     # Coefs is shape (n_pixels, n_genes_add)
-    # We use the driver "gels" here because this is the only option for GPU torch. This assumes that 
-    # bled_codes_weighted is full-rank, which I think it always is in real data examples (at least it very well should 
+    # We use the driver "gels" here because this is the only option for GPU torch. This assumes that
+    # bled_codes_weighted is full-rank, which I think it always is in real data examples (at least it very well should
     # be!)
     coefs = torch.linalg.lstsq(
         bled_codes[:, genes].transpose(0, 1),
@@ -86,10 +86,12 @@ def fit_coefs_weight(
     """
     # (n_pixels, n_rounds_channels, n_genes_add)
     bled_codes_weighted = bled_codes[:, genes].swapaxes(0, 1) * weight[..., None]
+    del bled_codes, genes
     # (n_pixels, n_rounds_channels)
     pixel_colors_weighted = pixel_colors.T * weight
-    # We use the driver "gels" here because this is the only option for GPU torch. This assumes that 
-    # bled_codes_weighted is full-rank, which I think it always is in real data examples (at least it very well should 
+    del pixel_colors
+    # We use the driver "gels" here because this is the only option for GPU torch. This assumes that
+    # bled_codes_weighted is full-rank, which I think it always is in real data examples (at least it very well should
     # be!)
     coefs = torch.linalg.lstsq(bled_codes_weighted, pixel_colors_weighted, rcond=-1, driver="gels")[0]
     # Using pytorch's batch matrix multiplication to eliminate a need for a for loop
@@ -145,10 +147,12 @@ def get_best_gene_base(
     # Calculate score including background genes as if best gene is background, then stop iteration. all_scores has
     # shape (n_pixels, n_genes)
     all_scores = dot_product.dot_product_score(residual_pixel_colours, all_bled_codes, inverse_var, norm_shift)[3]
+    del residual_pixel_colours, all_bled_codes, inverse_var
     # best_genes has shape (n_pixels, )
     best_genes = torch.argmax(torch.abs(all_scores), dim=1)
     # Take the best gene score for each pixel.
     best_scores = all_scores[range(n_pixels), best_genes]
+    del all_scores
     # If best_gene is in ignore_genes, set score below score_thresh, i.e. set the score to zero.
     if ignore_genes.ndim == 1:
         best_scores *= torch.isin(best_genes, ignore_genes, invert=True)
@@ -198,7 +202,7 @@ def get_best_gene_first_iter(
         - pass_score_thresh (`(n_pixels) tensor[bool]`): true if `best_score > score_thresh`.
         - background_var (`(n_pixels x (n_rounds * n_channels)) tensor[float]`): variance in each round/channel based
             on just the background.
-    
+
     Notes:
         - The returned tensors are placed on the same device as the parameters' device.
     """
@@ -279,7 +283,6 @@ def get_best_gene(
     assert background_genes.ndim == 1
 
     n_pixels, n_rounds_channels = residual_pixel_colors.shape
-    n_channels, n_genes_added = background_genes.size, genes_added.shape[1]
     best_genes = torch.zeros((n_pixels), dtype=int)
     pass_score_threshes = torch.zeros((n_pixels), dtype=bool)
     inverse_vars = torch.zeros((n_pixels, n_rounds_channels), dtype=torch.float32)
@@ -290,6 +293,7 @@ def get_best_gene(
     inverse_vars = torch.reciprocal(
         torch.bmm((coefs**2)[:, None], all_bled_codes[genes_added] ** 2 * alpha)[:, 0] + background_var
     )
+    del coefs, background_var
     # Similar function to numpy's .repeat
     ignore_genes = torch.repeat_interleave(background_genes[None], n_pixels, dim=0)
     ignore_genes = torch.concatenate((ignore_genes, genes_added), dim=1)
@@ -347,7 +351,7 @@ def get_all_coefs(
 
     Notes:
         - Background vectors are fitted first and then not updated again.
-        - All variables used in the for loop over OMP iterations is kept in GPU memory. They are then moved to the CPU 
+        - All variables used in the for loop over OMP iterations is kept in GPU memory. They are then moved to the CPU
             device when all iterations are complete.
     """
     cuda, cpu = torch.device("cuda"), torch.device("cpu")
@@ -385,7 +389,7 @@ def get_all_coefs(
     # colors and codes for fit_coefs function (No background as this is not updated again).
     # always uses post background color as coefficients for all genes re-estimated at each iteration.
     pixel_colors = pixel_colors.reshape((n_pixels, -1)).to(cuda)
-    
+
     all_codes = all_codes.to(cuda)
     background_coefs = background_coefs.to(cuda)
     background_genes = background_genes.to(cuda)
