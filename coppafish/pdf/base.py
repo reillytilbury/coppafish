@@ -72,7 +72,7 @@ class BuildPDF:
         )
         self.use_rounds_all.sort()
 
-        if not os.path.isfile(os.path.join(output_dir, "_basic_info.pdf")):
+        if not os.path.isfile(os.path.join(output_dir, "_basic_info.pdf") and nb.has_page("basic_info")):
             with PdfPages(os.path.join(output_dir, "_basic_info.pdf")) as pdf:
                 mpl.rcParams.update(mpl.rcParamsDefault)
                 # Build a pdf with data from scale, extract, filter, find_spots, register, stitch, OMP
@@ -85,7 +85,7 @@ class BuildPDF:
                 plt.close(fig)
         pbar.update()
 
-        if not os.path.isfile(os.path.join(output_dir, "_scale.pdf")):
+        if not os.path.isfile(os.path.join(output_dir, "_scale.pdf")) and nb.has_page("scale"):
             with PdfPages(os.path.join(output_dir, "_scale.pdf")) as pdf:
                 pbar.set_postfix_str("Scale")
                 if nb.has_page("scale"):
@@ -102,7 +102,7 @@ class BuildPDF:
                     plt.close(fig)
         pbar.update()
 
-        if not os.path.isfile(os.path.join(output_dir, "_extract.pdf")):
+        if not os.path.isfile(os.path.join(output_dir, "_extract.pdf")) and nb.has_page("extract"):
             with PdfPages(os.path.join(output_dir, "_extract.pdf")) as pdf:
                 # Extract section
                 pbar.set_postfix_str("Extract")
@@ -140,7 +140,7 @@ class BuildPDF:
                     del extract_pixel_unique_values, extract_pixel_unique_counts
         pbar.update()
 
-        if not os.path.isfile(os.path.join(output_dir, "_filter.pdf")):
+        if not os.path.isfile(os.path.join(output_dir, "_filter.pdf")) and nb.has_page("filter"):
             with PdfPages(os.path.join(output_dir, "_filter.pdf")) as pdf:
                 # Filter section
                 pbar.set_postfix_str("Filter")
@@ -182,7 +182,7 @@ class BuildPDF:
                     del filter_pixel_unique_values, filter_pixel_unique_counts
         pbar.update()
 
-        if not os.path.isfile(os.path.join(output_dir, "_find_spots.pdf")):
+        if not os.path.isfile(os.path.join(output_dir, "_find_spots.pdf")) and nb.has_page("find_spots"):
             with PdfPages(os.path.join(output_dir, "_find_spots.pdf")) as pdf:
                 pbar.set_postfix_str("Find spots")
                 if nb.has_page("find_spots"):
@@ -250,7 +250,11 @@ class BuildPDF:
         pbar.set_postfix_str("Stitch")
         pbar.update()
 
-        if not os.path.isfile(os.path.join(output_dir, "_ref_call_spots.pdf")):
+        if (
+            not os.path.isfile(os.path.join(output_dir, "_ref_call_spots.pdf"))
+            and nb.has_page("ref_spots")
+            and nb.has_page("call_spots")
+        ):
             with PdfPages(os.path.join(output_dir, "_ref_call_spots.pdf")) as pdf:
                 pbar.set_postfix_str("Reference and call spots")
                 if nb.has_page("ref_spots") and nb.has_page("call_spots"):
@@ -337,11 +341,11 @@ class BuildPDF:
                         fig.tight_layout()
                         pdf.savefig(fig)
                         plt.close(fig)
-            pbar.update()
+        pbar.update()
 
-            pbar.set_postfix_str("OMP")
-            pbar.update()
-            pbar.close()
+        pbar.set_postfix_str("OMP")
+        pbar.update()
+        pbar.close()
 
         if auto_open:
             webbrowser.open_new_tab(rf"{output_dir}")

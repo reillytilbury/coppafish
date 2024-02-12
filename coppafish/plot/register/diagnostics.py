@@ -1744,6 +1744,7 @@ class ViewSubvolReg:
         self.position = self.position.reshape((self.subvol_z, self.subvol_y, self.subvol_x, 3)).astype(int)
         self.predicted_shift = self.predicted_shift.reshape((self.subvol_z, self.subvol_y, self.subvol_x, 3))
         self.shift_residual = self.shift_residual.reshape((self.subvol_z, self.subvol_y, self.subvol_x))
+        self.transform = nb.register_debug.round_transform_raw[self.t, self.r]
         # create viewer
         self.viewer = napari.Viewer()
         napari.run()
@@ -1774,14 +1775,19 @@ class ViewSubvolReg:
         self.box_z, self.box_y, self.box_x = int(z_box), int(y_box), int(x_box)
         self.subvol_base, self.subvol_target = subvol_base, subvol_target
 
-    def view_subvol_cross_corr(self, z: int = 0, y: int = 0, x: int = 0):
+    def view_subvol_cross_corr(self, z: int = 0, y: int = 0, x: int = 0, grid_view: bool = False):
         """
         View the cross correlation for a single subvolume for the given tile and round
         Args:
             z: z index of subvolume
             y: y index of subvolume
             x: x index of subvolume
+            grid_view: whether to view the images in a 2D grid, or as a 3D stack
         """
+        # check if there are any layers in the viewer, if so, remove them
+        if len(self.viewer.layers) > 0:
+            for i in range(len(self.viewer.layers)):
+                self.viewer.layers.pop()
         z_start, z_end = int(max(0, z - 1)), int(min(self.subvol_z, z + 1) + 1)
         merged_subvol_target = preprocessing.merge_subvols(position=self.position[z_start:z_end, y, x].copy(),
                                                            subvol=self.subvol_target[z_start:z_end, y, x])
@@ -1806,25 +1812,78 @@ class ViewSubvolReg:
 
         # add images
         y_size, x_size = merged_subvol_base.shape[1:]
-        self.viewer.add_image(phase_cross_ifft, name=f'Phase cross correlation. z = {z}, y = {y}, x = {x}')
-        self.viewer.add_points([-phase_cross_shift + im_centre], name='Phase cross correlation shift', size=5,
-                          face_color='blue', symbol='cross')
-        # add overlays below this
-        translation_offset = np.array([0, 1.1 * y_size, 0])
-        self.viewer.add_image(merged_subvol_target, name=f'Target. z = {z}, y = {y}, x = {x}', colormap='green',
-                         blending='additive', translate=translation_offset)
-        self.viewer.add_image(merged_subvol_base, name=f'Base. Shift = {phase_cross_shift}', colormap='red',
-                         blending='additive', translate=translation_offset + phase_cross_shift)
-        # add predicted shift
-        translation_offset = np.array([0, 1.1 * y_size, 1.1 * x_size])
-        self.viewer.add_image(merged_subvol_target, name=f'Target. z = {z}, y = {y}, x = {x}', colormap='green',
-                         blending='additive', translate=translation_offset)
-        self.viewer.add_image(merged_subvol_base, name=f'Base. Predicted Shift = {np.rint(self.predicted_shift[z, y, x])}',
-                         colormap='red', blending='additive',
-                         translate=translation_offset + self.predicted_shift[z, y, x])
+        if not grid_view:
+            self.viewer.add_image(phase_cross_ifft, name=f'Phase cross correlation. z = {z}, y = {y}, x = {x}')
+            self.viewer.add_points([-phase_cross_shift + im_centre], name='Phase cross correlation shift', size=5,
+                                   face_color='blue', symbol='cross')
+            # add overlays below this
+            translation_offset = np.array([0, 1.1 * y_size, 0])
+            self.viewer.add_image(merged_subvol_target, name=f'Target. z = {z}, y = {y}, x = {x}', colormap='green',
+                                  blending='additive', translate=translation_offset)
+            self.viewer.add_image(merged_subvol_base, name=f'Base. Shift = {phase_cross_shift}', colormap='red',
+                                  blending='additive', translate=translation_offset + phase_cross_shift)
+            # add predicted shift
+            translation_offset = np.array([0, 1.1 * y_size, 1.1 * x_size])
+            self.viewer.add_image(merged_subvol_target, name=f'Target. z = {z}, y = {y}, x = {x}', colormap='green',
+                                  blending='additive', translate=translation_offset)
+            self.viewer.add_image(merged_subvol_base, name=f'Base. Predicted Shift = '
+                                                           f'{np.rint(self.predicted_shift[z, y, x])}',
+                                  colormap='red', blending='additive',
+                                  translate=translation_offset + self.predicted_shift[z, y, x])
+        else:
+            # generate transformed image
+            new_origin = np.array([merged_subvol_min_z, self.position[z, y, x, 1], self.position[z, y, x, 2]])
+            transform = (self.transform).copy()
+            # need to adjust shift as we are changing the origin
+            transform[:, 3] += (transform[:3, :3] - np.eye(3)) @ new_origin
+            transform = preprocessing.invert_affine(transform)
+            merged_subvol_base_transformed = affine_transform(merged_subvol_base, transform, order=0)
+
+            # initialise grid
+            phase_cross_shift_yx = phase_cross_shift[1:]
+            predicted_shift_yx = self.predicted_shift[z, y, x, 1:]
+            nz = merged_subvol_target.shape[0]
+            features_z = {'z': np.arange(nz)}
+            text_z = {'string': 'Z: {z}', 'size': 8, 'color': 'white'}
+            for i in range(nz):
+                # 1. Plot cross correlation
+                translation_offset = np.array([0, 1.1 * x_size * i])
+                self.viewer.add_image(phase_cross_ifft[i], name=f'Phase cross correlation. z = {z}, y = {y}, x = {x}',
+                                      translate=translation_offset)
+                # 2. Plot base and target, with base shifted by phase_cross_shift
+                translation_offset = np.array([1.1 * y_size, 1.1 * x_size * i])
+                self.viewer.add_image(merged_subvol_target[i], name=f'Target. z = {z}, y = {y}, x = {x}',
+                                      colormap='green', blending='additive', translate=translation_offset)
+                base_i = (i - np.rint(self.shift[z, y, x, 0])).astype(int)
+                if (base_i >= 0) and (base_i < nz):
+                    self.viewer.add_image(merged_subvol_base[base_i], name=f'Base. Shift = {phase_cross_shift}',
+                                          colormap='red', blending='additive',
+                                          translate=translation_offset + phase_cross_shift_yx)
+                # 3. Plot base and target, with base shifted by predicted_shift
+                translation_offset = np.array([2.2 * y_size, 1.1 * x_size * i])
+                self.viewer.add_image(merged_subvol_target[i], name=f'Target. z = {z}, y = {y}, x = {x}',
+                                      colormap='green', blending='additive', translate=translation_offset)
+                base_i = (i - np.rint(self.predicted_shift[z, y, x, 0])).astype(int)
+                if (base_i >= 0) and (base_i < nz):
+                    self.viewer.add_image(merged_subvol_base[base_i], name=f'Base. Predicted Shift = '
+                                                                      f'{np.rint(self.predicted_shift[z, y, x])}',
+                                          colormap='red', blending='additive',
+                                          translate=translation_offset + predicted_shift_yx)
+                # 4. Plot affine transformed image
+                translation_offset = np.array([3.3 * y_size, 1.1 * x_size * i])
+                self.viewer.add_image(merged_subvol_target[i], name=f'Target. z = {z}, y = {y}, x = {x}',
+                                        colormap='green', blending='additive', translate=translation_offset)
+                self.viewer.add_image(merged_subvol_base_transformed[i], name=f'Base. Affine transformed',
+                                        colormap='red', blending='additive', translate=translation_offset)
+
+            # plot z plane numbers above each z plane
+            z_label_coords = [np.array([-20, 1.1 * x_size * i + x_size // 2]) for i in range(nz)]
+            self.viewer.add_points(z_label_coords, features=features_z, text=text_z, size=0)
+            self.viewer.window.qt_viewer.dockLayerControls.setVisible(False)
+            self.viewer.window.qt_viewer.dockLayerList.setVisible(False)
+
         self.viewer.window.qt_viewer.dockLayerControls.setVisible(False)
-        # make the layer list window bigger
-        self.viewer.window.qt_viewer.dockLayerList.setMinimumWidth(500)
+
         napari.run()
 
 

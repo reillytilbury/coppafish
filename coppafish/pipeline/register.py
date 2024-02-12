@@ -239,6 +239,7 @@ def register(
         # Save registration data externally
         with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
             pickle.dump(registration_data, f)
+
     # Add round statistics to debugging page.
     nbp_debug.position = registration_data["round_registration"]["position"]
     nbp_debug.round_shift = registration_data["round_registration"]["shift"]
@@ -262,6 +263,17 @@ def register(
     use_rounds_new = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
     transform[:, use_rounds_new] = registration_data["icp"]["transform"][:, use_rounds_new]
     nbp.transform = transform
+
+    # first, let us blur the pre-seq round images
+    if nbp_basic.use_preseq:
+        if pre_seq_blur_radius is None:
+            pre_seq_blur_radius = 3
+        for t, c in itertools.product(use_tiles, use_channels):
+            image_preseq = tiles_io.load_image(
+                nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=nbp_basic.pre_seq_round, c=c, suffix="_raw")
+            image_preseq = scipy.ndimage.gaussian_filter(image_preseq, pre_seq_blur_radius)
+            tiles_io.save_image(
+                nbp_file, nbp_basic, nbp_extract.file_type, image_preseq, t=t, r=nbp_basic.pre_seq_round, c=c)
 
     # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
     # fluorescence
