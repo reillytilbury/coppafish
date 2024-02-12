@@ -1,8 +1,10 @@
 # coppafish
 
-![https://github.com/reillytilbury/coppafish/blob/dev/.github/workflows/continuous_integration.yaml](https://github.com/reillytilbury/coppafish/actions/workflows/continuous_integration.yaml/badge.svg)
+![https://github.com/reillytilbury/coppafish/blob/dev/.github/workflows/integration.yaml](https://github.com/reillytilbury/coppafish/actions/workflows/integration.yaml/badge.svg)
+![https://github.com/reillytilbury/coppafish/blob/dev/.github/workflows/pytorch_integration.yaml](https://github.com/reillytilbury/coppafish/actions/workflows/pytorch_integration.yaml/badge.svg)
+![https://github.com/reillytilbury/coppafish/blob/dev/.github/workflows/optimised_integration.yaml](https://github.com/reillytilbury/coppafish/actions/workflows/optimised_integration.yaml/badge.svg)
 
-![](https://github.com/jduffield65/coppafish/blob/main/docs/images/readme_viewer.png?raw=true)
+## Documentation
 
 * [Homepage](https://reillytilbury.github.io/coppafish/)
     * [Installation](https://reillytilbury.github.io/coppafish/#installation)
@@ -27,7 +29,7 @@
     * [Registration viewer](https://reillytilbury.github.io/coppafish/diagnostics/#registrationviewer)
 * [Glossary](https://reillytilbury.github.io/coppafish/glossary/)
 
+![](https://github.com/jduffield65/coppafish/blob/main/docs/images/readme_viewer.png?raw=true)
 
-## Documentation
 For more information on coppafish's method, please see the 
 [documentation](https://jduffield65.github.io/coppafish/) here (some of this information will be outdated).
