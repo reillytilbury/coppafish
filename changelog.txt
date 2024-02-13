@@ -1,3 +1,9 @@
+2024/02/DD Alpha Update (v):
+ * The Viewer's gene legend is dark themed again.
+ * Viewer documentation added.
+
+
+
 2024/02/12 Alpha Update (v0.9.1):
  * Vectorised find_spots detect.py numpy code for faster speeds in OMP.
  * The diagnostic PDF is now created after scale, extract, and filter sections for the user to see.
