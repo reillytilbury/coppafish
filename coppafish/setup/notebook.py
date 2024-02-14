@@ -30,13 +30,13 @@ and silently in the background.  (If a new type is needed, see the
 documentation near the TYPES variable in the code below for how to add a new
 type.)
 """
+
 import numpy as np
 import hashlib
 import os
 import time
 import json
 import shutil
-import warnings
 
 try:
     import importlib_resources
@@ -46,6 +46,7 @@ from typing import Tuple, Optional, List, Any
 
 from .config import get_config
 from .file_names import set_file_names
+from .. import logging
 
 
 # Functions in Notebook._no_save_pages need defined here
@@ -328,9 +329,9 @@ class Notebook:
                 self._config = read_config  # update config to new one - only difference will be in file_names section
             self.add_no_save_pages()  # add file_names page with new config
         else:
-            print("Notebook file not found, creating a new notebook.")
+            logging.info("Notebook file not found, creating a new notebook.")
             if read_config is None:
-                warnings.warn("Have not passed a config_file so Notebook.get_config() won't work.")
+                logging.warn("Have not passed a config_file so Notebook.get_config() won't work.")
             self._created_time = time.time()
             self._config = read_config
 
@@ -375,7 +376,7 @@ class Notebook:
         config = self.get_config()
         is_equal = True
         if config.keys() != config_2.keys():
-            warnings.warn("The config files have different sections.")
+            logging.info("The config files have different sections.")
             is_equal = False
         else:
             sort_page_names = sorted(self._page_times.items(), key=lambda x: x[1])  # sort by time added to notebook
@@ -385,7 +386,7 @@ class Notebook:
                 # Only compare sections for which there is a corresponding page in the notebook.
                 if section not in self._no_compare_config_sections and section in page_names:
                     if config[section] != config_2[section]:
-                        warnings.warn(f"The {section} section of the two config files differ.")
+                        logging.info(f"The {section} section of the two config files differ.")
                         is_equal = False
         return is_equal
 
@@ -394,9 +395,9 @@ class Notebook:
         `describe(var)` will print comments for variables called `var` in each `NotebookPage`.
         """
         if key is None:
-            print(self.__repr__())
+            logging.info(self.__repr__())
         elif len(self._page_times) == 0:
-            print(f"No pages so cannot search for variable {key}")
+            logging.info(f"No pages so cannot search for variable {key}")
         else:
             sort_page_names = sorted(self._page_times.items(), key=lambda x: x[1])  # sort by time added to notebook
             page_names = [name[0] for name in sort_page_names]
@@ -409,9 +410,9 @@ class Notebook:
             for page_name in page_names:
                 # if in comments file, then print the comment
                 if key in json_comments[page_name]:
-                    print(f"{key} in {page_name}:")
+                    logging.info(f"{key} in {page_name}:")
                     self.__getattribute__(page_name).describe(key)
-                    print("")
+                    logging.info("")
                     n_times_appeared += 1
 
                 elif self._config is not None:
@@ -424,14 +425,14 @@ class Notebook:
                     for section in config_sections:
                         for param in config[section].keys():
                             if param.lower() == key.lower():
-                                print(
+                                logging.info(
                                     f"No variable named {key} in the {page_name} page.\n"
                                     f"But it is in the {section} section of the config file and has value:\n"
                                     f"{config[section][param]}\n"
                                 )
                                 n_times_appeared += 1
             if n_times_appeared == 0:
-                print(f"{key} is not in any of the pages in this notebook.")
+                logging.info(f"{key} is not in any of the pages in this notebook.")
 
     def __eq__(self, other):
         """
@@ -550,7 +551,7 @@ class Notebook:
         assert isinstance(other, Notebook), "Can only combine notebook with another notebook"
         new_path = os.path.join(os.path.dirname(self._file), "notebook_combined.npz")
         if os.path.isfile(new_path):
-            warnings.warn(f"Combined notebook at {new_path} already exists, replacing...")
+            logging.warn(f"Combined notebook at {new_path} already exists, replacing...")
             os.remove(new_path)
 
         tile_indices = [self.basic_info.use_tiles, other.basic_info.use_tiles]
@@ -590,7 +591,7 @@ class Notebook:
             new_name:
         """
         nbp = self.__getattribute__(old_name)
-        warnings.warn(f"Changing name of {old_name} page to {new_name}")
+        logging.info(f"Changing name of {old_name} page to {new_name}")
         time_added = self._page_times[old_name]
         nbp.finalized = False
         nbp.name = new_name
@@ -652,9 +653,9 @@ class Notebook:
             d[self._NBMETA + self._SEP + self._CONFIGMETA] = self._config
         np.savez_compressed(self._file, **d)
         # Finishing the diagnostics described above
-        print(f"Notebook saved: took {round(time.time() - save_start_time, 3)} seconds")
+        logging.info(f"Notebook saved: took {round(time.time() - save_start_time, 3)} seconds")
         if len(self.get_unique_versions()) > 1:
-            warnings.warn(f"Saved notebook contains more than one software version: \n\t{self.get_unique_versions()}")
+            logging.warn(f"Saved notebook contains more than one software version: {self.get_unique_versions()}")
 
     def from_file(self, fn: str) -> Tuple[List, dict, float, str]:
         """
@@ -789,7 +790,7 @@ class NotebookPage:
             elif not np.array_equal(attribute_0, attribute_1):
                 equal = False
             if not equal:
-                print(f"{attribute_0} != {attribute_1}")
+                logging.info(f"{attribute_0} != {attribute_1}")
                 return equal
         return equal
 
@@ -826,10 +827,10 @@ class NotebookPage:
 
         """
         if key is None:
-            print(self.__repr__())  # describe whole page if no key given
+            logging.info(self.__repr__())  # describe whole page if no key given
         else:
             if key not in self._times.keys():
-                print(f"No variable named {key} in the {self.name} page.")
+                logging.error(f"No variable named {key} in the {self.name} page.")
             else:
                 json_comments = json.load(open(self._comments_file))
                 if self.name in json_comments:
@@ -837,9 +838,9 @@ class NotebookPage:
                     while "" in json_comments[self.name][key]:
                         json_comments[self.name][key].remove("")
                     # replace below removes markdown code indicators
-                    print("\n".join(json_comments[self.name][key][1:]).replace("`", ""))
+                    logging.info("\n".join(json_comments[self.name][key][1:]).replace("`", ""))
                 else:
-                    print(f"No comments available for page called {self.name}.")
+                    logging.warn(f"No comments available for page called {self.name}.")
 
     def __setattr__(self, key, value):
         # Add an item to the notebook page.

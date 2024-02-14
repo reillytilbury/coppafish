@@ -1,6 +1,7 @@
 2024/02/DD Alpha Update (v):
  * The Viewer's gene legend is dark themed again.
  * Viewer documentation added.
+ * All coppafish logs are saved in a file with default name output.log
 
 
 

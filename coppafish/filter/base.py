@@ -1,9 +1,17 @@
 import numpy as np
 from typing import Optional, Tuple
 
+from .. import logging
 
-def get_filter_info(image: np.ndarray, auto_thresh_multiplier: float, hist_bin_edges: np.ndarray, max_pixel_value: int,
-                     scale: float, z_info: Optional[int] = None) -> Tuple[float, np.ndarray, int, float]:
+
+def get_filter_info(
+    image: np.ndarray,
+    auto_thresh_multiplier: float,
+    hist_bin_edges: np.ndarray,
+    max_pixel_value: int,
+    scale: float,
+    z_info: Optional[int] = None,
+) -> Tuple[float, np.ndarray, int, float]:
     """
     Gets information from filtered scaled images useful for later in the pipeline.
     If 3D image, only z-plane used for `auto_thresh` and `hist_counts` calculation for speed and the that the
@@ -32,7 +40,7 @@ def get_filter_info(image: np.ndarray, auto_thresh_multiplier: float, hist_bin_e
     """
     if image.ndim == 3:
         if z_info is None:
-            raise ValueError("z_info not provided")
+            logging.error(ValueError("z_info not provided"))
         auto_thresh = np.median(np.abs(image[:, :, z_info])) * auto_thresh_multiplier
         hist_counts = np.histogram(image[:, :, z_info], hist_bin_edges)[0]
     else:

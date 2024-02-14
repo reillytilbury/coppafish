@@ -1,5 +1,4 @@
 import os
-import warnings
 import textwrap
 import webbrowser
 import numpy as np
@@ -10,6 +9,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from typing import Union, Optional, Tuple
 
 from ..setup import Notebook, NotebookPage
+from .. import logging
 
 
 # Plot settings
@@ -550,7 +550,7 @@ class BuildPDF:
                                 continue
                             hist_x[k] = np.log2(count)
                     if np.sum(hist_x) <= 0:
-                        warnings.warn(f"The {section_name.lower()} image for {t=}, {r=}, {c=} looks to be all zeroes!")
+                        logging.warn(f"The {section_name.lower()} image for {t=}, {r=}, {c=} looks to be all zeroes!")
                         continue
                     if np.max(hist_x) > greatest_count:
                         greatest_count = np.max(hist_x)

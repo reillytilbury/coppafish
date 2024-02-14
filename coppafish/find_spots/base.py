@@ -3,7 +3,7 @@ import numpy as np
 import os
 from typing import Optional
 
-from .. import utils
+from .. import utils, logging
 
 
 def spot_yxz(local_yxz: np.ndarray, tile: int, round: int, channel: int, spot_no: np.ndarray) -> np.ndarray:
@@ -34,7 +34,9 @@ def spot_yxz(local_yxz: np.ndarray, tile: int, round: int, channel: int, spot_no
     # tile t and all channels up to (but not including) channel c. This gives number of spots found before [t,r,c] ie:
     # start index. To get end_index, just add number of spots on [t,r,c]
 
-    start_index = np.sum(spot_no[:tile, :, :]) + np.sum(spot_no[tile, :round, :]) + np.sum(spot_no[tile, round, :channel])
+    start_index = (
+        np.sum(spot_no[:tile, :, :]) + np.sum(spot_no[tile, :round, :]) + np.sum(spot_no[tile, round, :channel])
+    )
     end_index = start_index + spot_no[tile, round, channel]
 
     use = range(start_index, end_index)
@@ -42,8 +44,9 @@ def spot_yxz(local_yxz: np.ndarray, tile: int, round: int, channel: int, spot_no
     return local_yxz[use]
 
 
-def spot_isolated(isolated_spots: np.ndarray, tile: int, ref_round: int, ref_channel: int, spot_no: np.ndarray) \
-        -> np.ndarray:
+def spot_isolated(
+    isolated_spots: np.ndarray, tile: int, ref_round: int, ref_channel: int, spot_no: np.ndarray
+) -> np.ndarray:
     """
     Exactly same rational as spot_yxz but now return isolated status of spots in t,r,c
 
@@ -75,8 +78,14 @@ def spot_isolated(isolated_spots: np.ndarray, tile: int, ref_round: int, ref_cha
     return isolated_spots[use]
 
 
-def get_isolated(image: np.ndarray, spot_yxz: np.ndarray, thresh: float, radius_inner: float, radius_xy: float,
-                 radius_z: Optional[float] = None) -> np.ndarray:
+def get_isolated(
+    image: np.ndarray,
+    spot_yxz: np.ndarray,
+    thresh: float,
+    radius_inner: float,
+    radius_xy: float,
+    radius_z: Optional[float] = None,
+) -> np.ndarray:
     """
     Determines whether each spot in ```spot_yxz``` is isolated by getting the value of image after annular filtering
     at each location in ```spot_yxz```.
@@ -101,7 +110,7 @@ def get_isolated(image: np.ndarray, spot_yxz: np.ndarray, thresh: float, radius_
     """
     se = utils.strel.annulus(radius_inner, radius_xy, radius_z)
     # With just coords, takes about 3s for 50 z-planes.
-    isolated = utils.morphology.imfilter_coords(image, se, spot_yxz, padding=0, corr_or_conv='corr') / np.sum(se)
+    isolated = utils.morphology.imfilter_coords(image, se, spot_yxz, padding=0, corr_or_conv="corr") / np.sum(se)
     return isolated < thresh
 
 
@@ -128,7 +137,9 @@ def check_neighbour_intensity(image: np.ndarray, spot_yxz: np.ndarray, thresh: f
     elif image.ndim == 2:
         transforms = [[1, 0], [0, 1], [-1, 0], [0, -1]]
     else:
-        raise ValueError(f"image has to have two or three dimensions but given image has {image.ndim} dimensions.")
+        logging.error(
+            ValueError(f"image has to have two or three dimensions but given image has {image.ndim} dimensions.")
+        )
     keep = np.zeros((spot_yxz.shape[0], len(transforms)), dtype=bool)
     for i, t in enumerate(transforms):
         mod_spot_yx = spot_yxz + t
@@ -177,19 +188,20 @@ def load_spot_info(file_path: str, n_tiles: int, n_rounds: int, n_extra_rounds: 
     """
     if os.path.isfile(file_path):
         raw = np.load(file_path, allow_pickle=True)
-        spot_info = {
-            'spot_yxz': raw.f.arr_0, 'spot_no': raw.f.arr_1, 'isolated': raw.f.arr_2, 'completed': raw.f.arr_3
-        }
+        spot_info = {"spot_yxz": raw.f.arr_0, "spot_no": raw.f.arr_1, "isolated": raw.f.arr_2, "completed": raw.f.arr_3}
     else:
-        spot_info = {'spot_yxz': np.zeros((0, 3), dtype=np.int16),
-                     'spot_no': np.zeros((n_tiles, n_rounds + n_extra_rounds, n_channels), dtype=np.uint32),
-                     'isolated': np.zeros((0), dtype=bool),
-                     'completed': np.zeros((n_tiles, n_rounds + n_extra_rounds, n_channels), dtype=bool)}
+        spot_info = {
+            "spot_yxz": np.zeros((0, 3), dtype=np.int16),
+            "spot_no": np.zeros((n_tiles, n_rounds + n_extra_rounds, n_channels), dtype=np.uint32),
+            "isolated": np.zeros((0), dtype=bool),
+            "completed": np.zeros((n_tiles, n_rounds + n_extra_rounds, n_channels), dtype=bool),
+        }
     return spot_info
 
 
-def filter_intense_spots(local_yxz: np.ndarray, spot_intensity: np.ndarray, n_z: int,
-                         max_spots: int = 500) -> np.ndarray:
+def filter_intense_spots(
+    local_yxz: np.ndarray, spot_intensity: np.ndarray, n_z: int, max_spots: int = 500
+) -> np.ndarray:
     """
     Filters spots by intensity. For each z plane, keeps only the top max_spots spots.
     Args:
