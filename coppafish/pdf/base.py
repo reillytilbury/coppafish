@@ -40,6 +40,7 @@ class BuildPDF:
             output_dir (str, optional): directory to save pdfs. Default: `nb.basic_info.file_names/diagnostics.pdf`.
             auto_open (bool, optional): open the PDF in a web browser after creation. Default: true.
         """
+        logging.debug("Creating diagnostic PDF started")
         pbar = tqdm(desc="Creating Diagnostic PDF", total=10, unit="section")
         pbar.set_postfix_str("Loading notebook")
         if isinstance(nb, str):
@@ -347,6 +348,7 @@ class BuildPDF:
         pbar.update()
         pbar.close()
 
+        logging.debug("Creating diagnostic PDF complete")
         if auto_open:
             webbrowser.open_new_tab(rf"{output_dir}")
 
