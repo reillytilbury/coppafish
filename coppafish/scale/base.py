@@ -149,7 +149,7 @@ def get_scale_from_txt(
         if np.abs(scale_saved) < tol:
             pass  # 0 means scale not used so do nothing
         elif scale is None:
-            logging.info("Using value of scale = {:.2f} saved in\n".format(scale_saved) + txt_file)
+            logging.info("Using value of scale = {:.2f} saved in ".format(scale_saved) + txt_file)
             scale = float(scale_saved)  # Set to saved value used up till now if not specified
         elif np.abs(scale - scale_saved) > tol:
             logging.error(
@@ -162,7 +162,7 @@ def get_scale_from_txt(
         if np.abs(scale_anchor_saved) < tol:
             pass  # 0 means scale_anchor not computed yet so do nothing
         elif scale_anchor is None:
-            logging.info("Using value of scale_anchor = {:.2f} saved in\n".format(scale_anchor_saved) + txt_file)
+            logging.info("Using value of scale_anchor = {:.2f} saved in ".format(scale_anchor_saved) + txt_file)
             scale_anchor = float(scale_anchor_saved)  # Set to saved value used up till now if not specified
         elif np.abs(scale_anchor - scale_anchor_saved) > tol:
             logging.error(
