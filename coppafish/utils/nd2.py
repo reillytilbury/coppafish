@@ -7,7 +7,7 @@ import numbers
 from tqdm import tqdm
 from typing import Optional, List, Union, Tuple
 
-from .. import setup
+from .. import setup, logging
 from ..setup import NotebookPage
 from ..utils import raw
 from . import errors
@@ -15,6 +15,7 @@ from . import errors
 
 # bioformats ssl certificate error solution:
 # https://stackoverflow.com/questions/35569042/ssl-certificate-verify-failed-with-python3
+
 
 # nd2 library Does not work with Mac M1
 def load(file_path: str) -> Tuple[np.ndarray, dict]:
@@ -28,7 +29,7 @@ def load(file_path: str) -> Tuple[np.ndarray, dict]:
         Dask array indices in order `fov`, `channel`, `y`, `x`, `z`.
     """
     if not os.path.isfile(file_path):
-        raise errors.NoFileError(file_path)
+        logging.error(errors.NoFileError(file_path))
     with nd2.ND2File(file_path) as images:
         images = images.to_dask()
     # images = nd2.imread(file_name, dask=True)  # get python crashing with this in get_image for some reason
@@ -51,17 +52,17 @@ def get_raw_extension(input_dir: str) -> str:
             files.append(os.path.join(root, filename))
     files.sort()
     # Just need a single npy to confirm this is the format
-    if any([directory.endswith('npy') for directory in files]):
-        raw_extension = '.npy'
+    if any([directory.endswith("npy") for directory in files]):
+        raw_extension = ".npy"
     else:
         # Get the first nd2 file here
-        index = min([i for i in range(len(files)) if files[i].endswith('nd2')])
+        index = min([i for i in range(len(files)) if files[i].endswith("nd2")])
 
         with nd2.ND2File(os.path.join(input_dir, files[index])) as image:
-            if image.sizes['C'] == 28:
-                raw_extension = '.nd2'
+            if image.sizes["C"] == 28:
+                raw_extension = ".nd2"
             else:
-                raw_extension = 'jobs'
+                raw_extension = "jobs"
     return raw_extension
 
 
@@ -81,44 +82,49 @@ def get_metadata(file_path: str, config: dict) -> dict:
     """
 
     if not os.path.isfile(file_path):
-        raise errors.NoFileError(file_path)
+        logging.error(errors.NoFileError(file_path))
 
     with nd2.ND2File(file_path) as images:
-        metadata = {'n_tiles': images.sizes['P'],
-                    'n_channels': images.sizes['C'],
-                    'tile_sz': images.sizes['X'],
-                    'pixel_size_xy': images.metadata.channels[0].volume.axesCalibration[0],
-                    'pixel_size_z': images.metadata.channels[0].volume.axesCalibration[2]}
+        metadata = {
+            "n_tiles": images.sizes["P"],
+            "n_channels": images.sizes["C"],
+            "tile_sz": images.sizes["X"],
+            "pixel_size_xy": images.metadata.channels[0].volume.axesCalibration[0],
+            "pixel_size_z": images.metadata.channels[0].volume.axesCalibration[2],
+        }
         # Check if data is 3d
-        if 'Z' in images.sizes:
+        if "Z" in images.sizes:
             # subtract 1 as we always ignore first z plane
-            nz = images.sizes['Z']
-            metadata['tile_centre'] = np.array([metadata['tile_sz'], metadata['tile_sz'], nz])/2
+            nz = images.sizes["Z"]
+            metadata["tile_centre"] = np.array([metadata["tile_sz"], metadata["tile_sz"], nz]) / 2
         else:
-            metadata['tile_centre'] = np.array([metadata['tile_sz'], metadata['tile_sz']])/2
+            metadata["tile_centre"] = np.array([metadata["tile_sz"], metadata["tile_sz"]]) / 2
 
-        xy_pos = np.array([images.experiment[0].parameters.points[i].stagePositionUm[:2]
-                           for i in range(images.sizes['P'])])
-        xy_pos = (xy_pos - np.min(xy_pos, 0)) / metadata['pixel_size_xy']
-        metadata['xy_pos'] = xy_pos
-        metadata['tilepos_yx_nd2'], metadata['tilepos_yx'] = \
-            setup.get_tilepos(xy_pos=xy_pos, tile_sz=metadata['tile_sz'], 
-                              expected_overlap=config['stitch']['expected_overlap'])
+        xy_pos = np.array(
+            [images.experiment[0].parameters.points[i].stagePositionUm[:2] for i in range(images.sizes["P"])]
+        )
+        xy_pos = (xy_pos - np.min(xy_pos, 0)) / metadata["pixel_size_xy"]
+        metadata["xy_pos"] = xy_pos
+        metadata["tilepos_yx_nd2"], metadata["tilepos_yx"] = setup.get_tilepos(
+            xy_pos=xy_pos, tile_sz=metadata["tile_sz"], expected_overlap=config["stitch"]["expected_overlap"]
+        )
         # Now also extract the laser and camera associated with each channel
-        desc = images.text_info['description']
-        channel_metadata = desc.split('Plane #')[1:]
+        desc = images.text_info["description"]
+        channel_metadata = desc.split("Plane #")[1:]
         laser = np.zeros(len(channel_metadata), dtype=int)
         camera = np.zeros(len(channel_metadata), dtype=int)
         for i in range(len(channel_metadata)):
-            laser[i] = int(channel_metadata[i][channel_metadata[i].index('; On')-3:
-                                               channel_metadata[i].index('; On')])
-            camera[i] = int(channel_metadata[i][channel_metadata[i].index('Name:')+6:
-                                                channel_metadata[i].index('Name:')+9])
-        metadata['channel_laser'] = laser.tolist()
-        metadata['channel_camera'] = camera.tolist()
+            laser[i] = int(
+                channel_metadata[i][channel_metadata[i].index("; On") - 3 : channel_metadata[i].index("; On")]
+            )
+            camera[i] = int(
+                channel_metadata[i][channel_metadata[i].index("Name:") + 6 : channel_metadata[i].index("Name:") + 9]
+            )
+        metadata["channel_laser"] = laser.tolist()
+        metadata["channel_camera"] = camera.tolist()
         # Get the entire input directory to list
-        metadata['n_rounds'] = len(config['file_names']['round'])
-        metadata['nz'] = nz
+        metadata["n_rounds"] = len(config["file_names"]["round"])
+        metadata["nz"] = nz
 
     return metadata
 
@@ -134,7 +140,7 @@ def get_all_metadata(file_path: str) -> dict:
         dict: dictionary containing all found metadata for given ND2 file.
     """
     if not os.path.isfile(file_path):
-        raise errors.NoFileError(file_path)
+        logging.error(errors.NoFileError(file_path))
 
     with nd2.ND2File(file_path) as images:
         metadata = images.unstructured_metadata()
@@ -162,17 +168,19 @@ def get_jobs_metadata(files: list, input_dir: str, config: dict) -> dict:
     """
     # Get simple metadata which is constant across tiles from first file
     with nd2.ND2File(os.path.join(input_dir, files[0])) as im:
-        metadata = {'tile_sz': im.sizes['X'],
-                    'pixel_size_xy': im.metadata.channels[0].volume.axesCalibration[0],
-                    'pixel_size_z': im.metadata.channels[0].volume.axesCalibration[2]}
+        metadata = {
+            "tile_sz": im.sizes["X"],
+            "pixel_size_xy": im.metadata.channels[0].volume.axesCalibration[0],
+            "pixel_size_z": im.metadata.channels[0].volume.axesCalibration[2],
+        }
         # Check if data is 3d
-        if 'Z' in im.sizes:
+        if "Z" in im.sizes:
             # subtract 1 as we always ignore first z plane
-            nz = im.sizes['Z']
-            metadata['tile_centre'] = np.array([metadata['tile_sz'], metadata['tile_sz'], nz]) / 2
+            nz = im.sizes["Z"]
+            metadata["tile_centre"] = np.array([metadata["tile_sz"], metadata["tile_sz"], nz]) / 2
         else:
             # Our microscope setup is always square tiles
-            metadata['tile_centre'] = np.array([metadata['tile_sz'], metadata['tile_sz']]) / 2
+            metadata["tile_centre"] = np.array([metadata["tile_sz"], metadata["tile_sz"]]) / 2
 
     # Now loop through the files to get the more varied data
     xy_pos = []
@@ -180,7 +188,7 @@ def get_jobs_metadata(files: list, input_dir: str, config: dict) -> dict:
     camera = []
 
     # Only want to extract metadata from round 0
-    for f_id, f in tqdm(enumerate(files), desc='Reading metadata from all files'):
+    for f_id, f in tqdm(enumerate(files), desc="Reading metadata from all files"):
         with nd2.ND2File(os.path.join(input_dir, f)) as im:
             stage_position = [int(x) for x in im.frame_metadata(0).channels[0].position.stagePositionUm[:2]]
             # We want to append if this stage position is new
@@ -194,42 +202,46 @@ def get_jobs_metadata(files: list, input_dir: str, config: dict) -> dict:
                 break
             cal = im.metadata.channels[0].volume.axesCalibration[0]
             # Now also extract the laser and camera associated with each channel
-            desc = im.text_info['description']
-            channel_metadata = desc.split('Plane #')[1:]
+            desc = im.text_info["description"]
+            channel_metadata = desc.split("Plane #")[1:]
             # Since channels constant across tiles only need to gauge from tile 1
             if stage_position == xy_pos[0]:
                 for i in range(len(channel_metadata)):
-                    laser_wavelength = int(channel_metadata[i][channel_metadata[i].index('; On') - 3:
-                                                               channel_metadata[i].index('; On')])
-                    camera_wavelength = int(channel_metadata[i][channel_metadata[i].index('Name:') + 6:
-                                                                channel_metadata[i].index('Name:') + 9])
+                    laser_wavelength = int(
+                        channel_metadata[i][channel_metadata[i].index("; On") - 3 : channel_metadata[i].index("; On")]
+                    )
+                    camera_wavelength = int(
+                        channel_metadata[i][
+                            channel_metadata[i].index("Name:") + 6 : channel_metadata[i].index("Name:") + 9
+                        ]
+                    )
                     laser.append(laser_wavelength)
                     camera.append(camera_wavelength)
 
     # Normalise so that minimum is 0,0
     xy_pos = np.array(xy_pos)
     xy_pos = (xy_pos - np.min(xy_pos, axis=0)) / cal
-    metadata['xy_pos'] = xy_pos
-    metadata['tilepos_yx_nd2'], metadata['tilepos_yx'] = \
-        setup.get_tilepos(xy_pos=xy_pos, tile_sz=metadata['tile_sz'], 
-                          expected_overlap=config['stitch']['expected_overlap'])
-    metadata['n_tiles'] = len(metadata['tilepos_yx_nd2'])
+    metadata["xy_pos"] = xy_pos
+    metadata["tilepos_yx_nd2"], metadata["tilepos_yx"] = setup.get_tilepos(
+        xy_pos=xy_pos, tile_sz=metadata["tile_sz"], expected_overlap=config["stitch"]["expected_overlap"]
+    )
+    metadata["n_tiles"] = len(metadata["tilepos_yx_nd2"])
     # get n_channels and channel info
-    metadata['channel_laser'], metadata['channel_camera'] = laser, camera
-    metadata['n_channels'] = len(laser)
+    metadata["channel_laser"], metadata["channel_camera"] = laser, camera
+    metadata["n_channels"] = len(laser)
     # Final piece of metadata is n_rounds. Note num_files = num_rounds * num_tiles * num_lasers
     n_files = len(os.listdir(input_dir))
     n_lasers = len(set(laser))
 
-    if config['file_names']['raw_extension'] != 'jobs':
-        preseq_exists = os.path.isfile(os.path.join(input_dir, config['file_names']['pre_seq']))
-    elif config['file_names']['raw_extension'] == 'jobs':
-        preseq_exists = bool(config['file_names']['pre_seq'])
-    metadata['n_rounds'] = n_files // (n_lasers * metadata['n_tiles'])
-    metadata['n_rounds'] -= preseq_exists
+    if config["file_names"]["raw_extension"] != "jobs":
+        preseq_exists = os.path.isfile(os.path.join(input_dir, config["file_names"]["pre_seq"]))
+    elif config["file_names"]["raw_extension"] == "jobs":
+        preseq_exists = bool(config["file_names"]["pre_seq"])
+    metadata["n_rounds"] = n_files // (n_lasers * metadata["n_tiles"])
+    metadata["n_rounds"] -= preseq_exists
     # TODO find a better solution to fix the number of rounds
-    metadata['n_rounds'] -= 1
-    metadata['nz'] = nz
+    metadata["n_rounds"] -= 1
+    metadata["nz"] = nz
 
     return metadata
 
@@ -347,12 +359,16 @@ def save_metadata(json_file: str, nd2_file: str, use_channels: Optional[List] = 
     """
     metadata = get_metadata(nd2_file)
     if use_channels is not None:
-        if len(use_channels) > metadata['sizes']['c']:
-            raise ValueError(f"use_channels contains {len(use_channels)} channels but there "
-                             f"are only {metadata['sizes']['c']} channels in the nd2 metadata.")
-        metadata['sizes']['c'] = len(use_channels)
-        metadata['use_channels'] = use_channels   # channels extracted from nd2 file
-    json.dump(metadata, open(json_file, 'w'))
+        if len(use_channels) > metadata["sizes"]["c"]:
+            logging.error(
+                ValueError(
+                    f"use_channels contains {len(use_channels)} channels but there "
+                    f"are only {metadata['sizes']['c']} channels in the nd2 metadata."
+                )
+            )
+        metadata["sizes"]["c"] = len(use_channels)
+        metadata["use_channels"] = use_channels  # channels extracted from nd2 file
+    json.dump(metadata, open(json_file, "w"))
 
 
 # def get_nd2_tile_ind(tile_ind_npy: Union[int, List[int]], tile_pos_yx_nd2: np.ndarray,
@@ -376,15 +392,16 @@ def save_metadata(json_file: str, nd2_file: str, use_channels: Optional[List] = 
 #     """
 #     Since nd2 tiles are numbered 0,0 from bottom left, and npy tiles are numbered 0,0 from top right, we need to
 #     convert tile_pos_yx[tile_ind_npy] to nd2 tile indices
-    # n_rows, n_cols = tile_pos_yx_nd2.max(axis=0)
-    # get index in the nd2 tile pos array of [n_rows, n_cols] - tile_pos_yx_np[tile_ind_npy]
-    # tile_pos = np.array([n_rows, n_cols]) - tile_pos_yx_npy[tile_ind_npy]
-    # nd2_index = np.where(np.sum(tile_pos_yx_nd2 == tile_pos, axis=1) == 2)[0][0]
-    # return nd2_index
+# n_rows, n_cols = tile_pos_yx_nd2.max(axis=0)
+# get index in the nd2 tile pos array of [n_rows, n_cols] - tile_pos_yx_np[tile_ind_npy]
+# tile_pos = np.array([n_rows, n_cols]) - tile_pos_yx_npy[tile_ind_npy]
+# nd2_index = np.where(np.sum(tile_pos_yx_nd2 == tile_pos, axis=1) == 2)[0][0]
+# return nd2_index
 
 
-def get_nd2_tile_ind(tile_ind_npy: Union[int, List[int]], tile_pos_yx_nd2: np.ndarray, tile_pos_yx_npy: np.ndarray
-                     ) -> Union[int, List[int]]:
+def get_nd2_tile_ind(
+    tile_ind_npy: Union[int, List[int]], tile_pos_yx_nd2: np.ndarray, tile_pos_yx_npy: np.ndarray
+) -> Union[int, List[int]]:
     """
     Gets index of tiles in nd2 file from tile index of npy file.
 
@@ -414,8 +431,14 @@ def get_nd2_tile_ind(tile_ind_npy: Union[int, List[int]], tile_pos_yx_nd2: np.nd
     # return np.where(np.sum(tile_pos_yx_nd2 == tile_pos_yx_npy[tile_ind_npy], 1) == 2)[0][0]
 
 
-def get_raw_images(nbp_basic: NotebookPage, nbp_file: NotebookPage, tiles: List[int], rounds: List[int],
-                   channels: List[int], use_z: List[int]) -> np.ndarray:
+def get_raw_images(
+    nbp_basic: NotebookPage,
+    nbp_file: NotebookPage,
+    tiles: List[int],
+    rounds: List[int],
+    channels: List[int],
+    use_z: List[int],
+) -> np.ndarray:
     """
     This loads in raw images for the experiment corresponding to the *Notebook*.
 
@@ -452,16 +475,17 @@ def get_raw_images(nbp_basic: NotebookPage, nbp_file: NotebookPage, tiles: List[
 
     raw_images = np.zeros((n_tiles, n_rounds, n_channels, ny, nx, nz), dtype=np.uint16)
     with tqdm(total=n_images) as pbar:
-        pbar.set_description(f'Loading in raw data')
+        pbar.set_description(f"Loading in raw data")
         for r in range(n_rounds):
             round_dask_array, _ = raw.load_dask(nbp_file, nbp_basic, r=rounds[r])
             # TODO: Can get rid of these two for loops, when round_dask_array is always a dask array.
             #  At the moment though, is not dask array when using nd2_reader (On Mac M1).
             for t in range(n_tiles):
                 for c in range(n_channels):
-                    pbar.set_postfix({'round': rounds[r], 'tile': tiles[t], 'channel': channels[c]})
-                    raw_images[t, r, c] = raw.load_image(nbp_file, nbp_basic, tiles[t], channels[c], round_dask_array,
-                                                         rounds[r], use_z)
+                    pbar.set_postfix({"round": rounds[r], "tile": tiles[t], "channel": channels[c]})
+                    raw_images[t, r, c] = raw.load_image(
+                        nbp_file, nbp_basic, tiles[t], channels[c], round_dask_array, rounds[r], use_z
+                    )
                     pbar.update(1)
     return raw_images
 
@@ -479,7 +503,7 @@ def get_raw_images(nbp_basic: NotebookPage, nbp_file: NotebookPage, tiles: List[
 #              and then field of view.
 #     """
 #     if not os.path.isfile(file_path):
-#         raise errors.NoFileError(file_path)
+#         logging.error(errors.NoFileError(file_path))
 #     images = ND2Reader(file_path)
 #     images.iter_axes = 'vcz'
 #     return images

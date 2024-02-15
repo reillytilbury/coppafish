@@ -4,6 +4,7 @@ import numpy as np
 from typing import Optional
 
 from . import morphology
+from .. import logging
 
 
 def periodic_line(p: int, v: np.ndarray) -> np.ndarray:
@@ -57,7 +58,7 @@ def disk(r: int, n: int = 4) -> np.ndarray:
         n = 0
     if n == 0:
         xx, yy = np.meshgrid(np.arange(-r, r + 1), np.arange(-r, r + 1))
-        nhood = xx ** 2 + yy ** 2 <= r ** 2
+        nhood = xx**2 + yy**2 <= r**2
     else:
         # Reference for radial decomposition of disks:  Rolf Adams, "Radial
         # Decomposition of Discs and Spheres," CVGIP:  Graphical Models and
@@ -79,7 +80,7 @@ def disk(r: int, n: int = 4) -> np.ndarray:
         elif n == 8:
             v = np.array([[1, 0], [2, 1], [1, 1], [1, 2], [0, 1], [-1, 2], [-1, 1], [-2, 1]])
         else:
-            raise ValueError(f'Value of n provided ({n}) is not 0, 4, 6 or 8.')
+            logging.error(ValueError(f"Value of n provided ({n}) is not 0, 4, 6 or 8."))
         # Determine k, which is the desired radial extent of the periodic
         # line strels.  For the origin of this formula, see the second
         # paragraph on page 328 of the Rolf Adams paper.
@@ -123,9 +124,12 @@ def disk_3d(r_xy: float, r_z: float) -> np.ndarray:
         `int [2*r_xy+1, 2*r_xy+1, 2*r_z+1]`.
             Structuring element with each element either `0` or `1`.
     """
-    y, x, z = np.meshgrid(np.arange(-np.ceil(r_xy), np.ceil(r_xy) + 1), np.arange(-np.ceil(r_xy), np.ceil(r_xy) + 1),
-                          np.arange(-np.ceil(r_z), np.ceil(r_z) + 1))
-    se = x ** 2 + y ** 2 + z ** 2 <= r_xy ** 2
+    y, x, z = np.meshgrid(
+        np.arange(-np.ceil(r_xy), np.ceil(r_xy) + 1),
+        np.arange(-np.ceil(r_xy), np.ceil(r_xy) + 1),
+        np.arange(-np.ceil(r_z), np.ceil(r_z) + 1),
+    )
+    se = x**2 + y**2 + z**2 <= r_xy**2
     # Crop se to remove zeros at extremities
     se = se[:, :, ~np.all(se == 0, axis=(0, 1))]
     se = se[:, ~np.all(se == 0, axis=(0, 2)), :]
@@ -151,15 +155,18 @@ def annulus(r0: float, r_xy: float, r_z: Optional[float] = None) -> np.ndarray:
     r_xy1_int = maths.floor(r_xy)
     if r_z is None:
         y, x = np.meshgrid(np.arange(-r_xy1_int, r_xy1_int + 1), np.arange(-r_xy1_int, r_xy1_int + 1))
-        m = x ** 2 + y ** 2
+        m = x**2 + y**2
     else:
         r_z1_int = maths.floor(r_z)
-        y, x, z = np.meshgrid(np.arange(-r_xy1_int, r_xy1_int + 1), np.arange(-r_xy1_int, r_xy1_int + 1),
-                              np.arange(-r_z1_int, r_z1_int + 1))
-        m = x ** 2 + y ** 2 + z ** 2
+        y, x, z = np.meshgrid(
+            np.arange(-r_xy1_int, r_xy1_int + 1),
+            np.arange(-r_xy1_int, r_xy1_int + 1),
+            np.arange(-r_z1_int, r_z1_int + 1),
+        )
+        m = x**2 + y**2 + z**2
     # only use upper radius in xy direction as z direction has different pixel size.
-    annulus = r_xy ** 2 >= m
-    annulus = np.logical_and(annulus, m > r0 ** 2)
+    annulus = r_xy**2 >= m
+    annulus = np.logical_and(annulus, m > r0**2)
     return annulus.astype(int)
 
 
@@ -185,26 +192,37 @@ def fspecial(r_y: float, r_x: Optional[float] = None, r_z: Optional[float] = Non
         x, y = np.meshgrid(np.arange(-crad, crad + 1), np.arange(-crad, crad + 1))
         max_xy = np.maximum(np.abs(x), np.abs(y))
         min_xy = np.minimum(np.abs(x), np.abs(y))
-        m1 = (r ** 2 < (max_xy + 0.5) ** 2 + (min_xy - 0.5) ** 2) * (min_xy - 0.5) + \
-             (r ** 2 >= (max_xy + 0.5) ** 2 + (min_xy - 0.5) ** 2) * np.sqrt(r ** 2 - (max_xy + 0.5) ** 2,
-                                                                             dtype=np.complex_)
+        m1 = (r**2 < (max_xy + 0.5) ** 2 + (min_xy - 0.5) ** 2) * (min_xy - 0.5) + (
+            r**2 >= (max_xy + 0.5) ** 2 + (min_xy - 0.5) ** 2
+        ) * np.sqrt(r**2 - (max_xy + 0.5) ** 2, dtype=np.complex_)
         m1 = np.real(m1)
-        m2 = (r ** 2 > (max_xy - 0.5) ** 2 + (min_xy + 0.5) ** 2) * (min_xy + 0.5) + \
-             (r ** 2 <= (max_xy - 0.5) ** 2 + (min_xy + 0.5) ** 2) * np.sqrt(r ** 2 - (max_xy - 0.5) ** 2,
-                                                                             dtype=np.complex_)
+        m2 = (r**2 > (max_xy - 0.5) ** 2 + (min_xy + 0.5) ** 2) * (min_xy + 0.5) + (
+            r**2 <= (max_xy - 0.5) ** 2 + (min_xy + 0.5) ** 2
+        ) * np.sqrt(r**2 - (max_xy - 0.5) ** 2, dtype=np.complex_)
         m2 = np.real(m2)
-        sgrid = (r ** 2 * (0.5 * (np.arcsin(m2 / r) - np.arcsin(m1 / r)) +
-                           0.25 * (np.sin(2 * np.arcsin(m2 / r)) - np.sin(2 * np.arcsin(m1 / r)))) - (max_xy - 0.5) * (
-                             m2 - m1) +
-                 (m1 - min_xy + 0.5)) * ((((r ** 2 < (max_xy + 0.5) ** 2 + (min_xy + 0.5) ** 2) &
-                                           (r ** 2 > (max_xy - 0.5) ** 2 + (min_xy - 0.5) ** 2)) |
-                                          ((min_xy == 0) & (max_xy - 0.5 < r) & (max_xy + 0.5 >= r))))
-        sgrid = sgrid + ((max_xy + 0.5) ** 2 + (min_xy + 0.5) ** 2 < r ** 2)
-        sgrid[crad, crad] = min(np.pi * r ** 2, np.pi / 2)
-        if crad > 0.0 and r > crad - 0.5 and r ** 2 < (crad - 0.5) ** 2 + 0.25:
-            m1 = np.sqrt(r ** 2 - (crad - 0.5) ** 2)
+        sgrid = (
+            r**2
+            * (
+                0.5 * (np.arcsin(m2 / r) - np.arcsin(m1 / r))
+                + 0.25 * (np.sin(2 * np.arcsin(m2 / r)) - np.sin(2 * np.arcsin(m1 / r)))
+            )
+            - (max_xy - 0.5) * (m2 - m1)
+            + (m1 - min_xy + 0.5)
+        ) * (
+            (
+                (
+                    (r**2 < (max_xy + 0.5) ** 2 + (min_xy + 0.5) ** 2)
+                    & (r**2 > (max_xy - 0.5) ** 2 + (min_xy - 0.5) ** 2)
+                )
+                | ((min_xy == 0) & (max_xy - 0.5 < r) & (max_xy + 0.5 >= r))
+            )
+        )
+        sgrid = sgrid + ((max_xy + 0.5) ** 2 + (min_xy + 0.5) ** 2 < r**2)
+        sgrid[crad, crad] = min(np.pi * r**2, np.pi / 2)
+        if crad > 0.0 and r > crad - 0.5 and r**2 < (crad - 0.5) ** 2 + 0.25:
+            m1 = np.sqrt(r**2 - (crad - 0.5) ** 2)
             m1n = m1 / r
-            sg0 = 2 * (r ** 2 * (0.5 * np.arcsin(m1n) + 0.25 * np.sin(2 * np.arcsin(m1n))) - m1 * (crad - 0.5))
+            sg0 = 2 * (r**2 * (0.5 * np.arcsin(m1n) + 0.25 * np.sin(2 * np.arcsin(m1n))) - m1 * (crad - 0.5))
             sgrid[2 * crad, crad] = sg0
             sgrid[crad, 2 * crad] = sg0
             sgrid[crad, 0] = sg0
@@ -216,9 +234,11 @@ def fspecial(r_y: float, r_x: Optional[float] = None, r_z: Optional[float] = Non
         sgrid[crad, crad] = min(sgrid[crad, crad], 1)
         h = sgrid / np.sum(sgrid)
     else:
-        x, y, z = np.meshgrid(np.arange(-maths.ceil(r_x), maths.ceil(r_x) + 1), 
-                              np.arange(-maths.ceil(r_y), maths.ceil(r_y) + 1),
-                              np.arange(-maths.ceil(r_z), maths.ceil(r_z) + 1))
-        h = (1 - x ** 2 / r_x ** 2 - y ** 2 / r_y ** 2 - z ** 2 / r_z ** 2) >= 0
+        x, y, z = np.meshgrid(
+            np.arange(-maths.ceil(r_x), maths.ceil(r_x) + 1),
+            np.arange(-maths.ceil(r_y), maths.ceil(r_y) + 1),
+            np.arange(-maths.ceil(r_z), maths.ceil(r_z) + 1),
+        )
+        h = (1 - x**2 / r_x**2 - y**2 / r_y**2 - z**2 / r_z**2) >= 0
         h = h / np.sum(h)
     return h

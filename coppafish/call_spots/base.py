@@ -2,11 +2,12 @@ from scipy.spatial import KDTree
 import numpy as np
 from typing import List, Tuple
 
-from coppafish import utils
+from .. import utils, logging
 
 
-def get_non_duplicate(tile_origin: np.ndarray, use_tiles: List, tile_centre: np.ndarray,
-                      spot_local_yxz: np.ndarray, spot_tile: np.ndarray) -> np.ndarray:
+def get_non_duplicate(
+    tile_origin: np.ndarray, use_tiles: List, tile_centre: np.ndarray, spot_local_yxz: np.ndarray, spot_tile: np.ndarray
+) -> np.ndarray:
     """
     Find duplicate spots as those detected on a tile which is not tile centre they are closest to.
 
@@ -39,9 +40,13 @@ def get_non_duplicate(tile_origin: np.ndarray, use_tiles: List, tile_centre: np.
     tree_tiles = KDTree(tile_centres[:, :2])
     if np.isnan(tile_origin[np.unique(spot_tile)]).any():
         nan_tiles = np.unique(spot_tile)[np.unique(np.where(np.isnan(tile_origin[np.unique(spot_tile)]))[0])]
-        raise ValueError(f"tile_origin for tiles\n{nan_tiles}\ncontains nan values but some spot_tile "
-                         f"also contains these tiles. Maybe remove these from use_tiles to continue.\n"
-                         f"Also, consider coppafish.plot.n_spots_grid to check if these tiles have few spots.")
+        logging.error(
+            ValueError(
+                f"tile_origin for tiles\n{nan_tiles}\ncontains nan values but some spot_tile "
+                f"also contains these tiles. Maybe remove these from use_tiles to continue.\n"
+                f"Also, consider coppafish.plot.n_spots_grid to check if these tiles have few spots."
+            )
+        )
     spot_global_yxz = spot_local_yxz + tile_origin[spot_tile]
     all_nearest_tile_ind = tree_tiles.query(spot_global_yxz[:, :2])[1]
     not_duplicate = np.asarray(use_tiles)[all_nearest_tile_ind.flatten()] == spot_tile
@@ -66,21 +71,26 @@ def get_bled_codes(gene_codes: np.ndarray, bleed_matrix: np.ndarray, gene_effici
     Returns:
         ```float [n_genes x n_rounds x n_channels]```.
             ```bled_codes``` such that ```spot_color``` of a gene ```g```
-            in round ```r``` is expected to be a constant multiple of ```bled_codes[g, r]```. bled_codes[g] will 
+            in round ```r``` is expected to be a constant multiple of ```bled_codes[g, r]```. bled_codes[g] will
             all have a norm of one.
     """
     n_genes, n_rounds = gene_codes.shape[0], gene_codes.shape[1]
     n_channels, n_dyes = bleed_matrix.shape
     if not utils.errors.check_shape(gene_codes, [n_genes, n_rounds]):
-        raise utils.errors.ShapeError('gene_codes', gene_codes.shape, (n_genes, n_rounds))
+        logging.error(utils.errors.ShapeError("gene_codes", gene_codes.shape, (n_genes, n_rounds)))
     if gene_codes.max() >= n_dyes:
         ind_1, ind_2 = np.where(gene_codes == gene_codes.max())
-        raise ValueError(f"gene_code for gene {ind_1[0]}, round {ind_2[0]} has a dye with index {gene_codes.max()}"
-                         f" but there are only {n_dyes} dyes.")
+        logging.error(
+            ValueError(
+                f"gene_code for gene {ind_1[0]}, round {ind_2[0]} has a dye with index {gene_codes.max()}"
+                f" but there are only {n_dyes} dyes."
+            )
+        )
     if gene_codes.min() < 0:
         ind_1, ind_2 = np.where(gene_codes == gene_codes.min())
-        raise ValueError(f"gene_code for gene {ind_1[0]}, round {ind_2[0]} has a dye with a negative index:"
-                         f" {gene_codes.min()}")
+        logging.error(ValueError(
+            f"gene_code for gene {ind_1[0]}, round {ind_2[0]} has a dye with a negative index:" f" {gene_codes.min()}"
+        ))
 
     bled_codes = np.zeros((n_genes, n_rounds, n_channels))
     for g in range(n_genes):
@@ -94,11 +104,17 @@ def get_bled_codes(gene_codes: np.ndarray, bleed_matrix: np.ndarray, gene_effici
     return bled_codes
 
 
-def compute_gene_efficiency(spot_colours: np.ndarray, bled_codes: np.ndarray, gene_no: np.ndarray,
-                            gene_score: np.ndarray, gene_codes: np.ndarray, intensity: np.ndarray,
-                            spot_number_threshold: int = 25, score_threshold: float = 0.8,
-                            intensity_threshold: float = 0) \
-        -> Tuple[np.ndarray, np.ndarray, list]:
+def compute_gene_efficiency(
+    spot_colours: np.ndarray,
+    bled_codes: np.ndarray,
+    gene_no: np.ndarray,
+    gene_score: np.ndarray,
+    gene_codes: np.ndarray,
+    intensity: np.ndarray,
+    spot_number_threshold: int = 25,
+    score_threshold: float = 0.8,
+    intensity_threshold: float = 0,
+) -> Tuple[np.ndarray, np.ndarray, list]:
     """
     Compute gene efficiency and gene coefficients from spot colours and bleed matrix.
 
@@ -118,7 +134,7 @@ def compute_gene_efficiency(spot_colours: np.ndarray, bled_codes: np.ndarray, ge
             Minimum score required to compute gene efficiency.
         intensity_threshold: `float`.
             Minimum intensity required to compute gene efficiency.
-    
+
     #TODO: Add documentation for the returns
     """
     n_spots, n_rounds, n_channels = spot_colours.shape
@@ -156,8 +172,9 @@ def compute_gene_efficiency(spot_colours: np.ndarray, bled_codes: np.ndarray, ge
     return gene_efficiency, use_ge, dye_efficiency
 
 
-def matrix_match(Y: np.ndarray, X: np.ndarray, u: np.ndarray, v: np.ndarray, alpha: float = 0, beta: float = 0,
-                 n_iters: int = 50) -> [np.ndarray, np.ndarray]:
+def matrix_match(
+    Y: np.ndarray, X: np.ndarray, u: np.ndarray, v: np.ndarray, alpha: float = 0, beta: float = 0, n_iters: int = 50
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     This function solves the following problem: given two matrices Y and X (n rows and m columns each), find two
     vectors u and v (of length n and m respectively) such that Y_ij ~ u_i * X_ij * v_j for all i and j. This is
@@ -190,7 +207,7 @@ def matrix_match(Y: np.ndarray, X: np.ndarray, u: np.ndarray, v: np.ndarray, alp
     return u, v
 
 
-def matrix_match_exact(Y: np.ndarray, X: np.ndarray) -> [np.ndarray, np.ndarray]:
+def matrix_match_exact(Y: np.ndarray, X: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
     This function solves the following problem: given two matrices Y and X (n rows and m columns each), find two
     vectors u and v (of length n and m respectively) such that Y_ij ~ u_i * X_ij * v_j for all i and j. We do this by
@@ -222,8 +239,9 @@ def matrix_match_exact(Y: np.ndarray, X: np.ndarray) -> [np.ndarray, np.ndarray]
     return u, v
 
 
-def matrix_match_with_prior(Y: np.ndarray, X: np.ndarray, u_init: np.ndarray, v_init: np.ndarray, alpha: float = 0,
-                            beta: float = 0) -> [np.ndarray, np.ndarray]:
+def matrix_match_with_prior(
+    Y: np.ndarray, X: np.ndarray, u_init: np.ndarray, v_init: np.ndarray, alpha: float = 0, beta: float = 0
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     This function solves the following problem: given two matrices Y and X (n rows and m columns each), find two
     vectors u and v (of length n and m respectively) such that Y_ij ~ u_i * X_ij * v_j for all i and j. We do this by
@@ -243,7 +261,7 @@ def matrix_match_with_prior(Y: np.ndarray, X: np.ndarray, u_init: np.ndarray, v_
     """
     n, m = Y.shape
     W = Y * X
-    eta = 1 / ((1+alpha)*(1+beta))
+    eta = 1 / ((1 + alpha) * (1 + beta))
     u_operator = np.linalg.inv(np.eye(n) - eta * W @ W.T)
     v_operator = np.linalg.inv(np.eye(m) - eta * W.T @ W)
     u = u_operator @ (alpha * u_init + beta * W @ v_init)

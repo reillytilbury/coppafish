@@ -1,10 +1,10 @@
 import jax  # must import jax for non-jax pipeline to work
-import warnings
 import numpy as np
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
 
 from . import detect
 from .. import utils
+from .. import logging
 
 # Silence jax CPU warning
 jax.config.update("jax_platform_name", "cpu")
@@ -63,7 +63,7 @@ def detect_spots(
             pad_size_z = 0
     if image.ndim == 2 and se.ndim == 3:
         mid_z = int(np.floor((se.shape[2] - 1) / 2))
-        warnings.warn(
+        logging.warn(
             f"2D image provided but 3D filter asked for.\n" f"Using the middle plane ({mid_z}) of this filter."
         )
         se = se[:, :, mid_z]

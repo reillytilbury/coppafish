@@ -1,15 +1,14 @@
 import os
 import numpy as np
-import warnings
 
 from ..setup.notebook import NotebookPage
-from .. import utils, extract, scale
+from .. import utils, extract, scale, logging
 
 
 def compute_scale(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage) -> NotebookPage:
     """
-    This calculates the scale factors for the filtered sequencing images and anchor images to convert the float types 
-    that are produced after filtering to integers that take the full range of `np.uint16` which the filtered images 
+    This calculates the scale factors for the filtered sequencing images and anchor images to convert the float types
+    that are produced after filtering to integers that take the full range of `np.uint16` which the filtered images
     will be saved as when 'filter' is run.
 
     Args:
@@ -18,7 +17,7 @@ def compute_scale(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage)
         nbp_basic (NotebookPage): 'basic_info' notebook page.
 
     Returns:
-        `NotebookPage[scale]` page containing image scale factors which are needed by 'extract' in the pipeline and may 
+        `NotebookPage[scale]` page containing image scale factors which are needed by 'extract' in the pipeline and may
             be useful for debugging purposes.
 
     Notes:
@@ -27,14 +26,18 @@ def compute_scale(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage)
     # Check scaling won't cause clipping when saving as uint16
     scale_norm_max = np.iinfo(np.uint16).max - nbp_basic.tile_pixel_value_shift
     if config["scale_norm"] >= scale_norm_max:
-        raise ValueError(
-            f"\nconfig['extract']['scale_norm'] = {config['scale_norm']} but it must be below " f"{scale_norm_max}"
+        logging.error(
+            ValueError(
+                f"\nconfig['extract']['scale_norm'] = {config['scale_norm']} but it must be below " f"{scale_norm_max}"
+            )
         )
 
     nbp = NotebookPage("scale")
     nbp.software_version = utils.system.get_software_version()
     nbp.revision_hash = utils.system.get_git_revision_hash()
-    
+
+    logging.debug("Scale started")
+
     if not os.path.isdir(os.path.dirname(nbp_file.scale)):
         os.mkdir(os.path.dirname(nbp_file.scale))
     if config["r1"] is None:
@@ -46,22 +49,26 @@ def compute_scale(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage)
     if config["r_smooth"] is not None:
         if len(config["r_smooth"]) == 2:
             if nbp_basic.is_3d:
-                warnings.warn(
+                logging.warn(
                     f"Running 3D pipeline but only 2D smoothing requested with r_smooth" f" = {config['r_smooth']}."
                 )
         elif len(config["r_smooth"]) == 3:
             if not nbp_basic.is_3d:
-                raise ValueError("Running 2D pipeline but 3D smoothing requested.")
+                logging.error(ValueError("Running 2D pipeline but 3D smoothing requested."))
         else:
-            raise ValueError(
-                f"r_smooth provided was {config['r_smooth']}.\n"
-                f"But it needs to be a 2 radii for 2D smoothing or 3 radii for 3D smoothing.\n"
-                f"I.e. it is the wrong shape."
+            logging.error(
+                ValueError(
+                    f"r_smooth provided was {config['r_smooth']}.\n"
+                    f"But it needs to be a 2 radii for 2D smoothing or 3 radii for 3D smoothing.\n"
+                    f"I.e. it is the wrong shape."
+                )
             )
         if config["r_smooth"][0] > config["r2"]:
-            raise ValueError(
-                f"Smoothing radius, {config['r_smooth'][0]}, is larger than the outer radius of the\n"
-                f"hanning filter, {config['r2']}, making the filtering step redundant."
+            logging.error(
+                ValueError(
+                    f"Smoothing radius, {config['r_smooth'][0]}, is larger than the outer radius of the\n"
+                    f"hanning filter, {config['r2']}, making the filtering step redundant."
+                )
             )
 
         # smooth_kernel = utils.strel.fspecial(*tuple(config['r_smooth']))
@@ -69,7 +76,7 @@ def compute_scale(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage)
         smooth_kernel = smooth_kernel / np.sum(smooth_kernel)
 
         if np.max(config["r_smooth"]) == 1:
-            warnings.warn("Max radius of smooth filter was 1, so not using.")
+            logging.warn("Max radius of smooth filter was 1, so not using.")
             config["r_smooth"] = None
 
     # check to see if scales have already been computed
@@ -82,7 +89,9 @@ def compute_scale(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage)
         scale_norm_min = (np.iinfo("uint16").max - nbp_basic.tile_pixel_value_shift) / 5
         scale_norm_max = np.iinfo("uint16").max - nbp_basic.tile_pixel_value_shift
         if not scale_norm_min <= config["scale_norm"] <= scale_norm_max:
-            raise utils.errors.OutOfBoundsError("scale_norm", config["scale_norm"], scale_norm_min, scale_norm_max)
+            logging.error(
+                utils.errors.OutOfBoundsError("scale_norm", config["scale_norm"], scale_norm_min, scale_norm_max)
+            )
         # If using smoothing, apply this as well before scale
         if config["r_smooth"] is None:
             smooth_kernel_2d = None
@@ -96,7 +105,7 @@ def compute_scale(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage)
             smooth_kernel_2d = smooth_kernel_2d / np.sum(smooth_kernel_2d)
             if np.max(config["r_smooth"][:2]) <= 1:
                 smooth_kernel_2d = None  # If dimensions of 2D kernel are [1, 1] is equivalent to no smoothing
-        print("Computing scale...")
+        logging.info("Computing scale...")
         nbp.scale_tile, nbp.scale_channel, nbp.scale_z, config["scale"] = scale.base.get_scale(
             nbp_file,
             nbp_basic,
@@ -114,13 +123,13 @@ def compute_scale(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage)
         nbp.scale_z = None
         smooth_kernel_2d = None
     nbp.scale = config["scale"]
-    
+
     if nbp_basic.use_anchor == False:
         nbp.scale_anchor_tile = None
         nbp.scale_anchor_z = None
         nbp.scale_anchor = None
     elif config["scale_anchor"] is None:
-        print("Computing scale_anchor...")
+        logging.info("Computing scale_anchor...")
         nbp.scale_anchor_tile, _, nbp.scale_anchor_z, config["scale_anchor"] = scale.base.get_scale(
             nbp_file,
             nbp_basic,
@@ -137,10 +146,11 @@ def compute_scale(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage)
         nbp.scale_anchor_z = None
     # Save scale values to disk in case need to re-run
     scale.base.save_scale(nbp_file.scale, nbp.scale, config["scale_anchor"])
-    
+
     nbp.r_smooth = config["r_smooth"]
     nbp.r1 = config["r1"]
     nbp.r2 = config["r2"]
     nbp.scale_anchor = config["scale_anchor"]
-    
+    logging.debug("Scale complete")
+
     return nbp
