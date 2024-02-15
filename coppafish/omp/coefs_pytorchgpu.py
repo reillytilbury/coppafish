@@ -463,7 +463,10 @@ def get_all_coefs(
             pbar.update()
     logging.debug("Finding OMP coefficients complete")
 
-    return gene_coefs.type(torch.float32).to(cpu), background_coefs.type(torch.float32).to(cpu)
+    gene_coefs, background_coefs = gene_coefs.type(torch.float32).to(cpu), background_coefs.type(torch.float32).to(cpu)
+    with torch.no_grad():
+        torch.cuda.empty_cache()
+    return gene_coefs, background_coefs
 
 
 def get_pixel_coefs_yxz(
