@@ -372,6 +372,7 @@ def get_all_coefs(
     pixel_colors = pixel_colors.reshape((n_pixels, -1))
 
     continue_pixels = torch.arange(n_pixels)
+    logging.debug("Finding OMP coefficients started")
     with tqdm.tqdm(total=max_genes, disable=no_verbose, desc="Finding OMP coefficients for each pixel") as pbar:
         for i in range(max_genes):
             if i == 0:
@@ -429,6 +430,7 @@ def get_all_coefs(
                 gene_coefs[torch.asarray(continue_pixels)[:, None], torch.asarray(added_genes)] = torch.asarray(i_coefs)
 
             pbar.update()
+    logging.debug("Finding OMP coefficients complete")
 
     return gene_coefs.type(torch.float32), background_coefs.type(torch.float32)
 

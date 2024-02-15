@@ -398,6 +398,7 @@ def get_all_coefs(
     gene_coefs = gene_coefs.to(cuda)
 
     continue_pixels = torch.arange(n_pixels, device=cuda)
+    logging.debug("Finding OMP coefficients started")
     with tqdm.tqdm(total=max_genes, disable=no_verbose, desc="Finding OMP coefficients for each pixel") as pbar:
         for i in range(max_genes):
             if i == 0:
@@ -460,6 +461,7 @@ def get_all_coefs(
             with torch.no_grad():
                 torch.cuda.empty_cache()
             pbar.update()
+    logging.debug("Finding OMP coefficients complete")
 
     return gene_coefs.type(torch.float32).to(cpu), background_coefs.type(torch.float32).to(cpu)
 

@@ -577,6 +577,7 @@ def get_all_coefs(
     pixel_colors = pixel_colors.reshape((n_pixels, -1))
 
     continue_pixels = jnp.arange(n_pixels)
+    logging.debug("Finding OMP coefficients started")
     with tqdm(total=max_genes, disable=no_verbose) as pbar:
         pbar.set_description("Finding OMP coefficients for each pixel")
         for i in range(max_genes):
@@ -639,6 +640,7 @@ def get_all_coefs(
 
             pbar.update(1)
     pbar.close()
+    logging.debug("Finding OMP coefficients complete")
 
     return np.asarray(gene_coefs, np.float32), np.asarray(background_coefs, dtype=np.float32)
 
