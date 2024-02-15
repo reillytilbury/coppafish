@@ -556,6 +556,8 @@ def get_pixel_coefs_yxz(
             config["max_genes"],
             config["weight_coef_fit"],
         )[0]
+        with torch.no_grad():
+            torch.cuda.empty_cache()
         pixel_coefs_tz = torch.asarray(pixel_coefs_tz, dtype=torch.float32)
         del pixel_colors_tz
         # Only keep pixels for which at least one gene has non-zero coefficient.
