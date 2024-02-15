@@ -78,6 +78,48 @@ def imfilter(
             )
 
 
+def manual_convolve(
+    image: np.ndarray,
+    y_kernel_shifts: np.ndarray,
+    x_kernel_shifts: np.asarray,
+    z_kernel_shifts: np.ndarray,
+    coords: np.ndarray,
+) -> np.ndarray:
+    """
+    Finds result of convolution at specific locations indicated by `coords` with binary kernel.
+    I.e. instead of convolving whole `image`, just find result at these `points`.
+
+    Args:
+        image: `int [image_szY x image_szX x image_szZ]`.
+            Image to be filtered. Must be 3D.
+        y_kernel_shifts: `int [n_nonzero_kernel]`
+            Shifts indicating where kernel equals 1.
+            I.e. if `kernel = np.ones((3,3))` then `y_shift = x_shift = z_shift = [-1, 0, 1]`.
+        x_kernel_shifts: `int [n_nonzero_kernel]`
+            Shifts indicating where kernel equals 1.
+            I.e. if `kernel = np.ones((3,3))` then `y_shift = x_shift = z_shift = [-1, 0, 1]`.
+        z_kernel_shifts: `int [n_nonzero_kernel]`
+            Shifts indicating where kernel equals 1.
+            I.e. if `kernel = np.ones((3,3))` then `y_shift = x_shift = z_shift = [-1, 0, 1]`.
+        coords: `int [n_points x 3]`.
+            yxz coordinates where result of filtering is desired.
+
+    Returns:
+        `int [n_points]`.
+            Result of filtering of `image` at each point in `coords`.
+
+    Notes:
+        - Image needs to be padded before this function is called otherwise get an error when go out of bounds.
+    """
+    n_points = coords.shape[0]
+    n_nonzero_kernel = y_kernel_shifts.size
+    coords_shifted = np.repeat(coords[:, np.newaxis], n_nonzero_kernel, axis=1)
+    coords_shifted[..., 0] += y_kernel_shifts
+    coords_shifted[..., 1] += x_kernel_shifts
+    coords_shifted[..., 2] += z_kernel_shifts
+    return image[tuple(coords_shifted.reshape((-1, 3)).T)].reshape((n_points, n_nonzero_kernel)).sum(1)
+
+
 def imfilter_coords(
     image: np.ndarray,
     kernel: np.ndarray,
@@ -117,14 +159,52 @@ def imfilter_coords(
         `int [n_points]`.
             Result of filtering of `image` at each point in `coords`.
     """
-    im_filt = imfilter(image.astype(int), kernel, padding, corr_or_conv, oa=False)
-    return im_filt[tuple([coords[:, j] for j in range(im_filt.ndim)])]
+    if corr_or_conv == "corr":
+        kernel = np.flip(kernel)
+    elif corr_or_conv != "conv":
+        logging.error(ValueError(f"corr_or_conv should be either 'corr' or 'conv' but given value is {corr_or_conv}"))
+    kernel = ensure_odd_kernel(kernel, "end")
+
+    # Ensure shape of image and kernel correct
+    if image.ndim != coords.shape[1]:
+        logging.error(
+            ValueError(f"Image has {image.ndim} dimensions but coords only have {coords.shape[1]} dimensions.")
+        )
+    if image.ndim == 2:
+        image = np.expand_dims(image, 2)
+    elif image.ndim != 3:
+        logging.error(ValueError(f"image must have 2 or 3 dimensions but given image has {image.ndim}."))
+    if kernel.ndim == 2:
+        kernel = np.expand_dims(kernel, 2)
+    elif kernel.ndim != 3:
+        logging.error(ValueError(f"kernel must have 2 or 3 dimensions but given image has {image.ndim}."))
+    if kernel.max() > 1:
+        logging.error(
+            ValueError(f"kernel is expected to be binary, only containing 0 or 1 but kernel.max = {kernel.max()}")
+        )
+
+    if coords.shape[1] == 2:
+        # set all z coordinates to 0 if 2D.
+        coords = np.append(coords, np.zeros((coords.shape[0], 1), dtype=int), axis=1)
+    if (coords.max(axis=0) >= np.array(image.shape)).any():
+        logging.error(
+            ValueError(f"Max yxz coordinates provided are {coords.max(axis=0)} but image has shape {image.shape}.")
+        )
+
+    pad_size = [(int((ax_size - 1) / 2),) * 2 for ax_size in kernel.shape]
+    pad_coords = np.asarray(coords) + np.array([val[0] for val in pad_size])
+    if isinstance(padding, numbers.Number):
+        image_pad = np.pad(np.asarray(image), pad_size, "constant", constant_values=padding).astype(int)
+    else:
+        image_pad = np.pad(np.asarray(image), pad_size, padding).astype(int)
+    y_shifts, x_shifts, z_shifts = get_shifts_from_kernel(np.asarray(np.flip(kernel)))
+    return np.asarray(manual_convolve(image_pad, y_shifts, x_shifts, z_shifts, pad_coords))
 
 
 def get_shifts_from_kernel(kernel: npt.NDArray) -> Tuple[npt.NDArray, npt.NDArray, npt.NDArray]:
     """
     Returns where kernel is positive as shifts in y, x and z.
-    I.e. `kernel=jnp.ones((3,3,3))` would return `y_shifts = x_shifts = z_shifts = -1, 0, 1`.
+    I.e. `kernel=np.ones((3,3,3))` would return `y_shifts = x_shifts = z_shifts = -1, 0, 1`.
 
     Args:
         kernel (`[kernel_szY x kernel_szX x kernel_szY] ndarray[int]`): the kernel.
