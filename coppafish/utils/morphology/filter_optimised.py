@@ -3,14 +3,16 @@ from typing import Union, Tuple
 import jax
 import numpy as np
 from jax import numpy as jnp
+
 from .base import ensure_odd_kernel
+from ... import logging
 
 
 def get_shifts_from_kernel(kernel: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """
     Returns where kernel is positive as shifts in y, x and z.
     I.e. `kernel=jnp.ones((3,3,3))` would return `y_shifts = x_shifts = z_shifts = -1, 0, 1`.
-    
+
     Args:
         kernel: int [kernel_szY x kernel_szX x kernel_szY]
 
@@ -28,14 +30,24 @@ def get_shifts_from_kernel(kernel: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarra
     return tuple(shifts)
 
 
-def manual_convolve_single(image: jnp.ndarray, y_kernel_shifts: jnp.ndarray, x_kernel_shifts: jnp.asarray,
-                           z_kernel_shifts: jnp.ndarray, coord: jnp.ndarray) -> float:
+def manual_convolve_single(
+    image: jnp.ndarray,
+    y_kernel_shifts: jnp.ndarray,
+    x_kernel_shifts: jnp.asarray,
+    z_kernel_shifts: jnp.ndarray,
+    coord: jnp.ndarray,
+) -> float:
     return jnp.sum(image[coord[0] + y_kernel_shifts, coord[1] + x_kernel_shifts, coord[2] + z_kernel_shifts])
 
 
 @jax.jit
-def manual_convolve(image: jnp.ndarray, y_kernel_shifts: jnp.ndarray, x_kernel_shifts: jnp.asarray,
-                    z_kernel_shifts: jnp.ndarray, coords: jnp.ndarray) -> jnp.ndarray:
+def manual_convolve(
+    image: jnp.ndarray,
+    y_kernel_shifts: jnp.ndarray,
+    x_kernel_shifts: jnp.asarray,
+    z_kernel_shifts: jnp.ndarray,
+    coords: jnp.ndarray,
+) -> jnp.ndarray:
     """
     Finds result of convolution at specific locations indicated by `coords` with binary kernel.
     I.e. instead of convolving whole `image`, just find result at these `points`.
@@ -58,16 +70,22 @@ def manual_convolve(image: jnp.ndarray, y_kernel_shifts: jnp.ndarray, x_kernel_s
     Returns:
         `int [n_points]`.
             Result of filtering of `image` at each point in `coords`.
-            
+
     Notes:
         - Image needs to be padded before this function is called otherwise get an error when go out of bounds.
     """
-    return jax.vmap(manual_convolve_single, in_axes=(None, None, None, None, 0),
-                    out_axes=0)(image, y_kernel_shifts, x_kernel_shifts,z_kernel_shifts, coords)
+    return jax.vmap(manual_convolve_single, in_axes=(None, None, None, None, 0), out_axes=0)(
+        image, y_kernel_shifts, x_kernel_shifts, z_kernel_shifts, coords
+    )
 
 
-def imfilter_coords(image: np.ndarray, kernel: np.ndarray, coords: np.ndarray, padding: Union[float, str] = 0,
-                    corr_or_conv: str = 'corr') -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+def imfilter_coords(
+    image: np.ndarray,
+    kernel: np.ndarray,
+    coords: np.ndarray,
+    padding: Union[float, str] = 0,
+    corr_or_conv: str = "corr",
+) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Copy of MATLAB `imfilter` function with `'output_size'` equal to `'same'`.
     Only finds result of filtering at specific locations.
@@ -101,36 +119,42 @@ def imfilter_coords(image: np.ndarray, kernel: np.ndarray, coords: np.ndarray, p
         `int [n_points]`.
             Result of filtering of `image` at each point in `coords`.
     """
-    if corr_or_conv == 'corr':
+    if corr_or_conv == "corr":
         kernel = np.flip(kernel)
-    elif corr_or_conv != 'conv':
-        raise ValueError(f"corr_or_conv should be either 'corr' or 'conv' but given value is {corr_or_conv}")
-    kernel = ensure_odd_kernel(kernel, 'end')
+    elif corr_or_conv != "conv":
+        logging.error(ValueError(f"corr_or_conv should be either 'corr' or 'conv' but given value is {corr_or_conv}"))
+    kernel = ensure_odd_kernel(kernel, "end")
 
     # Ensure shape of image and kernel correct
     if image.ndim != coords.shape[1]:
-        raise ValueError(f"Image has {image.ndim} dimensions but coords only have {coords.shape[1]} dimensions.")
+        logging.error(
+            ValueError(f"Image has {image.ndim} dimensions but coords only have {coords.shape[1]} dimensions.")
+        )
     if image.ndim == 2:
         image = np.expand_dims(image, 2)
     elif image.ndim != 3:
-        raise ValueError(f"image must have 2 or 3 dimensions but given image has {image.ndim}.")
+        logging.error(ValueError(f"image must have 2 or 3 dimensions but given image has {image.ndim}."))
     if kernel.ndim == 2:
         kernel = np.expand_dims(kernel, 2)
     elif kernel.ndim != 3:
-        raise ValueError(f"kernel must have 2 or 3 dimensions but given image has {image.ndim}.")
+        logging.error(ValueError(f"kernel must have 2 or 3 dimensions but given image has {image.ndim}."))
     if kernel.max() > 1:
-        raise ValueError(f'kernel is expected to be binary, only containing 0 or 1 but kernel.max = {kernel.max()}')
+        logging.error(
+            ValueError(f"kernel is expected to be binary, only containing 0 or 1 but kernel.max = {kernel.max()}")
+        )
 
     if coords.shape[1] == 2:
         # set all z coordinates to 0 if 2D.
         coords = np.append(coords, np.zeros((coords.shape[0], 1), dtype=int), axis=1)
     if (coords.max(axis=0) >= np.array(image.shape)).any():
-        raise ValueError(f"Max yxz coordinates provided are {coords.max(axis=0)} but image has shape {image.shape}.")
+        logging.error(
+            ValueError(f"Max yxz coordinates provided are {coords.max(axis=0)} but image has shape {image.shape}.")
+        )
 
-    pad_size = [(int((ax_size-1)/2),)*2 for ax_size in kernel.shape]
+    pad_size = [(int((ax_size - 1) / 2),) * 2 for ax_size in kernel.shape]
     pad_coords = jnp.asarray(coords) + jnp.array([val[0] for val in pad_size])
     if isinstance(padding, numbers.Number):
-        image_pad = jnp.pad(jnp.asarray(image), pad_size, 'constant', constant_values=padding).astype(int)
+        image_pad = jnp.pad(jnp.asarray(image), pad_size, "constant", constant_values=padding).astype(int)
     else:
         image_pad = jnp.pad(jnp.asarray(image), pad_size, padding).astype(int)
     y_shifts, x_shifts, z_shifts = get_shifts_from_kernel(jnp.asarray(np.flip(kernel)))

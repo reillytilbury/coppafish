@@ -21,7 +21,7 @@ def get_spot_images(image: np.ndarray, spot_yxz: np.ndarray, shape: Union[np.nda
         ``float [n_peaks x y_shape x x_shape (x z_shape)]``. ``[s]`` is the small image surrounding spot ``s``.
     """
     if min(np.array(shape) % 2) == 0:
-        raise ValueError(f"Require shape to be odd in each dimension but given shape was {shape}.")
+        logging.error(ValueError(f"Require shape to be odd in each dimension but given shape was {shape}."))
     mid_index = (
         np.ceil(np.array(shape) / 2).astype(int) - 1
     )  # index in spot_images where max intensity is for each spot.
@@ -91,7 +91,7 @@ def get_average_spot_image(
     elif av_type == "median":
         av_func = lambda x, axis: np.nanmedian(x, axis)
     else:
-        raise ValueError(f"av_type must be 'mean' or 'median' but value given was {av_type}")
+        logging.error(ValueError(f"av_type must be 'mean' or 'median' but value given was {av_type}"))
 
     mid_index = np.ceil(np.array(spot_images.shape[1:]) / 2).astype(int) - 1
 
@@ -123,10 +123,10 @@ def get_average_spot_image(
         av_image = np.zeros_like(spot_images[0])
         if symmetry == "annulus_3d":
             if spot_images.ndim != 4:
-                raise ValueError("Must give 3D images with symmetry = 'annulus_3d'")
+                logging.error(ValueError("Must give 3D images with symmetry = 'annulus_3d'"))
             n_z = spot_images.shape[3]
             if n_z % 2 == 0:
-                raise ValueError("Must have odd number of z-planes with symmetry = 'annulus_3d'")
+                logging.error(ValueError("Must have odd number of z-planes with symmetry = 'annulus_3d'"))
             # ensure each z-plane has unique set of indices so can average each separately.
             bin_index = np.tile(np.expand_dims(bin_index, 2), [1, 1, n_z])
             for i in range(mid_index[2]):
@@ -137,8 +137,10 @@ def get_average_spot_image(
             current_bin = bin_index == i
             av_image[current_bin] = av_func(spot_images[:, current_bin], (0, 1))
     else:
-        raise ValueError(
-            f"symmetry must be None, 'quadrant_2d', 'annulus_2d' or 'annulus_3d' but value given was " f"{symmetry}"
+        logging.error(
+            ValueError(
+                f"symmetry must be None, 'quadrant_2d', 'annulus_2d' or 'annulus_3d' but value given was " f"{symmetry}"
+            )
         )
 
     if symmetry is not None:

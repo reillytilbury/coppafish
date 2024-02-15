@@ -56,7 +56,9 @@ def extend_array(array: np.ndarray, extend_scale: int, direction: str = "both") 
         elif direction == "both":
             ext_array = np.concatenate((ext_below, array, ext_above))
         else:
-            raise ValueError(f"direction specified was {direction}, whereas it should be 'below', 'above' or 'both'")
+            logging.error(
+                ValueError(f"direction specified was {direction}, whereas it should be 'below', 'above' or 'both'")
+            )
     return ext_array
 
 
@@ -434,7 +436,7 @@ def compute_shift(
     if np.asarray(z_scale).size == 1:
         z_scale = [z_scale, z_scale]
     if len(z_scale) > 2:
-        raise ValueError(f"Only 2 z_scale values should be provided but z_scale given was {z_scale}.")
+        logging.error(ValueError(f"Only 2 z_scale values should be provided but z_scale given was {z_scale}."))
     yx_base_slices, yx_transform_trees, z_shift_guess = get_2d_slices(yxz_base, yxz_transform, nz_collapse)
     if nz_collapse is not None:
         # Only do z-scaling in 3D case

@@ -7,6 +7,7 @@ DEBUG = 10
 INFO = 20
 WARNING = 30
 ERROR = 40
+CRASH_ON = ERROR
 severity_to_name = {
     DEBUG: "DEBUG",
     INFO: "INFO",
@@ -64,8 +65,8 @@ def log(msg: Union[str, Exception], severity: int) -> None:
         with open(_log_file, "a") as log_file:
             log_file.write(message + "\n")
     if severity >= _minimum_print_severity:
-        if severity >= ERROR:
-            # Crash on error severity
+        if severity >= CRASH_ON:
+            # Crash on high severity
             if isinstance(msg, Exception):
                 raise msg
             raise LogError(message)
@@ -79,7 +80,7 @@ def datetime_string() -> str:
     Returns:
         str: current date and time as a string with second precision.
     """
-    return datetime.now().strftime("%d/%m/%y %H:%M:%S")
+    return datetime.now().strftime("%d/%m/%y %H:%M:%S.%f")
 
 
 class LogError(Exception):

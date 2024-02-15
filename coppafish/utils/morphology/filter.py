@@ -4,11 +4,14 @@ import numpy as np
 import numpy.typing as npt
 from scipy.ndimage import correlate, convolve
 from scipy.signal import oaconvolve
+
 from .base import ensure_odd_kernel
+from ... import logging
 
 
-def imfilter(image: np.ndarray, kernel: np.ndarray, padding: Union[float, str] = 0,
-             corr_or_conv: str = 'corr', oa: bool = True) -> np.ndarray:
+def imfilter(
+    image: np.ndarray, kernel: np.ndarray, padding: Union[float, str] = 0, corr_or_conv: str = "corr", oa: bool = True
+) -> np.ndarray:
     """
     Copy of MATLAB `imfilter` function with `'output_size'` equal to `'same'`.
 
@@ -38,41 +41,50 @@ def imfilter(image: np.ndarray, kernel: np.ndarray, padding: Union[float, str] =
             `image` after being filtered.
     """
     if oa:
-        if corr_or_conv == 'corr':
+        if corr_or_conv == "corr":
             kernel = np.flip(kernel)
-        elif corr_or_conv != 'conv':
-            raise ValueError(f"corr_or_conv should be either 'corr' or 'conv' but given value is {corr_or_conv}")
-        kernel = ensure_odd_kernel(kernel, 'end')
+        elif corr_or_conv != "conv":
+            logging.error(
+                ValueError(f"corr_or_conv should be either 'corr' or 'conv' but given value is {corr_or_conv}")
+            )
+        kernel = ensure_odd_kernel(kernel, "end")
         if kernel.ndim < image.ndim:
             kernel = np.expand_dims(kernel, axis=tuple(np.arange(kernel.ndim, image.ndim)))
-        pad_size = [(int((ax_size-1)/2),)*2 for ax_size in kernel.shape]
+        pad_size = [(int((ax_size - 1) / 2),) * 2 for ax_size in kernel.shape]
         if isinstance(padding, numbers.Number):
-            return oaconvolve(np.pad(image, pad_size, 'constant', constant_values=padding), kernel, 'valid')
+            return oaconvolve(np.pad(image, pad_size, "constant", constant_values=padding), kernel, "valid")
         else:
-            return oaconvolve(np.pad(image, pad_size, padding), kernel, 'valid')
+            return oaconvolve(np.pad(image, pad_size, padding), kernel, "valid")
     else:
-        if padding == 'symmetric':
-            padding = 'reflect'
-        elif padding == 'edge':
-            padding = 'nearest'
+        if padding == "symmetric":
+            padding = "reflect"
+        elif padding == "edge":
+            padding = "nearest"
         # Old method, about 3x slower for filtering large 3d image with small 3d kernel
         if isinstance(padding, numbers.Number):
             pad_value = padding
-            padding = 'constant'
+            padding = "constant"
         else:
             pad_value = 0.0  # doesn't do anything for non-constant padding
-        if corr_or_conv == 'corr':
-            kernel = ensure_odd_kernel(kernel, 'start')
+        if corr_or_conv == "corr":
+            kernel = ensure_odd_kernel(kernel, "start")
             return correlate(image, kernel, mode=padding, cval=pad_value)
-        elif corr_or_conv == 'conv':
-            kernel = ensure_odd_kernel(kernel, 'end')
+        elif corr_or_conv == "conv":
+            kernel = ensure_odd_kernel(kernel, "end")
             return convolve(image, kernel, mode=padding, cval=pad_value)
         else:
-            raise ValueError(f"corr_or_conv should be either 'corr' or 'conv' but given value is {corr_or_conv}")
+            logging.error(
+                ValueError(f"corr_or_conv should be either 'corr' or 'conv' but given value is {corr_or_conv}")
+            )
 
 
-def imfilter_coords(image: np.ndarray, kernel: np.ndarray, coords: np.ndarray, padding: Union[float, str] = 0,
-                    corr_or_conv: str = 'corr') -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+def imfilter_coords(
+    image: np.ndarray,
+    kernel: np.ndarray,
+    coords: np.ndarray,
+    padding: Union[float, str] = 0,
+    corr_or_conv: str = "corr",
+) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Copy of MATLAB `imfilter` function with `'output_size'` equal to `'same'`.
     Only finds result of filtering at specific locations but still filters entire image.

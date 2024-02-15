@@ -4,10 +4,10 @@ from tqdm import tqdm
 
 from ..setup import NotebookPage
 from ..utils import tiles_io
+from .. import logging
 
 
-def apply_transform(yxz: np.ndarray, transform: np.ndarray,
-                    tile_sz: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def apply_transform(yxz: np.ndarray, transform: np.ndarray, tile_sz: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
     This transforms the coordinates yxz based on an affine transform.
     E.g. to find coordinates of spots on the same tile but on a different round and channel.
@@ -36,16 +36,24 @@ def apply_transform(yxz: np.ndarray, transform: np.ndarray,
     yxz_pad = np.pad(yxz, [(0, 0), (0, 1)], constant_values=1)
     yxz_transform = yxz_pad @ transform
     yxz_transform = np.round(yxz_transform).astype(np.int16)
-    in_range = np.logical_and((yxz_transform >= np.array([0, 0, 0])).all(axis=1),
-                              (yxz_transform < tile_sz).all(axis=1))  # set color to nan if out range
+    in_range = np.logical_and(
+        (yxz_transform >= np.array([0, 0, 0])).all(axis=1), (yxz_transform < tile_sz).all(axis=1)
+    )  # set color to nan if out range
     return yxz_transform, in_range
 
 
-def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_file: NotebookPage,
-                    nbp_basic: NotebookPage, nbp_extract: NotebookPage, nbp_filter: NotebookPage, 
-                    use_rounds: Optional[List[int]] = None, use_channels: Optional[List[int]] = None, 
-                    return_in_bounds: bool = False, 
-                    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+def get_spot_colors(
+    yxz_base: np.ndarray,
+    t: int,
+    transforms: np.ndarray,
+    nbp_file: NotebookPage,
+    nbp_basic: NotebookPage,
+    nbp_extract: NotebookPage,
+    nbp_filter: NotebookPage,
+    use_rounds: Optional[List[int]] = None,
+    use_channels: Optional[List[int]] = None,
+    return_in_bounds: bool = False,
+) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Takes some spots found on the reference round, and computes the corresponding spot intensity
     in specified imaging rounds/channels.
@@ -90,12 +98,12 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
     Notes:
         - Returned spot colors have dimension `n_spots x len(nbp_basic.use_rounds) x len(nbp_basic.use_channels)` not
             `n_pixels x nbp_basic.n_rounds x nbp_basic.n_channels`.
-        - `invalid_value = -nbp_basic.tile_pixel_value_shift` is the lowest possible value saved in the npy file minus 
-            1 (due to clipping in extract step), so it is impossible for spot_color to be this. Hence I use this as 
-            integer nan. It will be `invalid_value` if the registered coordinate of spot `s` is outside the tile in 
+        - `invalid_value = -nbp_basic.tile_pixel_value_shift` is the lowest possible value saved in the npy file minus
+            1 (due to clipping in extract step), so it is impossible for spot_color to be this. Hence I use this as
+            integer nan. It will be `invalid_value` if the registered coordinate of spot `s` is outside the tile in
             round `r`, channel `c`.
     """
-    bg_scale = nbp_filter.bg_scale    
+    bg_scale = nbp_filter.bg_scale
     if bg_scale is not None:
         assert nbp_basic.use_preseq, "Can't subtract background if preseq round doesn't exist!"
         use_bg = True
@@ -127,14 +135,17 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
             if not nbp_basic.is_3d:
                 # If 2D, load in all channels first
                 # FIXME: use load_tile function for .zarr support with 2D
-                image_all_channels = np.load(nbp_file.tile[t][use_rounds[r]], mmap_mode='r')
+                image_all_channels = np.load(nbp_file.tile[t][use_rounds[r]], mmap_mode="r")
             for c in range(n_use_channels):
                 transform_rc = transforms[t, use_rounds[r], use_channels[c]]
-                pbar.set_postfix({'round': use_rounds[r], 'channel': use_channels[c]})
+                pbar.set_postfix({"round": use_rounds[r], "channel": use_channels[c]})
                 if transform_rc[0, 0] == 0:
-                    raise ValueError(
-                        f"Transform for tile {t}, round {use_rounds[r]}, channel {use_channels[c]} is zero:"
-                        f"\n{transform_rc}")
+                    logging.error(
+                        ValueError(
+                            f"Transform for tile {t}, round {use_rounds[r]}, channel {use_channels[c]} is zero:"
+                            f"\n{transform_rc}"
+                        )
+                    )
                 yxz_transform, in_range = apply_transform(yxz_base, transform_rc, tile_sz)
                 yxz_transform = np.asarray(yxz_transform)
                 in_range = np.asarray(in_range)
@@ -142,12 +153,20 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
                 if yxz_transform.shape[0] > 0:
                     # Read in the shifted uint16 colors here, and remove shift later.
                     if nbp_basic.is_3d:
-                        spot_colors[in_range, r, c] = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t, 
-                                                                         use_rounds[r], use_channels[c], yxz_transform,
-                                                                         apply_shift=False)
+                        spot_colors[in_range, r, c] = tiles_io.load_image(
+                            nbp_file,
+                            nbp_basic,
+                            nbp_extract.file_type,
+                            t,
+                            use_rounds[r],
+                            use_channels[c],
+                            yxz_transform,
+                            apply_shift=False,
+                        )
                     else:
                         spot_colors[in_range, r, c] = image_all_channels[use_channels[c]][
-                            tuple(np.asarray(yxz_transform[:, i]) for i in range(2))]
+                            tuple(np.asarray(yxz_transform[:, i]) for i in range(2))
+                        ]
                 pbar.update(1)
     # Remove shift so now spots outside bounds have color equal to - nbp_basic.tile_pixel_shift_value.
     # It is impossible for any actual spot color to be this due to clipping at the extract stage.
@@ -160,19 +179,29 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
             )
             for c in range(n_use_channels):
                 transform_rc = transforms[t, nbp_basic.pre_seq_round, use_channels[c]]
-                pbar.set_postfix({'round': use_rounds[r], 'channel': use_channels[c]})
+                pbar.set_postfix({"round": use_rounds[r], "channel": use_channels[c]})
                 if transform_rc[0, 0] == 0:
-                    raise ValueError(
-                        f"Transform for tile {t}, round {nbp_basic.pre_seq_round}, channel {use_channels[c]} is zero:"
-                        f"\n{transform_rc}")
+                    logging.error(
+                        ValueError(
+                            f"Transform for tile {t}, round {nbp_basic.pre_seq_round}, channel {use_channels[c]} is zero:"
+                            f"\n{transform_rc}"
+                        )
+                    )
                 yxz_transform, in_range = apply_transform(yxz_base, transform_rc, tile_sz)
                 yxz_transform = yxz_transform[in_range]
                 if yxz_transform.shape[0] > 0:
                     # Read in the shifted uint16 colors here, and remove shift later.
                     if nbp_basic.is_3d:
-                        bg_colours[in_range, c] = \
-                            tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t, nbp_basic.pre_seq_round, 
-                                               use_channels[c], yxz_transform, apply_shift=False)
+                        bg_colours[in_range, c] = tiles_io.load_image(
+                            nbp_file,
+                            nbp_basic,
+                            nbp_extract.file_type,
+                            t,
+                            nbp_basic.pre_seq_round,
+                            use_channels[c],
+                            yxz_transform,
+                            apply_shift=False,
+                        )
                 pbar.update(1)
         # subtract tile pixel shift value so that bg_colours are in range -15_000 to 50_000 (approx)
         bg_colours = bg_colours - nbp_basic.tile_pixel_value_shift
@@ -180,7 +209,7 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
         bg_colours = np.repeat(bg_colours[:, None, :], n_use_rounds, axis=1)
         bg_valid = (bg_colours > -nbp_basic.tile_pixel_value_shift).all(axis=(1, 2))
         bg_colours[bg_valid] = bg_colours[bg_valid] * bg_scale[t][np.ix_(use_rounds, use_channels)]
-    
+
     invalid_value = -nbp_basic.tile_pixel_value_shift
     if use_bg:
         good = colours_valid * bg_valid
@@ -198,7 +227,7 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
             yxz_base = yxz_base[good]
         else:
             spot_colors[~good] = invalid_value
-            
+
     return (spot_colors, yxz_base, bg_colours) if use_bg else (spot_colors, yxz_base)
 
 
@@ -222,8 +251,9 @@ def all_pixel_yxz(y_size: int, x_size: int, z_planes: Union[List, int, np.ndarra
     return np.array(np.meshgrid(np.arange(y_size), np.arange(x_size), z_planes), dtype=np.int16).T.reshape(-1, 3)
 
 
-def normalise_rc(pixel_colours: np.ndarray, spot_colours: np.ndarray, cutoff_intensity_percentile: float = 75,
-                 num_spots: int = 100) -> np.ndarray:
+def normalise_rc(
+    pixel_colours: np.ndarray, spot_colours: np.ndarray, cutoff_intensity_percentile: float = 75, num_spots: int = 100
+) -> np.ndarray:
     """
     Takes in the pixel colours for a single z-plane of a tile, for all rounds and channels. Then performs 2
     normalisations. The first of these is normalising by round and the second is normalising by channel.

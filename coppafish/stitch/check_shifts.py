@@ -49,7 +49,7 @@ def check_shifts_stitch(nb: Notebook):
             f"coppafish.plot.view_stitch_search\nIf stitching looks wrong, maybe try re-running with "
             f"different configuration parameters e.g. smaller shift_step or larger shift_max_range."
         )
-        raise ValueError(f"{message}")
+        logging.error(ValueError(f"{message}"))
     elif n_fail >= 1:
         logging.warn(message)
 
@@ -118,6 +118,6 @@ def check_shifts_register(nb: Notebook):
                     f"Current channel {c_ref} has at least {spot_no[c_ref]} on all tiles and rounds "
                     f"but channel {c_most_spots} has at least {spot_no[c_most_spots]}."
                 )
-            raise ValueError(f"{message}")
+            logging.error(ValueError(f"{message}"))
         else:
             logging.warn(message)

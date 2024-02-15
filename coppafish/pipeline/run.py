@@ -96,7 +96,7 @@ def initialize_nb(config_file: str) -> Notebook:
         os.path.join(config_file["output_dir"], config_file["log_name"]),
     )
     logging.info(
-        f" COPPAFISH v{utils.system.get_software_version()} ".center(utils.system.current_terminal_size_xy(-25)[0], "=")
+        f" COPPAFISH v{utils.system.get_software_version()} ".center(utils.system.current_terminal_size_xy(-33)[0], "=")
     )
 
     if not nb.has_page("basic_info"):
