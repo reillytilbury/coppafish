@@ -371,6 +371,7 @@ def get_spots(
         del spots_to_check, pixel_index
     # TODO: if 2D can do all genes together.
     for g in tqdm.trange(n_genes, desc=f"Finding spots for all {n_genes} genes from omp_coef images"):
+        logging.debug(f"Finding spots {g=} started")
         # shift nzg_pixel_yxz so min is 0 in each axis so smaller image can be formed.
         # Note size of image will be different for each gene.
         coef_image, coord_shift = cropped_coef_image(pixel_yxz, pixel_coefs[:, g])
@@ -378,7 +379,9 @@ def get_spots(
             # If no non-zero coefficients, go to next gene
             continue
         if spot_yxzg is None:
+            logging.debug("detect_spots started")
             spot_yxz = detect_spots(coef_image, coef_thresh, radius_xy, radius_z, False)[0]
+            logging.debug("detect_spots complete")
         else:
             # spot_yxz match pixel_yxz so if crop pixel_yxz need to crop spot_yxz too.
             spot_yxz = spot_yxzg[spot_yxzg[:, 3] == g, : coef_image.ndim] - coord_shift[: coef_image.ndim]
@@ -404,6 +407,7 @@ def get_spots(
         spot_info_g[:, 3] = g
         spot_info = np.append(spot_info, spot_info_g, axis=0)
         del spot_info_g, keep
+        logging.debug(f"Finding spots {g=} complete")
 
     if spot_shape is None:
         return spot_info[:, :3], spot_info[:, 3]
