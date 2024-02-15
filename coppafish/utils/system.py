@@ -66,12 +66,21 @@ def get_core_count() -> int:
     return int(n_threads)
 
 
-def current_terminal_size_xy() -> Tuple[int, int]:
+def current_terminal_size_xy(x_offset: int = 0, y_offset: int = 0) -> Tuple[int, int]:
     """
-    Get the current terminal size in x and y direction. Falls back to a default of `(80, 20)` if cannot be found.
+    Get the current terminal size in x and y direction, clamped at >= 1 in both directions. Falls back to a default of
+    `(80, 20)` if cannot be found.
+
+    Args:
+        x_offset (int, optional): add this value to the terminal size in x. Default: 0.
+        y_offset (int, optional): add this value to the terminal size in y. Default: 0.
 
     Returns:
         - (int): number of terminal columns.
         - (int): number of terminal rows.
     """
-    return tuple(shutil.get_terminal_size((80, 20)))
+    terminal_size = tuple(shutil.get_terminal_size((80, 20)))
+    return (
+        int(np.clip(terminal_size[0] + x_offset, a_min=1, a_max=None)),
+        int(np.clip(terminal_size[1] + y_offset, a_min=1, a_max=None)),
+    )

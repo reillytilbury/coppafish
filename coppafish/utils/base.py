@@ -4,6 +4,8 @@ import numpy as np
 import numpy.typing as npt
 from typing import Union, Dict, List, Optional
 
+from .. import logging
+
 
 def get_function_name() -> str:
     """
@@ -44,8 +46,10 @@ def round_any(x: Union[float, npt.NDArray], base: float, round_type: str = "roun
     elif round_type == "floor":
         return base * np.floor(x / base)
     else:
-        raise ValueError(
-            f"round_type specified was {round_type} but it should be one of the following:\n" f"round, ceil, floor"
+        logging.error(
+            ValueError(
+                f"round_type specified was {round_type} but it should be one of the following:\n" f"round, ceil, floor"
+            )
         )
 
 
@@ -99,8 +103,8 @@ def expand_channels(array: npt.NDArray[np.float_], use_channels: List[int], n_ch
 
 def reed_solomon_codes(n_genes: int, n_rounds: int, n_channels: Optional[int] = None) -> Dict:
     """
-    Generates random gene codes based on reed-solomon principle, using the lowest degree polynomial possible for the 
-    number of genes needed. The `i`th gene name will be `gene_i`. We assume that `n_channels` is the number of unique 
+    Generates random gene codes based on reed-solomon principle, using the lowest degree polynomial possible for the
+    number of genes needed. The `i`th gene name will be `gene_i`. We assume that `n_channels` is the number of unique
     dyes, each dye is labelled between `(0, n_channels]`.
 
     Args:
@@ -133,8 +137,8 @@ def reed_solomon_codes(n_genes: int, n_rounds: int, n_channels: Optional[int] = 
             break
         degree += 1
         if degree == 20:
-            raise ValueError("Polynomial degree required is too large for generating the gene codes")
-    # Create a `degree` degree polynomial, where each coefficient goes between (0, n_rounds] to generate each unique 
+            logging.error(ValueError("Polynomial degree required is too large for generating the gene codes"))
+    # Create a `degree` degree polynomial, where each coefficient goes between (0, n_rounds] to generate each unique
     # gene code
     codes = dict()
     # Index 0 is for constant, index 1 for linear coefficient, etc..
@@ -168,8 +172,10 @@ def reed_solomon_codes(n_genes: int, n_rounds: int, n_channels: Optional[int] = 
     values = list(codes.values())
     if len(values) != len(set(values)):
         # Not every gene code is unique
-        raise ValueError(
-            f"Could not generate {n_genes} unique gene codes with {n_rounds} rounds/dyes. "
-            + "Maybe try decreasing the number of genes or increasing the number of rounds."
+        logging.error(
+            ValueError(
+                f"Could not generate {n_genes} unique gene codes with {n_rounds} rounds/dyes. "
+                + "Maybe try decreasing the number of genes or increasing the number of rounds."
+            )
         )
     return codes

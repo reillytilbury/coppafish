@@ -1,16 +1,13 @@
 import nd2
 import scipy
-import warnings
 import numpy as np
 import skimage
 from tqdm import tqdm
-from multiprocessing import Queue
 from sklearn.linear_model import HuberRegressor
 from typing import Optional, Tuple
 
-from .preprocessing import NotebookPage
+from .. import logging
 from . import preprocessing
-from ..utils import tiles_io
 
 
 def find_shift_array(subvol_base, subvol_target, position, r_threshold):
@@ -32,7 +29,7 @@ def find_shift_array(subvol_base, subvol_target, position, r_threshold):
         shift_corr coef (n_z_subvolumes * n_y_subvolumes * n_x_subvolumes, 1)
     """
     if subvol_base.shape != subvol_target.shape:
-        raise ValueError("Subvolume arrays have different shapes")
+        logging.error(ValueError("Subvolume arrays have different shapes"))
     z_subvolumes, y_subvolumes, x_subvolumes = subvol_base.shape[0], subvol_base.shape[1], subvol_base.shape[2]
     shift = np.zeros((z_subvolumes, y_subvolumes, x_subvolumes, 3))
     shift_corr = np.zeros((z_subvolumes, y_subvolumes, x_subvolumes))
@@ -126,7 +123,7 @@ def find_zyx_shift(subvol_base, subvol_target, pearson_r_threshold=0.9):
         shift_corr: correlation coefficient of shift (float)
     """
     if subvol_base.shape != subvol_target.shape:
-        raise ValueError("Subvolume arrays have different shapes")
+        logging.error(ValueError("Subvolume arrays have different shapes"))
     shift, _, _ = skimage.registration.phase_cross_correlation(
         reference_image=subvol_target, moving_image=subvol_base, upsample_factor=10
     )
@@ -224,9 +221,8 @@ def huber_regression(shift, position, predict_shift=True):
     if len(set(position[:, 0])) <= 2:
         z_coef = np.array([0, 0, 0])
         z_shift = np.mean(shift[:, 0])
-        # raise a warning if we have less than 3 z-coords in position
-        warnings.warn(
-            "Less than 3 z-coords in position. Setting z-coords of transform to no scaling and shift of mean(shift)"
+        logging.warn(
+            "Fewer than 3 z-coords in position. Setting z-coords of transform to no scaling and shift of mean(shift)"
         )
     else:
         huber_z = HuberRegressor(epsilon=2, max_iter=400, tol=1e-4).fit(X=position, y=shift[:, 0])
@@ -347,9 +343,8 @@ def channel_registration(
         # Set registration_data['channel_registration']['channel_transform'][c] = np.eye(3) for all channels c
         for c in range(n_cams):
             transform[c] = np.eye(3, 4)
-        print(
-            "Fluorescent beads directory does not exist. Prior assumption will be that channels are registered to "
-            "each other."
+        logging.warn(
+            "Fluorescent beads directory does not exist. Assuming that all channels are registered to each other."
         )
         return transform
 
@@ -402,7 +397,7 @@ def channel_registration(
             )
             if not converged:
                 transform[i] = np.eye(4, 3)
-                raise Warning("ICP did not converge for camera " + str(i) + ". Replacing with identity.")
+                logging.error(Warning("ICP did not converge for camera " + str(i) + ". Replacing with identity."))
             pbar.update(1)
 
     # Need to add in z coord info as not accounted for by registration due to all coords being equal
@@ -655,7 +650,7 @@ def brightness_scale(
     seq: np.ndarray,
     intensity_percentile: float,
     sub_image_size: Optional[int] = None,
-    ) -> Tuple[float, np.ndarray, np.ndarray]:
+) -> Tuple[float, np.ndarray, np.ndarray]:
     """
     Function to find scale factor m and such that m * preseq ~ seq. First, the preseq and seq images are
     aligned using phase cross correlation. Then apply regression on the pixels of `preseq' which are above the
@@ -729,11 +724,19 @@ def brightness_scale(
     return m.item(), sub_image_seq, sub_image_preseq
 
 
-def get_single_affine_transform(spot_yxz_base: np.ndarray, spot_yxz_transform: np.ndarray, z_scale_base: float,
-                                z_scale_transform: float, start_transform: np.ndarray,
-                                neighb_dist_thresh: float, tile_centre: np.ndarray, n_iter: int = 100,
-                                reg_constant_scale: Optional[float] = None, reg_constant_shift: Optional[float] = None,
-                                reg_transform: Optional[np.ndarray] = None) -> Tuple[np.ndarray, int, float, bool]:
+def get_single_affine_transform(
+    spot_yxz_base: np.ndarray,
+    spot_yxz_transform: np.ndarray,
+    z_scale_base: float,
+    z_scale_transform: float,
+    start_transform: np.ndarray,
+    neighb_dist_thresh: float,
+    tile_centre: np.ndarray,
+    n_iter: int = 100,
+    reg_constant_scale: Optional[float] = None,
+    reg_constant_shift: Optional[float] = None,
+    reg_transform: Optional[np.ndarray] = None,
+) -> Tuple[np.ndarray, int, float, bool]:
     """
     Finds the affine transform taking `spot_yxz_base` to `spot_yxz_transform`.
 
@@ -769,7 +772,7 @@ def get_single_affine_transform(spot_yxz_base: np.ndarray, spot_yxz_transform: n
         - `error` - Average distance between neighbours below `neighb_dist_thresh`.
         - `is_converged` - `False` if max iterations reached before transform converged.
     """
-    #? Is this function needed or is it copying similar knowledge used in other functions? Is used in a ICP plot only
+    # ? Is this function needed or is it copying similar knowledge used in other functions? Is used in a ICP plot only
     spot_yxz_base = (spot_yxz_base - tile_centre) * [1, 1, z_scale_base]
     spot_yxz_transform = (spot_yxz_transform - tile_centre) * [1, 1, z_scale_transform]
     tree_transform = scipy.spatial.KDTree(spot_yxz_transform)
@@ -777,9 +780,16 @@ def get_single_affine_transform(spot_yxz_base: np.ndarray, spot_yxz_transform: n
     transform = start_transform.copy()
     for _ in range(n_iter):
         neighbour_last = neighbour.copy()
-        transform, neighbour, n_matches, error = \
-            get_transform(spot_yxz_base, transform, spot_yxz_transform, neighb_dist_thresh,
-                          tree_transform, reg_constant_scale, reg_constant_shift, reg_transform)
+        transform, neighbour, n_matches, error = get_transform(
+            spot_yxz_base,
+            transform,
+            spot_yxz_transform,
+            neighb_dist_thresh,
+            tree_transform,
+            reg_constant_scale,
+            reg_constant_shift,
+            reg_transform,
+        )
 
         is_converged = np.abs(neighbour - neighbour_last).max() == 0
         if is_converged:

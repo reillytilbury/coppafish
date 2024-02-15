@@ -7,7 +7,7 @@ from tqdm import tqdm
 from typing import Tuple
 
 from ..setup import NotebookPage
-from .. import find_spots
+from .. import find_spots, logging
 from ..register import preprocessing
 from ..register import base as register_base
 from ..utils import system, tiles_io
@@ -55,6 +55,7 @@ def register(
 
     # Part 0: Initialisation
     # Initialise frequently used variables
+    logging.debug("Register started")
     nbp, nbp_debug = NotebookPage("register"), NotebookPage("register_debug")
     nbp.software_version = system.get_software_version()
     nbp.revision_hash = system.get_git_revision_hash()
@@ -213,7 +214,7 @@ def register(
                     # Only do ICP on non-degenerate tiles with more than ~ 100 spots, otherwise just use the
                     # starting transform
                     if nbp_find_spots.spot_no[t, r, c] < config["icp_min_spots"] and r in use_rounds:
-                        print(
+                        logging.warn(
                             f"Tile {t}, round {r}, channel {c} has too few spots to run ICP. Using initial transform"
                             f" instead."
                         )
@@ -270,10 +271,12 @@ def register(
             pre_seq_blur_radius = 3
         for t, c in itertools.product(use_tiles, use_channels):
             image_preseq = tiles_io.load_image(
-                nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=nbp_basic.pre_seq_round, c=c, suffix="_raw")
+                nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=nbp_basic.pre_seq_round, c=c, suffix="_raw"
+            )
             image_preseq = scipy.ndimage.gaussian_filter(image_preseq, pre_seq_blur_radius)
             tiles_io.save_image(
-                nbp_file, nbp_basic, nbp_extract.file_type, image_preseq, t=t, r=nbp_basic.pre_seq_round, c=c)
+                nbp_file, nbp_basic, nbp_extract.file_type, image_preseq, t=t, r=nbp_basic.pre_seq_round, c=c
+            )
 
     # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
     # fluorescence
@@ -321,4 +324,5 @@ def register(
         nbp_filter.bg_scale = bg_scale
         nbp_filter.finalized = True
 
+    logging.debug("Register complete")
     return nbp, nbp_debug

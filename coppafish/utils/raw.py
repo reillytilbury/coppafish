@@ -1,12 +1,12 @@
 import os
 import re
 import numpy as np
-import warnings
 import dask.array
 from tqdm import tqdm
 from typing import List, Optional, Tuple, Union
 
 from .errors import OutOfBoundsError
+from .. import logging
 from ..utils import nd2
 from ..setup import NotebookPage
 
@@ -25,14 +25,16 @@ def get_tile_indices(folder: str) -> List:
         `int [n_files_with_single_number]`.
             Numbers contained in file_names
     """
-    delimiters = "[a-z]+", "s+", "_", "."   # Any letter, white space, _ or . used as delimiter
-    regex_pattern = '|\\'.join(delimiters)
+    delimiters = "[a-z]+", "s+", "_", "."  # Any letter, white space, _ or . used as delimiter
+    regex_pattern = "|\\".join(delimiters)
     file_names = os.listdir(folder)
     file_names.sort()  # put in ascending order
     tiles = [int(s) for file_name in file_names for s in re.split(regex_pattern, file_name) if s.isdigit()]
     if len(tiles) != len(file_names):
-        warnings.warn(f'Number of files in {folder} is {len(file_names)} but found {len(tiles)} numbers.\n'
-                      f'So some files have no numbers / multiple numbers in their name.')
+        logging.warn(
+            f"Number of files in {folder} is {len(file_names)} but found {len(tiles)} numbers.\n"
+            f"So some files have no numbers / multiple numbers in their name."
+        )
     return tiles
 
 
@@ -53,24 +55,40 @@ def metadata_sanity_check(metadata: dict, round_folder_path: str) -> List:
 
     """
     tiles = get_tile_indices(round_folder_path)
-    if max(tiles) >= metadata['sizes']['t']:
-        raise OutOfBoundsError("tiles", max(tiles), 0, metadata['sizes']['t']-1)
+    if max(tiles) >= metadata["sizes"]["t"]:
+        logging.error(OutOfBoundsError("tiles", max(tiles), 0, metadata["sizes"]["t"] - 1))
     file_names = os.listdir(round_folder_path)
     raw_data_0_path = os.path.join(round_folder_path, file_names[0])
-    raw_data_0 = np.load(raw_data_0_path, mmap_mode='r')  # mmap as don't need actual data
+    raw_data_0 = np.load(raw_data_0_path, mmap_mode="r")  # mmap as don't need actual data
     _, n_channels, n_y, n_x, n_z = raw_data_0.shape
-    if n_channels != metadata['sizes']['c']:
-        raise ValueError(f"Number of channels in the metadata is {metadata['sizes']['c']} "
-                         f"but the file\n{raw_data_0_path}\ncontains {n_channels} channels.")
-    if n_y != metadata['sizes']['y']:
-        raise ValueError(f"y_dimension in the metadata is {metadata['sizes']['y']} "
-                         f"but the file\n{raw_data_0_path}\nhas y_dimension = {n_y}.")
-    if n_x != metadata['sizes']['x']:
-        raise ValueError(f"x_dimension in the metadata is {metadata['sizes']['x']} "
-                         f"but the file\n{raw_data_0_path}\nhas x_dimension = {n_x}.")
-    if n_z != metadata['sizes']['z']:
-        raise ValueError(f"z_dimension in the metadata is {metadata['sizes']['z']} "
-                         f"but the file\n{raw_data_0_path}\nhas z_dimension = {n_z}.")
+    if n_channels != metadata["sizes"]["c"]:
+        logging.error(
+            ValueError(
+                f"Number of channels in the metadata is {metadata['sizes']['c']} "
+                f"but the file\n{raw_data_0_path}\ncontains {n_channels} channels."
+            )
+        )
+    if n_y != metadata["sizes"]["y"]:
+        logging.error(
+            ValueError(
+                f"y_dimension in the metadata is {metadata['sizes']['y']} "
+                f"but the file\n{raw_data_0_path}\nhas y_dimension = {n_y}."
+            )
+        )
+    if n_x != metadata["sizes"]["x"]:
+        logging.error(
+            ValueError(
+                f"x_dimension in the metadata is {metadata['sizes']['x']} "
+                f"but the file\n{raw_data_0_path}\nhas x_dimension = {n_x}."
+            )
+        )
+    if n_z != metadata["sizes"]["z"]:
+        logging.error(
+            ValueError(
+                f"z_dimension in the metadata is {metadata['sizes']['z']} "
+                f"but the file\n{raw_data_0_path}\nhas z_dimension = {n_z}."
+            )
+        )
     return tiles
 
 
@@ -105,12 +123,14 @@ def load_dask(nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int) -> Tuple[
     # Not sure how this applies to lasers
     n_lasers, n_cams = max(1, len(np.unique(channel_laser))), max(1, len(np.unique(channel_cam)))
 
-    if not np.isin(nbp_file.raw_extension, ['.nd2', '.npy', 'jobs']):
-        raise ValueError(f"nbp_file.raw_extension must be '.nd2', '.npy' or 'jobs' but it is {nbp_file.raw_extension}.")
+    if not np.isin(nbp_file.raw_extension, [".nd2", ".npy", "jobs"]):
+        logging.error(
+            ValueError(f"nbp_file.raw_extension must be '.nd2', '.npy' or 'jobs' but it is {nbp_file.raw_extension}.")
+        )
 
     all_metadata = None
 
-    if nbp_file.raw_extension != 'jobs':
+    if nbp_file.raw_extension != "jobs":
         if nbp_basic.use_anchor:
             # always have anchor as first round after imaging rounds
             round_files = nbp_file.round + [nbp_file.anchor]
@@ -119,13 +139,13 @@ def load_dask(nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int) -> Tuple[
         if nbp_basic.use_preseq:
             round_files = round_files + [nbp_file.pre_seq]
         round_file = os.path.join(nbp_file.input_dir, round_files[r])
-        if nbp_file.raw_extension == '.nd2':
+        if nbp_file.raw_extension == ".nd2":
             round_dask_array = nd2.load(round_file + nbp_file.raw_extension)
             all_metadata = nd2.get_all_metadata(round_file + nbp_file.raw_extension)
-        elif nbp_file.raw_extension == '.npy':
+        elif nbp_file.raw_extension == ".npy":
             round_dask_array = dask.array.from_npy_stack(round_file)
     else:
-        #TODO: Combine all metadata from the jobs nd2 files for each round.
+        # TODO: Combine all metadata from the jobs nd2 files for each round.
         # Now deal with the case where files are split by laser
         if nbp_basic.use_anchor:
             # always have anchor as first round after imaging rounds
@@ -139,13 +159,13 @@ def load_dask(nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int) -> Tuple[
         # Deal with non anchor round first as this follows a different format to anchor round
         if r != nbp_basic.anchor_round:
 
-            for t in tqdm(range(n_tiles), desc='Loading tiles in dask array'):
-                #Get all the files of a given tiles (should be 7)
-                tile_files = round_files[r][t*n_lasers: (t+1)*n_lasers]
+            for t in tqdm(range(n_tiles), desc="Loading tiles in dask array"):
+                # Get all the files of a given tiles (should be 7)
+                tile_files = round_files[r][t * n_lasers : (t + 1) * n_lasers]
                 tile_dask_array = []
 
                 for f in tile_files:
-                    laser_file = os.path.join(nbp_file.input_dir, f + '.nd2')
+                    laser_file = os.path.join(nbp_file.input_dir, f + ".nd2")
                     tile_dask_array.append(nd2.load(laser_file))
 
                 tile_da = dask.array.concatenate(tile_dask_array, axis=-1)  # concatenate on the laser axis
@@ -163,15 +183,15 @@ def load_dask(nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int) -> Tuple[
 
             anchor_files = nbp_file.anchor
 
-            for t in tqdm(range(n_tiles), desc='Loading tiles in dask array'):
+            for t in tqdm(range(n_tiles), desc="Loading tiles in dask array"):
                 # Get all the files of a given tiles (should be 7)
-                tile_files = anchor_files[t * n_lasers: (t + 1) * n_lasers]
+                tile_files = anchor_files[t * n_lasers : (t + 1) * n_lasers]
                 tile_dask_array = []
                 latest_shape = (nz + 1, tile_sz, tile_sz, n_cams)
 
                 for f_id, f in enumerate(tile_files):
                     if f_id == anchor_laser_index or f_id == dapi_laser_index:
-                        laser_file = os.path.join(nbp_file.input_dir, f + '.nd2')
+                        laser_file = os.path.join(nbp_file.input_dir, f + ".nd2")
                         new_dask_array = nd2.load(laser_file)
                         latest_shape = new_dask_array.shape
                         tile_dask_array.append(new_dask_array)
@@ -192,9 +212,15 @@ def load_dask(nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int) -> Tuple[
     return round_dask_array, all_metadata
 
 
-def load_image(nbp_file: NotebookPage, nbp_basic: NotebookPage, t: int, c: int,
-               round_dask_array: Optional[dask.array.Array] = None, r: Optional[int] = None,
-               use_z: Optional[List[int]] = None) -> np.ndarray:
+def load_image(
+    nbp_file: NotebookPage,
+    nbp_basic: NotebookPage,
+    t: int,
+    c: int,
+    round_dask_array: Optional[dask.array.Array] = None,
+    r: Optional[int] = None,
+    use_z: Optional[List[int]] = None,
+) -> np.ndarray:
     """
     Loads in raw data either from npy stack or nd2 file for tile and channel specified. If no round dask array specified
     we load one in.
@@ -210,12 +236,14 @@ def load_image(nbp_file: NotebookPage, nbp_basic: NotebookPage, t: int, c: int,
             Don't need to provide if give round_dask_array.
         use_z: z-planes to load in.
             If use_z = None, will load in all z-planes.
-    
+
     Returns:
         numpy array [n_y x n_x x len(use_z)].
     """
-    if not np.isin(nbp_file.raw_extension, ['.nd2', '.npy', 'jobs']):
-        raise ValueError(f"nbp_file.raw_extension must be '.nd2', '.npy' or 'jobs' but it is {nbp_file.raw_extension}.")
+    if not np.isin(nbp_file.raw_extension, [".nd2", ".npy", "jobs"]):
+        logging.error(
+            ValueError(f"nbp_file.raw_extension must be '.nd2', '.npy' or 'jobs' but it is {nbp_file.raw_extension}.")
+        )
 
     if round_dask_array is None:
         if nbp_basic.use_anchor:
@@ -225,13 +253,13 @@ def load_image(nbp_file: NotebookPage, nbp_basic: NotebookPage, t: int, c: int,
             round_files = nbp_file.round
         if nbp_basic.use_preseq:
             round_files = round_files + [nbp_file.pre_seq]
-        if nbp_file.raw_extension == '.nd2':
+        if nbp_file.raw_extension == ".nd2":
             round_file = os.path.join(nbp_file.input_dir, round_files[r])
             round_dask_array = nd2.load(round_file + nbp_file.raw_extension)
-        elif nbp_file.raw_extension == '.npy':
+        elif nbp_file.raw_extension == ".npy":
             round_file = os.path.join(nbp_file.input_dir, round_files[r])
             round_dask_array = dask.array.from_npy_stack(round_file)
-        elif nbp_file.raw_extension == 'jobs':
+        elif nbp_file.raw_extension == "jobs":
             round_dask_array, _ = load_dask(nbp_file, nbp_basic, r)
 
     # Return a tile/channel/z-planes from the dask array.
@@ -239,14 +267,14 @@ def load_image(nbp_file: NotebookPage, nbp_basic: NotebookPage, t: int, c: int,
         use_z = nbp_basic.use_z
 
     t_nd2 = nd2.get_nd2_tile_ind(t, nbp_basic.tilepos_yx_nd2, nbp_basic.tilepos_yx)
-    if nbp_file.raw_extension == '.nd2':
+    if nbp_file.raw_extension == ".nd2":
         # Only need this if statement because nd2.get_image will be different if use nd2reader not nd2 module
         # which is needed on M1 mac.
         return nd2.get_image(round_dask_array, t_nd2, c, use_z)
-    elif nbp_file.raw_extension == '.npy':
+    elif nbp_file.raw_extension == ".npy":
         # Need the with below to silence warning
-        with dask.config.set(**{'array.slicing.split_large_chunks': False}):
+        with dask.config.set(**{"array.slicing.split_large_chunks": False}):
             return np.asarray(round_dask_array[t_nd2, c, :, :, use_z])
-    elif nbp_file.raw_extension == 'jobs':
-        with dask.config.set(**{'array.slicing.split_large_chunks': False}):
+    elif nbp_file.raw_extension == "jobs":
+        with dask.config.set(**{"array.slicing.split_large_chunks": False}):
             return np.asarray(round_dask_array[t_nd2, c, :, :, use_z])

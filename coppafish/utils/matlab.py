@@ -5,6 +5,7 @@ from typing import Union, List
 
 from ..setup.notebook import Notebook, NotebookPage
 from ..call_spots import qual_check
+from .. import logging
 
 
 def load_v_less_7_3(file_name: str, var_names: Union[str, List[str]]) -> Union[tuple, np.ndarray]:
@@ -96,30 +97,30 @@ def update_dict(nbp: NotebookPage, nb: Notebook, spots_info_dict: dict, score_th
         `spots_info_dict` is returned, just including spots for which `score > score_thresh`.
 
     """
-    pf = nbp.name + '_'
-    if pf != 'omp_' and pf != 'ref_spots_':
-        raise ValueError("Wrong page given, should be 'omp' or 'ref_spots'")
+    pf = nbp.name + "_"
+    if pf != "omp_" and pf != "ref_spots_":
+        logging.error(ValueError("Wrong page given, should be 'omp' or 'ref_spots'"))
     nbp.finalized = False
     score_thresh_old = nbp.score_thresh
     del nbp.score_thresh
     nbp.score_thresh = score_thresh
-    if pf == 'omp_':
-        keep = qual_check.quality_threshold(nb, 'omp')
+    if pf == "omp_":
+        keep = qual_check.quality_threshold(nb, "omp")
     else:
-        keep = qual_check.quality_threshold(nb, 'ref')
+        keep = qual_check.quality_threshold(nb, "ref")
     del nbp.score_thresh
     nbp.score_thresh = score_thresh_old
     nbp.finalized = True
-    for var in ['local_yxz', 'tile', 'colors', 'intensity', 'background_coef', 'gene_no']:
+    for var in ["local_yxz", "tile", "colors", "intensity", "background_coef", "gene_no"]:
         spots_info_dict[pf + var] = spots_info_dict[pf + var][keep]
-    if pf == 'ref_spots_':
-        del spots_info_dict[pf + 'background_coef']
-        for var in ['isolated', 'score', 'score_diff']:
+    if pf == "ref_spots_":
+        del spots_info_dict[pf + "background_coef"]
+        for var in ["isolated", "score", "score_diff"]:
             spots_info_dict[pf + var] = spots_info_dict[pf + var][keep]
-    if pf == 'omp_':
-        for var in ['shape_spot_local_yxz', 'shape_spot_gene_no', 'spot_shape_float']:
+    if pf == "omp_":
+        for var in ["shape_spot_local_yxz", "shape_spot_gene_no", "spot_shape_float"]:
             del spots_info_dict[pf + var]
-        for var in ['coef', 'n_neighbours_pos', 'n_neighbours_neg']:
+        for var in ["coef", "n_neighbours_pos", "n_neighbours_neg"]:
             spots_info_dict[pf + var] = spots_info_dict[pf + var][keep]
     return spots_info_dict
 
@@ -137,31 +138,31 @@ def save_nb_results(nb: Notebook, file_name: str, score_thresh_ref_spots: float 
 
     """
     mdic = {}
-    if nb.has_page('file_names'):
-        mdic['tile_file_names'] = nb.file_names.tile
-    if nb.has_page('stitch'):
-        mdic['tile_origin'] = nb.stitch.tile_origin
-    if nb.has_page('register'):
-        mdic['transform'] = nb.register.transform
+    if nb.has_page("file_names"):
+        mdic["tile_file_names"] = nb.file_names.tile
+    if nb.has_page("stitch"):
+        mdic["tile_origin"] = nb.stitch.tile_origin
+    if nb.has_page("register"):
+        mdic["transform"] = nb.register.transform
 
-    if nb.has_page('call_spots'):
+    if nb.has_page("call_spots"):
         call_spots_dict = nb.call_spots.to_serial_dict()
-        call_spots_dict = {k: v for k, v in call_spots_dict.items() if not '___' in k}
-        del call_spots_dict['PAGEINFO']
+        call_spots_dict = {k: v for k, v in call_spots_dict.items() if not "___" in k}
+        del call_spots_dict["PAGEINFO"]
         mdic.update(call_spots_dict)
 
-    if nb.has_page('ref_spots'):
+    if nb.has_page("ref_spots"):
         ref_spots_dict = nb.ref_spots.to_serial_dict()
         # Give 'ref_spots' prefix to key names as same variables in omp page.
-        ref_spots_dict = {ref_spots_dict['PAGEINFO'] + '_' + k: v for k, v in ref_spots_dict.items() if not '___' in k}
-        del ref_spots_dict['ref_spots_PAGEINFO']
+        ref_spots_dict = {ref_spots_dict["PAGEINFO"] + "_" + k: v for k, v in ref_spots_dict.items() if not "___" in k}
+        del ref_spots_dict["ref_spots_PAGEINFO"]
         ref_spots_dict = update_dict(nb.ref_spots, nb, ref_spots_dict, score_thresh_ref_spots)
         mdic.update(ref_spots_dict)
 
-    if nb.has_page('omp'):
+    if nb.has_page("omp"):
         omp_dict = nb.omp.to_serial_dict()
-        omp_dict = {omp_dict['PAGEINFO'] + '_' + k:v for k,v in omp_dict.items() if not '___' in k}
-        del omp_dict['omp_PAGEINFO']
+        omp_dict = {omp_dict["PAGEINFO"] + "_" + k: v for k, v in omp_dict.items() if not "___" in k}
+        del omp_dict["omp_PAGEINFO"]
         omp_dict = update_dict(nb.omp, nb, omp_dict, score_thresh_omp)
         mdic.update(omp_dict)
     for k, v in mdic.items():

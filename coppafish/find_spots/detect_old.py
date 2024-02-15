@@ -1,8 +1,8 @@
-import warnings
 import numpy as np
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
 
 from .. import utils
+from .. import logging
 
 
 def detect_spots(
@@ -58,7 +58,7 @@ def detect_spots(
             pad_size_z = 0
     if image.ndim == 2 and se.ndim == 3:
         mid_z = int(np.floor((se.shape[2] - 1) / 2))
-        warnings.warn(
+        logging.warn(
             f"2D image provided but 3D filter asked for.\n" f"Using the middle plane ({mid_z}) of this filter."
         )
         se = se[:, :, mid_z]

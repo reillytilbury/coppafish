@@ -17,7 +17,7 @@ from typing import Tuple, Union, Optional, List, Any
 
 from ..setup import NotebookPage
 from ..register import preprocessing
-from .. import utils, extract
+from .. import utils, extract, logging
 
 
 class OptimisedFor(Enum):
@@ -45,7 +45,7 @@ def image_exists(file_path: str, file_type: str) -> bool:
         # Require a non-empty zarr directory
         return os.path.isdir(file_path) and len(os.listdir(file_path)) > 0
     else:
-        raise ValueError(f"Unsupported file_type: {file_type.lower()}")
+        logging.error(ValueError(f"Unsupported file_type: {file_type.lower()}"))
 
 
 def _save_image(
@@ -104,7 +104,7 @@ def _save_image(
         )
         zarray[:] = image
     else:
-        raise ValueError(f"Unsupported `file_type`: {file_type.lower()}")
+        logging.error(ValueError(f"Unsupported `file_type`: {file_type.lower()}"))
 
 
 def _load_image(
@@ -147,7 +147,7 @@ def _load_image(
             return zarr.open(file_path, mode="r")[indices, ...]
         return zarr.open(file_path, mode="r").get_coordinate_selection(indices)
     else:
-        raise ValueError(f"Unsupported `file_type`: {file_type.lower()}")
+        logging.error(ValueError(f"Unsupported `file_type`: {file_type.lower()}"))
 
 
 def save_image(
@@ -186,7 +186,7 @@ def save_image(
 
     if nbp_basic.is_3d:
         if c is None:
-            raise ValueError("3d image but channel not given.")
+            logging.error(ValueError("3d image but channel not given."))
         if c == nbp_basic.dapi_channel:
             # If dapi is given then image should already by uint16 so no clipping
             image = image.astype(np.uint16)
@@ -204,7 +204,7 @@ def save_image(
         # In 3D, cannot possibly save any un-used channel hence no exception for this case.
         expected_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
         if not utils.errors.check_shape(image, expected_shape):
-            raise utils.errors.ShapeError("tile to be saved", image.shape, expected_shape)
+            logging.error(utils.errors.ShapeError("tile to be saved", image.shape, expected_shape))
         # yxz -> zxy
         image = np.swapaxes(image, 2, 0)
         # zxy -> zyx
@@ -242,7 +242,7 @@ def save_image(
         image[np.setdiff1d(np.arange(nbp_basic.n_channels), use_channels)] = 0
         expected_shape = (nbp_basic.n_channels, nbp_basic.tile_sz, nbp_basic.tile_sz)
         if not utils.errors.check_shape(image, expected_shape):
-            raise utils.errors.ShapeError("tile to be saved", image.shape, expected_shape)
+            logging.error(utils.errors.ShapeError("tile to be saved", image.shape, expected_shape))
         file_path = nbp_file.tile[t][r][c]
         file_path = file_path[file_path.index(file_type) :] + suffix + file_type
         _save_image(image, file_path, file_type, optimised_for=OptimisedFor.Z_PLANE_READ)
@@ -303,13 +303,13 @@ def load_image(
             suffix = "_raw"
         file_path = file_path[: file_path.index(file_type)] + suffix + file_type
     if not image_exists(file_path, file_type):
-        raise FileNotFoundError(f"Could not find image at {file_path} to load from")
+        logging.error(FileNotFoundError(f"Could not find image at {file_path} to load from"))
     if yxz is not None:
         # Use mmap when only loading in part of image
         if isinstance(yxz, (list, tuple)):
             if nbp_basic.is_3d:
                 if len(yxz) != 3:
-                    raise ValueError(f"Loading in a 3D tile but dimension of coordinates given is {len(yxz)}.")
+                    logging.error(ValueError(f"Loading in a 3D tile but dimension of coordinates given is {len(yxz)}."))
                 if yxz[0] is None and yxz[1] is None:
                     z_indices = yxz[2]
                     if isinstance(z_indices, int):
@@ -330,14 +330,16 @@ def load_image(
                     image = np.moveaxis(_load_image(file_path, file_type, indices=coord_index_zyx, mmap_mode="r"), 0, 2)
             else:
                 if len(yxz) != 2:
-                    raise ValueError(f"Loading in a 2D tile but dimension of coordinates given is {len(yxz)}.")
+                    logging.error(ValueError(f"Loading in a 2D tile but dimension of coordinates given is {len(yxz)}."))
                 coord_index = np.ix_(np.array([c]), yxz[0], yxz[1])  # add channel as first coordinate in 2D.
                 # [0] below is to remove channel index of length 1.
                 image = _load_image(nbp_file.tile[t][r], file_type, mmap_mode="r")[coord_index][0]
         elif isinstance(yxz, (np.ndarray, jnp.ndarray)):
             if nbp_basic.is_3d:
                 if yxz.shape[1] != 3:
-                    raise ValueError(f"Loading in a 3D tile but dimension of coordinates given is {yxz.shape[1]}.")
+                    logging.error(
+                        ValueError(f"Loading in a 3D tile but dimension of coordinates given is {yxz.shape[1]}.")
+                    )
                 coord_index_zyx = tuple([yxz[:, j] for j in [2, 0, 1]])
                 if np.allclose(coord_index_zyx[0], coord_index_zyx[0][0]) and coord_index_zyx[0].size > 100_000:
                     image = _load_image(file_path, file_type, indices=coord_index_zyx[0][0].item())
@@ -346,16 +348,20 @@ def load_image(
                     image = _load_image(file_path, file_type, indices=coord_index_zyx, mmap_mode="r")
             else:
                 if yxz.shape[1] != 2:
-                    raise ValueError(f"Loading in a 2D tile but dimension of coordinates given is {yxz.shape[1]}.")
+                    logging.error(
+                        ValueError(f"Loading in a 2D tile but dimension of coordinates given is {yxz.shape[1]}.")
+                    )
                 coord_index = tuple(np.asarray(yxz[:, i]) for i in range(2))
                 coord_index = (np.full(yxz.shape[0], c, int),) + coord_index  # add channel as first coordinate in 2D.
                 # image = np.load(nbp_file.tile[t][r], mmap_mode='r')[coord_index]
                 image = _load_image(nbp_file.tile[t][r], file_type, mmap_mode="r")[coord_index]
         else:
-            raise ValueError(
-                f"yxz should either be an [n_spots x n_dim] array to return an n_spots array indicating "
-                f"the value of the image at these coordinates or \n"
-                f"a list containing {2 + int(nbp_basic.is_3d)} arrays indicating the sub image to load."
+            logging.error(
+                ValueError(
+                    f"yxz should either be an [n_spots x n_dim] array to return an n_spots array indicating "
+                    f"the value of the image at these coordinates or \n"
+                    f"a list containing {2 + int(nbp_basic.is_3d)} arrays indicating the sub image to load."
+                )
             )
     else:
         if nbp_basic.is_3d:
