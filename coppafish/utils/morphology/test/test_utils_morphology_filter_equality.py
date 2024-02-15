@@ -33,9 +33,9 @@ def test_imfilter_coords_equality():
     assert (result == result_jax).all(), "Outputs are not the same"
 
     image_shape_3d = (25, 25, 4)
-    image_3d = rng.rand(100, size=image_shape_3d)
+    image_3d = rng.randint(100, size=image_shape_3d)
     kernel_3d = rng.randint(2, size=(5, 5, 2))
-    coords_3d = rng.randint(50, size=(n_points, 3))
+    coords_3d = rng.randint(4, size=(n_points, 3))
     result = imfilter_coords(image_3d, kernel_3d, coords_3d)
     result_jax = imfilter_coords_jax(image_3d, kernel_3d, coords_3d)
     assert result.shape == result_jax.shape == (n_points,), "Expected output shape to be (n_points, )"
