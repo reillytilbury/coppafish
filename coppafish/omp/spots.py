@@ -51,11 +51,11 @@ def count_spot_neighbours(
     if not np.isin(kernel_vals, [-1, 0, 1]).all():
         logging.error(ValueError("filter contains values other than -1, 0 or 1."))
 
-    # Check all spots in image
-    max_yxz = np.array(image.shape) - 1
-    spot_oob = [val for val in spot_yxz if val.min() < 0 or any(val > max_yxz)]
-    if len(spot_oob) > 0:
-        logging.error(utils.errors.OutOfBoundsError("spot_yxz", spot_oob[0], [0] * image.ndim, max_yxz))
+    # Check that all spot positions are in the image bounds
+    max_yxz = np.asarray(image.shape) - 1
+    spot_yxz_out_of_bounds = spot_yxz[np.logical_or((spot_yxz < 0).any(1), (spot_yxz > max_yxz[None]).any(1))]
+    if spot_yxz_out_of_bounds.size > 0:
+        logging.error(utils.errors.OutOfBoundsError("spot_yxz", spot_yxz_out_of_bounds[0], [0] * image.ndim, max_yxz))
 
     if np.isin([-1, 1], kernel_vals).all():
         # Return positive and negative counts
@@ -373,18 +373,12 @@ def get_spots(
     for g in tqdm.trange(n_genes, desc=f"Finding spots for all {n_genes} genes from omp_coef images"):
         # shift nzg_pixel_yxz so min is 0 in each axis so smaller image can be formed.
         # Note size of image will be different for each gene.
-        start = time.time()
         coef_image, coord_shift = cropped_coef_image(pixel_yxz, pixel_coefs[:, g])
-        end = time.time()
-        logging.debug(f"cropped_coef_image time taken for {g=}: {end - start}s")
         if coef_image is None:
             # If no non-zero coefficients, go to next gene
             continue
         if spot_yxzg is None:
-            start = time.time()
             spot_yxz = detect_spots(coef_image, coef_thresh, radius_xy, radius_z, False)[0]
-            end = time.time()
-            logging.debug(f"detect_spots time taken for {g=}: {end - start}s")
         else:
             # spot_yxz match pixel_yxz so if crop pixel_yxz need to crop spot_yxz too.
             spot_yxz = spot_yxzg[spot_yxzg[:, 3] == g, : coef_image.ndim] - coord_shift[: coef_image.ndim]
@@ -394,10 +388,9 @@ def get_spots(
             keep = np.ones(spot_yxz.shape[0], dtype=bool)
             spot_info_g = np.zeros((np.sum(keep), 4), dtype=int)
         else:
-            start = time.time()
+            logging.debug(f"count_spot_neighbours for {g=} started")
             n_pos_neighb, n_neg_neighb = count_spot_neighbours(coef_image, spot_yxz, spot_shape)
-            end = time.time()
-            logging.debug(f"count_spot_neighbours time taken for {g=}: {end - start}s")
+            logging.debug(f"count_spot_neighbours for {g=} complete")
             keep = n_pos_neighb > pos_neighbour_thresh
             spot_info_g = np.zeros((np.sum(keep), 6), dtype=int)
             spot_info_g[:, 4] = n_pos_neighb[keep]
