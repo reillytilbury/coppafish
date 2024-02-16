@@ -1,4 +1,4 @@
-# coppafish
+# ![](/docs/images/logo.png) coppafish
 
 ![https://github.com/reillytilbury/coppafish/blob/dev/.github/workflows/continuous_integration.yaml](https://github.com/reillytilbury/coppafish/actions/workflows/continuous_integration.yaml/badge.svg)
 
