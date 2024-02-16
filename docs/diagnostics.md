@@ -47,7 +47,7 @@ from coppafish import BuildPDF
 BuildPDF("path/to/notebook.npz")
 ```
 
-to specify the directory save to
+specify the directory to save to by
 ```python
 BuildPDF("path/to/notebook.npz", "path/to/output/directory")
 ```
