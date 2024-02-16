@@ -18,8 +18,8 @@ from tqdm import tqdm
 import numpy.typing as npt
 from typing import Dict, List, Any, Tuple, Optional
 
-from coppafish import utils
-from coppafish.pipeline import run
+from .. import utils
+from ..pipeline import run
 
 
 DEFAULT_IMAGE_DTYPE = float

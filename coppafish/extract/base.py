@@ -1,11 +1,10 @@
-import numpy as np
 import os
-import warnings
 import time
+import numpy as np
 from tqdm import tqdm
-from typing import Tuple, Optional
+from typing import Tuple
 
-from .. import utils
+from .. import utils, logging
 
 
 def wait_for_data(data_path: str, wait_time: int, dir: bool = False):
@@ -23,13 +22,13 @@ def wait_for_data(data_path: str, wait_time: int, dir: bool = False):
         check_data_func = lambda x: os.path.isfile(x)
     if not check_data_func(data_path):
         # wait for file to become available
-        if wait_time > 60 ** 2:
-            wait_time_print = round(wait_time / 60 ** 2, 1)
-            wait_time_unit = 'hours'
+        if wait_time > 60**2:
+            wait_time_print = round(wait_time / 60**2, 1)
+            wait_time_unit = "hours"
         else:
             wait_time_print = round(wait_time, 1)
-            wait_time_unit = 'seconds'
-        warnings.warn(f'\nNo file named\n{data_path}\nexists. Waiting for {wait_time_print} {wait_time_unit}...')
+            wait_time_unit = "seconds"
+        logging.warn(f"\nNo file named\n{data_path}\nexists. Waiting for {wait_time_print} {wait_time_unit}...")
         with tqdm(total=wait_time, position=0) as pbar:
             pbar.set_description(f"Waiting for {data_path}")
             for i in range(wait_time):
@@ -39,8 +38,8 @@ def wait_for_data(data_path: str, wait_time: int, dir: bool = False):
                 pbar.update(1)
         pbar.close()
         if not check_data_func(data_path):
-            raise utils.errors.NoFileError(data_path)
-        print("file found!\nWaiting for file to fully load...")
+            logging.error(utils.errors.NoFileError(data_path))
+        logging.info("file found!\nWaiting for file to fully load...")
         # wait for file to stop loading
         old_bytes = 0
         new_bytes = 0.00001
@@ -48,7 +47,7 @@ def wait_for_data(data_path: str, wait_time: int, dir: bool = False):
             time.sleep(5)
             old_bytes = new_bytes
             new_bytes = os.path.getsize(data_path)
-        print("file loaded!")
+        logging.info("file loaded!")
 
 
 def get_pixel_length(length_microns: float, pixel_size: float) -> int:

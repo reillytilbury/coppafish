@@ -7,7 +7,7 @@ from tqdm import tqdm
 from typing import Tuple
 
 from ..setup import NotebookPage
-from .. import find_spots
+from .. import find_spots, logging
 from ..register import preprocessing
 from ..register import base as register_base
 from ..utils import system, tiles_io
@@ -55,8 +55,9 @@ def register(
 
     # Part 0: Initialisation
     # Initialise frequently used variables
+    logging.debug("Register started")
     nbp, nbp_debug = NotebookPage("register"), NotebookPage("register_debug")
-    nbp.software_version = system.get_software_verison()
+    nbp.software_version = system.get_software_version()
     nbp.revision_hash = system.get_git_revision_hash()
     use_tiles, use_rounds, use_channels = nbp_basic.use_tiles, nbp_basic.use_rounds, nbp_basic.use_channels
     n_tiles, n_rounds, n_channels = nbp_basic.n_tiles, nbp_basic.n_rounds, nbp_basic.n_channels
@@ -213,7 +214,7 @@ def register(
                     # Only do ICP on non-degenerate tiles with more than ~ 100 spots, otherwise just use the
                     # starting transform
                     if nbp_find_spots.spot_no[t, r, c] < config["icp_min_spots"] and r in use_rounds:
-                        print(
+                        logging.warn(
                             f"Tile {t}, round {r}, channel {c} has too few spots to run ICP. Using initial transform"
                             f" instead."
                         )
@@ -239,6 +240,7 @@ def register(
         # Save registration data externally
         with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
             pickle.dump(registration_data, f)
+
     # Add round statistics to debugging page.
     nbp_debug.position = registration_data["round_registration"]["position"]
     nbp_debug.round_shift = registration_data["round_registration"]["shift"]
@@ -263,6 +265,19 @@ def register(
     transform[:, use_rounds_new] = registration_data["icp"]["transform"][:, use_rounds_new]
     nbp.transform = transform
 
+    # first, let us blur the pre-seq round images
+    if nbp_basic.use_preseq:
+        if pre_seq_blur_radius is None:
+            pre_seq_blur_radius = 3
+        for t, c in itertools.product(use_tiles, use_channels):
+            image_preseq = tiles_io.load_image(
+                nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=nbp_basic.pre_seq_round, c=c, suffix="_raw"
+            )
+            image_preseq = scipy.ndimage.gaussian_filter(image_preseq, pre_seq_blur_radius)
+            tiles_io.save_image(
+                nbp_file, nbp_basic, nbp_extract.file_type, image_preseq, t=t, r=nbp_basic.pre_seq_round, c=c
+            )
+
     # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
     # fluorescence
     if nbp_basic.use_preseq:
@@ -279,7 +294,7 @@ def register(
             transform_pre = preprocessing.invert_affine(preprocessing.yxz_to_zyx_affine(transform[t, r_pre, c]))
             z_scale_pre = transform_pre[0, 0]
             z_shift_pre = transform_pre[0, 3]
-            mid_z_pre = int((mid_z - z_shift_pre) / z_scale_pre)
+            mid_z_pre = int(np.clip((mid_z - z_shift_pre) / z_scale_pre, 0, len(nbp_basic.use_z) - 1))
             yxz = [None, None, mid_z_pre]
             image_preseq = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r_pre, c=c, yxz=yxz)
             image_preseq = image_preseq.astype(np.int32)
@@ -292,7 +307,7 @@ def register(
                 transform_seq = preprocessing.invert_affine(preprocessing.yxz_to_zyx_affine(transform[t, r, c]))
                 z_scale_seq = transform_seq[0, 0]
                 z_shift_seq = transform_seq[0, 3]
-                mid_z_seq = int((mid_z - z_shift_seq) / z_scale_seq)
+                mid_z_seq = int(np.clip((mid_z - z_shift_seq) / z_scale_seq, 0, len(nbp_basic.use_z) - 1))
                 yxz = [None, None, mid_z_seq]
                 image_seq = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r, c=c, yxz=yxz)
                 image_seq = image_seq.astype(np.int32)
@@ -309,4 +324,5 @@ def register(
         nbp_filter.bg_scale = bg_scale
         nbp_filter.finalized = True
 
+    logging.debug("Register complete")
     return nbp, nbp_debug

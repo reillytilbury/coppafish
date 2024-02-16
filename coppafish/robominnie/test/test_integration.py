@@ -3,8 +3,8 @@ import numpy as np
 import warnings
 import pytest
 
-from coppafish import Notebook, Viewer, BuildPDF
-from coppafish.robominnie import RoboMinnie
+from coppafish import Viewer, BuildPDF, Notebook
+from coppafish.robominnie.robominnie import RoboMinnie
 from coppafish.plot.register.diagnostics import RegistrationViewer
 
 

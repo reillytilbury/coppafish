@@ -1,6 +1,6 @@
 ## Coppafish
 
-Coppafish is an open source data analysis software for Combinatorial padlOck-Probe-Amplified Fluorescence In Situ 
+Coppafish is an open source data analysis software for COmbinatorial Padlock-Probe-Amplified Fluorescence In Situ 
 Hybridization (coppafish) datasets. A series of 3D microscope images are arranged in tiles, rounds and channels. For 
 each sequencing round, every gene being considered is fluoresced by a dye. Then, by the end of all rounds, each gene 
 type has a unique sequence of dyes, called the gene code. Some vocabulary might be unfamiliar, please see the 

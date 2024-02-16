@@ -1,12 +1,11 @@
 import os
 import time
-import warnings
 import numpy as np
 from tqdm import tqdm
 import numpy.typing as npt
 from typing import Optional, Tuple
 
-from .. import utils, extract
+from .. import utils, extract, logging
 from ..utils import tiles_io, indexing
 from ..filter import deconvolution
 from ..filter import base as filter_base
@@ -46,9 +45,10 @@ def run_filter(
 
     nbp = NotebookPage("filter")
     nbp_debug = NotebookPage("filter_debug")
-    nbp.software_version = utils.system.get_software_verison()
+    nbp.software_version = utils.system.get_software_version()
     nbp.revision_hash = utils.system.get_git_revision_hash()
 
+    logging.debug("Filter started")
     start_time = time.time()
     if not os.path.isdir(nbp_file.tile_dir):
         os.mkdir(nbp_file.tile_dir)
@@ -229,13 +229,15 @@ def run_filter(
                 np.savez(auto_thresh_path, auto_thresh)
                 # Deal with pixels outside uint16 range when saving
                 if nbp_debug.n_clip_pixels[t, r, c] > config["n_clip_warn"]:
-                    warnings.warn(
+                    logging.warn(
                         f"\nTile {t}, round {r}, channel {c} has "
                         f"{nbp_debug.n_clip_pixels[t, r, c]} pixels\n"
                         f"that will be clipped when converting to uint16."
                     )
                 if nbp_debug.n_clip_pixels[t, r, c] > config["n_clip_error"]:
-                    raise ValueError(f"{t=}, {r=}, {c=} filter image clipped {nbp_debug.n_clip_pixels[t, r, c]} pixels")
+                    logging.error(
+                        ValueError(f"{t=}, {r=}, {c=} filter image clipped {nbp_debug.n_clip_pixels[t, r, c]} pixels")
+                    )
             # Delay gaussian blurring of preseq until after reg to give it a better chance
             saved_im = tiles_io.save_image(
                 nbp_file,
@@ -260,4 +262,5 @@ def run_filter(
     nbp.bg_scale = None
     end_time = time.time()
     nbp_debug.time_taken = end_time - start_time
+    logging.debug("Filter complete")
     return nbp, nbp_debug

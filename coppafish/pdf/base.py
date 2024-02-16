@@ -1,5 +1,4 @@
 import os
-import warnings
 import textwrap
 import webbrowser
 import numpy as np
@@ -10,6 +9,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from typing import Union, Optional, Tuple
 
 from ..setup import Notebook, NotebookPage
+from .. import logging
 
 
 # Plot settings
@@ -40,6 +40,7 @@ class BuildPDF:
             output_dir (str, optional): directory to save pdfs. Default: `nb.basic_info.file_names/diagnostics.pdf`.
             auto_open (bool, optional): open the PDF in a web browser after creation. Default: true.
         """
+        logging.debug("Creating diagnostic PDF started")
         pbar = tqdm(desc="Creating Diagnostic PDF", total=10, unit="section")
         pbar.set_postfix_str("Loading notebook")
         if isinstance(nb, str):
@@ -72,7 +73,7 @@ class BuildPDF:
         )
         self.use_rounds_all.sort()
 
-        if not os.path.isfile(os.path.join(output_dir, "_basic_info.pdf")):
+        if not os.path.isfile(os.path.join(output_dir, "_basic_info.pdf") and nb.has_page("basic_info")):
             with PdfPages(os.path.join(output_dir, "_basic_info.pdf")) as pdf:
                 mpl.rcParams.update(mpl.rcParamsDefault)
                 # Build a pdf with data from scale, extract, filter, find_spots, register, stitch, OMP
@@ -85,7 +86,7 @@ class BuildPDF:
                 plt.close(fig)
         pbar.update()
 
-        if not os.path.isfile(os.path.join(output_dir, "_scale.pdf")):
+        if not os.path.isfile(os.path.join(output_dir, "_scale.pdf")) and nb.has_page("scale"):
             with PdfPages(os.path.join(output_dir, "_scale.pdf")) as pdf:
                 pbar.set_postfix_str("Scale")
                 if nb.has_page("scale"):
@@ -102,7 +103,7 @@ class BuildPDF:
                     plt.close(fig)
         pbar.update()
 
-        if not os.path.isfile(os.path.join(output_dir, "_extract.pdf")):
+        if not os.path.isfile(os.path.join(output_dir, "_extract.pdf")) and nb.has_page("extract"):
             with PdfPages(os.path.join(output_dir, "_extract.pdf")) as pdf:
                 # Extract section
                 pbar.set_postfix_str("Extract")
@@ -140,7 +141,7 @@ class BuildPDF:
                     del extract_pixel_unique_values, extract_pixel_unique_counts
         pbar.update()
 
-        if not os.path.isfile(os.path.join(output_dir, "_filter.pdf")):
+        if not os.path.isfile(os.path.join(output_dir, "_filter.pdf")) and nb.has_page("filter"):
             with PdfPages(os.path.join(output_dir, "_filter.pdf")) as pdf:
                 # Filter section
                 pbar.set_postfix_str("Filter")
@@ -182,7 +183,7 @@ class BuildPDF:
                     del filter_pixel_unique_values, filter_pixel_unique_counts
         pbar.update()
 
-        if not os.path.isfile(os.path.join(output_dir, "_find_spots.pdf")):
+        if not os.path.isfile(os.path.join(output_dir, "_find_spots.pdf")) and nb.has_page("find_spots"):
             with PdfPages(os.path.join(output_dir, "_find_spots.pdf")) as pdf:
                 pbar.set_postfix_str("Find spots")
                 if nb.has_page("find_spots"):
@@ -250,7 +251,11 @@ class BuildPDF:
         pbar.set_postfix_str("Stitch")
         pbar.update()
 
-        if not os.path.isfile(os.path.join(output_dir, "_ref_call_spots.pdf")):
+        if (
+            not os.path.isfile(os.path.join(output_dir, "_ref_call_spots.pdf"))
+            and nb.has_page("ref_spots")
+            and nb.has_page("call_spots")
+        ):
             with PdfPages(os.path.join(output_dir, "_ref_call_spots.pdf")) as pdf:
                 pbar.set_postfix_str("Reference and call spots")
                 if nb.has_page("ref_spots") and nb.has_page("call_spots"):
@@ -337,12 +342,13 @@ class BuildPDF:
                         fig.tight_layout()
                         pdf.savefig(fig)
                         plt.close(fig)
-            pbar.update()
+        pbar.update()
 
-            pbar.set_postfix_str("OMP")
-            pbar.update()
-            pbar.close()
+        pbar.set_postfix_str("OMP")
+        pbar.update()
+        pbar.close()
 
+        logging.debug("Creating diagnostic PDF complete")
         if auto_open:
             webbrowser.open_new_tab(rf"{output_dir}")
 
@@ -546,7 +552,7 @@ class BuildPDF:
                                 continue
                             hist_x[k] = np.log2(count)
                     if np.sum(hist_x) <= 0:
-                        warnings.warn(f"The {section_name.lower()} image for {t=}, {r=}, {c=} looks to be all zeroes!")
+                        logging.warn(f"The {section_name.lower()} image for {t=}, {r=}, {c=} looks to be all zeroes!")
                         continue
                     if np.max(hist_x) > greatest_count:
                         greatest_count = np.max(hist_x)

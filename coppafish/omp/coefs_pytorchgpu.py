@@ -6,8 +6,7 @@ import numpy as np
 from typing import Tuple, Union, List, Any
 
 from . import base
-from .. import call_spots
-from .. import utils
+from .. import utils, call_spots, logging
 from ..call_spots import dot_product_pytorch as dot_product
 from ..setup import NotebookPage
 
@@ -40,8 +39,8 @@ def fit_coefs(
     # The arguments given are of shapes (n_pixels, (n_rounds * n_channels), n_genes_add) and
     # (n_pixels, (n_rounds * n_channels), 1). Pytorch then knows to batch over pixels
     # Coefs is shape (n_pixels, n_genes_add)
-    # We use the driver "gels" here because this is the only option for GPU torch. This assumes that 
-    # bled_codes_weighted is full-rank, which I think it always is in real data examples (at least it very well should 
+    # We use the driver "gels" here because this is the only option for GPU torch. This assumes that
+    # bled_codes_weighted is full-rank, which I think it always is in real data examples (at least it very well should
     # be!)
     coefs = torch.linalg.lstsq(
         bled_codes[:, genes].transpose(0, 1),
@@ -86,10 +85,12 @@ def fit_coefs_weight(
     """
     # (n_pixels, n_rounds_channels, n_genes_add)
     bled_codes_weighted = bled_codes[:, genes].swapaxes(0, 1) * weight[..., None]
+    del bled_codes, genes
     # (n_pixels, n_rounds_channels)
     pixel_colors_weighted = pixel_colors.T * weight
-    # We use the driver "gels" here because this is the only option for GPU torch. This assumes that 
-    # bled_codes_weighted is full-rank, which I think it always is in real data examples (at least it very well should 
+    del pixel_colors
+    # We use the driver "gels" here because this is the only option for GPU torch. This assumes that
+    # bled_codes_weighted is full-rank, which I think it always is in real data examples (at least it very well should
     # be!)
     coefs = torch.linalg.lstsq(bled_codes_weighted, pixel_colors_weighted, rcond=-1, driver="gels")[0]
     # Using pytorch's batch matrix multiplication to eliminate a need for a for loop
@@ -145,10 +146,12 @@ def get_best_gene_base(
     # Calculate score including background genes as if best gene is background, then stop iteration. all_scores has
     # shape (n_pixels, n_genes)
     all_scores = dot_product.dot_product_score(residual_pixel_colours, all_bled_codes, inverse_var, norm_shift)[3]
+    del residual_pixel_colours, all_bled_codes, inverse_var
     # best_genes has shape (n_pixels, )
     best_genes = torch.argmax(torch.abs(all_scores), dim=1)
     # Take the best gene score for each pixel.
     best_scores = all_scores[range(n_pixels), best_genes]
+    del all_scores
     # If best_gene is in ignore_genes, set score below score_thresh, i.e. set the score to zero.
     if ignore_genes.ndim == 1:
         best_scores *= torch.isin(best_genes, ignore_genes, invert=True)
@@ -198,7 +201,7 @@ def get_best_gene_first_iter(
         - pass_score_thresh (`(n_pixels) tensor[bool]`): true if `best_score > score_thresh`.
         - background_var (`(n_pixels x (n_rounds * n_channels)) tensor[float]`): variance in each round/channel based
             on just the background.
-    
+
     Notes:
         - The returned tensors are placed on the same device as the parameters' device.
     """
@@ -279,7 +282,6 @@ def get_best_gene(
     assert background_genes.ndim == 1
 
     n_pixels, n_rounds_channels = residual_pixel_colors.shape
-    n_channels, n_genes_added = background_genes.size, genes_added.shape[1]
     best_genes = torch.zeros((n_pixels), dtype=int)
     pass_score_threshes = torch.zeros((n_pixels), dtype=bool)
     inverse_vars = torch.zeros((n_pixels, n_rounds_channels), dtype=torch.float32)
@@ -290,6 +292,7 @@ def get_best_gene(
     inverse_vars = torch.reciprocal(
         torch.bmm((coefs**2)[:, None], all_bled_codes[genes_added] ** 2 * alpha)[:, 0] + background_var
     )
+    del coefs, background_var
     # Similar function to numpy's .repeat
     ignore_genes = torch.repeat_interleave(background_genes[None], n_pixels, dim=0)
     ignore_genes = torch.concatenate((ignore_genes, genes_added), dim=1)
@@ -347,7 +350,7 @@ def get_all_coefs(
 
     Notes:
         - Background vectors are fitted first and then not updated again.
-        - All variables used in the for loop over OMP iterations is kept in GPU memory. They are then moved to the CPU 
+        - All variables used in the for loop over OMP iterations is kept in GPU memory. They are then moved to the CPU
             device when all iterations are complete.
     """
     cuda, cpu = torch.device("cuda"), torch.device("cpu")
@@ -358,15 +361,17 @@ def get_all_coefs(
     check_spot = torch.randint(0, n_pixels, size=(1,))[0].item()
     diff_to_int = torch.round(pixel_colors[check_spot]).to(int) - pixel_colors[check_spot]
     if torch.abs(diff_to_int).max() == 0:
-        raise ValueError(
-            f"pixel_coefs should be found using normalised pixel_colors."
-            f"\nBut for pixel {check_spot}, pixel_colors given are integers indicating they are "
-            f"the raw intensities."
+        logging.error(
+            ValueError(
+                f"pixel_coefs should be found using normalised pixel_colors."
+                f"\nBut for pixel {check_spot}, pixel_colors given are integers indicating they are "
+                f"the raw intensities."
+            )
         )
 
     n_genes, n_rounds, n_channels = bled_codes.shape
     if not utils.errors.check_shape(pixel_colors, [n_pixels, n_rounds, n_channels]):
-        raise utils.errors.ShapeError("pixel_colors", pixel_colors.shape, (n_pixels, n_rounds, n_channels))
+        logging.error(utils.errors.ShapeError("pixel_colors", pixel_colors.shape, (n_pixels, n_rounds, n_channels)))
     no_verbose = n_pixels < 1000  # show progress bar with more than 1000 pixels.
 
     # Fit background and override initial pixel_colors
@@ -385,7 +390,7 @@ def get_all_coefs(
     # colors and codes for fit_coefs function (No background as this is not updated again).
     # always uses post background color as coefficients for all genes re-estimated at each iteration.
     pixel_colors = pixel_colors.reshape((n_pixels, -1)).to(cuda)
-    
+
     all_codes = all_codes.to(cuda)
     background_coefs = background_coefs.to(cuda)
     background_genes = background_genes.to(cuda)
@@ -393,6 +398,7 @@ def get_all_coefs(
     gene_coefs = gene_coefs.to(cuda)
 
     continue_pixels = torch.arange(n_pixels, device=cuda)
+    logging.debug("Finding OMP coefficients started")
     with tqdm.tqdm(total=max_genes, disable=no_verbose, desc="Finding OMP coefficients for each pixel") as pbar:
         for i in range(max_genes):
             if i == 0:
@@ -426,7 +432,7 @@ def get_all_coefs(
 
             continue_pixels = continue_pixels[pass_score_thresh]
             n_continue = len(continue_pixels)
-            pbar.set_postfix({"n_pixels": n_continue})
+            pbar.set_postfix({"n_pixels": n_continue, "gpu": "true"})
             if n_continue == 0:
                 break
             if i == 0:
@@ -451,12 +457,32 @@ def get_all_coefs(
                     torch.asarray(continue_pixels, device=cuda)[:, None], torch.asarray(added_genes, device=cuda)
                 ] = torch.asarray(i_coefs, device=cuda)
 
-            # Clear any remaining large GPU tensors in vRAM
             with torch.no_grad():
                 torch.cuda.empty_cache()
             pbar.update()
+    logging.debug("Finding OMP coefficients complete")
 
-    return gene_coefs.type(torch.float32).to(cpu), background_coefs.type(torch.float32).to(cpu)
+    gene_coefs_cpu = gene_coefs.type(torch.float32).to(cpu)
+    background_coefs_cpu = background_coefs.type(torch.float32).to(cpu)
+    del (
+        all_codes,
+        background_coefs,
+        background_genes,
+        bled_codes,
+        gene_coefs,
+        added_genes,
+        pass_score_thresh,
+        background_variance,
+        i_added_genes,
+        inverse_var,
+        fail_score_thresh,
+        i_coefs,
+        residual_pixel_colors,
+    )
+    with torch.no_grad():
+        torch.cuda.empty_cache()
+
+    return gene_coefs_cpu, background_coefs_cpu
 
 
 def get_pixel_coefs_yxz(
@@ -507,7 +533,7 @@ def get_pixel_coefs_yxz(
 
     z_chunks = len(use_z) // z_chunk_size + 1
     for z_chunk in range(z_chunks):
-        print(f"z_chunk {z_chunk + 1}/{z_chunks}")
+        logging.info(f"z_chunk {z_chunk + 1}/{z_chunks}")
         # While iterating through tiles, only save info for rounds/channels using
         # - add all rounds/channels back in later. This returns colors in use_rounds/channels only and no invalid.
         pixel_yxz_tz, pixel_colors_tz = base.get_pixel_colours(
@@ -546,6 +572,8 @@ def get_pixel_coefs_yxz(
             config["max_genes"],
             config["weight_coef_fit"],
         )[0]
+        with torch.no_grad():
+            torch.cuda.empty_cache()
         pixel_coefs_tz = torch.asarray(pixel_coefs_tz, dtype=torch.float32)
         del pixel_colors_tz
         # Only keep pixels for which at least one gene has non-zero coefficient.

@@ -8,7 +8,7 @@ except ImportError:
     from ..spot_colors import base as spot_colors_base
 from ..call_spots import base as call_spots_base
 from .. import find_spots as fs
-from .. import utils
+from .. import utils, logging
 from ..setup.notebook import NotebookPage
 
 
@@ -60,26 +60,28 @@ def get_reference_spots(
     # We create a notebook page for ref_spots which stores information like local coords, isolated info, tile_no of each
     # spot and much more.
     nbp = NotebookPage("ref_spots")
-    nbp.software_version = utils.system.get_software_verison()
+    nbp.software_version = utils.system.get_software_version()
     nbp.revision_hash = utils.system.get_git_revision_hash()
     # The code is going to loop through all tiles, as we expect some anchor spots on each tile but r and c should stay
     # fixed as the value of the reference round and reference channel
     r = nbp_basic.anchor_round
     c = nbp_basic.anchor_channel
+    logging.debug("Get ref spots started")
 
     # all means all spots found on the reference round / channel
     all_local_yxz = np.zeros((0, 3), dtype=np.int16)
     all_isolated = np.zeros(0, dtype=bool)
     all_local_tile = np.zeros(0, dtype=np.int16)
-    in_bounds = np.zeros((nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.n_extra_rounds * nbp_basic.use_preseq,
-                          nbp_basic.n_channels))
+    in_bounds = np.zeros(
+        (nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.n_extra_rounds * nbp_basic.use_preseq, nbp_basic.n_channels)
+    )
 
     # Now we start looping through tiles and recording the local_yxz spots on this tile and the isolated status of each
     # We then append this to our all_local_yxz, ... arrays
     for t in nbp_basic.use_tiles:
         t_local_yxz = fs.spot_yxz(nbp_find_spots.spot_yxz, t, r, c, nbp_find_spots.spot_no)
         t_isolated = fs.spot_isolated(nbp_find_spots.isolated_spots, t, r, c, nbp_find_spots.spot_no)
-        # np.shape(t_local_yxz)[0] is the number of spots found on this tile. If there's a nonzero number of spots 
+        # np.shape(t_local_yxz)[0] is the number of spots found on this tile. If there's a nonzero number of spots
         # found then we append the local_yxz info and isolated info to our arrays.
         # The all_local_tiles array SHOULD be the same length (ie have same number of elements as all_local_yxz has
         # rows) as all_local_yxz
@@ -106,11 +108,11 @@ def get_reference_spots(
     nd_spot_colors_use = np.zeros((nd_local_tile.shape[0], n_use_rounds, n_use_channels), dtype=np.int32)
     bg_colours = np.zeros_like(nd_spot_colors_use)
     transform = jnp.asarray(transform)
-    print("Reading in spot_colors for ref_round spots")
+    logging.info("Reading in spot_colors for ref_round spots")
     for t in nbp_basic.use_tiles:
         in_tile = nd_local_tile == t
         if np.sum(in_tile) > 0:
-            print(f"Tile {np.where(use_tiles==t)[0][0]+1}/{n_use_tiles}")
+            logging.info(f"Tile {np.where(use_tiles==t)[0][0]+1}/{n_use_tiles}")
             # this line will return invalid_value for spots outside tile bounds on particular r/c.
             if nbp_basic.use_preseq:
                 nd_spot_colors_use[in_tile], yxz_base, bg_colours[in_tile] = spot_colors_base.get_spot_colors(
@@ -156,5 +158,6 @@ def get_reference_spots(
     nbp.background_strength = None
     nbp.gene_probs = None
     nbp.dye_strengths = None
+    logging.debug("Get ref spots complete")
 
     return nbp
