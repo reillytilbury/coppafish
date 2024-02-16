@@ -36,3 +36,18 @@ spot intensity. We recommend a value $\ge1$, but there is no known optimal value
 ![](images/Viewer_example.PNG "The Viewer")
 
 ## RegistrationViewer
+
+## PDF Diagnostics
+
+During a pipeline run, multiple .pdf files are created for different sections. These are located in the output 
+directory. They can be manually created from the notebook file by
+```python
+from coppafish import BuildPDF
+
+BuildPDF("path/to/notebook.npz")
+```
+
+to specify the directory save to
+```python
+BuildPDF("path/to/notebook.npz", "path/to/output/directory")
+```
