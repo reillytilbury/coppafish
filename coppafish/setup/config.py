@@ -154,19 +154,17 @@ _options = {
             'flip_x': 'bool'
         },
     'register':
-        {
-            'neighb_dist_thresh_2d': 'number',
-            'neighb_dist_thresh_3d': 'number',
-            'subvols': 'list_int',
-            'box_size': 'list_int',
-            'pearson_r_thresh': 'number',
-            'residual_thresh': 'int',
+        {   # this parameter is for channel registration
             'bead_radii': 'maybe_list_number',
+            # these parameters are for round registration
+            'downsample_factor': 'int',
+            'window_radius': 'int',
+            'smooth_sigma': 'number',
+            'smooth_thresh': 'number',
+            # these parameters are for icp
+            'neighb_dist_thresh': 'number',
             'icp_min_spots': 'int',
-            'icp_max_iter': 'int',
-            'round_registration_channel': 'maybe_int',
-            'sobel': 'bool',
-            'max_background_scale_cores': 'maybe_int'
+            'icp_max_iter': 'int'
         },
     'call_spots':
         {
