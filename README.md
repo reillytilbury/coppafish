@@ -4,7 +4,7 @@
 ![https://github.com/reillytilbury/coppafish/blob/dev/.github/workflows/pytorch_integration.yaml](https://github.com/reillytilbury/coppafish/actions/workflows/pytorch_integration.yaml/badge.svg)
 ![https://github.com/reillytilbury/coppafish/blob/dev/.github/workflows/optimised_integration.yaml](https://github.com/reillytilbury/coppafish/actions/workflows/optimised_integration.yaml/badge.svg)
 
-![](/docs/images/logo.png)
+<img src="/docs/images/logo.png" width="50"/>
 
 ## Documentation
 
