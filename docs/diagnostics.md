@@ -30,9 +30,24 @@ allows the user to change the minimum and maximum scores to be displayed. The "I
 allowed spot intensity to display (only affects Anchor and OMP). The "Method" is the chosen method of gene calling. 
 "Prob" is the Von-Mises probability method, "Anchor" is the anchor method (see [call spots](method.md#call-spots)), and 
 "OMP" is the Orthogonal Matching Pursuit method (see [OMP](method.md#orthogonal-matching-pursuit)). The "OMP Score 
-Multiplier" will affect how much weight a middle positive spot intensity has over the negative outer annulus part of a 
-spot intensity. We recommend a value $\ge1$, but there is no known optimal value.
+Multiplier" will affect how much weight positive coefficient has over negative coefficient parts of a spot. We 
+recommend a value $\ge1$, but there is no known optimal value.
 
 ![](images/Viewer_example.PNG "The Viewer")
 
 ## RegistrationViewer
+
+## PDF Diagnostics
+
+During a pipeline run, multiple .pdf files are created for different sections. These are located in the output 
+directory. They can be manually created from the notebook file by
+```python
+from coppafish import BuildPDF
+
+BuildPDF("path/to/notebook.npz")
+```
+
+specify the directory to save to by
+```python
+BuildPDF("path/to/notebook.npz", "path/to/output/directory")
+```
