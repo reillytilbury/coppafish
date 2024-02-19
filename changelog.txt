@@ -1,3 +1,8 @@
+2024/02/19 Alpha Update (v0.9.3):
+ * Pytorch GPU fix attempt.
+ * Docs + logo update for coppafish.
+
+
 2024/02/15 Alpha Update (v0.9.2):
  * OMP is now significantly faster after vectorising an out of bounds check for spot positions.
  * All coppafish logs are saved in a file with default name pipeline.log, the name can be changed by editing the 
