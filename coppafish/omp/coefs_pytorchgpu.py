@@ -456,9 +456,6 @@ def get_all_coefs(
                 gene_coefs[
                     torch.asarray(continue_pixels, device=cuda)[:, None], torch.asarray(added_genes, device=cuda)
                 ] = torch.asarray(i_coefs, device=cuda)
-
-            with torch.no_grad():
-                torch.cuda.empty_cache()
             pbar.update()
     logging.debug("Finding OMP coefficients complete")
 
@@ -479,8 +476,6 @@ def get_all_coefs(
         i_coefs,
         residual_pixel_colors,
     )
-    with torch.no_grad():
-        torch.cuda.empty_cache()
 
     return gene_coefs_cpu, background_coefs_cpu
 
