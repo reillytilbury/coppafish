@@ -73,13 +73,12 @@ def register(
             cameras = list(set(nbp_basic.channel_camera))
         cameras.sort()
         anchor_cam_idx = cameras.index(nbp_basic.channel_camera[nbp_basic.anchor_channel])
-        # cam_transform = register_base.channel_registration(
-        #     fluorescent_bead_path=nbp_file.fluorescent_bead_path,
-        #     anchor_cam_idx=anchor_cam_idx,
-        #     n_cams=len(cameras),
-        #     bead_radii=config["bead_radii"],
-        # )
-        cam_transform = np.repeat(np.eye(3,4)[None, ...], len(cameras), axis=0)
+        cam_transform = register_base.channel_registration(
+            fluorescent_bead_path=nbp_file.fluorescent_bead_path,
+            anchor_cam_idx=anchor_cam_idx,
+            n_cams=len(cameras),
+            bead_radii=config["bead_radii"],
+        )
         # Now loop through all channels and set the channel transform to its cam transform
         for c in use_channels:
             cam_idx = cameras.index(nbp_basic.channel_camera[c])
