@@ -65,7 +65,7 @@ def detect_spots(
 
     # set central pixel to 0
     se[np.ix_(*[(np.floor((se.shape[i] - 1) / 2).astype(int),) for i in range(se.ndim)])] = 0
-    se_shifts = utils.morphology.filter.get_shifts_from_kernel(se)
+    se_shifts = np.array(utils.morphology.filter.get_shifts_from_kernel(se))
 
     consider_yxz = np.where(image > intensity_thresh)
     n_consider = consider_yxz[0].shape[0]
@@ -79,19 +79,15 @@ def detect_spots(
         image[consider_yxz] = image[consider_yxz] + rand_im_shift
 
     consider_intensity = image[consider_yxz]
-    consider_yxz = list(consider_yxz)
+    consider_yxz = np.array(consider_yxz)
 
-    paddings = np.asarray([pad_size_y, pad_size_x, pad_size_z])[: image.ndim]
-    keep = np.asarray(
-        get_local_maxima(
-            image, np.asarray(se_shifts), paddings, np.asarray(consider_yxz), np.asarray(consider_intensity)
-        )
-    )
+    paddings = np.array([pad_size_y, pad_size_x, pad_size_z])[: image.ndim]
+    keep = get_local_maxima(image, se_shifts, paddings, consider_yxz, consider_intensity)
     if remove_duplicates:
         peak_intensity = np.round(consider_intensity[keep]).astype(int)
     else:
         peak_intensity = consider_intensity[keep]
-    peak_yxz = np.array(consider_yxz).transpose()[keep]
+    peak_yxz = consider_yxz.transpose()[keep]
     return peak_yxz, peak_intensity
 
 
@@ -124,9 +120,9 @@ def get_local_maxima(
 
     image = np.pad(image, [(p, p) for p in pad_sizes], mode="constant", constant_values=0)
     # Local pixel positions of spots must change after padding is added
-    consider_yxz += pad_sizes[:, np.newaxis]
+    consider_yxz_se_shifted = consider_yxz + pad_sizes[:, np.newaxis]
     # (image.ndim, n_consider, n_shifts) shape
-    consider_yxz_se_shifted = np.repeat(consider_yxz[..., np.newaxis], se_shifts.shape[1], axis=2)
+    consider_yxz_se_shifted = np.repeat(consider_yxz_se_shifted[..., np.newaxis], se_shifts.shape[1], axis=2)
     consider_yxz_se_shifted += se_shifts[None].transpose((1, 0, 2))
     # image.ndim items in tuple of `(n_consider * n_shifts) ndarray[int]`
     consider_yxz_se_shifted = tuple(consider_yxz_se_shifted.reshape((image.ndim, -1)))
