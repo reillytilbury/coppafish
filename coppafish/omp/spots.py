@@ -379,9 +379,7 @@ def get_spots(
             # If no non-zero coefficients, go to next gene
             continue
         if spot_yxzg is None:
-            logging.debug("detect_spots started")
             spot_yxz = detect_spots(coef_image, coef_thresh, radius_xy, radius_z, False)[0]
-            logging.debug("detect_spots complete")
         else:
             # spot_yxz match pixel_yxz so if crop pixel_yxz need to crop spot_yxz too.
             spot_yxz = spot_yxzg[spot_yxzg[:, 3] == g, : coef_image.ndim] - coord_shift[: coef_image.ndim]
@@ -391,9 +389,7 @@ def get_spots(
             keep = np.ones(spot_yxz.shape[0], dtype=bool)
             spot_info_g = np.zeros((np.sum(keep), 4), dtype=int)
         else:
-            logging.debug(f"count_spot_neighbours for {g=} started")
             n_pos_neighb, n_neg_neighb = count_spot_neighbours(coef_image, spot_yxz, spot_shape)
-            logging.debug(f"count_spot_neighbours for {g=} complete")
             keep = n_pos_neighb > pos_neighbour_thresh
             spot_info_g = np.zeros((np.sum(keep), 6), dtype=int)
             spot_info_g[:, 4] = n_pos_neighb[keep]
