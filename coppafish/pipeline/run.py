@@ -50,7 +50,7 @@ def run_pipeline(
     run_stitch(nb)
     run_reference_spots(nb, overwrite_ref_spots)
     run_omp(nb)
-    BuildPDF(nb)
+    BuildPDF(nb, auto_open=True)
     return nb
 
 

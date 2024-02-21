@@ -29,7 +29,7 @@ class BuildPDF:
         self,
         nb: Union[Notebook, str],
         output_dir: Optional[str] = None,
-        auto_open: bool = True,
+        auto_open: bool = False,
     ) -> None:
         """
         Build a diagnostic PDF of coppafish results for each relevant section. A section pdf is not re-generated if the
