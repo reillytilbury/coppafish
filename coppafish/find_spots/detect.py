@@ -81,6 +81,7 @@ def detect_spots(
     consider_intensity = image[consider_yxz]
     consider_yxz = np.array(consider_yxz)
 
+    logging.debug(f"{consider_yxz.shape=}")
     paddings = np.array([pad_size_y, pad_size_x, pad_size_z])[: image.ndim]
     keep = get_local_maxima(image, se_shifts, paddings, consider_yxz, consider_intensity)
     if remove_duplicates:
