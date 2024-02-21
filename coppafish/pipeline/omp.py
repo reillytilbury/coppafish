@@ -215,6 +215,7 @@ def call_spots_omp(
         )
 
         if spot_shape is None:
+            logging.info("Computing OMP spot shape")
             nbp.shape_tile = int(t)
             spot_yxz, spot_gene_no = omp.get_spots(pixel_coefs_t, pixel_yxz_t, config["radius_xy"], detect_radius_z)
             z_scale = nbp_basic.pixel_size_z / nbp_basic.pixel_size_xy
