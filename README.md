@@ -5,6 +5,7 @@
 ![https://github.com/reillytilbury/coppafish/blob/dev/.github/workflows/integration.yaml](https://github.com/reillytilbury/coppafish/actions/workflows/integration.yaml/badge.svg)
 ![https://github.com/reillytilbury/coppafish/blob/dev/.github/workflows/pytorch_integration.yaml](https://github.com/reillytilbury/coppafish/actions/workflows/pytorch_integration.yaml/badge.svg)
 ![https://github.com/reillytilbury/coppafish/blob/dev/.github/workflows/optimised_integration.yaml](https://github.com/reillytilbury/coppafish/actions/workflows/optimised_integration.yaml/badge.svg)
+![GitHub License](https://img.shields.io/github/license/reillytilbury/coppafish)
 
 ## Documentation
 
