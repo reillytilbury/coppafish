@@ -61,7 +61,7 @@ overlapping genes to be detected. It is an iterative,
 <a href="https://en.wikipedia.org/wiki/Greedy_algorithm" target="_blank">greedy algorithm</a> that runs on individual 
 pixels in the microscope images. At each OMP iteration, a new gene type is assigned to the pixel. OMP is also 
 self-correcting. "Orthogonal" refers to how OMP will re-compute its gene contributions after every iteration by least 
-squares. A background gene[^1] is a valid gene type. The iterations stop if:
+squares. Background genes[^1] are considered valid gene types in OMP. The iterations stop if:
 
 * `max_genes` in the `omp` config section is reached. 
 * assigning the next best gene type to the pixel does not have a dot product score above `dp_thresh` in the `omp` 
