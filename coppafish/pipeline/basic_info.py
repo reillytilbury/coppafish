@@ -404,6 +404,11 @@ def set_basic_info_new(config: dict) -> NotebookPage:
         nbp.use_z.sort()
     # This has not been assigned yet but now we can be sure that use_z not None!
     nbp.nz = len(nbp.use_z)
+    for i in range(nbp.nz):
+        if i == (nbp.nz - 1):
+            break
+        if abs(nbp.use_z[i] - nbp.use_z[i + 1]) > 1:
+            logging.warn("use_z contains z planes that are not connected. This may cause software instability")
 
     if nbp.use_dyes is None:
         del nbp.use_dyes
