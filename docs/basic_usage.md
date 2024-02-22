@@ -75,7 +75,11 @@ gene_1 1230123
 gene_2 2301230
 gene_3 3012301
 ```
-the names (`gene_0`, `gene_1`, ...) can be changed.
+the names (`gene_0`, `gene_1`, ...) can be changed. Do not assign any genes a constant gene code, e.g. `0000000`. For 
+more details on how the codes can be generated, see coppafish's gene code generator `reed_solomon_codes` in 
+[`coppafish/utils/base.py`](https://github.com/reillytilbury/coppafish/blob/alpha/coppafish/utils/base.py). Also, see 
+[wikipedia](https://en.wikipedia.org/wiki/Reed%E2%80%93Solomon_error_correction) for how gene code selection is 
+optimised.
 
 ### Configuration
 
@@ -113,7 +117,9 @@ rounds. `dye_names` does not have to be set explicitly if `n_seq_channels == n_d
 fraction of the tile in x (y) dimension that is overlapping between adjacent tiles, typically `0.1-0.15`. More details 
 about every config variable can be found at 
 <a href="https://github.com/reillytilbury/coppafish/blob/alpha/coppafish/setup/settings.default.ini" target="_blank">
-`coppafish/setup/settings.default.ini`</a> in the source code.
+`coppafish/setup/settings.default.ini`</a> in the source code. `use_z` contains all selected z planes, they should all 
+be adjacent planes. It is recommended to use microscopic images where the middle z plane is roughly the brightest for 
+best performance; this can be configured by changing the selected z planes in `use_z`.
 
 ## Running
 

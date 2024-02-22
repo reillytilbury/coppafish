@@ -7,10 +7,7 @@ overlay in the Viewer for [diagnostics](diagnostics.md).
 
 * Gene code - A sequence of dyes that are assigned to a gene type for each round. Each gene type has a unique gene 
 code. For example, if the dyes are labelled `0, 1, 2` and there are 2 sequencing rounds, some example gene codes are 
-`0, 1` (i.e. dye `0` in first round, dye `1` in second round), `1, 2`, `0, 2`. For more details on how the codes can be 
-generated, see our own gene code generator `reed_solomon_codes` in 
-[`coppafish/utils/base.py`](https://github.com/reillytilbury/coppafish/blob/alpha/coppafish/utils/base.py). Also, see 
-[wikipedia](https://en.wikipedia.org/wiki/Reed%E2%80%93Solomon_error_correction).
+`0, 1` (i.e. dye `0` in first round, dye `1` in second round), `1, 2`, `0, 2`.
 
 * Notebook - A write-once[^1] compressed file that stores all important outputs from coppafish. The notebook is used 
 to plot many [diagnostics](diagnostics.md). A notebook can be loaded by 
