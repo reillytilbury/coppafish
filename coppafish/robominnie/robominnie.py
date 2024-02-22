@@ -997,7 +997,7 @@ class RoboMinnie:
         # Remove any large spaces in the config contents
         config_file_contents = config_file_contents.replace("  ", "")
 
-        self.config_filepath = os.path.join(output_dir, "config.ini")
+        self.config_filepath = os.path.join(output_dir, "robominnie.ini")
         with open(self.config_filepath, "w") as f:
             f.write(config_file_contents)
 
