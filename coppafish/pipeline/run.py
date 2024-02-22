@@ -300,6 +300,11 @@ def run_register(nb: Notebook) -> None:
         )
         nb += nbp
         nb += nbp_debug
+    else:
+        logging.warn(utils.warnings.NotebookPageWarning("register"))
+        logging.warn(utils.warnings.NotebookPageWarning("register_debug"))
+    if not nb.basic_info.use_preseq:
+        return
     reg_images_dir = os.path.join(nb.file_names.output_dir, "reg_images")
     if not os.path.isdir(reg_images_dir) or len(os.listdir(reg_images_dir)) == 0:
         # Save reg images
@@ -324,9 +329,6 @@ def run_register(nb: Notebook) -> None:
                     nb, t, nb.basic_info.anchor_round, round_registration_channel
                 )
             register.preprocessing.generate_reg_images(nb, t, nb.basic_info.anchor_round, nb.basic_info.anchor_channel)
-    else:
-        logging.warn(utils.warnings.NotebookPageWarning("register"))
-        logging.warn(utils.warnings.NotebookPageWarning("register_debug"))
 
 
 def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None:
