@@ -302,7 +302,7 @@ def run_register(nb: Notebook) -> None:
             nb.filter,
             nb.find_spots,
             config["register"],
-            pre_seq_blur_radius=config["extract"]["pre_seq_blur_radius"],
+            pre_seq_blur_radius=config["filter"]["pre_seq_blur_radius"],
         )
         nb += nbp
         nb += nbp_debug

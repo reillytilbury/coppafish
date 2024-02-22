@@ -63,7 +63,6 @@ def register(
 
     # Load in registration data from previous runs of the software
     registration_data = preprocessing.load_reg_data(nbp_file, nbp_basic)
-    uncompleted_tiles = np.setdiff1d(use_tiles, registration_data["round_registration"]["tiles_completed"])
 
     # Part 1: Channel registration
     if registration_data["channel_registration"]["transform"].max() == 0:
@@ -86,7 +85,7 @@ def register(
                 preprocessing.zyx_to_yxz_affine(A=cam_transform[cam_idx]))
 
     # Part 2: Round registration
-    for t in tqdm(uncompleted_tiles, desc='Optical Flow on uncompleted tiles', total=len(uncompleted_tiles)):
+    for t in tqdm(use_tiles, desc='Optical Flow on uncompleted tiles', total=len(use_tiles)):
         # Load in the anchor image and the round images. Note that here anchor means anchor round, not necessarily
         # anchor channel
         anchor_image = preprocessing.yxz_to_zyx(
@@ -114,26 +113,15 @@ def register(
                 )
             )
             # Now run the registration algorithm on this tile and round
-            kernel_dir = None
-            round_reg_data = register_base.optical_flow_register(target=round_image, base=anchor_image,
-                                                                 upsample_factor=upsample_factor,
-                                                                 window_radius=config["window_radius"],
-                                                                 smooth_sigma=config["smooth_sigma"],
-                                                                 smooth_threshold=config["smooth_thresh"],
-                                                                 clip_val=config["flow_clip"])
-            # Now save the data
-            warp_dir = os.path.join(nbp_file.output_dir, "warps")
-            folders = ['raw', 'corr', 'smooth']
-            # add folders if they don't exist
-            if not os.path.exists(warp_dir):
-                os.makedirs(warp_dir)
-            for folder in folders:
-                if not os.path.exists(os.path.join(warp_dir, folder)):
-                    os.makedirs(os.path.join(warp_dir, folder))
-            # save the warps
-                save_location = os.path.join(warp_dir, folder, f"t{t}_r{r}.npy")
-                np.save(save_location, round_reg_data[f"warp_{folder}"])
-            del round_reg_data
+            register_base.optical_flow_register(target=round_image, base=anchor_image,
+                                                upsample_factor=upsample_factor,
+                                                window_radius=config["window_radius"],
+                                                smooth_sigma=config["smooth_sigma"],
+                                                smooth_threshold=config["smooth_thresh"],
+                                                clip_val=config["flow_clip"],
+                                                output_dir=os.path.join(nbp_file.output_dir, "flow"),
+                                                file_name=f"t{t}_r{r}.npy",
+                                                )
         # Now append tile number to the registration data, then save to file
         registration_data["round_registration"]["tiles_completed"].append(t)
         # Save the data to file
@@ -154,10 +142,10 @@ def register(
                 nbp_find_spots.spot_yxz, t, nbp_basic.anchor_round, nbp_basic.anchor_channel, nbp_find_spots.spot_no
             )
             for r in use_rounds:
-                warp_loc = os.path.join(nbp_file.output_dir, "warps", "smooth", f"t{t}_r{r}.npy")
-                warp_tr = np.load(warp_loc)
-                warp_tr = preprocessing.warp_zyx_to_yxz(warp_tr)
-                ref_spots_t = preprocessing.apply_warp(warp=warp_tr, points=ref_spots_t_ambient)
+                flow_loc = os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy")
+                # convert flow to yxz and invert
+                flow_tr = -preprocessing.flow_zyx_to_yxz(np.load(flow_loc, mmap_mode='r'))
+                ref_spots_t = preprocessing.apply_flow(flow=flow_tr, points=ref_spots_t_ambient)
                 for c in use_channels:
                     # Only do ICP on non-degenerate tiles with more than ~ 100 spots
                     if nbp_find_spots.spot_no[t, r, c] < config["icp_min_spots"]:
@@ -198,15 +186,18 @@ def register(
     nbp_debug.converged = registration_data["icp"]["converged"]
 
     # first, let us blur the pre-seq round images
-    if nbp_basic.use_preseq:
-        if pre_seq_blur_radius is None:
-            pre_seq_blur_radius = 3
-        for t, c in itertools.product(use_tiles, use_channels):
-            image_preseq = tiles_io.load_image(
-                nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=nbp_basic.pre_seq_round, c=c, suffix="_raw")
-            image_preseq = scipy.ndimage.gaussian_filter(image_preseq, pre_seq_blur_radius)
-            tiles_io.save_image(
-                nbp_file, nbp_basic, nbp_extract.file_type, image_preseq, t=t, r=nbp_basic.pre_seq_round, c=c)
+    # if nbp_basic.use_preseq:
+    #     if pre_seq_blur_radius is None:
+    #         pre_seq_blur_radius = 3
+    #     for t, c in tqdm(itertools.product(use_tiles, use_channels), total=len(use_tiles) * len(use_channels),
+    #                      desc="Blurring pre-seq round images"):
+    #         image_preseq = tiles_io.load_image(
+    #             nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=nbp_basic.pre_seq_round, c=c, suffix="_raw")
+    #         image_preseq = scipy.ndimage.gaussian_filter(image_preseq, pre_seq_blur_radius)
+    #         image_preseq = image_preseq.astype(np.int32)
+    #         image_preseq = image_preseq - nbp_basic.tile_pixel_value_shift
+    #         tiles_io.save_image(
+    #             nbp_file, nbp_basic, nbp_extract.file_type, image_preseq, t=t, r=nbp_basic.pre_seq_round, c=c)
 
     # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
     # fluorescence
@@ -215,6 +206,7 @@ def register(
         r_pre = nbp_basic.pre_seq_round
         use_rounds = nbp_basic.use_rounds
         mid_z = len(nbp_basic.use_z) // 2
+        icp_correction = nbp.icp_correction
         for t, c in tqdm(
             itertools.product(use_tiles, use_channels),
             desc="Computing background scale factors",
@@ -225,6 +217,7 @@ def register(
             image_preseq = image_preseq.astype(np.int32)
             image_preseq = image_preseq - nbp_basic.tile_pixel_value_shift
             image_preseq = image_preseq.astype(np.float32)
+            image_preseq = preprocessing.yxz_to_zyx(image_preseq)
             # load in the warp for the pre-seq round
             round_warp = np.load(os.path.join(nbp.warp_dir, "smooth", f"t{t}_r{r_pre}.npy"))
             channel_transform = preprocessing.yxz_to_zyx_affine(icp_correction[t, r_pre, c])

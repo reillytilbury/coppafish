@@ -46,7 +46,7 @@ def load_reg_data(nbp_file: NotebookPage, nbp_basic: NotebookPage):
     else:
         n_tiles, n_rounds, n_channels = nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.n_extra_rounds, \
             nbp_basic.n_channels
-        round_registration = {'tiles_completed': [], 'warp_directory': os.path.join(nbp_file.output_dir, 'warps')}
+        round_registration = {'flow_dir': os.path.join(nbp_file.output_dir, 'flow')}
         channel_registration = {'transform': np.zeros((n_channels, 4, 3))}
         registration_data = {'round_registration': round_registration,
                              'channel_registration': channel_registration,
@@ -344,6 +344,8 @@ def merge_subvols(position, subvol):
 
     # identify overlapping regions
     overlapping_pixels = np.argwhere(neighbour_im > 1)
+    if len(overlapping_pixels) == 0:
+        return merged
     centre_dist = np.linalg.norm(overlapping_pixels[:, None, :] - centre[None, :, :], axis=2)
     # get the index of the closest centre
     closest_centre = np.argmin(centre_dist, axis=1)
@@ -430,37 +432,22 @@ def window_image(image: np.ndarray) -> np.ndarray:
     return image
 
 
-def invert_warp(warp: np.ndarray) -> np.ndarray:
-    """
-    Invert a warp.
-
-    Args:
-        warp: warp to invert. (3, n
-
-    Returns:
-        warp: inverted warp.
-    """
-    nz, ny, nx = warp.shape[1:]
-    coords = np.array(np.meshgrid(range(nz), range(ny), range(nx), indexing='ij'))
-    flow = warp - coords
-    flow = -flow
-    warp = flow + coords
-    return warp
-
-
 def compose_warps(warp_a: np.ndarray, warp_b: np.ndarray, order: int = 0) -> np.ndarray:
     """
     Compose two warps.
 
     Args:
-        warp_a: n_z x n_y x n_x ndarray of shifts. This is the warp to be applied first.
-        warp_b: nz x ny x nx ndarray of shifts. This is the warp to be applied second.
+        warp_a: 3 x n_z x n_y x n_x ndarray of shifts. This is the warp to be applied first.
+        warp_b: 3 x nz x ny x nx ndarray of shifts. This is the warp to be applied second.
         order: order of the interpolation. Default: 0.
 
     Returns:
         warp: composed warp.
     """
-    warp = skimage.transform.warp(warp_b, warp_a, order=order, mode='constant', cval=0, preserve_range=True)
+    warp = np.zeros_like(warp_a)
+    for i in range(3):
+        warp[i] = skimage.transform.warp(warp_b[i], warp_a[i], order=order, mode='constant', cval=0,
+                                         preserve_range=True)
     return warp
 
 
@@ -487,26 +474,27 @@ def affine_transform_to_warp(affine: np.ndarray, shape: Tuple[int, int, int]) ->
     return warp
 
 
-def warp_zyx_to_yxz(warp_zyx: np.ndarray) -> np.ndarray:
+def flow_zyx_to_yxz(flow_zyx: np.ndarray) -> np.ndarray:
     """
-    Convert a warp from zyx to yxz.
+    Convert a flow from zyx to yxz.
     Args:
-        warp_zyx: np.ndarray of shape (3, nz, ny, nx) of warps in zyx coords.
+        flow_zyx: np.ndarray of shape (3, nz, ny, nx) of flows in zyx coords.
 
     Returns:
-        warp_new: np.ndarray of shape (3, ny, nx, nz)
+        flow_yxz: np.ndarray of shape (3, ny, nx, nz)
     """
-    warp_yxz = np.moveaxis(warp_zyx, 1, -1)
-    warp_yxz = np.roll(warp_yxz, -1, axis=0)
-    return warp_yxz
+    flow_yxz = np.moveaxis(flow_zyx, 1, -1)
+    flow_yxz = np.roll(flow_yxz, -1, axis=0)
+    return flow_yxz
 
 
-def apply_warp(warp: np.ndarray, points: np.ndarray, ignore_oob: bool = True) -> np.ndarray:
+def apply_flow(flow: np.ndarray, points: np.ndarray, ignore_oob: bool = True) -> np.ndarray:
     """
-    Apply a warp to a set of points.
+    Apply a flow to a set of points. Note that this is applying forward warping, meaning that the points are moved to
+    their location in the warp array.
 
     Args:
-        warp: warp to apply. ( 3 x ny x nx x nz)
+        flow (np.ndarray): flow to apply. (3 x nz x ny x nx)
         points: points to apply the warp to. (n_points x 3 in yxz coords)
         ignore_oob: remove points that go out of bounds. Default: True.
 
@@ -514,8 +502,8 @@ def apply_warp(warp: np.ndarray, points: np.ndarray, ignore_oob: bool = True) ->
         new_points: new points.
     """
     y_indices, x_indices, z_indices = points.T.astype(int)
-    new_points = warp[:, y_indices, x_indices, z_indices].T
-    ny, nx, nz = warp.shape[1:]
+    new_points = points + flow[:, y_indices, x_indices, z_indices].T
+    ny, nx, nz = flow.shape[1:]
     if ignore_oob:
         oob = (new_points[:, 0] < 0) | (new_points[:, 0] >= ny) | (new_points[:, 1] < 0) | (new_points[:, 1] >= nx) | \
               (new_points[:, 2] < 0) | (new_points[:, 2] >= nz)
