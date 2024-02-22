@@ -266,7 +266,8 @@ def register(
     if nbp_basic.use_preseq:
         if pre_seq_blur_radius is None:
             pre_seq_blur_radius = 3
-        for t, c in itertools.product(use_tiles, use_channels):
+        has_dapi = nbp_basic.dapi_channel is not None
+        for t, c in itertools.product(use_tiles, use_channels + has_dapi * [nbp_basic.dapi_channel]):
             image_preseq = tiles_io.load_image(
                 nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=nbp_basic.pre_seq_round, c=c, suffix="_raw"
             )

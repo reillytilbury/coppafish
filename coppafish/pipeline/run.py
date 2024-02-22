@@ -303,8 +303,6 @@ def run_register(nb: Notebook) -> None:
     else:
         logging.warn(utils.warnings.NotebookPageWarning("register"))
         logging.warn(utils.warnings.NotebookPageWarning("register_debug"))
-    if not nb.basic_info.use_preseq:
-        return
     reg_images_dir = os.path.join(nb.file_names.output_dir, "reg_images")
     if not os.path.isdir(reg_images_dir) or len(os.listdir(reg_images_dir)) == 0:
         # Save reg images

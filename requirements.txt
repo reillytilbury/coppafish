@@ -83,6 +83,7 @@ psutil==5.9.8
 psygnal==0.9.5
 ptyprocess==0.7.0
 pure-eval==0.2.2
+pyarrow==15.0.0
 pyconify==0.1.6
 pydantic==1.10.13
 pydantic-compat==0.1.2
