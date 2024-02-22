@@ -76,6 +76,7 @@ def register(
 
     # Part 1: Initial affine transform
     # Start with channel registration
+    logging.debug("Compute channel transforms started")
     pbar = tqdm(total=len(uncompleted_tiles))
     pbar.set_description(f"Running initial channel registration")
     if registration_data["channel_registration"]["transform"].max() == 0:
@@ -95,8 +96,10 @@ def register(
         for c in use_channels:
             cam_idx = cameras.index(nbp_basic.channel_camera[c])
             registration_data["channel_registration"]["transform"][c] = cam_transform[cam_idx]
+    logging.debug("Compute channel transforms complete")
 
     # round registration
+    logging.debug("Compute round transforms started")
     with tqdm(total=len(uncompleted_tiles)) as pbar:
         pbar.set_description(f"Running initial round registration on all tiles")
         for t in uncompleted_tiles:
@@ -162,8 +165,10 @@ def register(
             with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
                 pickle.dump(registration_data, f)
             pbar.update(1)
+    logging.debug("Compute round transforms complete")
 
     # Part 2: Regularisation
+    logging.info("Regularising transforms")
     registration_data = register_base.regularise_transforms(
         registration_data=registration_data,
         tile_origin=np.roll(tile_origin, 1, axis=1),
@@ -173,6 +178,7 @@ def register(
     )
 
     # Now combine all of these into single sub-vol transform array via composition
+    logging.info("Combining sub-volume transforms")
     for t, r, c in itertools.product(
         use_tiles, nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq, use_channels
     ):
@@ -187,6 +193,7 @@ def register(
         pickle.dump(registration_data, f)
 
     # Part 3: ICP
+    logging.info("Running Iterative Closest Point (ICP)")
     if "icp" not in registration_data.keys():
         # Initialise variables for ICP step
         icp_transform = np.zeros((n_tiles, n_rounds + nbp_basic.use_anchor + nbp_basic.use_preseq, n_channels, 4, 3))
@@ -263,6 +270,7 @@ def register(
     nbp.transform = transform
 
     # first, let us blur the pre-seq round images
+    logging.info("Blurring presequence round images")
     if nbp_basic.use_preseq:
         if pre_seq_blur_radius is None:
             pre_seq_blur_radius = 3
@@ -278,6 +286,7 @@ def register(
 
     # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
     # fluorescence
+    logging.debug("Compute background scale factors started")
     if nbp_basic.use_preseq:
         bg_scale = np.zeros((n_tiles, n_rounds, n_channels))
         r_pre = nbp_basic.pre_seq_round
@@ -319,6 +328,7 @@ def register(
         # Now add the bg_scale to the nbp_filter page. To do this we need to delete the bg_scale attribute.
         nbp_filter.finalized = False
         del nbp_filter.bg_scale
+        logging.debug("Compute background scale factors complete")
         nbp_filter.bg_scale = bg_scale
         nbp_filter.finalized = True
 
