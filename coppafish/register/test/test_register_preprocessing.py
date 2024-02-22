@@ -1,14 +1,14 @@
-from coppafish.register import preprocessing as reg_pre
+import numpy as np
 from skimage import data
 
-import numpy as np
+from coppafish.utils import tiles_io
 
 
 def test_apply_image_shift():
     rng = np.random.RandomState(0)
     im = rng.randint(np.iinfo(np.uint16).max, size=(2, 3, 4, 5))
-    output = reg_pre.offset_pixels_by(im, -5)
-    assert output.dtype.name == 'int32', "Expected output to be of type `np.int32`"
+    output = tiles_io.offset_pixels_by(im, -5)
+    assert output.dtype.name == "int32", "Expected output to be of type `np.int32`"
     assert (output == (im.astype(np.int32) - 5)).all(), "Unexpected output after image shift"
 
 
@@ -52,7 +52,7 @@ def test_yxz_to_zyx():
 def test_n_matches_to_frac_matches():
     # Setup data
     rng = np.random.RandomState(0)
-    n_matches = rng.randint(0, 10, size=(3,4,10))
+    n_matches = rng.randint(0, 10, size=(3, 4, 10))
     spot_no = np.ones((3, 4)) * 10
     # Test the function
     frac_matches = reg_pre.n_matches_to_frac_matches(n_matches, spot_no)
@@ -78,18 +78,10 @@ def test_split_3d_image():
 
 def test_compose_affine():
     # Setup data
-    matrix1 = 2 * np.array([[1, 0, 0, 0],
-                            [0, 1, 0, 0],
-                            [0, 0, 1, 0]])
-    matrix2 = 3 * np.array([[1, 0, 0, 0],
-                            [0, 1, 0, 0],
-                            [0, 0, 1, 0]])
-    matrix3 = np.array([[1, 0, 0, 1],
-                        [0, 1, 0, 2],
-                        [0, 0, 1, 3]])
-    matrix4 = np.array([[1, 0, 0, 4],
-                        [0, 1, 0, 5],
-                        [0, 0, 1, 6]])
+    matrix1 = 2 * np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]])
+    matrix2 = 3 * np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]])
+    matrix3 = np.array([[1, 0, 0, 1], [0, 1, 0, 2], [0, 0, 1, 3]])
+    matrix4 = np.array([[1, 0, 0, 4], [0, 1, 0, 5], [0, 0, 1, 6]])
     # Test the function
     scaled_matrix = reg_pre.compose_affine(matrix1, matrix2)
     summed_matrix = reg_pre.compose_affine(matrix3, matrix4)
@@ -98,9 +90,7 @@ def test_compose_affine():
     assert summed_matrix.shape == (3, 4)
     # Test that the values are correct
     assert np.allclose(scaled_matrix, 6 * np.eye(3, 4))
-    assert np.allclose(summed_matrix, np.array([[1, 0, 0, 5],
-                                                [0, 1, 0, 7],
-                                                [0, 0, 1, 9]]))
+    assert np.allclose(summed_matrix, np.array([[1, 0, 0, 5], [0, 1, 0, 7], [0, 0, 1, 9]]))
 
 
 def test_invert_affine():
@@ -116,34 +106,24 @@ def test_invert_affine():
 
 def test_yxz_to_zyx_affine():
     # set up data
-    matrix_yxz = np.array([[1, 0, 0],
-                           [0, 2, 0],
-                           [0, 0, 3],
-                           [1, 2, 3]])
+    matrix_yxz = np.array([[1, 0, 0], [0, 2, 0], [0, 0, 3], [1, 2, 3]])
     # convert to zyx
     matrix_zyx = reg_pre.yxz_to_zyx_affine(matrix_yxz)
     # check that the shape is correct
     assert matrix_zyx.shape == (3, 4)
     # check that the values are correct
-    assert np.allclose(matrix_zyx, np.array([[3, 0, 0, 3],
-                                             [0, 1, 0, 1],
-                                             [0, 0, 2, 2]]))
+    assert np.allclose(matrix_zyx, np.array([[3, 0, 0, 3], [0, 1, 0, 1], [0, 0, 2, 2]]))
 
 
 def test_zyx_to_yxz_affine():
     # set up data
-    matrix_zyx = np.array([[3, 0, 0, 3],
-                           [0, 1, 0, 1],
-                           [0, 0, 2, 2]]).astype(float)
+    matrix_zyx = np.array([[3, 0, 0, 3], [0, 1, 0, 1], [0, 0, 2, 2]]).astype(float)
     # convert to zyx
     matrix_yxz = reg_pre.zyx_to_yxz_affine(matrix_zyx)
     # check that the shape is correct
     assert matrix_yxz.shape == (4, 3)
     # check that the values are correct
-    assert np.allclose(matrix_yxz, np.array([[1, 0, 0],
-                                             [0, 2, 0],
-                                             [0, 0, 3],
-                                             [1, 2, 3]]))
+    assert np.allclose(matrix_yxz, np.array([[1, 0, 0], [0, 2, 0], [0, 0, 3], [1, 2, 3]]))
 
 
 def test_custom_shift():
@@ -162,8 +142,7 @@ def test_merge_subvols():
     # set up data
     rng = np.random.RandomState(0)
     subvols = rng.rand(2, 3, 4, 5)
-    pos = np.array([[0, 0, 0],
-                    [10, 10, 10]])
+    pos = np.array([[0, 0, 0], [10, 10, 10]])
     subvol_3 = np.ones((3, 4, 5))
     pos_3 = np.array([1, 1, 1])
     # merge subvols
@@ -174,4 +153,3 @@ def test_merge_subvols():
     # check that the values are correct
     assert np.allclose(merged[:3, :4, :5], subvols[0])
     assert np.allclose(merged[10:, 10:, 10:], subvols[1])
-

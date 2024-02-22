@@ -111,11 +111,9 @@ def register(
                     t=t,
                     r=nbp_basic.anchor_round,
                     c=round_registration_channel,
-                    apply_shift=False,
+                    apply_shift=True,
                 )
             )
-            if not (use_dapi):
-                anchor_image = preprocessing.offset_pixels_by(anchor_image, -nbp_basic.tile_pixel_value_shift)
             use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
             # split the rounds into two chunks, as we can't fit all of them into memory at once
             round_chunks = [use_rounds[: len(use_rounds) // 2], use_rounds[len(use_rounds) // 2 :]]
@@ -147,7 +145,6 @@ def register(
                                     r=r,
                                     c=round_registration_channel,
                                     suffix="_raw" if r == nbp_basic.pre_seq_round else "",
-                                    apply_shift=False,
                                 ),
                             )
                         )
