@@ -1,6 +1,7 @@
 import numpy as np
 from skimage import data
 
+from coppafish.register import preprocessing as reg_pre
 from coppafish.utils import tiles_io
 
 
