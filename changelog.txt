@@ -1,4 +1,5 @@
 2024/02/19 Alpha Update (v0.10.0):
+ * Default Wiener deconvolution configuration in the filter stage is improved.
  * Pytorch GPU out of memory fix attempt.
  * Docs + logo update for coppafish.
  * Detecting spots is less memory intensive.
