@@ -2,6 +2,7 @@
  * Pytorch GPU out of memory fix attempt.
  * Docs + logo update for coppafish.
  * Detecting spots is less memory intensive.
+ * New config variable in filter called "psf_max_spots". The default is 5,000, the same as previous versions.
 
 
 2024/02/15 Alpha Update (v0.9.2):

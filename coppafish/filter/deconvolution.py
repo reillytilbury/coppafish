@@ -43,7 +43,7 @@ def get_psf_spots(
     intensity_auto_param: float,
     isolation_dist: float,
     shape: List[int],
-    maximum_spots: Optional[int] = None,
+    max_spots: Optional[int] = None,
 ) -> Tuple[np.ndarray, float, List[int]]:
     """
     Finds spot_shapes about spots found in raw data, average of these then used for psf.
@@ -66,7 +66,7 @@ def get_psf_spots(
         intensity_auto_param: If ```intensity_thresh = None``` so is automatically computed, it is done using this.
         isolation_dist: Spots are isolated if nearest neighbour is further away than this.
         shape: ```int [y_diameter, x_diameter, z_diameter]```. Desired size of image about each spot.
-        maximum_spots (int, optional): maximum number of psf spots to get. Default: no maximum.
+        max_spots (int, optional): maximum number of psf spots to use. Default: no limit.
 
     Returns:
         - ```spot_images``` - ```int [n_spots x y_diameter x x_diameter x z_diameter]```.
@@ -103,12 +103,12 @@ def get_psf_spots(
             isolation_dist,
         )
         chosen_spots = np.logical_and(isolated, not_single_pixel)
-        if maximum_spots is not None and np.sum(chosen_spots) > maximum_spots:
+        if max_spots is not None and np.sum(chosen_spots) > max_spots:
             n_isolated_spots = 0
             for i in range(chosen_spots.shape[0]):
-                if n_isolated_spots == maximum_spots:
+                if n_isolated_spots == max_spots:
                     chosen_spots[i:] = False
-                    n_spots = maximum_spots
+                    n_spots = max_spots
                     break
                 if chosen_spots[i]:
                     n_isolated_spots += 1

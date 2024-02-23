@@ -107,6 +107,7 @@ _options = {
         "psf_intensity_thresh": "maybe_number",
         "psf_isolation_dist": "number",
         "psf_min_spots": "int",
+        "psf_max_spots": "maybe_int",
         "psf_shape": "list_int",
         "psf_annulus_width": "number",
         "wiener_constant": "number",
