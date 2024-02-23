@@ -80,12 +80,27 @@ def detect_spots(
 
     consider_intensity = image[consider_yxz]
     consider_yxz = np.array(consider_yxz)
+    logging.debug(f"{consider_yxz.shape=}")
     if consider_yxz.max() <= np.iinfo(np.int32).max:
         consider_yxz = consider_yxz.astype(np.int32)
-
-    logging.debug(f"{consider_yxz.shape=}")
+    # Sometimes consider_yxz can have too many spots in it to be run all at once through get_local_maxima without
+    # running out of memory, so it is separated into smaller batches and then recombined after.
+    max_batch_size = np.floor(5_000_000 * utils.system.get_available_memory() / 64.5).astype(int)
+    logging.debug(f"{max_batch_size=}")
     paddings = np.array([pad_size_y, pad_size_x, pad_size_z])[: image.ndim]
-    keep = get_local_maxima(image, se_shifts, paddings, consider_yxz, consider_intensity)
+    keep = np.zeros(n_consider, dtype=bool)
+    final_i = np.ceil(n_consider / max_batch_size) - 1
+    for i in range(np.ceil(n_consider / max_batch_size).astype(int)):
+        index_start = i * max_batch_size
+        if i == final_i:
+            index_end = n_consider
+        else:
+            index_end = (i + 1) * max_batch_size
+        consider_yxz_batch = consider_yxz[index_start:index_end]
+        consider_intensity_batch = consider_intensity[index_start:index_end]
+        keep[index_start:index_end] = get_local_maxima(
+            image, se_shifts, paddings, consider_yxz_batch, consider_intensity_batch
+        )
     if remove_duplicates:
         peak_intensity = np.round(consider_intensity[keep]).astype(int)
     else:
