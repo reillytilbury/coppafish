@@ -1,4 +1,4 @@
-2024/02/19 Alpha Update (v0.9.3):
+2024/02/19 Alpha Update (v0.10.0):
  * Pytorch GPU out of memory fix attempt.
  * Docs + logo update for coppafish.
  * Detecting spots is less memory intensive.
