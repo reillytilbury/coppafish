@@ -304,7 +304,8 @@ class RoboMinnie:
         Args:
             noise_mean_amplitude (float, optional): Mean amplitude of random noise. Default: 0.
             noise_std (float): Standard deviation/width of random noise.
-            noise_type (str('normal' or 'uniform'), optional): Type of random noise to apply. Default: 'normal'.
+            noise_type (str('normal', 'uniform', or 'poisson'), optional): Type of random noise to apply. Default:
+                'normal'.
             include_anchor (bool, optional): Whether to apply random noise to anchor image. Default: true.
             include_presequence (bool, optional): Whether to apply random noise to presequence rounds. Default: true.
             include_dapi (bool, optional): Whether to apply random noise to DAPI image. Default: true.
@@ -322,7 +323,7 @@ class RoboMinnie:
 
             Args:
                 _rng (Generator): Random number generator.
-                _noise_type (str): Type of noise ('normal' or 'uniform').
+                _noise_type (str): Type of noise ('normal', 'uniform', or 'poisson').
                 _noise_mean_amplitude (float): Mean or center of the noise distribution.
                 _noise_std (float): Standard deviation or spread of the noise distribution.
                 _size (tuple of int, int, int): Size of the noise array.
@@ -339,6 +340,8 @@ class RoboMinnie:
                 return _rng.uniform(
                     _noise_mean_amplitude - _noise_std / 2, _noise_mean_amplitude + _noise_std / 2, _size
                 )
+            elif _noise_type == "poisson":
+                return _noise_std * (rng.poisson(size=_size) + _noise_mean_amplitude - 1)
             else:
                 raise ValueError(f"Unknown noise type: {_noise_type}")
 
@@ -357,7 +360,6 @@ class RoboMinnie:
                 rng, noise_type, noise_mean_amplitude, noise_std, self.anchor_shape
             )[self.anchor_channel]
             np.add(self.anchor_image, anchor_noise, out=self.anchor_image)
-            del anchor_noise
         if include_presequence and self.include_presequence:
             presequence_noise[(self.dapi_channel + 1) :] = _generate_noise(
                 rng, noise_type, noise_mean_amplitude, noise_std, self.presequence_shape
@@ -372,6 +374,7 @@ class RoboMinnie:
             presequence_noise[self.dapi_channel] = _generate_noise(
                 rng, noise_type, noise_mean_amplitude, noise_std, self.presequence_shape
             )[self.dapi_channel]
+        del anchor_noise
 
         # Add new random noise to each pixel
         np.add(self.image, sequence_noise, out=self.image)
@@ -689,7 +692,7 @@ class RoboMinnie:
             omp_initial_intensity_thresh_percentile (float, optional): percentile of the absolute intensity of all
                 pixels in the mid z-plane of the central tile. Used as a threshold for pixels to decide what to apply
                 OMP on. A higher number leads to stricter picking of pixels. Default: `90`.
-            register_with_dapi (bool, optional): apply channel registration using the DAPI channel, if available. 
+            register_with_dapi (bool, optional): apply channel registration using the DAPI channel, if available.
                 Default: true.
         """
         # Same dtype as ND2s
