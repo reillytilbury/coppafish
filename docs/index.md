@@ -1,14 +1,16 @@
 ## Coppafish
 
 Coppafish is an open source data analysis software for COmbinatorial Padlock-Probe-Amplified Fluorescence In Situ 
-Hybridization (coppafish) datasets. A series of 3D microscope images are arranged in tiles, rounds and channels. For 
-each sequencing round, every considered gene is fluoresced by a dye. By the end of all rounds, each gene has a unique 
-barcode sequence of dyes, called the gene code. Some vocabulary might be unfamiliar, please see the 
-[glossary](glossary.md) for reference.
+Hybridization (coppafish) datasets. A series of 3D microscope images are arranged into tiles, rounds and channels. For 
+each sequencing round, every considered gene is fluoresced by a dye. By the end of all rounds, each gene has a unique, 
+barcode-like sequence of dyes, called the gene code. For more details about coppafish's methodology, see the 
+[method](method.md). See [installation](#installation) on how to install our software, and [usage](basic_usage.md) to 
+run coppafish on your dataset. Some vocabulary might be unfamiliar, please see the [glossary](glossary.md) for 
+reference.
 
 <figure markdown="span">
   ![Image title](images/coppafish_simple_schematic.png){ width="400" }
-  <figcaption>Gene calling schematic</figcaption>
+  <figcaption>Gene calling on a tile.</figcaption>
 </figure>
 
 ## Installation
