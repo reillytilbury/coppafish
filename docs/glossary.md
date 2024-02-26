@@ -10,9 +10,9 @@ But, a dye can have "bleed through", i.e. brightness in multiple channels from t
 recommended). The DAPI is not essential for coppafish but is recommended as a debugging tool, where it can be used as 
 an overlay in the [Viewer](diagnostics.md#viewer).
 
-* Gene code - A sequence of dyes that are assigned to a gene for each sequencing round. Each gene type has a unique 
-gene code. For example, if the dyes are labelled `0, 1, 2` and there are 2 sequencing rounds, some example gene codes 
-are `0, 1` (i.e. dye `0` in first round, dye `1` in second round), `1, 2`, `0, 2`.
+* Gene code - A sequence of dyes that are assigned to a gene for each sequencing round. Each gene has a unique gene 
+code. For example, if the dyes are labelled `0, 1, 2` and there are 2 sequencing rounds, some example gene codes are 
+`0, 1` (i.e. dye `0` in first round, dye `1` in second round), `1, 2`, `0, 2`.
 
 * Notebook - A write-once[^1] compressed file that stores all important outputs from coppafish. The notebook is used 
 to plot many [diagnostics](diagnostics.md). A notebook can be loaded by 

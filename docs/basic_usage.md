@@ -67,7 +67,7 @@ with open(file_path, "w") as f:
 
 ### Code book
 
-A code book is a `.txt` file that tells coppafish the expected gene codes for every gene type. An example of a four 
+A code book is a `.txt` file that tells coppafish the expected gene codes for each gene. An example of a four 
 gene code book is
 ```
 gene_0 0123012

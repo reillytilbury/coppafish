@@ -59,14 +59,14 @@ config</a> default file.
 Orthogonal Matching Pursuit (OMP) is the most sophisticated gene calling method used by coppafish, allowing for 
 overlapping genes to be detected. It is an iterative, 
 <a href="https://en.wikipedia.org/wiki/Greedy_algorithm" target="_blank">greedy algorithm</a> that runs on individual 
-pixels in the microscope images. At each OMP iteration, a new gene type is assigned to the pixel. OMP is also 
+pixels in the microscope images. At each OMP iteration, a new gene is assigned to the pixel. OMP is also 
 self-correcting. "Orthogonal" refers to how OMP will re-compute its gene contributions after every iteration by least 
-squares. Background genes[^1] are considered valid gene types in OMP. The iterations stop if:
+squares. Background genes[^1] are considered valid genes in OMP. The iterations stop if:
 
 * `max_genes` in the `omp` config section is reached. 
-* assigning the next best gene type to the pixel does not have a dot product score above `dp_thresh` in the `omp` 
-config. The dot product score is a dot product of the residual pixel intensity in every sequencing round/channel (known 
-as its colour) with the normalised bled codes (see [call spots](#call-spots)).
+* assigning the next best gene to the pixel does not have a dot product score above `dp_thresh` in the `omp` config. 
+The dot product score is a dot product of the residual pixel intensity in every sequencing round/channel (known as its 
+colour) with the normalised bled codes (see [call spots](#call-spots)).
 
 Sometimes, when a gene is chosen by OMP, a very strong residual pixel intensity can be produced when the selected gene 
 is subtracted from the pixel colour. To protect against this, `weight_coef_fit` can be set to true and weighting 
