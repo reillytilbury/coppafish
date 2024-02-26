@@ -21,7 +21,5 @@ def get_spot_intensity(spot_colors: jnp.ndarray) -> jnp.ndarray:
         - We expect spots that are genes to have at least one large intensity value in each round so high spot
             intensity is more indicative of a gene.
     """
-    if (spot_colors <= -15_000).sum() > 0:
-        logging.warn(f"Found spot colors <= -15000")
     # Max over all channels, then median over all rounds
     return jnp.median(jnp.max(spot_colors, axis=2), axis=1)
