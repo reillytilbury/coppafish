@@ -304,8 +304,6 @@ def register(
             mid_z_pre = int(np.clip((mid_z - z_shift_pre) / z_scale_pre, 0, len(nbp_basic.use_z) - 1))
             yxz = [None, None, mid_z_pre]
             image_preseq = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r_pre, c=c, yxz=yxz)
-            image_preseq = image_preseq.astype(np.int32)
-            image_preseq = image_preseq - nbp_basic.tile_pixel_value_shift
             image_preseq = image_preseq.astype(np.float32)
             # we have to load in inverse transform to use scipy.ndimage.affine_transform
             inv_transform_pre_yx = preprocessing.yxz_to_zyx_affine(transform[t, r_pre, c])[1:, 1:]
@@ -317,8 +315,6 @@ def register(
                 mid_z_seq = int(np.clip((mid_z - z_shift_seq) / z_scale_seq, 0, len(nbp_basic.use_z) - 1))
                 yxz = [None, None, mid_z_seq]
                 image_seq = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r, c=c, yxz=yxz)
-                image_seq = image_seq.astype(np.int32)
-                image_seq = image_seq - nbp_basic.tile_pixel_value_shift
                 image_seq = image_seq.astype(np.float32)
                 # we have to load in inverse transform to use scipy.ndimage.affine_transform
                 inv_transform_seq_yx = preprocessing.yxz_to_zyx_affine(transform[t, r, c])[1:, 1:]
