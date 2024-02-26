@@ -44,6 +44,10 @@ markdown_extensions:
       generic: true
   # Footnote support
   - footnotes
+  # Captions and aligned images support
+  - md_in_html
+  # Re-sizeable images
+  - attr_list
 extra_javascript:
   - javascripts/config.js
   - https://polyfill.io/v3/polyfill.min.js?features=es6

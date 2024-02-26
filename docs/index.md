@@ -6,6 +6,11 @@ each sequencing round, every considered gene is fluoresced by a dye. By the end 
 barcode sequence of dyes, called the gene code. Some vocabulary might be unfamiliar, please see the 
 [glossary](glossary.md) for reference.
 
+<figure markdown="span">
+  ![Image title](images/coppafish_simple_schematic.png){ width="400" }
+  <figcaption>Gene calling schematic</figcaption>
+</figure>
+
 ## Installation
 
 ### Prerequisites
