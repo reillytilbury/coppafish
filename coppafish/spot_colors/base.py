@@ -124,7 +124,7 @@ def get_spot_colors(
     if use_bg:
         bg_colours = np.zeros((n_spots, n_use_channels), dtype=np.int32)
     if not nbp_basic.is_3d:
-        # use numpy not jax.numpy as reading in tiff is done in numpy.
+        # use numpy not jax.numpy as reading images outputs to numpy.
         tile_sz = np.asarray([nbp_basic.tile_sz, nbp_basic.tile_sz, 1], dtype=np.int16)
     else:
         tile_sz = np.asarray([nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)], dtype=np.int16)
