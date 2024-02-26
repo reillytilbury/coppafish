@@ -18,9 +18,8 @@ where a new napari tab will be opened.
 ### Description
 
 The greyscale signal in the background is the DAPI (if no DAPI is included in the dataset, then the anchor image is 
-displayed instead); whiter regions indicate cells. Each gene type is given a unique shape and colour, shown in the gene 
-legend. A gene type can be toggled by left clicking on it in the gene legend, right click a gene type to show only that 
-type.
+displayed instead); whiter regions indicate cells. Each gene is given a unique shape and colour, shown in the gene 
+legend. A gene can be toggled by left clicking on it in the gene legend, right click a gene to show only that type.
 
 For help with Viewer hotkeys, press Shift + k. This includes further diagnostic plots built into the Viewer.
 
