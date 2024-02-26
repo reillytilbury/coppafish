@@ -228,6 +228,7 @@ def get_spot_colors(
             yxz_base = yxz_base[good]
         else:
             spot_colors[good] = (spot_colors - bg_colours)[good]
+            spot_colors[~good] = invalid_value
     elif not use_bg:
         good = colours_valid
         if return_in_bounds:
