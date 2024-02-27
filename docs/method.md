@@ -16,9 +16,9 @@ pixel value precision.
 Save all raw data again at the `tile_dir` in the `extract` config section. Coppafish does this for: 
 
 * file compression support.
-* raw data in a universal format that can then be used by multiple versions of our software.
-* more optimised for data retrieval speed. The default file type is using [zarr](https://zarr.readthedocs.io/) arrays, 
-but we also support saving as uncompressed numpy arrays by setting `file_type` to `.npy` in the extract config section.
+* saving raw data in a universal format that can then be used by multiple versions of our software.
+* optimised data retrieval speeds. The default file type is using [zarr](https://zarr.readthedocs.io/) arrays, but we 
+also support saving as uncompressed numpy arrays by setting `file_type` to `.npy` in the extract config section.
 
 Extract also saves metadata inside of the `tile_dir` directory if the raw files are ND2 format.
 
