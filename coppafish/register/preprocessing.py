@@ -432,46 +432,58 @@ def window_image(image: np.ndarray) -> np.ndarray:
     return image
 
 
-def compose_warps(warp_a: np.ndarray, warp_b: np.ndarray, order: int = 0) -> np.ndarray:
+def compose_flows(flow_a: np.ndarray, flow_b: np.ndarray, order: int = 0) -> np.ndarray:
     """
-    Compose two warps.
+    Compose two flows.
 
     Args:
-        warp_a: 3 x n_z x n_y x n_x ndarray of shifts. This is the warp to be applied first.
-        warp_b: 3 x nz x ny x nx ndarray of shifts. This is the warp to be applied second.
+        flow_a: 3 x n_z x n_y x n_x ndarray of shifts. This is the flow to be applied first.
+        flow_b: 3 x nz x ny x nx ndarray of shifts. This is the flow to be applied second.
         order: order of the interpolation. Default: 0.
 
     Returns:
-        warp: composed warp.
+        flow: 3 x nz x ny x nx ndarray of shifts.
     """
+    grid = np.array(np.meshgrid(np.arange(flow_a.shape[1]), np.arange(flow_a.shape[2]), np.arange(flow_a.shape[3]),
+                                indexing='ij')).astype(np.float32)
+    warp_a = grid + flow_a
+    warp_b = grid + flow_b
     warp = np.zeros_like(warp_a)
+    del flow_a, flow_b
+
     for i in range(3):
-        warp[i] = skimage.transform.warp(warp_b[i], warp_a[i], order=order, mode='constant', cval=0,
+        warp[i] = skimage.transform.warp(warp_b[i], warp_a, order=order, mode='constant', cval=0,
                                          preserve_range=True)
-    return warp
+
+    flow = warp - grid
+    return flow
 
 
-def affine_transform_to_warp(affine: np.ndarray, shape: Tuple[int, int, int]) -> np.ndarray:
+def affine_transform_to_flow(affine: np.ndarray, shape: Tuple[int, int, int]) -> np.ndarray:
     """
-    Convert an affine transform to a warp.
+    Convert an affine transform to a flow.
 
     Args:
         affine: 3 x 4 affine transform (zyx).
         shape: shape of the warp. (nz, ny, nx)
 
     Returns:
-        warp: warp.
+        flow: flow. (3 x nz x ny x nx)
     """
     # define and pad the grid
     grid = np.meshgrid(np.arange(shape[0]), np.arange(shape[1]), np.arange(shape[2]), indexing='ij')
-    grid = np.array(grid)
+    grid = np.array(grid, dtype=np.float32)
     grid = grid.reshape(3, -1)
     grid = np.vstack((grid, np.ones(grid.shape[1])))
     # apply the affine transform
     warp = (affine @ grid)[:3]
     # reshape the grid
     warp = warp.reshape(3, *shape)
-    return warp
+    grid = grid[:3].reshape(3, *shape)
+    flow = warp - grid
+    # so that we are consistent, let's make this an inverse warp, meaning we need to negate the flow
+
+    return -flow
 
 
 def flow_zyx_to_yxz(flow_zyx: np.ndarray) -> np.ndarray:
@@ -494,13 +506,16 @@ def apply_flow(flow: np.ndarray, points: np.ndarray, ignore_oob: bool = True) ->
     their location in the warp array.
 
     Args:
-        flow (np.ndarray): flow to apply. (3 x nz x ny x nx)
+        flow (np.ndarray): flow to apply. (3 x nz x ny x nx). In our case, this flow will always be the inverse flow,
+        so we need to apply the negative of the flow to the points.
         points: points to apply the warp to. (n_points x 3 in yxz coords)
         ignore_oob: remove points that go out of bounds. Default: True.
 
     Returns:
         new_points: new points.
     """
+    # invert the flow
+    flow = -flow
     y_indices, x_indices, z_indices = points.T.astype(int)
     new_points = points + flow[:, y_indices, x_indices, z_indices].T
     ny, nx, nz = flow.shape[1:]

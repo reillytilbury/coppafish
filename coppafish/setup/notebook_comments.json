@@ -711,10 +711,10 @@
             "to each imaging round/channel for every tile.",
             "Page added to *Notebook* in *pipeline/register.py*"
         ],
-        "warp_dir": [
+        "flow_dir": [
             "",
             "String",
-            "Directory where the warp files are saved"
+            "Directory where the flow files are saved"
         ],
         "icp_correction": [
             "",

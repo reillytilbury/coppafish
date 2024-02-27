@@ -290,16 +290,13 @@ def optical_flow_register(target: np.ndarray, base: np.ndarray, upsample_factor:
     # down-sample the images
     target_down = target[::upsample_factor[0], ::upsample_factor[1], ::upsample_factor[2]]
     base_down = base[::upsample_factor[0], ::upsample_factor[1], ::upsample_factor[2]]
-    # set the 99the percentile of both images to 1 (important as the algorithm assumes similar intensity distributions)
-    target_down = target_down / np.percentile(target_down, 99)
-    base_down = base_down / np.percentile(base_down, 99)
     clip_val = clip_val / np.array(upsample_factor)
 
     # compute the optical flow
     flow = optical_flow_single(base_down, target_down, window_radius=window_radius, clip_val=clip_val,
-                                          chunks=[1, 4, 4], n_cores=16, loc=os.path.join(output_dir, 'raw', file_name))
+                               chunks=[1, 4, 4], n_cores=16, loc=os.path.join(output_dir, 'raw', file_name))
     # compute the correlation between the base and target images within a small window of each pixel
-    correlation = flow_correlation(base, target, flow, win_size=np.array([2, 6, 6]),
+    correlation = flow_correlation(base_down, target_down, flow, win_size=np.array([2, 6, 6]),
                                    loc=os.path.join(output_dir, 'corr', file_name))
 
     # smooth the flow
@@ -340,6 +337,9 @@ def optical_flow_single(base: np.ndarray, target: np.ndarray, window_radius: int
     # flatten dims 0 and 1
     target_sub = target_sub.reshape((chunks[1]*chunks[2], nz, ny_sub, nx_sub))
     base_sub = base_sub.reshape((chunks[1]*chunks[2], nz, ny_sub, nx_sub))
+    # divide each subvolume by its 99th percentile
+    target_sub = target_sub / np.percentile(target_sub, 99, axis=(1, 2, 3))[:, np.newaxis, np.newaxis, np.newaxis]
+    base_sub = base_sub / np.percentile(base_sub, 99, axis=(1, 2, 3))[:, np.newaxis, np.newaxis, np.newaxis]
     # compute the optical flow (in parallel)
     n_cores = min(utils.system.get_core_count(), n_cores)
     print(f"Computing optical flow using {n_cores} cores")
@@ -358,16 +358,13 @@ def optical_flow_single(base: np.ndarray, target: np.ndarray, window_radius: int
         flow[i] = preprocessing.merge_subvols(pos, flow_sub[i])
         # clip the flow
         flow[i] = np.clip(flow[i], -clip_val[i], clip_val[i])
-    flow_up = upsample_flow(flow, upsample_factor, order=1)
-    # convert to float32
-    flow_up = flow_up.astype(np.float32)
     # save the flow
     if loc:
-        np.save(loc, flow_up)
+        np.save(loc, flow)
     t_end = time.time()
     print("Optical flow computation took " + str(t_end - t_start) + " seconds")
 
-    return flow_up
+    return flow
 
 
 def flow_correlation(base: np.ndarray, target: np.ndarray, flow: np.ndarray, win_size: np.ndarray,
@@ -407,10 +404,9 @@ def flow_correlation(base: np.ndarray, target: np.ndarray, flow: np.ndarray, win
     base_warped = base_warped.reshape(np.product(n_win), np.product(win_size))
     target = target.reshape(np.product(n_win), np.product(win_size))
     # compute the correlation
-    base_warped = base_warped - np.mean(base_warped, axis=1)[:, np.newaxis]
-    target = target - np.mean(target, axis=1)[:, np.newaxis]
-    correlation = (np.sum(base_warped * target, axis=1) /
-                   (np.linalg.norm(base_warped, axis=1) * np.linalg.norm(target, axis=1)))
+    # base_warped = base_warped - np.mean(base_warped, axis=1)[:, np.newaxis]
+    # target = target - np.mean(target, axis=1)[:, np.newaxis]
+    correlation = np.sum(base_warped * target, axis=1)
     # reshape the correlation back to the window dimensions
     correlation = correlation.reshape(n_win)
     # upsample the correlation to the original image size just by repeating the correlation values
@@ -443,7 +439,7 @@ def interpolate_flow(flow: np.ndarray, correlation: np.ndarray, threshold: float
     if os.path.exists(loc):
         return np.load(loc).astype(np.float32)
     time_start = time.time()
-    mask = correlation > threshold
+    mask = correlation > np.quantile(correlation, threshold)
     flow_indicator = mask.astype(np.float32)
     # smooth the flow indicator
     flow_indicator_smooth = gaussian_filter(flow_indicator, sigma, truncate=4)
@@ -452,7 +448,7 @@ def interpolate_flow(flow: np.ndarray, correlation: np.ndarray, threshold: float
     # divide the flow by the smoothed indicator
     flow = np.array([flow[i] / flow_indicator_smooth for i in range(3)])
     # convert to float32
-    flow = flow.astype(np.float32)
+    flow = flow.astype(np.float16)
     # save the flow
     if loc:
         np.save(loc, flow)
@@ -474,77 +470,6 @@ def upsample_flow(flow: np.ndarray, factor: tuple, order: int = 1) -> np.ndarray
     """
     flow_up = np.array([zoom(flow[i], factor, order=order) * factor[i] for i in range(3)])
     return flow_up
-
-# Bridge function for all functions in round registration
-# def round_registration(anchor_image: np.ndarray, round_image: list, config: dict) -> dict:
-#     """
-#     Function to carry out sub-volume round registration on a single tile.
-#
-#     Args:
-#         anchor_image: np.ndarray size [n_z, n_y, n_x] of the anchor image
-#         round_image: list of length n_rounds, where round_image[r] is  np.ndarray size [n_z, n_y, n_x] of round r
-#         config: dict of configuration parameters for registration
-#
-#     Returns:
-#         round_registration_data: dictionary containing the following keys:
-#         'position': np.ndarray size [z_sv x y_sv x x_sv, 3] of the position of each sub-volume in zyx format
-#         'shift': np.ndarray size [z_sv x y_sv x x_sv, 3] of the shift of each sub-volume in zyx format
-#         'shift_corr': np.ndarray size [z_sv x y_sv x x_sv] of the correlation coefficient of each sub-volume shift
-#         'transform': np.ndarray size [n_rounds, 3, 4] of the affine transform for each round in zyx format
-#     """
-#     # Initialize variables from config
-#     z_subvols, y_subvols, x_subvols = config["subvols"]
-#     z_box, y_box, x_box = config["box_size"]
-#     r_thresh = config["pearson_r_thresh"]
-#
-#     # Create the directory for the round registration data
-#     round_registration_data = {"position": [], "shift": [], "shift_corr": [], "transform": []}
-#
-#     if config["sobel"]:
-#         anchor_image = skimage.filters.sobel(anchor_image)
-#         round_image = [skimage.filters.sobel(r) for r in round_image]
-#
-#     # Now compute round shifts for this tile and the affine transform for each round
-#     pbar = tqdm(total=len(round_image), desc="Computing round transforms")
-#     for r in range(len(round_image)):
-#         # Set progress bar title
-#         pbar.set_description("Computing shifts for round " + str(r))
-#
-#         # next we split image into overlapping cuboids
-#         subvol_base, position = preprocessing.split_3d_image(
-#             image=anchor_image,
-#             z_subvolumes=z_subvols,
-#             y_subvolumes=y_subvols,
-#             x_subvolumes=x_subvols,
-#             z_box=z_box,
-#             y_box=y_box,
-#             x_box=x_box,
-#         )
-#         subvol_target, _ = preprocessing.split_3d_image(
-#             image=round_image[r],
-#             z_subvolumes=z_subvols,
-#             y_subvolumes=y_subvols,
-#             x_subvolumes=x_subvols,
-#             z_box=z_box,
-#             y_box=y_box,
-#             x_box=x_box,
-#         )
-#
-#         # Find the subvolume shifts
-#         shift, corr = find_shift_array(subvol_base, subvol_target, position=position.copy(), r_threshold=r_thresh)
-#         transform = huber_regression(shift, position, predict_shift=False)
-#         # Append these arrays to the round_shift, round_shift_corr, round_transform and position storage
-#         round_registration_data["shift"].append(shift)
-#         round_registration_data["shift_corr"].append(corr)
-#         round_registration_data["position"].append(position)
-#         round_registration_data["transform"].append(transform)
-#         pbar.update(1)
-#     pbar.close()
-#     # Convert all lists to numpy arrays
-#     for key in round_registration_data.keys():
-#         round_registration_data[key] = np.array(round_registration_data[key])
-#
-#     return round_registration_data
 
 
 def gaussian_kernel(sigma: float, size: int) -> np.ndarray:
