@@ -212,21 +212,20 @@ def get_spot_colors(
 
     invalid_value = -nbp_basic.tile_pixel_value_shift
     if use_bg:
-        good = colours_valid * bg_valid
+        # A valid background subtracted colour must not subtract below the invalid, negative value
+        subtracted_colours_valid = ((spot_colors - bg_colours) > invalid_value).all(axis=(1, 2))
+        good = np.logical_and(colours_valid, bg_valid)
+        good = np.logical_and(good, subtracted_colours_valid)
         if return_in_bounds:
-            spot_colors = (spot_colors - bg_colours)[good]
             bg_colours = bg_colours[good]
-            yxz_base = yxz_base[good]
-        else:
-            spot_colors[good] = (spot_colors - bg_colours)[good]
-            spot_colors[~good] = invalid_value
-    elif not use_bg:
+    else:
         good = colours_valid
-        if return_in_bounds:
-            spot_colors = spot_colors[good]
-            yxz_base = yxz_base[good]
-        else:
-            spot_colors[~good] = invalid_value
+
+    if return_in_bounds:
+        spot_colors = spot_colors[good]
+        yxz_base = yxz_base[good]
+    else:
+        spot_colors[~good] = invalid_value
 
     return (spot_colors, yxz_base, bg_colours) if use_bg else (spot_colors, yxz_base)
 
@@ -312,14 +311,13 @@ def remove_background(spot_colours: np.ndarray) -> Tuple[np.ndarray, np.ndarray]
         'spot_colours: [n_spots x n_rounds x n_channels_use]' spot colours with background removed.
         background_noise: [n_spots x n_channels_use]' background noise for each spot and channel.
     """
-    background_noise = np.zeros((spot_colours.shape[0], spot_colours.shape[2]))
+    n_spots = spot_colours.shape[0]
+    background_noise = np.percentile(spot_colours, 25, axis=1)
     # Loop through all channels and remove the background from each channel.
     for c in tqdm(range(spot_colours.shape[2])):
         background_code = np.zeros(spot_colours[0].shape)
         background_code[:, c] = 1
-        # now loop through all spots and remove the component of the background from the spot colour
-        for s in range(spot_colours.shape[0]):
-            background_noise[s, c] = np.percentile(spot_colours[s, :, c], 25)
-            spot_colours[s] = spot_colours[s] - background_noise[s, c] * background_code
+        # Remove the component of the background from the spot colour for each spot
+        spot_colours -= background_noise[:, c][:, None, None] * np.repeat(background_code[None], n_spots, axis=0)
 
     return spot_colours, background_noise
