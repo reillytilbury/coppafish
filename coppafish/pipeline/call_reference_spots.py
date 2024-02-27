@@ -363,8 +363,11 @@ def call_reference_spots(
         tile_colours = colours[spot_tile == t]
         tile_bg_colours = bg_colours[spot_tile == t]
         tile_bg_strength = np.sum(np.abs(tile_bg_colours), axis=(1, 2))
-        if np.allclose(tile_bg_strength, tile_bg_strength[0]):
-            # All pixels have the same background strength
+        if tile_bg_strength.size == 0 or np.allclose(tile_bg_strength, tile_bg_strength[0]):
+            logging.warn(
+                f"Failed to compute colour norm factor for {t=} because there was a lack of spots or uniform "
+                f"background strength. Norm factor will be set to 1."
+            )
             continue
         weak_bg = tile_bg_strength < np.percentile(tile_bg_strength, 50)
         if np.all(np.logical_not(weak_bg)):

@@ -321,6 +321,8 @@ def register(
                 image_seq = scipy.ndimage.affine_transform(image_seq, inv_transform_seq_yx)
                 # Now compute the scale factor
                 bg_scale[t, r, c] = register_base.brightness_scale(image_preseq, image_seq, 99)[0]
+                if bg_scale[t, r, c] < 0:
+                    logging.warn(f"Background scale for {t=}, {r=}, {c=} is negative")
         # Now add the bg_scale to the nbp_filter page. To do this we need to delete the bg_scale attribute.
         nbp_filter.finalized = False
         del nbp_filter.bg_scale
