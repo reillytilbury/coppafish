@@ -207,8 +207,9 @@ def run_filter(
                 if filter_kernel_dapi is not None:
                     im_filtered = utils.morphology.top_hat(im_filtered, filter_kernel_dapi)
             elif c != nbp_basic.dapi_channel:
-                # im converted to float in convolve_2d so no point changing dtype beforehand.
-                im_filtered = utils.morphology.convolve_2d(im_filtered, filter_kernel) * scale
+                im_filtered = im_filtered.astype(np.float64)
+                if nbp_scale.difference_of_hanning:
+                    im_filtered = utils.morphology.convolve_2d(im_filtered, filter_kernel) * scale
                 if nbp_scale.r_smooth is not None:
                     # oa convolve uses lots of memory and much slower here.
                     im_filtered = utils.morphology.imfilter(im_filtered, smooth_kernel, oa=False)

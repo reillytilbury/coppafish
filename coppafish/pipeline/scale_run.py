@@ -44,7 +44,10 @@ def compute_scale(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage)
         config["r1"] = extract.base.get_pixel_length(config["r1_auto_microns"], nbp_basic.pixel_size_xy)
     if config["r2"] is None:
         config["r2"] = config["r1"] * 2
-    filter_kernel = utils.morphology.hanning_diff(config["r1"], config["r2"])
+    if config["difference_of_hanning"]:
+        filter_kernel = utils.morphology.hanning_diff(config["r1"], config["r2"])
+    else:
+        filter_kernel = None
 
     if config["r_smooth"] is not None:
         if len(config["r_smooth"]) == 2:
@@ -150,6 +153,7 @@ def compute_scale(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage)
     nbp.r_smooth = config["r_smooth"]
     nbp.r1 = config["r1"]
     nbp.r2 = config["r2"]
+    nbp.difference_of_hanning = config["difference_of_hanning"]
     nbp.scale_anchor = config["scale_anchor"]
     logging.debug("Scale complete")
 

@@ -71,7 +71,7 @@ def get_scale(
     use_channels: List[int],
     use_z: List[int],
     scale_norm: int,
-    filter_kernel: np.ndarray,
+    filter_kernel: Optional[np.ndarray] = None,
     smooth_kernel: Optional[np.ndarray] = None,
 ) -> Tuple[int, int, int, float]:
     """
@@ -114,8 +114,11 @@ def get_scale(
         t = central_tile(nbp_basic.tilepos_yx, use_tiles)
     # find z-plane with max pixel across all channels of tile t
     c, z, image = get_z_plane(nbp_file, nbp_basic, r, t, use_channels, use_z)
-    # convolve_2d image in same way we convolve_2d before saving tiff files
-    im_filtered = utils.morphology.convolve_2d(image, filter_kernel)
+    if filter_kernel is not None:
+        # convolve_2d image in same way we convolve_2d before saving tiff files
+        im_filtered = utils.morphology.convolve_2d(image, filter_kernel)
+    else:
+        im_filtered = image.astype(np.float32)
     if smooth_kernel is not None:
         im_filtered = utils.morphology.imfilter(im_filtered, smooth_kernel, oa=False)
     scale = scale_norm / im_filtered.max()

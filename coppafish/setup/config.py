@@ -91,6 +91,7 @@ _options = {
         "scale_norm": "maybe_int",
         "scale_anchor": "maybe_number",
         "r1_auto_microns": "number",
+        "difference_of_hanning": "bool",
     },
     "extract": {
         "file_type": "str",

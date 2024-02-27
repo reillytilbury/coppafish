@@ -378,6 +378,11 @@
             "",
             "*Typical: 6*"
         ],
+        "difference_of_hanning": [
+            "eq",
+            "bool",
+            "Whether difference of Hanning will be applied to the images."
+        ],
         "scale": [
             "close",
             "Float",
