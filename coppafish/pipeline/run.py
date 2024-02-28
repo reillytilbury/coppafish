@@ -403,7 +403,7 @@ def run_omp(nb: Notebook) -> None:
             nb.filter,
             nb.call_spots,
             nb.stitch.tile_origin,
-            nb.register.transform,
+            nb.register.icp_correction,
             tile_most_spots,
         )
         nb += nbp

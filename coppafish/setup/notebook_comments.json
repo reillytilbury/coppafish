@@ -835,11 +835,6 @@
             "Numpy int32 array [n_spots x n_rounds x n_channels]",
             "Background colour of each spot. Calculated as the median of the channel across rounds."
         ],
-        "in_bounds": [
-            "",
-            "Numpy boolean array [n_tiles, n_rounds, n_channels]",
-            "fraction of each tile that is in bounds"
-        ],
         "software_version": [
             "",
             "String",
