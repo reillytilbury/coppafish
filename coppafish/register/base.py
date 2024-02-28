@@ -856,7 +856,7 @@ def brightness_scale(
     tile_size = seq.shape[-1]
     # TODO: Replace this sub-image stuff with optical flow
     if sub_image_size is None:
-        sub_image_size = int(tile_size // 4.095)
+        sub_image_size = int(tile_size // 2)
     n_sub_images = max(1, int(tile_size / sub_image_size))
     sub_image_shifts, sub_image_shift_score = (
         np.zeros((n_sub_images, n_sub_images, 2)),
@@ -881,7 +881,7 @@ def brightness_scale(
             sub_image_seq_shifted = preprocessing.custom_shift(sub_image_seq, sub_image_shifts[i, j].astype(int))
             sub_image_shift_score[i, j] = np.corrcoef(sub_image_preseq.ravel(), sub_image_seq_shifted.ravel())[0, 1]
     # Now find the best sub-image
-    max_score = np.max(sub_image_shift_score)
+    max_score = np.nanmax(sub_image_shift_score)
     i_max, j_max = np.argwhere(sub_image_shift_score == max_score)[0]
     shift_max_score = sub_image_shifts[i_max, j_max]
     y_range = np.arange(i_max * sub_image_size, (i_max + 1) * sub_image_size)

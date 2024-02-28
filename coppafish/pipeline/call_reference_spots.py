@@ -273,15 +273,17 @@ def call_reference_spots(config: dict, nbp_file: NotebookPage, nbp_basic: Notebo
 
     # Extract abs intensity percentile
     # central_tile = scale.base.central_tile(nbp_basic.tilepos_yx, nbp_basic.use_tiles)
-    central_tile = scale.base.central_tile(nbp_basic.tilepos_yx, [0, 6])
+    # todo: fix this
+    central_tile = scale.base.central_tile(nbp_basic.tilepos_yx, [6])
     if nbp_basic.is_3d:
         mid_z = int(nbp_basic.use_z[0] + (nbp_basic.use_z[-1] - nbp_basic.use_z[0]) // 2 - min(nbp_basic.use_z))
     else:
         mid_z = None
-    pixel_colors = spot_colors.get_spot_colors(spot_colors.all_pixel_yxz(nbp_basic.tile_sz, nbp_basic.tile_sz, mid_z),
-                                               central_tile, transform, nbp_file, nbp_basic, nbp_extract, nbp_filter,
-                                               return_in_bounds=True)[0]
-    pixel_intensity = call_spots.get_spot_intensity(np.abs(pixel_colors) / colour_norm_factor[central_tile])
-    nbp.abs_intensity_percentile = np.percentile(pixel_intensity, np.arange(1, 101))
+    # pixel_colors = spot_colors.get_spot_colors(spot_colors.all_pixel_yxz(nbp_basic.tile_sz, nbp_basic.tile_sz, mid_z),
+    #                                            central_tile, transform, nbp_file, nbp_basic, nbp_extract, nbp_filter,
+    #                                            return_in_bounds=True)[0]
+    # pixel_intensity = call_spots.get_spot_intensity(np.abs(pixel_colors) / colour_norm_factor[central_tile])
+    # nbp.abs_intensity_percentile = np.percentile(pixel_intensity, np.arange(1, 101))
+    nbp.abs_intensity_percentile = None
 
     return nbp, nbp_ref_spots

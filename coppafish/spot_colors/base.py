@@ -1,13 +1,14 @@
 from typing import Optional, List, Union, Tuple
 import numpy as np
 from tqdm import tqdm
+import os
 
 from ..setup import NotebookPage
 from ..utils import tiles_io
+from ..register import preprocessing
 
 
-def apply_transform(yxz: np.ndarray, transform: np.ndarray,
-                    tile_sz: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def apply_transform(yxz: np.ndarray, flow: np.ndarray, tile_sz: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
     This transforms the coordinates yxz based on an affine transform.
     E.g. to find coordinates of spots on the same tile but on a different round and channel.
@@ -17,10 +18,7 @@ def apply_transform(yxz: np.ndarray, transform: np.ndarray,
             ```yxz[i, :2]``` are the non-centered yx coordinates in ```yx_pixels``` for spot ```i```.
             ```yxz[i, 2]``` is the non-centered z coordinate in ```z_pixels``` for spot ```i```.
             E.g. these are the coordinates stored in ```nb['find_spots']['spot_details']```.
-        transform: ```float [4 x 3]```.
-            Affine transform to apply to ```yxz```, once centered and z units changed to ```yx_pixels```.
-            ```transform[3, 2]``` is approximately the z shift in units of ```yx_pixels```.
-            E.g. this is one of the transforms stored in ```nb['register']['transform']```.
+        flow: '''float mem-map [3 x n_pixels_z x n_pixels_y x n_pixels_x]''' of shifts for each pixel.
         tile_sz: ```int16 [3]```.
             YXZ dimensions of tile
 
@@ -33,18 +31,21 @@ def apply_transform(yxz: np.ndarray, transform: np.ndarray,
         - ```in_range``` - ```bool [n_spots]```.
             Whether spot s was in the bounds of the tile when transformed to round `r`, channel `c`.
     """
-    yxz_pad = np.pad(yxz, [(0, 0), (0, 1)], constant_values=1)
-    yxz_transform = yxz_pad @ transform
-    yxz_transform = np.round(yxz_transform).astype(np.int16)
+    # load in shifts for each pixel
+    y_indices, x_indices, z_indices = yxz.T
+    # apply shifts to each pixel
+    zyx_shifts = -flow[:, z_indices, y_indices, x_indices].T
+    yxz_shifts = np.roll(zyx_shifts, 1, axis=1)
+    yxz_transform = np.round(yxz + yxz_shifts).astype(np.uint16)
     in_range = np.logical_and((yxz_transform >= np.array([0, 0, 0])).all(axis=1),
                               (yxz_transform < tile_sz).all(axis=1))  # set color to nan if out range
     return yxz_transform, in_range
 
 
-def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_file: NotebookPage,
+def get_spot_colors(yxz_base: np.ndarray, t: int, transform: np.ndarray, nbp_file: NotebookPage,
                     nbp_basic: NotebookPage, nbp_extract: NotebookPage, nbp_filter: NotebookPage, 
                     use_rounds: Optional[List[int]] = None, use_channels: Optional[List[int]] = None, 
-                    return_in_bounds: bool = False, 
+                    return_in_bounds: bool = False
                     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Takes some spots found on the reference round, and computes the corresponding spot intensity
@@ -56,9 +57,7 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
             Local yxz coordinates of spots found in the reference round/reference channel of tile `t`
             yx coordinates are in units of `yx_pixels`. z coordinates are in units of `z_pixels`.
         t: Tile that spots were found on.
-        transforms: `float [n_tiles x n_rounds x n_channels x 4 x 3]`.
-            `transforms[t, r, c]` is the affine transform to get from tile `t`, `ref_round`, `ref_channel` to
-            tile `t`, round `r`, channel `c`.
+        transform: `float32 [n_rounds x n_channels x 4 x 3]`.
         nbp_file: `file_names` notebook page.
         nbp_basic: `basic_info` notebook page.
         nbp_extract: `extract` notebook page.
@@ -95,7 +94,9 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
             integer nan. It will be `invalid_value` if the registered coordinate of spot `s` is outside the tile in 
             round `r`, channel `c`.
     """
-    bg_scale = nbp_filter.bg_scale    
+    # bg_scale = nbp_filter.bg_scale
+    # todo: fix this
+    bg_scale = None
     if bg_scale is not None:
         assert nbp_basic.use_preseq, "Can't subtract background if preseq round doesn't exist!"
         use_bg = True
@@ -124,18 +125,24 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
     with tqdm(total=n_use_rounds * n_use_channels, disable=no_verbose) as pbar:
         pbar.set_description(f"Reading {n_spots} spot_colors, tile {t} from {nbp_extract.file_type} files")
         for r in range(n_use_rounds):
+            flow_r = np.load(os.path.join(nbp_file.output_dir, 'flow', 'smooth', f't{t}_r{use_rounds[r]}.npy'),
+                             mmap_mode='r')
             if not nbp_basic.is_3d:
                 # If 2D, load in all channels first
                 # FIXME: use load_tile function for .zarr support with 2D
                 image_all_channels = np.load(nbp_file.tile[t][use_rounds[r]], mmap_mode='r')
             for c in range(n_use_channels):
-                transform_rc = transforms[t, use_rounds[r], use_channels[c]]
+                transform_rc = preprocessing.yxz_to_zyx_affine(transform[r, use_channels[c]])
+                flow_c = preprocessing.affine_transform_to_flow(transform_rc,
+                                                                (len(nbp_basic.use_z), tile_sz[0], tile_sz[1]))
                 pbar.set_postfix({'round': use_rounds[r], 'channel': use_channels[c]})
                 if transform_rc[0, 0] == 0:
                     raise ValueError(
                         f"Transform for tile {t}, round {use_rounds[r]}, channel {use_channels[c]} is zero:"
                         f"\n{transform_rc}")
-                yxz_transform, in_range = apply_transform(yxz_base, transform_rc, tile_sz)
+                flow = preprocessing.compose_flows(flow_r, flow_c)
+                del flow_c
+                yxz_transform, in_range = apply_transform(yxz_base, flow, tile_sz)
                 yxz_transform = np.asarray(yxz_transform)
                 in_range = np.asarray(in_range)
                 yxz_transform = yxz_transform[in_range]
@@ -149,6 +156,7 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
                         spot_colors[in_range, r, c] = image_all_channels[use_channels[c]][
                             tuple(np.asarray(yxz_transform[:, i]) for i in range(2))]
                 pbar.update(1)
+            del flow_r
     # Remove shift so now spots outside bounds have color equal to - nbp_basic.tile_pixel_shift_value.
     # It is impossible for any actual spot color to be this due to clipping at the extract stage.
     spot_colors = spot_colors - nbp_basic.tile_pixel_value_shift
@@ -159,7 +167,9 @@ def get_spot_colors(yxz_base: np.ndarray, t: int, transforms: np.ndarray, nbp_fi
                 f"Reading {n_spots} background spot_colors, tile {t} from {nbp_extract.file_type} files"
             )
             for c in range(n_use_channels):
-                transform_rc = transforms[t, nbp_basic.pre_seq_round, use_channels[c]]
+                # transform_rc = transforms[t, nbp_basic.pre_seq_round, use_channels[c]]
+                # todo: fix this
+                transform_rc = None
                 pbar.set_postfix({'round': use_rounds[r], 'channel': use_channels[c]})
                 if transform_rc[0, 0] == 0:
                     raise ValueError(

@@ -264,18 +264,21 @@ def zyx_to_yxz_affine(A: np.ndarray, new_origin: np.ndarray = np.array([0, 0, 0]
         A_reformatted: 4 x 3 transform with associated changes
 
     """
-    # Add new origin conversion for zyx shift, need to do this before changing basis
-    A[:, 3] += (A[:3, :3] - np.eye(3)) @ new_origin
+    # convert A to 4 x 3
+    A = A.T
 
-    # Append a bottom row
-    A = np.vstack((A, np.array([0, 0, 0, 1])))
+    # Append a right column to A
+    A = np.vstack((A.T, np.array([0, 0, 0, 1]))).T
 
     # First, change basis to yxz
     C = np.eye(4)
     C[:3, :3] = np.roll(C[:3, :3], -1, axis=1)
 
-    # compute the matrix in the new basis, remove the final row and transpose to get 4 x 3
-    A = (np.linalg.inv(C) @ A @ C)[:3, :4].T
+    # compute the matrix in the new basis and remove the final column
+    A = (np.linalg.inv(C) @ A @ C)[:4, :3]
+
+    # Add new origin conversion for yxz shift, need to do this after changing basis so that the matrix is in yxz coords
+    A[3, :] += (A[:3, :3] - np.eye(3)) @ new_origin
 
     return A
 
@@ -483,7 +486,7 @@ def affine_transform_to_flow(affine: np.ndarray, shape: Tuple[int, int, int]) ->
     flow = warp - grid
     # so that we are consistent, let's make this an inverse warp, meaning we need to negate the flow
 
-    return -flow
+    return -flow.astype(np.float32)
 
 
 def flow_zyx_to_yxz(flow_zyx: np.ndarray) -> np.ndarray:

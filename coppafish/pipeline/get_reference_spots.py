@@ -1,11 +1,12 @@
 import numpy as np
 
-try:
-    import jax.numpy as jnp
-    from ..spot_colors import base_optimised as spot_colors_base
-except ImportError:
-    import numpy as jnp
-    from ..spot_colors import base as spot_colors_base
+# try:
+#     import jax.numpy as jnp
+#     from ..spot_colors import base_optimised as spot_colors_base
+# except ImportError:
+# Above is a quick fix to avoid import error when running tests. This is not the correct way to do it.
+import numpy as jnp
+from ..spot_colors import base as spot_colors_base
 from ..call_spots import base as call_spots_base
 from .. import find_spots as fs
 from .. import utils
@@ -19,7 +20,7 @@ def get_reference_spots(
     nbp_extract: NotebookPage,
     nbp_filter: NotebookPage,
     tile_origin: np.ndarray,
-    transform: np.ndarray,
+    icp_correction: np.ndarray,
 ) -> NotebookPage:
     """
     This takes each spot found on the reference round/channel and computes the corresponding intensity
@@ -49,10 +50,7 @@ def get_reference_spots(
             `tile_origin[t,:]` is the bottom left yxz coordinate of tile `t`.
             yx coordinates in `yx_pixels` and z coordinate in `z_pixels`.
             This is saved in the `stitch` notebook page i.e. `nb.stitch.tile_origin`.
-        transform: `float [n_tiles x n_rounds x n_channels x 4 x 3]`.
-            `transform[t, r, c]` is the affine transform to get from tile `t`, `ref_round`, `ref_channel` to
-            tile `t`, round `r`, channel `c`.
-            This is saved in the register notebook page i.e. `nb.register.transform`.
+        icp_correction: `float [n_tiles x n_rounds x n_channels x 4 x 3]`.
 
     Returns:
         `NotebookPage[ref_spots]` - Page containing intensity of each reference spot on each imaging round/channel.
@@ -105,7 +103,7 @@ def get_reference_spots(
     n_use_tiles = use_tiles.size
     nd_spot_colors_use = np.zeros((nd_local_tile.shape[0], n_use_rounds, n_use_channels), dtype=np.int32)
     bg_colours = np.zeros_like(nd_spot_colors_use)
-    transform = jnp.asarray(transform)
+    transform = jnp.asarray(icp_correction)
     print("Reading in spot_colors for ref_round spots")
     for t in nbp_basic.use_tiles:
         in_tile = nd_local_tile == t
@@ -118,7 +116,7 @@ def get_reference_spots(
                 )
             if not nbp_basic.use_preseq:
                 nd_spot_colors_use[in_tile], yxz_base = spot_colors_base.get_spot_colors(
-                    jnp.asarray(nd_local_yxz[in_tile]), t, transform, nbp_file, nbp_basic, nbp_extract, nbp_filter
+                    jnp.asarray(nd_local_yxz[in_tile]), t, transform[t], nbp_file, nbp_basic, nbp_extract, nbp_filter
                 )
 
     # good means all spots that were in bounds of tile on every imaging round and channel that was used.
