@@ -25,29 +25,19 @@ def offset_pixels_by(image: npt.NDArray[np.uint16], tile_pixel_value_shift: int)
     return image.astype(np.int32) + tile_pixel_value_shift
 
 
-def load_reg_data(nbp_file: NotebookPage, nbp_basic: NotebookPage, config: dict):
+def load_reg_data(nbp_file: NotebookPage, nbp_basic: NotebookPage):
     """
     Function to load in pkl file of previously obtained registration data if it exists.
     Args:
         nbp_file: File Names notebook page
         nbp_basic: Basic info notebook page
-        config: register page of config dictionary
     Returns:
         registration_data: dictionary with the following keys
         * round_registration (dict) with keys:
             * completed (list)
-            * position ( (z_subvols x y subvols x x_subvols) x 3 ) ndarray
-            * round_shift ( n_tiles x n_rounds x (z_subvols x y subvols x x_subvols) x 3 ) ndarray
-            * round_shift_corr ( n_tiles x n_rounds x (z_subvols x y subvols x x_subvols) ) ndarray
-            * round_transform_raw (n_tiles x n_rounds x 3 x 4) ndarray
-            * round_transform (n_tiles x n_rounds x 3 x 4) ndarray
+            * warp_directory (str)
         * channel_registration (dict) with keys:
-            * completed (list)
-            * channel_transform (n_tiles x n_channels x 3 x 4) ndarray
-            * channel_shift_corr ( n_tiles x n_channels x (z_subvols x y subvols x x_subvols) ) ndarray
-            * reference_round (n_tiles) ndarray
-        * initial_transform (n_tiles x n_rounds x n_channels x 3 x 4) ndarray
-
+            * transform (n_channels x 4 x 3) ndarray of affine transforms (zyx)
     """
     # Check if the registration data file exists
     if os.path.isfile(os.path.join(nbp_file.output_dir, 'registration_data.pkl')):
@@ -56,17 +46,10 @@ def load_reg_data(nbp_file: NotebookPage, nbp_basic: NotebookPage, config: dict)
     else:
         n_tiles, n_rounds, n_channels = nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.n_extra_rounds, \
             nbp_basic.n_channels
-        z_subvols, y_subvols, x_subvols = config['subvols']
-        round_registration = {'tiles_completed': [],
-                              'position': np.zeros((n_tiles, n_rounds, z_subvols * y_subvols * x_subvols, 3)),
-                              'shift': np.zeros((n_tiles, n_rounds, z_subvols * y_subvols * x_subvols, 3)),
-                              'shift_corr': np.zeros((n_tiles, n_rounds, z_subvols * y_subvols * x_subvols)),
-                              'transform_raw': np.zeros((n_tiles, n_rounds, 3, 4)),
-                              'transform': np.zeros((n_tiles, n_rounds, 3, 4))}
-        channel_registration = {'transform': np.zeros((n_channels, 3, 4))}
+        round_registration = {'flow_dir': os.path.join(nbp_file.output_dir, 'flow')}
+        channel_registration = {'transform': np.zeros((n_channels, 4, 3))}
         registration_data = {'round_registration': round_registration,
                              'channel_registration': channel_registration,
-                             'initial_transform': np.zeros((n_tiles, n_rounds, n_channels, 4, 3)),
                              'blur': False}
     return registration_data
 
@@ -281,18 +264,21 @@ def zyx_to_yxz_affine(A: np.ndarray, new_origin: np.ndarray = np.array([0, 0, 0]
         A_reformatted: 4 x 3 transform with associated changes
 
     """
-    # Add new origin conversion for zyx shift, need to do this before changing basis
-    A[:, 3] += (A[:3, :3] - np.eye(3)) @ new_origin
+    # convert A to 4 x 3
+    A = A.T
 
-    # Append a bottom row
-    A = np.vstack((A, np.array([0, 0, 0, 1])))
+    # Append a right column to A
+    A = np.vstack((A.T, np.array([0, 0, 0, 1]))).T
 
     # First, change basis to yxz
     C = np.eye(4)
     C[:3, :3] = np.roll(C[:3, :3], -1, axis=1)
 
-    # compute the matrix in the new basis, remove the final row and transpose to get 4 x 3
-    A = (np.linalg.inv(C) @ A @ C)[:3, :4].T
+    # compute the matrix in the new basis and remove the final column
+    A = (np.linalg.inv(C) @ A @ C)[:4, :3]
+
+    # Add new origin conversion for yxz shift, need to do this after changing basis so that the matrix is in yxz coords
+    A[3, :] += (A[:3, :3] - np.eye(3)) @ new_origin
 
     return A
 
@@ -342,18 +328,38 @@ def merge_subvols(position, subvol):
     Returns:
         merged: merged image (size will depend on amount of overlap)
     """
+    position = position.astype(int)
     # set min values to 0
     position -= np.min(position, axis=0)
     z_box, y_box, x_box = subvol.shape[1:]
+    centre = position + np.array([z_box//2, y_box//2, x_box//2])
     # Get the min and max values of the position, use this to get the size of the merged image and initialise it
     max_pos = np.max(position, axis=0)
     merged = np.zeros((max_pos + subvol.shape[1:]).astype(int))
-
-    # Loop through the subvols and add them to the merged image at the correct position. If there is overlap, take the
-    # final value
+    neighbour_im = np.zeros_like(merged)
+    # Loop through the subvols and add them to the merged image at the correct position.
     for i in range(position.shape[0]):
-        merged[position[i, 0]:position[i, 0] + z_box, position[i, 1]:position[i, 1] + y_box,
-               position[i, 2]:position[i, 2] + x_box] = subvol[i]
+        subvol_i_mask = np.ix_(range(position[i, 0], position[i, 0] + z_box),
+                               range(position[i, 1], position[i, 1] + y_box),
+                               range(position[i, 2], position[i, 2] + x_box))
+        neighbour_im[subvol_i_mask] += 1
+        merged[subvol_i_mask] = subvol[i]
+
+    # identify overlapping regions
+    overlapping_pixels = np.argwhere(neighbour_im > 1)
+    if len(overlapping_pixels) == 0:
+        return merged
+    centre_dist = np.linalg.norm(overlapping_pixels[:, None, :] - centre[None, :, :], axis=2)
+    # get the index of the closest centre
+    closest_centre = np.argmin(centre_dist, axis=1)
+    # now loop through subvols and assign overlapping pixels to the closest centre
+    for i in range(position.shape[0]):
+        subvol_i_pixel_ind = np.where(closest_centre == i)[0]
+        subvol_i_pixel_coords_global = np.array([overlapping_pixels[j] for j in subvol_i_pixel_ind])
+        subvol_i_pixel_coords_local = subvol_i_pixel_coords_global - position[i]
+        z_global, y_global, x_global = subvol_i_pixel_coords_global.T
+        z_local, y_local, x_local = subvol_i_pixel_coords_local.T
+        merged[z_global, y_global, x_global] = subvol[i, z_local, y_local, x_local]
 
     return merged
 
@@ -427,3 +433,97 @@ def window_image(image: np.ndarray) -> np.ndarray:
     window = window_z[:, None, None] * window_yx[None, :, :]
     image = image * window
     return image
+
+
+def compose_flows(flow_a: np.ndarray, flow_b: np.ndarray, order: int = 0) -> np.ndarray:
+    """
+    Compose two flows.
+
+    Args:
+        flow_a: 3 x n_z x n_y x n_x ndarray of shifts. This is the flow to be applied first.
+        flow_b: 3 x nz x ny x nx ndarray of shifts. This is the flow to be applied second.
+        order: order of the interpolation. Default: 0.
+
+    Returns:
+        flow: 3 x nz x ny x nx ndarray of shifts.
+    """
+    grid = np.array(np.meshgrid(np.arange(flow_a.shape[1]), np.arange(flow_a.shape[2]), np.arange(flow_a.shape[3]),
+                                indexing='ij')).astype(np.float32)
+    warp_a = grid + flow_a
+    warp_b = grid + flow_b
+    warp = np.zeros_like(warp_a)
+    del flow_a, flow_b
+
+    for i in range(3):
+        warp[i] = skimage.transform.warp(warp_b[i], warp_a, order=order, mode='constant', cval=0,
+                                         preserve_range=True)
+
+    flow = warp - grid
+    return flow
+
+
+def affine_transform_to_flow(affine: np.ndarray, shape: Tuple[int, int, int]) -> np.ndarray:
+    """
+    Convert an affine transform to a flow.
+
+    Args:
+        affine: 3 x 4 affine transform (zyx).
+        shape: shape of the warp. (nz, ny, nx)
+
+    Returns:
+        flow: flow. (3 x nz x ny x nx)
+    """
+    # define and pad the grid
+    grid = np.meshgrid(np.arange(shape[0]), np.arange(shape[1]), np.arange(shape[2]), indexing='ij')
+    grid = np.array(grid, dtype=np.float32)
+    grid = grid.reshape(3, -1)
+    grid = np.vstack((grid, np.ones(grid.shape[1])))
+    # apply the affine transform
+    warp = (affine @ grid)[:3]
+    # reshape the grid
+    warp = warp.reshape(3, *shape)
+    grid = grid[:3].reshape(3, *shape)
+    flow = warp - grid
+    # so that we are consistent, let's make this an inverse warp, meaning we need to negate the flow
+
+    return -flow.astype(np.float32)
+
+
+def flow_zyx_to_yxz(flow_zyx: np.ndarray) -> np.ndarray:
+    """
+    Convert a flow from zyx to yxz.
+    Args:
+        flow_zyx: np.ndarray of shape (3, nz, ny, nx) of flows in zyx coords.
+
+    Returns:
+        flow_yxz: np.ndarray of shape (3, ny, nx, nz)
+    """
+    flow_yxz = np.moveaxis(flow_zyx, 1, -1)
+    flow_yxz = np.roll(flow_yxz, -1, axis=0)
+    return flow_yxz
+
+
+def apply_flow(flow: np.ndarray, points: np.ndarray, ignore_oob: bool = True) -> np.ndarray:
+    """
+    Apply a flow to a set of points. Note that this is applying forward warping, meaning that the points are moved to
+    their location in the warp array.
+
+    Args:
+        flow (np.ndarray): flow to apply. (3 x nz x ny x nx). In our case, this flow will always be the inverse flow,
+        so we need to apply the negative of the flow to the points.
+        points: points to apply the warp to. (n_points x 3 in yxz coords)
+        ignore_oob: remove points that go out of bounds. Default: True.
+
+    Returns:
+        new_points: new points.
+    """
+    # invert the flow
+    flow = -flow
+    y_indices, x_indices, z_indices = points.T.astype(int)
+    new_points = points + flow[:, y_indices, x_indices, z_indices].T
+    ny, nx, nz = flow.shape[1:]
+    if ignore_oob:
+        oob = (new_points[:, 0] < 0) | (new_points[:, 0] >= ny) | (new_points[:, 1] < 0) | (new_points[:, 1] >= nx) | \
+              (new_points[:, 2] < 0) | (new_points[:, 2] >= nz)
+        new_points = new_points[~oob]
+    return new_points

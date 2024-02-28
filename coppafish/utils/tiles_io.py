@@ -160,6 +160,7 @@ def save_image(
     c: Optional[int] = None,
     num_rotations: int = 0,
     suffix: str = "",
+    apply_shift: bool = True,
 ) -> npt.NDArray[np.uint16]:
     """
     Wrapper function to save tiles as npy files with correct shift. Moves z-axis to first axis before saving as it is
@@ -178,6 +179,8 @@ def save_image(
         num_rotations (int, optional): number of `90` degree clockwise rotations to apply to image before saving.
             Applied to the `x` and `y` axes, to 3d `image` data only. Default: `0`.
         suffix (str, optional): suffix to add to file name before the file extension. Default: empty.
+        apply_shift (bool, optional): if true and saving a non-dapi channel, will apply the shift to the image.
+
 
     Returns:
         `(nz x ny x nx) ndarray[uint16]`: the saved, manipulated image.
@@ -190,7 +193,7 @@ def save_image(
         if c == nbp_basic.dapi_channel:
             # If dapi is given then image should already by uint16 so no clipping
             image = image.astype(np.uint16)
-        else:
+        elif apply_shift and c != nbp_basic.dapi_channel:
             # need to shift and clip image so fits into uint16 dtype.
             # clip at 1 not 0 because 0 (or -tile_pixel_value_shift)
             # will be used as an invalid value when reading in spot_colors.
@@ -257,7 +260,7 @@ def load_image(
     r: int,
     c: int,
     yxz: Optional[Union[List, Tuple, np.ndarray, jnp.ndarray]] = None,
-    apply_shift: bool = False,
+    apply_shift: bool = True,
     suffix: str = "",
 ) -> npt.NDArray[Union[np.int32, np.uint16]]:
     """
@@ -282,9 +285,7 @@ def load_image(
                 indicating the pixel value at `[1,1,1]`.
             Default: `None`.
 
-        apply_shift (bool, optional): if true, `yxz` is None, `r` is not the anchor round and `c` is not the dapi
-            channel, dtype will be `int32` with the pixels values shifted by `-nbp_basic.tile_pixel_value_shift`.
-            Otherwise dtype will be `uint16` unshifted. Default: true.
+        apply_shift (bool, optional): if true and loading in a non-dapi channel, will apply the shift to the image.
         suffix (str, optional): suffix to add to file name to load from. Default: no suffix.
 
     Returns:
@@ -295,12 +296,8 @@ def load_image(
         - May want to disable `apply_shift` to save memory and/or make loading quicker as there will be no dtype
             conversion. If loading in DAPI, dtype is always `uint16` as there is no shift.
     """
-    assert not apply_shift, "apply_shift is redundant, use register.preprocessing.apply_image_shift instead"
-
     if nbp_basic.is_3d:
         file_path = nbp_file.tile[t][r][c]
-        if r == nbp_basic.pre_seq_round:
-            suffix = "_raw"
         file_path = file_path[: file_path.index(file_type)] + suffix + file_type
     if not image_exists(file_path, file_type):
         logging.error(FileNotFoundError(f"Could not find image at {file_path} to load from"))
@@ -370,58 +367,10 @@ def load_image(
         else:
             # Use mmap when only loading in part of image
             image = _load_image(file_path, file_type, mmap_mode="r")[c]
+    # Apply shift if not DAPI channel
+    if apply_shift and c != nbp_basic.dapi_channel:
+        image = offset_pixels_by(image, -nbp_basic.tile_pixel_value_shift)
     return image
-
-
-def load_tile(
-    nbp_file: NotebookPage,
-    nbp_basic: NotebookPage,
-    file_type: str,
-    tile: int,
-    apply_shift: bool = False,
-) -> npt.NDArray[Union[np.int32, np.uint16]]:
-    """
-    Disk load every round and channel pixel values for a particular tile.
-
-    Args:
-        nbp_file (NotebookPage): 'file_names' notebook page.
-        nbp_basic (NotebookPage): 'basic_info' notebook page.
-        file_type (str): saved file type.
-        tile (int): tile index.
-        apply_shift (bool, optional): Whether to apply shift to image pixels. Default: false.
-
-    Returns:
-        `[n_rounds x n_channels x ny x nx (x nz)] ndarray[uint16 or int32]` tile image. If `apply_shift` is true, the
-            ndarray is int32.
-    """
-    use_rounds, use_channels = nbp_basic.use_rounds, nbp_basic.use_channels
-    use_indices = np.zeros(
-        (nbp_basic.n_rounds + nbp_basic.use_anchor + nbp_basic.use_preseq, nbp_basic.n_channels),
-        dtype=bool,
-    )
-    for r, c in itertools.product(use_rounds + nbp_basic.use_preseq * [nbp_basic.pre_seq_round], use_channels):
-        use_indices[r, c] = True
-    use_indices[nbp_basic.anchor_round, nbp_basic.anchor_channel] = True
-
-    tile_side_length = nbp_basic.tile_sz
-    if nbp_basic.is_3d:
-        image_shape = (*use_indices.shape, tile_side_length, tile_side_length, nbp_basic.nz)
-    else:
-        image_shape = (*use_indices.shape, tile_side_length, tile_side_length)
-
-    image_tile = np.zeros(image_shape, dtype=np.int32 if apply_shift else np.uint16)
-    for r, c in np.argwhere(use_indices):
-        image_tile[r, c] = utils.tiles_io.load_image(
-            nbp_file,
-            nbp_basic,
-            file_type,
-            tile,
-            r,
-            c,
-            apply_shift=False,
-            suffix="_raw" if r == nbp_basic.pre_seq_round else "",
-        )
-    return image_tile
 
 
 def get_npy_tile_ind(
@@ -569,3 +518,18 @@ def save_stitched(
         return stitched_image
     else:
         np.savez_compressed(im_file, stitched_image)
+
+
+def offset_pixels_by(image: npt.NDArray[np.uint16], tile_pixel_value_shift: int) -> npt.NDArray[np.int32]:
+    """
+    Apply an integer, negative shift to every image pixel and convert datatype from uint16 to int32.
+
+    Args:
+        image (`ndarray[uint16]`): image to shift.
+        tile_pixel_value_shift (int): shift.
+
+    Returns:
+        `ndarray[int32]`: shifted image.
+    """
+    assert tile_pixel_value_shift <= 0, "Cannot shift by a positive number"
+    return image.astype(np.int32) + tile_pixel_value_shift
