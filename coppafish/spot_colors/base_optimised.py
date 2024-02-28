@@ -8,6 +8,7 @@ import jax
 
 from ..setup.notebook import NotebookPage
 from ..utils import tiles_io
+from .. import logging
 
 
 def apply_transform(yxz: jnp.ndarray, flow: jnp.ndarray, icp_correction: jnp.ndarray,
@@ -82,12 +83,12 @@ def get_spot_colors(yxz_base: jnp.ndarray, t: jnp.ndarray, transform: jnp.ndarra
         - `spot_colors` - `int32 [n_spots x n_rounds_use x n_channels_use]` or
             `int32 [n_spots_in_bounds x n_rounds_use x n_channels_use]`.
             `spot_colors[s, r, c]` is the spot color for spot `s` in round `use_rounds[r]`, channel `use_channels[c]`.
+
         - `yxz_base` - `int16 [n_spots_in_bounds x 3]` or `int16 [n_spots x 3]`.
         - `bg_colours` - `int32 [n_spots_in_bounds x n_rounds_use x n_channels_use]` or
         `int32 [n_spots x n_rounds_use x n_channels_use]`. (only returned if `bg_scale` is not `None`).
         - in_bounds - `bool [n_spots]`. Whether spot s was in the bounds of the tile when transformed to round `r`,
         channel `c`. (only returned if `return_in_bounds` is `True`).
-
     """
     if use_rounds is None:
         use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
@@ -139,6 +140,7 @@ def get_spot_colors(yxz_base: jnp.ndarray, t: jnp.ndarray, transform: jnp.ndarra
     # It is impossible for any actual spot color to be this due to clipping at the extract stage.
     spot_colors = spot_colors - nbp_basic.tile_pixel_value_shift
     colours_valid = (spot_colors > -nbp_basic.tile_pixel_value_shift).all(axis=(1, 2))
+    
     if return_in_bounds:
         spot_colors = spot_colors[colours_valid]
         yxz_base = yxz_base[colours_valid]

@@ -27,9 +27,6 @@ def fit_background(spot_colors: np.ndarray, weight_shift: float = 0) -> Tuple[np
         - background_vectors `float [n_channels x n_rounds x n_channels]`.
             background_vectors[c] is the background vector for channel c.
     """
-    # if weight_shift < 1e-20:
-    #     warnings.warn(f'weight_shift value given, {weight_shift} is below 1e-20.'
-    #                   f'Using weight_shift=1e-20 to stop blow up to infinity.')
     weight_shift = np.clip(weight_shift, 1e-20, np.inf)  # ensure weight_shift > 1e-20 to avoid blow up to infinity.
 
     n_rounds, n_channels = spot_colors[0].shape
@@ -40,7 +37,7 @@ def fit_background(spot_colors: np.ndarray, weight_shift: float = 0) -> Tuple[np
     weight_factor = 1 / (np.abs(spot_colors) + weight_shift)
     spot_weight = spot_colors * weight_factor
     background_weight = np.ones((1, n_rounds, n_channels)) * background_vectors[0, 0, 0] * weight_factor
-    coef = np.sum(spot_weight * background_weight, axis=1) / np.sum(background_weight ** 2, axis=1)
+    coef = np.sum(spot_weight * background_weight, axis=1) / np.sum(background_weight**2, axis=1)
     residual = spot_colors - np.expand_dims(coef, 1) * np.ones((1, n_rounds, n_channels)) * background_vectors[0, 0, 0]
 
     return residual, coef, background_vectors

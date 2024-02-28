@@ -4,6 +4,7 @@ from typing import List, Union, Optional, Tuple
 from .. import utils
 from .. import find_spots
 from .. import scale
+from .. import logging
 from ..setup import NotebookPage
 
 
@@ -27,10 +28,23 @@ def psf_pad(psf: np.ndarray, image_shape: Union[np.ndarray, List[int]]) -> np.nd
     return np.pad(psf, [(pre_pad[i], post_pad[i]) for i in range(len(pre_pad))])
 
 
-def get_psf_spots(nbp_file: NotebookPage, nbp_basic: NotebookPage, nbp_extract: NotebookPage, round: int,
-                  use_tiles: List[int], channel: int, use_z: List[int], radius_xy: int, radius_z: int, min_spots: int,
-                  intensity_thresh: Optional[float], intensity_auto_param: float, isolation_dist: float,
-                  shape: List[int], maximum_spots: Optional[int] = None) -> Tuple[np.ndarray, float, List[int]]:
+def get_psf_spots(
+    nbp_file: NotebookPage,
+    nbp_basic: NotebookPage,
+    nbp_extract: NotebookPage,
+    round: int,
+    use_tiles: List[int],
+    channel: int,
+    use_z: List[int],
+    radius_xy: int,
+    radius_z: int,
+    min_spots: int,
+    intensity_thresh: Optional[float],
+    intensity_auto_param: float,
+    isolation_dist: float,
+    shape: List[int],
+    maximum_spots: Optional[int] = None,
+) -> Tuple[np.ndarray, float, List[int]]:
     """
     Finds spot_shapes about spots found in raw data, average of these then used for psf.
 
@@ -64,7 +78,7 @@ def get_psf_spots(nbp_file: NotebookPage, nbp_basic: NotebookPage, nbp_extract: 
     spot_images = np.zeros((0, shape[0], shape[1], shape[2]), dtype=np.float32)
     tiles_used = []
     while n_spots < min_spots:
-        if nbp_file.raw_extension == 'jobs':
+        if nbp_file.raw_extension == "jobs":
             t = scale.base.central_tile(nbp_basic.tilepos_yx_nd2, use_tiles)
             # choose tile closest to centre
             im = utils.tiles_io._load_image(nbp_file.tile_unfiltered[t][round][channel], nbp_extract.file_type)
@@ -78,13 +92,15 @@ def get_psf_spots(nbp_file: NotebookPage, nbp_basic: NotebookPage, nbp_extract: 
         if intensity_thresh is None:
             intensity_thresh = median_im + np.median(np.abs(im[:, :, mid_z] - median_im)) * intensity_auto_param
         elif intensity_thresh <= median_im or intensity_thresh >= np.iinfo(np.uint16).max:
-            raise utils.errors.OutOfBoundsError("intensity_thresh", intensity_thresh, median_im,
-                                                np.iinfo(np.uint16).max)
+            logging.error(
+                utils.errors.OutOfBoundsError("intensity_thresh", intensity_thresh, median_im, np.iinfo(np.uint16).max)
+            )
         spot_yxz, _ = find_spots.detect_spots(im, intensity_thresh, radius_xy, radius_z, True)
         # check fall off in intensity not too large
         not_single_pixel = find_spots.check_neighbour_intensity(im, spot_yxz, median_im)
         isolated = find_spots.get_isolated_points(
-            spot_yxz * [1, 1, nbp_basic.pixel_size_z / nbp_basic.pixel_size_xy], isolation_dist, 
+            spot_yxz * [1, 1, nbp_basic.pixel_size_z / nbp_basic.pixel_size_xy],
+            isolation_dist,
         )
         chosen_spots = np.logical_and(isolated, not_single_pixel)
         if maximum_spots is not None and np.sum(chosen_spots) > maximum_spots:
@@ -99,8 +115,12 @@ def get_psf_spots(nbp_file: NotebookPage, nbp_basic: NotebookPage, nbp_extract: 
         spot_yxz = spot_yxz[chosen_spots, :]
         if n_spots == 0 and np.shape(spot_yxz)[0] < min_spots / 4:
             # raise error on first tile if looks like we are going to use more than 4 tiles
-            raise ValueError(f"\nFirst tile, {t}, only found {np.shape(spot_yxz)[0]} spots."
-                             f"\nMaybe consider lowering intensity_thresh from current value of {intensity_thresh}.")
+            logging.error(
+                ValueError(
+                    f"\nFirst tile, {t}, only found {np.shape(spot_yxz)[0]} spots."
+                    f"\nMaybe consider lowering intensity_thresh from current value of {intensity_thresh}."
+                )
+            )
         if spot_images.size > 0:
             spot_images = np.append(spot_images, utils.spot_images.get_spot_images(im, spot_yxz, shape), axis=0)
         else:
@@ -109,8 +129,12 @@ def get_psf_spots(nbp_file: NotebookPage, nbp_basic: NotebookPage, nbp_extract: 
         use_tiles = np.setdiff1d(use_tiles, t)
         tiles_used.append(t)
         if len(use_tiles) == 0 and n_spots < min_spots:
-            raise ValueError(f"\nRequired min_spots = {min_spots}, but only found {n_spots}.\n"
-                             f"Maybe consider lowering intensity_thresh from current value of {intensity_thresh}.")
+            logging.error(
+                ValueError(
+                    f"\nRequired min_spots = {min_spots}, but only found {n_spots}.\n"
+                    f"Maybe consider lowering intensity_thresh from current value of {intensity_thresh}."
+                )
+            )
     return spot_images, float(intensity_thresh), tiles_used
 
 
@@ -133,7 +157,7 @@ def get_psf(spot_images: np.ndarray, annulus_width: float) -> np.ndarray:
     # Found that this works well as taper psf anyway, which gives reduced intensity as move away from centre.
     spot_images = spot_images - np.expand_dims(np.nanmedian(spot_images, axis=[1, 2]), [1, 2])
     spot_images = spot_images / np.expand_dims(np.nanmax(spot_images, axis=(1, 2)), [1, 2])
-    psf = utils.spot_images.get_average_spot_image(spot_images, 'median', 'annulus_2d', annulus_width)
+    psf = utils.spot_images.get_average_spot_image(spot_images, "median", "annulus_2d", annulus_width)
     # normalise psf so min is 0 and max is 1.
     psf = psf - psf.min()
     psf = psf / psf.max()
@@ -155,8 +179,12 @@ def get_wiener_filter(psf: np.ndarray, image_shape: Union[np.ndarray, List[int]]
         ```complex128 [n_im_y x n_im_x x n_im_z]```. Wiener filter of same size as image.
     """
     # taper psf so smoothly goes to 0 at each edge.
-    psf = psf * np.hanning(psf.shape[0]).reshape(-1, 1, 1) * np.hanning(psf.shape[1]).reshape(1, -1, 1) * \
-          np.hanning(psf.shape[2]).reshape(1, 1, -1)
+    psf = (
+        psf
+        * np.hanning(psf.shape[0]).reshape(-1, 1, 1)
+        * np.hanning(psf.shape[1]).reshape(1, -1, 1)
+        * np.hanning(psf.shape[2]).reshape(1, 1, -1)
+    )
     psf = psf_pad(psf, image_shape)
     psf_ft = np.fft.fftn(np.fft.ifftshift(psf))
     return np.conj(psf_ft) / np.real((psf_ft * np.conj(psf_ft) + constant))
@@ -180,11 +208,16 @@ def wiener_deconvolve(image: np.ndarray, im_pad_shape: List[int], filter: np.nda
     im_max = image.max()
     im_min = image.min()
     im_av = np.median(image[:, :, 0])
-    image = np.pad(image, [(im_pad_shape[i], im_pad_shape[i]) for i in range(len(im_pad_shape))], 'linear_ramp',
-                   end_values=[(im_av, im_av)] * 3)
+    image = np.pad(
+        image,
+        [(im_pad_shape[i], im_pad_shape[i]) for i in range(len(im_pad_shape))],
+        "linear_ramp",
+        end_values=[(im_av, im_av)] * 3,
+    )
     im_deconvolved = np.real(np.fft.ifftn(np.fft.fftn(image) * filter))
-    im_deconvolved = im_deconvolved[im_pad_shape[0]:-im_pad_shape[0], im_pad_shape[1]:-im_pad_shape[1],
-                     im_pad_shape[2]:-im_pad_shape[2]]
+    im_deconvolved = im_deconvolved[
+        im_pad_shape[0] : -im_pad_shape[0], im_pad_shape[1] : -im_pad_shape[1], im_pad_shape[2] : -im_pad_shape[2]
+    ]
     # set min and max so it covers same range as input image
     im_deconvolved = im_deconvolved - im_deconvolved.min()
     return np.round(im_deconvolved * (im_max - im_min) / im_deconvolved.max() + im_min).astype(int)

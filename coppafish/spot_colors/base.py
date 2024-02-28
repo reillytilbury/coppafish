@@ -5,6 +5,8 @@ import os
 
 from ..setup import NotebookPage
 from ..utils import tiles_io
+from .. import logging
+
 
 
 def apply_transform(yxz: np.ndarray, flow: np.ndarray, icp_correction: np.ndarray,
@@ -84,7 +86,6 @@ def get_spot_colors(yxz_base: np.ndarray, t: np.ndarray, transform: np.ndarray, 
         `int32 [n_spots x n_rounds_use x n_channels_use]`. (only returned if `bg_scale` is not `None`).
         - in_bounds - `bool [n_spots]`. Whether spot s was in the bounds of the tile when transformed to round `r`,
         channel `c`. (only returned if `return_in_bounds` is `True`).
-
     """
     if use_rounds is None:
         use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
@@ -136,6 +137,7 @@ def get_spot_colors(yxz_base: np.ndarray, t: np.ndarray, transform: np.ndarray, 
     # It is impossible for any actual spot color to be this due to clipping at the extract stage.
     spot_colors = spot_colors - nbp_basic.tile_pixel_value_shift
     colours_valid = (spot_colors > -nbp_basic.tile_pixel_value_shift).all(axis=(1, 2))
+
     if return_in_bounds:
         spot_colors = spot_colors[colours_valid]
         yxz_base = yxz_base[colours_valid]
@@ -177,8 +179,9 @@ def all_pixel_yxz(y_size: int, x_size: int, z_planes: Union[List, int, np.ndarra
     return np.array(np.meshgrid(np.arange(y_size), np.arange(x_size), z_planes), dtype=np.int16).T.reshape(-1, 3)
 
 
-def normalise_rc(pixel_colours: np.ndarray, spot_colours: np.ndarray, cutoff_intensity_percentile: float = 75,
-                 num_spots: int = 100) -> np.ndarray:
+def normalise_rc(
+    pixel_colours: np.ndarray, spot_colours: np.ndarray, cutoff_intensity_percentile: float = 75, num_spots: int = 100
+) -> np.ndarray:
     """
     Takes in the pixel colours for a single z-plane of a tile, for all rounds and channels. Then performs 2
     normalisations. The first of these is normalising by round and the second is normalising by channel.

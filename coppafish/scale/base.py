@@ -1,9 +1,8 @@
 import os
-import warnings
 import numpy as np
 from typing import List, Tuple, Optional
 
-from .. import utils
+from .. import utils, logging
 from ..setup import NotebookPage
 
 
@@ -25,8 +24,9 @@ def central_tile(tilepos_yx: np.ndarray, use_tiles: List[int]) -> int:
     return int(use_tiles[nearest_t])
 
 
-def get_z_plane(nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int, t: int, use_channels: List[int],
-                use_z: List[int]) -> Tuple[int, int, np.ndarray]:
+def get_z_plane(
+    nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int, t: int, use_channels: List[int], use_z: List[int]
+) -> Tuple[int, int, np.ndarray]:
     """
     Finds z plane and channel that has maximum pixel value for given round and tile.
 
@@ -53,19 +53,27 @@ def get_z_plane(nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int, t: int,
     for i in range(len(use_channels)):
         image_max[i, :] = np.max(
             np.max(
-                utils.raw.load_image(
-                    nbp_file, nbp_basic, t, use_channels[i], round_dask_array, r, use_z
-                ), axis=0, 
-            ), axis=0, 
+                utils.raw.load_image(nbp_file, nbp_basic, t, use_channels[i], round_dask_array, r, use_z),
+                axis=0,
+            ),
+            axis=0,
         )
     max_channel = use_channels[np.max(image_max, axis=1).argmax()]
     max_z = use_z[np.max(image_max, axis=0).argmax()]
     return max_channel, max_z, utils.raw.load_image(nbp_file, nbp_basic, t, max_channel, round_dask_array, r, max_z)
 
 
-def get_scale(nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int, use_tiles: List[int],
-              use_channels: List[int], use_z: List[int], scale_norm: int,
-              filter_kernel: np.ndarray, smooth_kernel: Optional[np.ndarray] = None) -> Tuple[int, int, int, float]:
+def get_scale(
+    nbp_file: NotebookPage,
+    nbp_basic: NotebookPage,
+    r: int,
+    use_tiles: List[int],
+    use_channels: List[int],
+    use_z: List[int],
+    scale_norm: int,
+    filter_kernel: np.ndarray,
+    smooth_kernel: Optional[np.ndarray] = None,
+) -> Tuple[int, int, int, float]:
     """
     Convolves the image for tile ```t```, channel ```c```, z-plane ```z``` with ```filter_kernel```
     then gets the multiplier to apply to filtered nd2 images by dividing ```scale_norm``` by the max value of this
@@ -100,7 +108,7 @@ def get_scale(nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int, use_tiles
             Multiplier to apply to filtered nd2 images before saving as npy so full npy ```uint16``` range occupied.
     """
     # tile to get scale from is central tile
-    if nbp_file.raw_extension == 'jobs':
+    if nbp_file.raw_extension == "jobs":
         t = central_tile(nbp_basic.tilepos_yx_nd2, use_tiles)
     else:
         t = central_tile(nbp_basic.tilepos_yx, use_tiles)
@@ -114,9 +122,9 @@ def get_scale(nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int, use_tiles
     return t, c, z, float(scale)
 
 
-
-def get_scale_from_txt(txt_file: str, scale: Optional[float], scale_anchor: Optional[float],
-                       tol: float = 0.001) -> Tuple[float, float]:
+def get_scale_from_txt(
+    txt_file: str, scale: Optional[float], scale_anchor: Optional[float], tol: float = 0.001
+) -> Tuple[float, float]:
     """
     This checks whether `scale` and `scale_anchor` values used for producing npy files in *tile_dir* match
     values used and saved to `txt_file` on previous run.
@@ -141,21 +149,29 @@ def get_scale_from_txt(txt_file: str, scale: Optional[float], scale_anchor: Opti
         if np.abs(scale_saved) < tol:
             pass  # 0 means scale not used so do nothing
         elif scale is None:
-            print("Using value of scale = {:.2f} saved in\n".format(scale_saved) + txt_file)
+            logging.info("Using value of scale = {:.2f} saved in ".format(scale_saved) + txt_file)
             scale = float(scale_saved)  # Set to saved value used up till now if not specified
         elif np.abs(scale - scale_saved) > tol:
-            raise ValueError(f"\nImaging round (Not anchor) tiles saved so far were calculated with scale = "
-                             f"{scale_saved}\nas saved in {txt_file}\n"
-                             f"This is different from config['extract']['scale'] = {scale}.")
+            logging.error(
+                ValueError(
+                    f"\nImaging round (Not anchor) tiles saved so far were calculated with scale = "
+                    f"{scale_saved}\nas saved in {txt_file}\n"
+                    f"This is different from config['extract']['scale'] = {scale}."
+                )
+            )
         if np.abs(scale_anchor_saved) < tol:
             pass  # 0 means scale_anchor not computed yet so do nothing
         elif scale_anchor is None:
-            print("Using value of scale_anchor = {:.2f} saved in\n".format(scale_anchor_saved) + txt_file)
+            logging.info("Using value of scale_anchor = {:.2f} saved in ".format(scale_anchor_saved) + txt_file)
             scale_anchor = float(scale_anchor_saved)  # Set to saved value used up till now if not specified
         elif np.abs(scale_anchor - scale_anchor_saved) > tol:
-            raise ValueError(f"\nAnchor round tiles saved so far were calculated with scale_anchor = "
-                             f"{scale_anchor_saved}\nas saved in {txt_file}\n"
-                             f"This is different from config['extract']['scale_anchor'] = {scale_anchor}.")
+            logging.error(
+                ValueError(
+                    f"\nAnchor round tiles saved so far were calculated with scale_anchor = "
+                    f"{scale_anchor_saved}\nas saved in {txt_file}\n"
+                    f"This is different from config['extract']['scale_anchor'] = {scale_anchor}."
+                )
+            )
     return scale, scale_anchor
 
 
@@ -179,4 +195,4 @@ def save_scale(txt_file: str, scale: Optional[float], scale_anchor: Optional[flo
         scale = 0
     if scale_anchor is None:
         scale_anchor = 0
-    np.savetxt(txt_file, [scale, scale_anchor], header='scale followed by scale_anchor')
+    np.savetxt(txt_file, [scale, scale_anchor], header="scale followed by scale_anchor")

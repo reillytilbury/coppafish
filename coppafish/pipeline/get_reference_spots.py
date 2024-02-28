@@ -7,7 +7,7 @@ except ImportError:
 from ..spot_colors import base as spot_colors_base
 from ..call_spots import base as call_spots_base
 from .. import find_spots as fs
-from .. import utils
+from .. import utils, logging
 from ..setup.notebook import NotebookPage
 
 
@@ -62,8 +62,10 @@ def get_reference_spots(
     # fixed as the value of the reference round and reference channel
     r = nbp_basic.anchor_round
     c = nbp_basic.anchor_channel
+    logging.debug("Get ref spots started")
     use_tiles, use_rounds, use_channels = (nbp_basic.use_tiles.copy(), nbp_basic.use_rounds.copy(),
                                            nbp_basic.use_channels.copy())
+
 
     # all means all spots found on the reference round / channel
     all_local_yxz = np.zeros((0, 3), dtype=np.int16)
@@ -75,7 +77,7 @@ def get_reference_spots(
     for t in nbp_basic.use_tiles:
         t_local_yxz = fs.spot_yxz(nbp_find_spots.spot_yxz, t, r, c, nbp_find_spots.spot_no)
         t_isolated = fs.spot_isolated(nbp_find_spots.isolated_spots, t, r, c, nbp_find_spots.spot_no)
-        # np.shape(t_local_yxz)[0] is the number of spots found on this tile. If there's a nonzero number of spots 
+        # np.shape(t_local_yxz)[0] is the number of spots found on this tile. If there's a nonzero number of spots
         # found then we append the local_yxz info and isolated info to our arrays.
         # The all_local_tiles array SHOULD be the same length (ie have same number of elements as all_local_yxz has
         # rows) as all_local_yxz
@@ -94,6 +96,7 @@ def get_reference_spots(
     nd_local_tile = all_local_tile[not_duplicate]
     nd_isolated = all_isolated[not_duplicate]
     invalid_value = -nbp_basic.tile_pixel_value_shift
+    
     # Only save used rounds/channels initially
     n_use_rounds, n_use_channels, n_use_tiles = len(use_rounds), len(use_channels), len(use_tiles)
     spot_colours = np.zeros((0, n_use_rounds, n_use_channels), dtype=np.int32)
@@ -140,5 +143,6 @@ def get_reference_spots(
     nbp.background_strength = None
     nbp.gene_probs = None
     nbp.dye_strengths = None
+    logging.debug("Get ref spots complete")
 
     return nbp

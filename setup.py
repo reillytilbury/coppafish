@@ -34,7 +34,6 @@ setup(
         "h5py",
         "pandas",
         "dask",
-        "joblib",
         "psutil",
         "zarr",
         "matplotlib",

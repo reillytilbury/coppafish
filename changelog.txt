@@ -1,3 +1,19 @@
+2024/02/15 Alpha Update (v0.9.2):
+ * OMP is now significantly faster after vectorising an out of bounds check for spot positions.
+ * All coppafish logs are saved in a file with default name pipeline.log, the name can be changed by editing the 
+    file_names config variable log_name.
+ * Out of memory issue in pytorch GPU fix.
+ * The Viewer's gene legend is dark themed again.
+ * Viewer documentation added.
+
+
+
+2024/02/12 Alpha Update (v0.9.1):
+ * Vectorised find_spots detect.py numpy code for faster speeds in OMP.
+ * The diagnostic PDF is now created after scale, extract, and filter sections for the user to see.
+ * Pre-sequence images are now blurred before computing the background scale and subtracting from sequencing images.
+
+
 2024/02/07 Alpha Update (v0.9.0):
  * The appropriate, tested package versions are installed by `pip install -r requirement...` with the wanted 
     requirements text file.

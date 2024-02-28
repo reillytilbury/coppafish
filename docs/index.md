@@ -1,6 +1,6 @@
 ## Coppafish
 
-Coppafish is an open source data analysis software for Combinatorial padlOck-Probe-Amplified Fluorescence In Situ 
+Coppafish is an open source data analysis software for COmbinatorial Padlock-Probe-Amplified Fluorescence In Situ 
 Hybridization (coppafish) datasets. A series of 3D microscope images are arranged in tiles, rounds and channels. For 
 each sequencing round, every gene being considered is fluoresced by a dye. Then, by the end of all rounds, each gene 
 type has a unique sequence of dyes, called the gene code. Some vocabulary might be unfamiliar, please see the 
@@ -56,7 +56,7 @@ python -m pip install -r requirements-pytorchgpu.txt
 python -m pip install -e .
 ```
 
-or for the optimised, [pytorch](https://github.com/pytorch) GPU code (Windows and Linux support)
+or for the optimised, [pytorch](https://github.com/pytorch) CPU code (Windows and Linux support)
 ```console
 cd coppafish
 python -m pip install --upgrade pip
@@ -64,7 +64,7 @@ python -m pip install -r requirements-pytorch.txt
 python -m pip install -e .
 ```
 
-or for the optimised [jax](https://github.com/google/jax) code (Linux only and can be less stable for some computers)
+or for the optimised [jax](https://github.com/google/jax) code (Linux only and is less stable)
 ```console
 cd coppafish
 python -m pip install --upgrade pip
@@ -79,8 +79,12 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python -m pip install -e .
 ```
+
 this can be useful for people with limited disk space for large packages like jax and pytorch who do not mind 
 sacrificing computation speed.
 
 If you do not wish to keep a local copy of coppafish (i.e. not interested in `git pull`ing higher coppafish versions 
 later) then remove the `-e` option. The source code can then be deleted after installing.
+
+If pytorch GPU is installed, but no cuda device is found available, then coppafish will automatically revert back to 
+CPU.

@@ -7,7 +7,7 @@ import numpy as np
 from tqdm import tqdm
 from typing import Tuple
 from ..setup import NotebookPage
-from .. import find_spots
+from .. import find_spots, logging
 from ..register import preprocessing
 from ..register import base as register_base
 from ..utils import system, tiles_io
@@ -53,6 +53,7 @@ def register(
 
     # Part 0: Initialisation
     # Initialise frequently used variables
+    logging.debug("Register started")
     nbp, nbp_debug = NotebookPage("register"), NotebookPage("register_debug")
     nbp.software_version = system.get_software_version()
     nbp.revision_hash = system.get_git_revision_hash()
@@ -186,6 +187,7 @@ def register(
     nbp_debug.converged = registration_data["icp"]["converged"]
 
     # first, let us blur the pre-seq round images
+
     # if nbp_basic.use_preseq:
     #     if pre_seq_blur_radius is None:
     #         pre_seq_blur_radius = 3
@@ -236,4 +238,5 @@ def register(
         nbp_filter.bg_scale = bg_scale
         nbp_filter.finalized = True
 
+    logging.debug("Register complete")
     return nbp, nbp_debug
