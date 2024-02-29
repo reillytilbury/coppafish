@@ -54,13 +54,15 @@ def run_filter(
         os.mkdir(nbp_file.tile_dir)
     file_type = nbp_extract.file_type
 
+    INVALID_AUTO_THRESH = -1
+    nbp_debug.invalid_auto_thresh = INVALID_AUTO_THRESH
     auto_thresh_path = os.path.join(nbp_file.tile_dir, "auto_thresh.npz")
     if os.path.isfile(auto_thresh_path):
         auto_thresh = np.load(auto_thresh_path)["arr_0"]
     else:
         auto_thresh = np.full(
             (nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.n_extra_rounds, nbp_basic.n_channels),
-            fill_value=-1,
+            fill_value=INVALID_AUTO_THRESH,
             dtype=int,
         )
     hist_counts_values_path = os.path.join(nbp_file.tile_dir, "hist_counts_values.npz")
@@ -186,7 +188,11 @@ def run_filter(
             if filtered_image_exists and hist_counts_values_exists[t, r, c] and c == nbp_basic.dapi_channel:
                 pbar.update()
                 continue
-            if filtered_image_exists and hist_counts_values_exists[t, r, c] and auto_thresh[t, r, c] != -1:
+            if (
+                filtered_image_exists
+                and hist_counts_values_exists[t, r, c]
+                and auto_thresh[t, r, c] != INVALID_AUTO_THRESH
+            ):
                 # We already have everything we need for this tile, round, channel image.
                 pbar.update()
                 continue

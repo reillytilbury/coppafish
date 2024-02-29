@@ -539,8 +539,13 @@
         "z_info": [
             "eq",
             "Integer",
-            "z plane in *npy* file from which `auto_thresh` and `hist_counts` were calculated. By default, this is the mid ",
-            "plane."
+            "z plane in *npy* file from which `auto_thresh` and `hist_counts` were calculated. By default, this is ",
+            "the mid plane."
+        ],
+        "invalid_auto_thresh": [
+            "eq",
+            "Integer",
+            "Any `filter.auto_thresh` value set to this is invalid."
         ],
         "time_taken": [
             "add",
