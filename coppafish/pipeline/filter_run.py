@@ -196,7 +196,7 @@ def run_filter(
             # zyx -> yxz
             im_raw = im_raw.transpose((1, 2, 0))
             im_filtered, bad_columns = extract.strip_hack(im_raw)  # check for faulty columns
-            assert bad_columns.size == 0, f"Bad y column(s) were found during image filtering: {t=}, {r=}, {c=}"
+            assert bad_columns.size == 0, f"Bad y column(s) were found during {t=}, {r=}, {c=} image filtering"
             del im_raw
             if config["deconvolve"]:
                 # Deconvolves dapi images too
