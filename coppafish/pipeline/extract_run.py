@@ -14,8 +14,7 @@ def run_extract(
 ) -> Tuple[NotebookPage, NotebookPage, Optional[np.ndarray]]:
     """
     This reads in images from the raw `nd2` files, filters them and then saves them as `config[extract][file_type]`
-    files in the tile directory. Also gets `auto_thresh` for use in turning images to point clouds and `hist_values`,
-    `hist_counts` required for normalisation between channels.
+    files in the tile directory. Also gets `hist_values` and `hist_counts` required for normalisation between channels.
 
     Args:
         config (dict): dictionary obtained from 'extract' section of config file.
