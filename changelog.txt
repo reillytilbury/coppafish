@@ -2,6 +2,7 @@
  * Default Wiener deconvolution configuration in the filter stage is improved.
  * Difference of Hanning is now default turned off in filter. This can be changed by setting the new variable 
     difference_of_hanning to true in the scale config section.
+ * Wiener deconvolve now does not shift pixel values after filtering fix.
  * Pytorch GPU out of memory fix attempt.
  * Detecting spots is less memory intensive.
  * Incorrect `hist_counts` values in extract and filter pages. This caused the filter/extract PDF histograms to be 
@@ -9,6 +10,7 @@
  * New config variable in filter called "psf_max_spots". The default is 5,000, the same as previous versions.
  * Added more pipeline warnings.
  * Removed unnecessary jax code.
+ * New `invalid_auto_thresh` notebook variable in filter_debug added.
  * Optimised plotting function `remove_background` in spot_colors.
  * Docs + logo update for coppafish.
 
