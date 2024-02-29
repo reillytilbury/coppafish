@@ -89,7 +89,7 @@ def call_reference_spots(
             nbp_ref_spots.__delattr__(var)
     nbp = NotebookPage("call_spots")
     nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_git_revision_hash()
+    nbp.revision_hash = utils.system.get_software_hash()
     logging.debug("Call ref spots started")
 
     # 0. Initialise frequently used variables

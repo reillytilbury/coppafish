@@ -61,7 +61,7 @@ def call_spots_omp(
     """
     nbp = NotebookPage("omp")
     nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_git_revision_hash()
+    nbp.revision_hash = utils.system.get_software_hash()
     logging.debug("OMP started")
 
     # use bled_codes with gene efficiency incorporated and only use_rounds/channels

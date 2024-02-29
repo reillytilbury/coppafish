@@ -30,7 +30,7 @@ def set_basic_info(config_file: dict, config_basic: dict, n_rounds: int = 7) -> 
     nbp.is_3d = config_basic["is_3d"]
 
     nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_git_revision_hash()
+    nbp.revision_hash = utils.system.get_software_hash()
 
     # TODO: Get rid of this
     # First condition refers to situation where jobs not used, alternative if jobs is used
@@ -297,7 +297,7 @@ def set_basic_info_new(config: dict) -> NotebookPage:
     nbp = NotebookPage("basic_info")
 
     nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_git_revision_hash()
+    nbp.revision_hash = utils.system.get_software_hash()
 
     # Now break the page contents up into 2 types, contents that must be read in from the config and those that can
     # be computed from the metadata

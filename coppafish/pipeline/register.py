@@ -58,7 +58,7 @@ def register(
     logging.debug("Register started")
     nbp, nbp_debug = NotebookPage("register"), NotebookPage("register_debug")
     nbp.software_version = system.get_software_version()
-    nbp.revision_hash = system.get_git_revision_hash()
+    nbp.revision_hash = system.get_software_hash()
     use_tiles, use_rounds, use_channels = nbp_basic.use_tiles, nbp_basic.use_rounds, nbp_basic.use_channels
     n_tiles, n_rounds, n_channels = nbp_basic.n_tiles, nbp_basic.n_rounds, nbp_basic.n_channels
     round_registration_channel = config["round_registration_channel"]

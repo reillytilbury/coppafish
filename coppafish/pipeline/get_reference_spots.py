@@ -61,7 +61,7 @@ def get_reference_spots(
     # spot and much more.
     nbp = NotebookPage("ref_spots")
     nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_git_revision_hash()
+    nbp.revision_hash = utils.system.get_software_hash()
     # The code is going to loop through all tiles, as we expect some anchor spots on each tile but r and c should stay
     # fixed as the value of the reference round and reference channel
     r = nbp_basic.anchor_round

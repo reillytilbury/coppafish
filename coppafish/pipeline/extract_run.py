@@ -39,7 +39,7 @@ def run_extract(
 
     nbp = NotebookPage("extract")
     nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_git_revision_hash()
+    nbp.revision_hash = utils.system.get_software_hash()
     nbp.file_type = config["file_type"]
     nbp.continuous_dapi = config["continuous_dapi"]
 

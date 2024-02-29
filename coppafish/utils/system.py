@@ -19,7 +19,7 @@ def get_software_version() -> str:
     return version_tag
 
 
-def get_git_revision_hash() -> str:
+def get_software_hash() -> str:
     """
     Get the latest git commit full hash if possible.
 
