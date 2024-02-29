@@ -51,7 +51,7 @@ def run_extract(
         pre_seq_round = None
 
     hist_counts_values_path = os.path.join(nbp_file.tile_unfiltered_dir, "hist_counts_values.npz")
-    hist_values = np.arange(np.iinfo(np.uint16).max - np.iinfo(np.uint16).min + 1)
+    hist_values = np.arange(tiles_io.get_pixel_max() - tiles_io.get_pixel_min() + 1)
     hist_counts = np.zeros(
         (hist_values.size, nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.n_extra_rounds, nbp_basic.n_channels),
         dtype=int,

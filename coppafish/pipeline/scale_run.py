@@ -24,7 +24,7 @@ def compute_scale(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage)
         - See 'scale' sections of `notebook_comments.json` file for description of the variables that are stored.
     """
     # Check scaling won't cause clipping when saving as uint16
-    scale_norm_max = np.iinfo(np.uint16).max - nbp_basic.tile_pixel_value_shift
+    scale_norm_max = utils.tiles_io.get_pixel_max() - nbp_basic.tile_pixel_value_shift
     if config["scale_norm"] >= scale_norm_max:
         logging.error(
             ValueError(
@@ -89,8 +89,8 @@ def compute_scale(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage)
 
     if config["scale"] is None and len(nbp_file.round) > 0:
         # ensure scale_norm value is reasonable so max pixel value in tiff file is significant factor of max of uint16
-        scale_norm_min = (np.iinfo("uint16").max - nbp_basic.tile_pixel_value_shift) / 5
-        scale_norm_max = np.iinfo("uint16").max - nbp_basic.tile_pixel_value_shift
+        scale_norm_min = (utils.tiles_io.get_pixel_max() - nbp_basic.tile_pixel_value_shift) / 5
+        scale_norm_max = utils.tiles_io.get_pixel_max() - nbp_basic.tile_pixel_value_shift
         if not scale_norm_min <= config["scale_norm"] <= scale_norm_max:
             logging.error(
                 utils.errors.OutOfBoundsError("scale_norm", config["scale_norm"], scale_norm_min, scale_norm_max)

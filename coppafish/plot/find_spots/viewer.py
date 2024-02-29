@@ -11,7 +11,6 @@ from ...setup import Notebook
 from ..raw import get_raw_images, number_to_list, add_basic_info_no_save
 from ... import extract, utils
 from ...filter import base as filter_base
-from ...register import preprocessing
 from ...utils import tiles_io
 from ...find_spots import check_neighbour_intensity
 
@@ -136,11 +135,11 @@ class view_find_spots:
             z_info = int(np.floor(nb.basic_info.nz / 2))
             hist_values = np.arange(
                 -nb.basic_info.tile_pixel_value_shift,
-                np.iinfo(np.uint16).max - nb.basic_info.tile_pixel_value_shift + 2,
+                tiles_io.get_pixel_max() - nb.basic_info.tile_pixel_value_shift + 2,
                 1,
             )
             hist_bin_edges = np.concatenate((hist_values - 0.5, hist_values[-1:] + 0.5))
-            max_npy_pixel_value = np.iinfo(np.uint16).max - nb.basic_info.tile_pixel_value_shift
+            max_npy_pixel_value = tiles_io.get_pixel_max() - nb.basic_info.tile_pixel_value_shift
             self.auto_thresh = filter_base.get_filter_info(
                 self.image, config["auto_thresh_multiplier"], hist_bin_edges, max_npy_pixel_value, scale, z_info
             )[0]

@@ -91,9 +91,11 @@ def get_psf_spots(
         median_im = np.median(im[:, :, mid_z])
         if intensity_thresh is None:
             intensity_thresh = median_im + np.median(np.abs(im[:, :, mid_z] - median_im)) * intensity_auto_param
-        elif intensity_thresh <= median_im or intensity_thresh >= np.iinfo(np.uint16).max:
+        elif intensity_thresh <= median_im or intensity_thresh >= utils.tiles_io.get_pixel_max():
             logging.error(
-                utils.errors.OutOfBoundsError("intensity_thresh", intensity_thresh, median_im, np.iinfo(np.uint16).max)
+                utils.errors.OutOfBoundsError(
+                    "intensity_thresh", intensity_thresh, median_im, utils.tiles_io.get_pixel_max()
+                )
             )
         spot_yxz, _ = find_spots.detect_spots(im, intensity_thresh, radius_xy, radius_z, True)
         # check fall off in intensity not too large

@@ -64,7 +64,7 @@ def run_filter(
             dtype=int,
         )
     hist_counts_values_path = os.path.join(nbp_file.tile_dir, "hist_counts_values.npz")
-    hist_values = np.arange(np.iinfo(np.uint16).max - np.iinfo(np.uint16).min + 1)
+    hist_values = np.arange(tiles_io.get_pixel_max() - tiles_io.get_pixel_min() + 1)
     hist_counts = np.zeros(
         (hist_values.size, nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.n_extra_rounds, nbp_basic.n_channels),
         dtype=int,
@@ -158,9 +158,9 @@ def run_filter(
             else:
                 scale = nbp_scale.scale
             if c == nbp_basic.dapi_channel:
-                max_pixel_value = np.iinfo(np.uint16).max
+                max_pixel_value = tiles_io.get_pixel_max()
             else:
-                max_pixel_value = np.iinfo(np.uint16).max - nbp_basic.tile_pixel_value_shift
+                max_pixel_value = tiles_io.get_pixel_max() - nbp_basic.tile_pixel_value_shift
 
             if r != nbp_basic.pre_seq_round:
                 file_path = nbp_file.tile[t][r][c]
@@ -256,7 +256,7 @@ def run_filter(
             # zyx -> yxz
             saved_im = saved_im.transpose((1, 2, 0))
             del im_filtered
-            hist_counts[:, t, r, c] = np.histogram(saved_im, hist_values.size)[0]
+            hist_counts[:, t, r, c] = np.histogram(saved_im, hist_values.size, range=(0, tiles_io.get_pixel_max()))[0]
             np.savez_compressed(hist_counts_values_path, hist_counts, hist_values)
             del saved_im
             pbar.update()

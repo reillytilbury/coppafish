@@ -9,6 +9,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from typing import Union, Optional, Tuple
 
 from ..setup import Notebook, NotebookPage
+from ..utils import tiles_io
 from .. import logging
 
 
@@ -112,7 +113,7 @@ class BuildPDF:
                     text_extract_info = ""
                     text_extract_info += self.get_extract_text_info(nb.extract)
                     axes[0, 0].set_title(text_extract_info, fontdict=INFO_FONTDICT, y=0.5)
-                    extract_image_dtype = np.uint16
+                    extract_image_dtype = tiles_io.IMAGE_SAVE_DTYPE
                     self.empty_plot_ticks(axes[0, 0])
                     pdf.savefig(fig)
                     plt.close(fig)
@@ -158,7 +159,7 @@ class BuildPDF:
                     pdf.savefig(fig)
                     plt.close(fig)
 
-                    filter_image_dtype = np.uint16
+                    filter_image_dtype = tiles_io.IMAGE_SAVE_DTYPE
                     file_path = os.path.join(nb.file_names.tile_dir, "hist_counts_values.npz")
                     filter_pixel_unique_counts, filter_pixel_unique_values = None, None
                     if os.path.isfile(file_path):

@@ -13,16 +13,32 @@ except ImportError:
 from tqdm import tqdm
 import numpy_indexed
 import numpy.typing as npt
-from typing import Tuple, Union, Optional, List, Any
+from typing import Tuple, Union, Optional, List
 
 from ..setup import NotebookPage
-from ..register import preprocessing
 from .. import utils, extract, logging
+
+
+IMAGE_SAVE_DTYPE = np.uint16
 
 
 class OptimisedFor(Enum):
     FULL_READ_AND_WRITE = auto()
     Z_PLANE_READ = auto()
+
+
+def get_pixel_max() -> int:
+    """
+    Get the maximum pixel value that can be saved in an image.
+    """
+    return np.iinfo(IMAGE_SAVE_DTYPE).max
+
+
+def get_pixel_min() -> int:
+    """
+    Get the minimum pixel value that can be saved in an image.
+    """
+    return np.iinfo(IMAGE_SAVE_DTYPE).min
 
 
 def image_exists(file_path: str, file_type: str) -> bool:
@@ -68,6 +84,9 @@ def _save_image(
     Raises:
         ValueError: unsupported file_type or optimised_for.
     """
+    if image.dtype != IMAGE_SAVE_DTYPE:
+        raise ValueError(f"Expected image dtype {IMAGE_SAVE_DTYPE}, got {image.dtype}")
+
     if optimised_for is None:
         optimised_for = OptimisedFor.FULL_READ_AND_WRITE
     if file_type.lower() == ".npy":
