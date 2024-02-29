@@ -176,6 +176,7 @@ class BuildPDF:
                             pixel_min,
                             pixel_max,
                             bin_size=2**10,
+                            auto_thresh_values=nb.filter.auto_thresh,
                         )
                         for fig in figs:
                             pdf.savefig(fig)
@@ -484,6 +485,7 @@ class BuildPDF:
         pixel_max: int,
         bin_size: int,
         log_count: bool = True,
+        auto_thresh_values: np.ndarray = None,
     ) -> list:
         assert bin_size >= 1
         assert (pixel_max - pixel_min + 1) % bin_size == 0
@@ -504,7 +506,7 @@ class BuildPDF:
         use_rounds_all = list(set(use_rounds_all))
         use_rounds_all.sort()
         final_round = use_rounds_all[-1]
-        greatest_possible_y = tiles_io.get_pixel_max() - tiles_io.get_pixel_min() + 1
+        greatest_possible_y = nb.basic_info.tile_sz * nb.basic_info.tile_sz * len(nb.basic_info.use_z)
         if log_count:
             greatest_possible_y = np.log2(greatest_possible_y)
         for t in nb.basic_info.use_tiles:
@@ -559,6 +561,14 @@ class BuildPDF:
                         continue
                     ax.bar(x=hist_loc, height=hist_x, color="red", width=bin_size)
                     ax.set_xlim(pixel_min, pixel_max)
+                    # Vertical line at the auto thresh value, i.e. the detecting spots threshold
+                    if auto_thresh_values is not None:
+                        ax.vlines(
+                            auto_thresh_values[t, r, c] + nb.basic_info.tile_pixel_value_shift,
+                            0,
+                            greatest_possible_y,
+                            linestyles="dotted",
+                        )
                     # Axis labelling and ticks
                     if c == first_channel:
                         round_label = str(r)
