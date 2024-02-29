@@ -5,7 +5,7 @@ from tqdm import tqdm
 import numpy.typing as npt
 from typing import Optional, Tuple
 
-from .. import utils, extract, logging
+from .. import utils, extract, logging, filter
 from ..utils import tiles_io, indexing
 from ..filter import deconvolution
 from ..filter import base as filter_base
@@ -204,12 +204,13 @@ def run_filter(
             im_filtered, bad_columns = extract.strip_hack(im_raw)  # check for faulty columns
             assert bad_columns.size == 0, f"Bad y column(s) were found during {t=}, {r=}, {c=} image filtering"
             del im_raw
+            # Move to floating point before doing any filtering
+            im_filtered = im_filtered.astype(np.float64)
             if config["deconvolve"]:
                 # Deconvolves dapi images too
                 logging.debug("Wiener deconvolve started")
-                im_filtered = deconvolution.wiener_deconvolve(im_filtered, config["wiener_pad_shape"], wiener_filter)
+                im_filtered = filter.wiener_deconvolve(im_filtered, config["wiener_pad_shape"], wiener_filter)
                 logging.debug("Wiener deconvolve complete")
-            im_filtered = im_filtered.astype(np.float64)
             if c == nbp_basic.dapi_channel:
                 if filter_kernel_dapi is not None:
                     im_filtered = utils.morphology.top_hat(im_filtered, filter_kernel_dapi)
