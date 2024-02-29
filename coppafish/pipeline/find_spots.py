@@ -28,8 +28,8 @@ def find_spots(
         nbp_extract (NotebookPage): `extract` notebook page.
         nbp_filter (NotebookPage): `filter` notebook page.
         auto_thresh (`[n_tiles x n_rounds x n_channels] ndarray[float]`): `auto_thresh[t, r, c]` is the threshold for
-            the tiff file corresponding to tile `t`, round `r`, channel `c` such that all local maxima with pixel
-            values greater than this are considered spots.
+            the tile `t`, round `r`, channel `c` image such that all local maxima with pixel values greater than this
+            are considered spots.
         image_t (`(n_rounds x n_channels x nz x ny x nx) ndarray[uint16]`, optional): extracted and filtered image
             for a single tile. If given, find_spots runs on the single tile and returns its NotebookPage. Default: not
             given.
