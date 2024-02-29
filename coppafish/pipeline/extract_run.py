@@ -114,7 +114,9 @@ def run_extract(
                     logging.warn(f"Raw image {t=}, {r=}, {c=} has a single valued plane!")
                 tiles_io._save_image(im, file_path, config["file_type"])
             # Compute the counts of each possible uint16 pixel value for the image.
-            hist_counts[:, t, r, c] = np.histogram(im, hist_values.size)[0]
+            hist_counts[:, t, r, c] = np.histogram(
+                im, hist_values.size, range=(tiles_io.get_pixel_min(), tiles_io.get_pixel_max())
+            )[0]
             np.savez_compressed(hist_counts_values_path, hist_counts, hist_values)
             del im
             pbar.update()

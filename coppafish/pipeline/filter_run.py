@@ -256,7 +256,9 @@ def run_filter(
             # zyx -> yxz
             saved_im = saved_im.transpose((1, 2, 0))
             del im_filtered
-            hist_counts[:, t, r, c] = np.histogram(saved_im, hist_values.size, range=(0, tiles_io.get_pixel_max()))[0]
+            hist_counts[:, t, r, c] = np.histogram(
+                saved_im, hist_values.size, range=(tiles_io.get_pixel_min(), tiles_io.get_pixel_max())
+            )[0]
             np.savez_compressed(hist_counts_values_path, hist_counts, hist_values)
             del saved_im
             pbar.update()
