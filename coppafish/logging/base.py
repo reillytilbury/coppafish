@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Union
+from typing import Union, Callable, Any
 
 
 DEBUG = 10
@@ -14,6 +14,25 @@ severity_to_name = {
     WARNING: "WARNING",
     ERROR: "ERROR",
 }
+
+
+def error_catch(func: Callable, *args, **kwargs) -> Any:
+    """
+    Any raised Exceptions that are not Keyboard/System interrupts are captured here and then sent to the logger as an
+    error so all errors are saved to the .log file.
+
+    Args:
+        func (Callable): function to run and catch errors on. All other parameters are input into func.
+
+    Returns:
+        Any: function output.
+    """
+    try:
+        result = func(*args, **kwargs)
+    except Exception as e:
+        error(e)
+        raise RuntimeError("Should not reach here")
+    return result
 
 
 def set_log_config(minimum_print_severity: int, log_file_path: str = None) -> None:
@@ -65,12 +84,12 @@ def log(msg: Union[str, Exception], severity: int) -> None:
         with open(_log_file, "a") as log_file:
             log_file.write(message + "\n")
     if severity >= _minimum_print_severity:
-        if severity >= CRASH_ON:
-            # Crash on high severity
-            if isinstance(msg, Exception):
-                raise msg
-            raise LogError(message)
         logging.getLogger("coppafish").log(severity, message)
+    if severity >= CRASH_ON:
+        # Crash on high severity
+        if isinstance(msg, Exception):
+            raise msg
+        raise LogError(message)
 
 
 def datetime_string() -> str:

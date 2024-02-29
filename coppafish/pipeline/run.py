@@ -46,11 +46,11 @@ def run_pipeline(
         Notebook: notebook containing all information gathered during the pipeline.
     """
     nb = initialize_nb(config_file)
-    run_tile_indep_pipeline(nb)
-    run_stitch(nb)
-    run_reference_spots(nb, overwrite_ref_spots)
-    run_omp(nb)
-    BuildPDF(nb, auto_open=True)
+    logging.error_catch(run_tile_indep_pipeline, nb)
+    logging.error_catch(run_stitch, nb)
+    logging.error_catch(run_reference_spots, nb, overwrite_ref_spots)
+    logging.error_catch(run_omp, nb)
+    logging.error_catch(BuildPDF, nb, auto_open=True)
     return nb
 
 
