@@ -504,6 +504,9 @@ class BuildPDF:
         use_rounds_all = list(set(use_rounds_all))
         use_rounds_all.sort()
         final_round = use_rounds_all[-1]
+        greatest_possible_y = tiles_io.get_pixel_max() - tiles_io.get_pixel_min() + 1
+        if log_count:
+            greatest_possible_y = np.log2(greatest_possible_y)
         for t in nb.basic_info.use_tiles:
             fig, axes = self.create_empty_page(
                 nrows=len(use_rounds_all),
@@ -517,7 +520,6 @@ class BuildPDF:
                 f"{section_name} {' log of ' if log_count else ''} pixel values, {t=}",
                 fontsize=SMALL_FONTSIZE,
             )
-            greatest_count = 0
             for i, r in enumerate(use_rounds_all):
                 if r == nb.basic_info.anchor_round:
                     use_channels_r = self.use_channels_anchor
@@ -555,8 +557,6 @@ class BuildPDF:
                     if np.sum(hist_x) <= 0:
                         logging.warn(f"The {section_name.lower()} image for {t=}, {r=}, {c=} looks to be all zeroes!")
                         continue
-                    if np.max(hist_x) > greatest_count:
-                        greatest_count = np.max(hist_x)
                     ax.bar(x=hist_loc, height=hist_x, color="red", width=bin_size)
                     ax.set_xlim(pixel_min, pixel_max)
                     # Axis labelling and ticks
@@ -577,8 +577,8 @@ class BuildPDF:
                             fontdict={"fontsize": SMALL_FONTSIZE},
                         )
                         ax.set_xticks([pixel_min, pixel_max])
-            ax.set_ylim([0, greatest_count])
             figures.append(fig)
+            ax.set_ylim([0, greatest_possible_y])
         return figures
 
     def get_find_spots_info(self, find_spots_page: NotebookPage) -> str:

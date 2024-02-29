@@ -1,9 +1,11 @@
 2024/02/19 Alpha Update (v0.10.0):
  * Default Wiener deconvolution configuration in the filter stage is improved.
- * Difference of Hannings is default turned off in filter. Can changed by setting difference_of_hanning to true in the 
-    scale config section.
+ * Difference of Hanning is now default turned off in filter. This can be changed by setting the new variable 
+    difference_of_hanning to true in the scale config section.
  * Pytorch GPU out of memory fix attempt.
  * Detecting spots is less memory intensive.
+ * Incorrect `hist_counts` values in extract and filter pages. This caused the filter/extract PDF histograms to be 
+    incorrectly ranged. This has now been fixed.
  * New config variable in filter called "psf_max_spots". The default is 5,000, the same as previous versions.
  * Added more pipeline warnings.
  * Removed unnecessary jax code.
