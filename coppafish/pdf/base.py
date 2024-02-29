@@ -561,6 +561,15 @@ class BuildPDF:
                         continue
                     ax.bar(x=hist_loc, height=hist_x, color="red", width=bin_size)
                     ax.set_xlim(pixel_min, pixel_max)
+                    if "filter" in section_name.lower():
+                        ax.vlines(
+                            nb.basic_info.tile_pixel_value_shift,
+                            0,
+                            greatest_possible_y,
+                            linestyles="solid",
+                            colors="black",
+                            linewidths=0.75,
+                        )
                     # Vertical line at the auto thresh value, i.e. the detecting spots threshold
                     if auto_thresh_values is not None:
                         ax.vlines(
