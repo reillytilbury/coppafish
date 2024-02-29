@@ -19,8 +19,6 @@ reference.
 
 * At least 48GB of RAM for tile sizes `58x2048x2048`.
 * Python version 3.9 or 3.10.
-* [Git](https://git-scm.com/) (optional) is used to store more precise versioning, i.e. a hash, to detect any changes 
-    in software version.
 
 ### Environment
 

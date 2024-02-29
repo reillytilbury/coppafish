@@ -36,7 +36,7 @@ def test_integration_smallest() -> Notebook:
     Returns:
         Notebook: complete coppafish Notebook.
     """
-    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "integration_dir")
+    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), ".integration_dir")
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
@@ -61,7 +61,7 @@ def test_integration_small_two_tile():
     Returns:
         Notebook: complete coppafish Notebook.
     """
-    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "integration_dir")
+    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), ".integration_dir")
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
@@ -84,7 +84,7 @@ def test_integration_002() -> None:
 
     Includes anchor round, DAPI image, presequence round, sequencing rounds, one tile.
     """
-    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "integration_dir")
+    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), ".integration_dir")
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
@@ -115,7 +115,7 @@ def test_integration_non_symmetric(include_stitch: bool = True, include_omp: boo
     Returns:
         Notebook: final notebook.
     """
-    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "integration_dir")
+    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), ".integration_dir")
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
@@ -141,7 +141,7 @@ def test_integration_004() -> None:
 
     Includes anchor round, DAPI image, presequence round, sequencing rounds, one tile. No DAPI channel registration.
     """
-    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "integration_dir")
+    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), ".integration_dir")
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
@@ -159,7 +159,7 @@ def test_integration_004() -> None:
 @pytest.mark.integration
 @pytest.mark.slow
 def test_bg_subtraction() -> None:
-    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "integration_dir")
+    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), ".integration_dir")
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
@@ -191,11 +191,11 @@ def test_viewers() -> None:
         - Requires a robominnie instance to have successfully run through first.
     """
     notebook_path = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), "integration_dir/output_coppafish/notebook.npz"
+        os.path.dirname(os.path.realpath(__file__)), ".integration_dir/output_coppafish/notebook.npz"
     )
     if not os.path.isfile(notebook_path):
         return
-    gene_colours_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "integration_dir/gene_colours.csv")
+    gene_colours_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), ".integration_dir/gene_colours.csv")
     notebook = Notebook(notebook_path)
     Viewer(notebook, gene_marker_file=gene_colours_path)
     RegistrationViewer(notebook)
@@ -211,12 +211,12 @@ def test_pdf_builder() -> None:
         - Requires a robominnie instance to have run through first to retrieve the notebook file.
     """
     notebook_path = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), "integration_dir/output_coppafish/notebook.npz"
+        os.path.dirname(os.path.realpath(__file__)), ".integration_dir/output_coppafish/notebook.npz"
     )
     BuildPDF(notebook_path, auto_open=False)
 
 
 if __name__ == "__main__":
-    test_integration_004()
+    test_integration_small_two_tile()
     test_pdf_builder()
     test_viewers()

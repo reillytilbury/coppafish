@@ -104,10 +104,10 @@ def initialize_nb(config_file: str) -> Notebook:
         nb += nbp_basic
     else:
         logging.warn(utils.warnings.NotebookPageWarning("basic_info"))
-    if utils.system.get_software_version() not in nb.get_unique_versions():
+    if utils.system.get_software_version() not in nb.get_all_variable_instances(nb._SOFTWARE_VERSION):
         logging.warn(
             f"You are running on software version {utils.system.get_software_version()}, but the notebook contains "
-            + f"data from versions {nb.get_unique_versions()}.",
+            + f"data from versions {nb.get_all_variable_instances(nb._SOFTWARE_VERSION)}.",
         )
         logging.warn("Are you sure you want to continue? (y or n) ")
         user_input = input()

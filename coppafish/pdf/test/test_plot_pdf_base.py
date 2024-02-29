@@ -8,7 +8,7 @@ from coppafish import BuildPDF
 def test_BuildPDF():
     robominnie_notebook = os.path.join(
         os.path.dirname(os.path.realpath(__file__)),
-        "../../robominnie/test/integration_dir/output_coppafish/notebook.npz",
+        "../../robominnie/test/.integration_dir/output_coppafish/notebook.npz",
     )
     output_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "unit_test_dir/diagnostics.pdf")
     if not os.path.isdir(os.path.dirname(output_path)):

@@ -1,7 +1,7 @@
 import os
 import shutil
 import psutil
-import subprocess
+import checksumdir
 import numpy as np
 from pathlib import PurePath
 from typing import Tuple
@@ -21,22 +21,16 @@ def get_software_version() -> str:
 
 def get_software_hash() -> str:
     """
-    Get the latest git commit full hash if possible.
+    Get a checksum hash from the coppafish directory (i.e. all the source code).
 
     Returns:
-        str: commit hash. If failed to find, returns an empty string.
+        str: hash.
     """
-    try:
-        hash = (
-            subprocess.check_output(
-                ["git", "rev-parse", "HEAD"], cwd=PurePath(os.path.dirname(os.path.realpath(__file__))).parent
-            )
-            .decode("ascii")
-            .strip()
-        )
-    except subprocess.CalledProcessError as e:
-        hash = ""
-    return hash
+    # Exclude any python cache files (.pyc)
+    result = checksumdir.dirhash(
+        PurePath(os.path.dirname(os.path.realpath(__file__))).parent, excluded_extensions=["pyc"], ignore_hidden=True
+    )
+    return result
 
 
 def get_available_memory() -> float:
