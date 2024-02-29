@@ -205,7 +205,7 @@ def wiener_deconvolve(image: np.ndarray, im_pad_shape: List[int], filter: np.nda
             Wiener filter to use.
 
     Returns:
-        `int [n_im_y x n_im_x x n_im_z]`: deconvolved image, rounded to the nearest integers.
+        `(n_im_y x n_im_x x n_im_z) ndarray[float]`: deconvolved image.
     """
     im_av = np.median(image[:, :, 0])
     image = np.pad(
@@ -218,4 +218,4 @@ def wiener_deconvolve(image: np.ndarray, im_pad_shape: List[int], filter: np.nda
     im_deconvolved = im_deconvolved[
         im_pad_shape[0] : -im_pad_shape[0], im_pad_shape[1] : -im_pad_shape[1], im_pad_shape[2] : -im_pad_shape[2]
     ]
-    return np.round(im_deconvolved).astype(int)
+    return im_deconvolved
