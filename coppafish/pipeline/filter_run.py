@@ -203,16 +203,18 @@ def run_filter(
                 logging.debug("Wiener deconvolve started")
                 im_filtered = deconvolution.wiener_deconvolve(im_filtered, config["wiener_pad_shape"], wiener_filter)
                 logging.debug("Wiener deconvolve complete")
+            im_filtered = im_filtered.astype(np.float64)
             if c == nbp_basic.dapi_channel:
                 if filter_kernel_dapi is not None:
                     im_filtered = utils.morphology.top_hat(im_filtered, filter_kernel_dapi)
             elif c != nbp_basic.dapi_channel:
-                im_filtered = im_filtered.astype(np.float64)
                 if nbp_scale.difference_of_hanning:
                     im_filtered = utils.morphology.convolve_2d(im_filtered, filter_kernel) * scale
                 if nbp_scale.r_smooth is not None:
                     # oa convolve uses lots of memory and much slower here.
                     im_filtered = utils.morphology.imfilter(im_filtered, smooth_kernel, oa=False)
+                if (im_filtered > np.iinfo(np.int32).max).sum() > 0:
+                    logging.warn(f"Converting to int32 has cut off pixels for {t=}, {r=}, {c=} filtered image")
                 # get_info is quicker on int32 so do this conversion first.
                 im_filtered = np.rint(im_filtered, np.zeros_like(im_filtered, dtype=np.int32), casting="unsafe")
                 # only use image unaffected by strip_hack to get information from tile
