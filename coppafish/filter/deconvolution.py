@@ -13,13 +13,13 @@ def psf_pad(psf: np.ndarray, image_shape: Union[np.ndarray, List[int]]) -> np.nd
     Pads psf with zeros so has same dimensions as image
 
     Args:
-        psf: ```float [y_shape x x_shape (x z_shape)]```.
+        psf: `float [y_shape x x_shape (x z_shape)]`.
             Point Spread Function with same shape as small image about each spot.
-        image_shape: ```int [psf.ndim]```.
-            Number of pixels in ```[y, x, (z)]``` direction of padded image.
+        image_shape: `int [psf.ndim]`.
+            Number of pixels in `[y, x, (z)]` direction of padded image.
 
     Returns:
-        ```float [image_shape[0] x image_shape[1] (x image_shape[2])]```.
+        `float [image_shape[0] x image_shape[1] (x image_shape[2])]`.
         Array same size as image with psf centered on middle pixel.
     """
     # must pad with ceil first so that ifftshift puts central pixel to (0,0,0).
@@ -54,25 +54,25 @@ def get_psf_spots(
         nbp_extract: `extract` notebook page.
         round: Reference round to get spots from to determine psf.
             This should be the anchor round (last round) if using.
-        use_tiles: ```int [n_use_tiles]```.
+        use_tiles: `int [n_use_tiles]`.
             tiff tile indices used in experiment.
         channel: Reference channel to get spots from to determine psf.
-        use_z: ```int [n_z]```. Z-planes used in the experiment.
+        use_z: `int [n_z]`. Z-planes used in the experiment.
         radius_xy: Radius of dilation structuring element in xy plane (approximately spot radius).
         radius_z: Radius of dilation structuring element in z direction (approximately spot radius)
         min_spots: Minimum number of spots required to determine average shape from. Typical: 300
-        intensity_thresh: Spots are local maxima in image with ```pixel value > intensity_thresh```.
-            if ```intensity_thresh = None```, will automatically compute it from mid z-plane of first tile.
-        intensity_auto_param: If ```intensity_thresh = None``` so is automatically computed, it is done using this.
+        intensity_thresh: Spots are local maxima in image with `pixel value > intensity_thresh`.
+            if `intensity_thresh = None`, will automatically compute it from mid z-plane of first tile.
+        intensity_auto_param: If `intensity_thresh = None` so is automatically computed, it is done using this.
         isolation_dist: Spots are isolated if nearest neighbour is further away than this.
-        shape: ```int [y_diameter, x_diameter, z_diameter]```. Desired size of image about each spot.
+        shape: `int [y_diameter, x_diameter, z_diameter]`. Desired size of image about each spot.
         max_spots (int, optional): maximum number of psf spots to use. Default: no limit.
 
     Returns:
-        - ```spot_images``` - ```int [n_spots x y_diameter x x_diameter x z_diameter]```.
-            ```spot_images[s]``` is the small image surrounding spot ```s```.
-        - ```intensity_thresh``` - ```float```. Only different from input if input was ```None```.
-        - ```tiles_used``` - ```int [n_tiles_used]```. Tiles the spots were found on.
+        - `spot_images` - `int [n_spots x y_diameter x x_diameter x z_diameter]`.
+            `spot_images[s]` is the small image surrounding spot `s`.
+        - `intensity_thresh` - `float`. Only different from input if input was `None`.
+        - `tiles_used` - `int [n_tiles_used]`. Tiles the spots were found on.
     """
     n_spots = 0
     spot_images = np.zeros((0, shape[0], shape[1], shape[2]), dtype=np.float32)
@@ -146,13 +146,13 @@ def get_psf(spot_images: np.ndarray, annulus_width: float) -> np.ndarray:
     It is normalised so min value is 0 and max value is 1.
 
     Args:
-        spot_images: ```int [n_spots x y_diameter x x_diameter x z_diameter]```.
-            ```spot_images[s]``` is the small image surrounding spot ```s```.
+        spot_images: `int [n_spots x y_diameter x x_diameter x z_diameter]`.
+            `spot_images[s]` is the small image surrounding spot `s`.
         annulus_width: Within each z-plane, this specifies how big an annulus to use,
             within which we expect all pixel values to be the same.
 
     Returns:
-        ```float [y_diameter x x_diameter x z_diameter]```.
+        `float [y_diameter x x_diameter x z_diameter]`.
             Average small image about a spot. Normalised so min is 0 and max is 1.
     """
     # normalise each z plane of each spot image first so each has median of 0 and max of 1.
@@ -171,14 +171,14 @@ def get_wiener_filter(psf: np.ndarray, image_shape: Union[np.ndarray, List[int]]
     This tapers the psf so goes to 0 at edges and then computes wiener filter from it.
 
     Args:
-        psf: ```float [y_diameter x x_diameter x z_diameter]```.
+        psf: `float [y_diameter x x_diameter x z_diameter]`.
             Average small image about a spot. Normalised so min is 0 and max is 1.
-        image_shape: ```int [n_im_y, n_im_x, n_im_z]```.
+        image_shape: `int [n_im_y, n_im_x, n_im_z]`.
             Indicates the shape of the image to be convolved after padding.
         constant: Constant used in wiener filter.
 
     Returns:
-        ```complex128 [n_im_y x n_im_x x n_im_z]```. Wiener filter of same size as image.
+        `complex128 [n_im_y x n_im_x x n_im_z]`. Wiener filter of same size as image.
     """
     # taper psf so smoothly goes to 0 at each edge.
     psf = (
@@ -194,21 +194,19 @@ def get_wiener_filter(psf: np.ndarray, image_shape: Union[np.ndarray, List[int]]
 
 def wiener_deconvolve(image: np.ndarray, im_pad_shape: List[int], filter: np.ndarray) -> np.ndarray:
     """
-    This pads ```image``` so goes to median value of ```image``` at each edge. Then deconvolves using wiener filter.
+    This pads `image` so goes to median value of `image` at each edge. Then deconvolves using the given Wiener filter.
 
     Args:
-        image: ```int [n_im_y x n_im_x x n_im_z]```.
+        image: `int [n_im_y x n_im_x x n_im_z]`.
             Image to be deconvolved.
-        im_pad_shape: ```int [n_pad_y, n_pad_x, n_pad_z]```.
-            How much to pad image in ```[y, x, z]``` directions.
-        filter: ```complex128 [n_im_y+2*n_pad_y, n_im_x+2*n_pad_x, n_im_z+2*n_pad_z]```.
+        im_pad_shape: `int [n_pad_y, n_pad_x, n_pad_z]`.
+            How much to pad image in `[y, x, z]` directions.
+        filter: `complex128 [n_im_y+2*n_pad_y, n_im_x+2*n_pad_x, n_im_z+2*n_pad_z]`.
             Wiener filter to use.
 
     Returns:
-        ```int [n_im_y x n_im_x x n_im_z]```. Deconvolved image.
+        `int [n_im_y x n_im_x x n_im_z]`: deconvolved image, rounded to the nearest integers.
     """
-    im_max = image.max()
-    im_min = image.min()
     im_av = np.median(image[:, :, 0])
     image = np.pad(
         image,
@@ -220,6 +218,4 @@ def wiener_deconvolve(image: np.ndarray, im_pad_shape: List[int], filter: np.nda
     im_deconvolved = im_deconvolved[
         im_pad_shape[0] : -im_pad_shape[0], im_pad_shape[1] : -im_pad_shape[1], im_pad_shape[2] : -im_pad_shape[2]
     ]
-    # set min and max so it covers same range as input image
-    im_deconvolved = im_deconvolved - im_deconvolved.min()
-    return np.round(im_deconvolved * (im_max - im_min) / im_deconvolved.max() + im_min).astype(int)
+    return np.round(im_deconvolved).astype(int)
