@@ -10,7 +10,7 @@ from ..utils import tiles_io, indexing
 
 
 def run_extract(
-    config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage, nbp_scale: NotebookPage
+    config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage
 ) -> Tuple[NotebookPage, NotebookPage, Optional[np.ndarray]]:
     """
     This reads in images from the raw `nd2` files, filters them and then saves them as `config[extract][file_type]`
@@ -20,7 +20,6 @@ def run_extract(
         config (dict): dictionary obtained from 'extract' section of config file.
         nbp_file (NotebookPage): 'file_names' notebook page.
         nbp_basic (NotebookPage): 'basic_info' notebook page.
-        nbp_scale (NotebookPage): 'scale' notebook page.
 
     Returns:
         - `NotebookPage[extract]`: page containing `auto_thresh` for use in turning images to point clouds and

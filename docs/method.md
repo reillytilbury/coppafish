@@ -4,13 +4,6 @@ and spot detection/gene calling ([find spots](#find-spots), [call spots](#call-s
 [orthogonal matching pursuit](#orthogonal-matching-pursuit)). Below, each section is given in the order a coppafish 
 pipeline runs in.
 
-## Scale
-
-Computes a scale factor for sequencing images and the anchor round. These numbers are typically between 1 and 10. All 
-images are then scaled by a number during the [filter](#filter) stage. This is done so that the images take up more of 
-the range when the filtered images are saved to disk and converted from floating point numbers to `uint16`, improving 
-pixel value precision.
-
 ## Extract
 
 Save all raw data again at the `tile_dir` in the `extract` config section. Coppafish does this for: 

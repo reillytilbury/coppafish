@@ -209,20 +209,26 @@ def save_image(
     if nbp_basic.is_3d:
         if c is None:
             logging.error(ValueError("3d image but channel not given."))
-        if c == nbp_basic.dapi_channel:
+        if not apply_shift or (c == nbp_basic.dapi_channel):
             # If dapi is given then image should already by uint16 so no clipping
-            image = image.astype(np.uint16)
-        elif apply_shift and c != nbp_basic.dapi_channel:
+            clipped_pixels = (image < 0).sum()
+            clipped_pixels += (image > get_pixel_max()).sum()
+            image = image.astype(IMAGE_SAVE_DTYPE)
+        else:
             # need to shift and clip image so fits into uint16 dtype.
             # clip at 1 not 0 because 0 (or -tile_pixel_value_shift)
             # will be used as an invalid value when reading in spot_colors.
+            clipped_pixels = ((image + nbp_basic.tile_pixel_value_shift) < 1).sum()
+            clipped_pixels += ((image + nbp_basic.tile_pixel_value_shift) > get_pixel_max()).sum()
             image = np.clip(
                 image + nbp_basic.tile_pixel_value_shift,
                 1,
-                np.iinfo(np.uint16).max,
+                get_pixel_max(),
                 np.zeros_like(image, dtype=np.uint16),
                 casting="unsafe",
             )
+        if clipped_pixels > 0:
+            logging.warn(f"{t=}, {r=}, {c=} saved image has clipped {clipped_pixels} pixels")
         # In 3D, cannot possibly save any un-used channel hence no exception for this case.
         expected_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
         if not utils.errors.check_shape(image, expected_shape):

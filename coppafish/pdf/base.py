@@ -42,7 +42,7 @@ class BuildPDF:
             auto_open (bool, optional): open the PDF in a web browser after creation. Default: true.
         """
         logging.debug("Creating diagnostic PDF started")
-        pbar = tqdm(desc="Creating Diagnostic PDF", total=10, unit="section")
+        pbar = tqdm(desc="Creating Diagnostic PDFs", total=9, unit="section")
         pbar.set_postfix_str("Loading notebook")
         if isinstance(nb, str):
             nb = Notebook(nb)
@@ -85,23 +85,6 @@ class BuildPDF:
                 axes[0, 0].set_title(text_intro_info, fontdict=INFO_FONTDICT, y=0.5)
                 pdf.savefig(fig)
                 plt.close(fig)
-        pbar.update()
-
-        if not os.path.isfile(os.path.join(output_dir, "_scale.pdf")) and nb.has_page("scale"):
-            with PdfPages(os.path.join(output_dir, "_scale.pdf")) as pdf:
-                pbar.set_postfix_str("Scale")
-                if nb.has_page("scale"):
-                    text_scale_info = "Scale\n \n"
-                    text_scale_info += self.get_version_from_page(nb.scale)
-                    text_scale_info += f"computed scale: {nb.scale.scale}\n"
-                    text_scale_info += f"computed anchor scale: {nb.scale.scale_anchor}\n"
-                    plt.figure(figsize=A4_SIZE_INCHES, frameon=False)
-                    fig, axes = self.create_empty_page(1, 1)
-                    self.empty_plot_ticks(axes)
-                    axes[0, 0].set_title(text_scale_info, fontdict=INFO_FONTDICT, y=0.5)
-                    # Saves the current figure onto a new pdf page
-                    pdf.savefig(fig)
-                    plt.close(fig)
         pbar.update()
 
         if not os.path.isfile(os.path.join(output_dir, "_extract.pdf")) and nb.has_page("extract"):
@@ -470,9 +453,10 @@ class BuildPDF:
             output += time_taken
         if filter_debug_page.r_dapi is not None:
             # Filtering DAPI is true
-            output += f"dapi filtering with r_dapi: {filter_debug_page.r_dapi}"
+            output += f"dapi filtering with r_dapi: {filter_debug_page.r_dapi}\n"
         else:
-            output += f"no dapi filtering"
+            output += f"no dapi filtering\n"
+        output += f"computed image scale: {filter_page.image_scale}"
         return output
 
     def create_pixel_value_hists(

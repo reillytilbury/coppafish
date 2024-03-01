@@ -11,7 +11,6 @@ from ..call_spots import base as call_spots_base
 from ..pdf.base import BuildPDF
 from .. import logging
 from . import basic_info
-from . import scale_run
 from . import extract_run
 from . import filter_run
 from . import find_spots
@@ -63,8 +62,6 @@ def run_tile_indep_pipeline(nb: Notebook) -> None:
         run_tile_by_tile (bool, optional): run each tile on a separate notebook through 'find_spots' and 'register',
             then merge them together. Default: true if PC has >110GB of available memory. False otherwise.
     """
-    run_scale(nb)
-    BuildPDF(nb)
     run_extract(nb)
     BuildPDF(nb)
     run_filter(nb)
@@ -117,27 +114,6 @@ def initialize_nb(config_file: str) -> Notebook:
     return nb
 
 
-def run_scale(nb: Notebook) -> None:
-    """
-    This runs the `scale` step of the pipeline to produce the scale factors to use during extraction.
-
-    `scale` page is added to the `Notebook` before saving.
-
-    Args:
-        nb (Notebook): `Notebook` containing `file_names` and `basic_info` pages.
-    """
-    if not nb.has_page("scale"):
-        config = nb.get_config()
-        nbp = scale_run.compute_scale(
-            config["scale"],
-            nb.file_names,
-            nb.basic_info,
-        )
-        nb += nbp
-    else:
-        logging.warn(utils.warnings.NotebookPageWarning("scale"))
-
-
 def run_extract(nb: Notebook) -> None:
     """
     This runs the `extract_and_filter` step of the pipeline to produce the tiff files in the tile directory.
@@ -155,12 +131,7 @@ def run_extract(nb: Notebook) -> None:
     """
     if not nb.has_page("extract"):
         config = nb.get_config()
-        nbp = extract_run.run_extract(
-            config["extract"],
-            nb.file_names,
-            nb.basic_info,
-            nb.scale,
-        )
+        nbp = extract_run.run_extract(config["extract"], nb.file_names, nb.basic_info)
         nb += nbp
     else:
         logging.warn(utils.warnings.NotebookPageWarning("extract"))
@@ -175,13 +146,7 @@ def run_filter(nb: Notebook) -> None:
     """
     if not nb.has_page("filter"):
         config = nb.get_config()
-        nbp, nbp_debug = filter_run.run_filter(
-            config["filter"],
-            nb.file_names,
-            nb.basic_info,
-            nb.scale,
-            nb.extract,
-        )
+        nbp, nbp_debug = filter_run.run_filter(config["filter"], nb.file_names, nb.basic_info, nb.extract)
         nb += nbp
         nb += nbp_debug
     else:

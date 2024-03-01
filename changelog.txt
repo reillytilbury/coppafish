@@ -3,6 +3,9 @@
  * Difference of Hanning is now default turned off in filter. This can be changed by setting the new variable 
     difference_of_hanning to true in the scale config section.
  * Wiener deconvolve now does not shift pixel values after filtering fix.
+ * Wiener deconvolution is now optimised in pytorch using the CPU, making filter ~90% faster.
+ * Scale computation is now done in the filter section.
+ * Scale section is removed.
  * Pytorch GPU out of memory fix attempt.
  * Detecting spots is less memory intensive.
  * Incorrect `hist_counts` values in extract and filter pages. This caused the filter/extract PDF histograms to be 

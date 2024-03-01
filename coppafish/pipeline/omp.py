@@ -9,13 +9,9 @@ try:
 except ImportError:
     import numpy as jnp
 
-from .. import utils
-from .. import logging
+from ..filter import base as filter_base
 from ..setup.notebook import NotebookPage
-from .. import spot_colors
-from .. import call_spots
-from .. import scale
-from .. import omp
+from .. import utils, spot_colors, call_spots, omp, logging
 
 
 def call_spots_omp(
@@ -108,7 +104,7 @@ def call_spots_omp(
     if not os.path.isfile(nbp_file.omp_spot_shape):
         # Set tile order so do shape_tile first to compute spot_shape from it.
         if shape_tile is None:
-            shape_tile = scale.base.central_tile(nbp_basic.tilepos_yx, nbp_basic.use_tiles)
+            shape_tile = filter_base.central_tile(nbp_basic.tilepos_yx, nbp_basic.use_tiles)
         if shape_tile not in nbp_basic.use_tiles:
             logging.error(ValueError(f"shape_tile, {shape_tile} is not in nbp_basic.use_tiles, {nbp_basic.use_tiles}"))
         shape_tile_ind = np.where(np.array(nbp_basic.use_tiles) == shape_tile)[0][0]

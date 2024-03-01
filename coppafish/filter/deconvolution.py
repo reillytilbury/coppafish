@@ -1,10 +1,8 @@
 import numpy as np
 from typing import List, Union, Optional, Tuple
 
-from .. import utils
-from .. import find_spots
-from .. import scale
-from .. import logging
+from .. import utils, find_spots, logging
+from ..filter import base as filter_base
 from ..setup import NotebookPage
 
 
@@ -79,11 +77,11 @@ def get_psf_spots(
     tiles_used = []
     while n_spots < min_spots:
         if nbp_file.raw_extension == "jobs":
-            t = scale.base.central_tile(nbp_basic.tilepos_yx_nd2, use_tiles)
+            t = filter_base.central_tile(nbp_basic.tilepos_yx_nd2, use_tiles)
             # choose tile closest to centre
             im = utils.tiles_io._load_image(nbp_file.tile_unfiltered[t][round][channel], nbp_extract.file_type)
         else:
-            t = scale.base.central_tile(nbp_basic.tilepos_yx, use_tiles)  # choose tile closet to centre
+            t = filter_base.central_tile(nbp_basic.tilepos_yx, use_tiles)  # choose tile closet to centre
             im = utils.tiles_io._load_image(nbp_file.tile_unfiltered[t][round][channel], nbp_extract.file_type)
         # zyx -> yxz
         im = im.transpose((1, 2, 0))

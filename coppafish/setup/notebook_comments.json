@@ -355,34 +355,6 @@
             "that the extracted images can take up the full range of `np.uint16`. The scale factor values are also stored ",
             "in a `.txt` file in case the notebook corrupts. The notebook values here are for user convenience."
         ],
-        "r_smooth": [
-            "close",
-            "Float or None",
-            "Radius of averaging filter to do smoothing of filtered image."
-        ],
-        "r1": [
-            "eq",
-            "Integer",
-            "Filtering is done with a *2D* difference of hanning filter with inner radius `r1` within which it is positive",
-            "and outer radius `r2` so annulus between `r1` and `r2` is negative.",
-            "Should be approx radius of spot.",
-            "",
-            "By default this is 0.5 micron converted to yx-pixel units which is typically 3."
-        ],
-        "r2": [
-            "eq",
-            "Integer",
-            "Filtering is done with a *2D* difference of hanning filter with inner radius `r1` within which it is positive",
-            "and outer radius `r2` so annulus between `r1` and `r2` is negative.",
-            "Units are yx-pixels and by default it will be twice r1.",
-            "",
-            "*Typical: 6*"
-        ],
-        "difference_of_hanning": [
-            "eq",
-            "bool",
-            "Whether difference of Hanning will be applied to the images."
-        ],
         "scale": [
             "close",
             "Float",
@@ -473,6 +445,13 @@
             "`auto_thresh[t, r, c]` is the threshold spot intensity for tile $t$, round $r$, channel $c$",
             "used for spot detection in the `find_spots` step of the pipeline."
         ],
+        "image_scale": [
+            "eq",
+            "Float",
+            "Every non-DAPI image is scaled by this number after filtering. It is computed using the first non-DAPI ",
+            "image in filter. The scaling helps to use more of the uint16 integer range when saving the images for ",
+            "improved pixel value precision."
+        ],
         "bg_scale": [
             "tile_0",
             "Numpy float array `[n_tiles x n_rounds x n_channels]`",
@@ -497,18 +476,6 @@
             "pipeline.",
             "",
             "Page added to *Notebook* in *pipeline/filter_run.py*"
-        ],
-        "n_clip_pixels": [
-            "tile_0",
-            "Numpy integer array [n_tiles x (n_rounds + n_extra_rounds) x n_channels]",
-            "`n_clip_pixels[t, r, c]` is the number of pixels in the saved *npy* tile for tile $t$, round $r$, channel $c$",
-            "which had intensity exceeding max *uint16* value and so had to be clipped."
-        ],
-        "clip_extract_scale": [
-            "tile_0",
-            "Numpy float array [n_tiles x (n_rounds + n_extra_rounds) x n_channels]",
-            "`clip_extract_scale[t, r, c]` is the recommended value for extract_scale such that for tile $t$, round $r$, channel $c$",
-            "`n_clip_pixels[t, r, c]` would be 0. Only computed for images where `n_clip_pixels[t, r, c] > 0`"
         ],
         "r_dapi": [
             "eq",

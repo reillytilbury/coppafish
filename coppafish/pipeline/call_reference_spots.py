@@ -5,10 +5,10 @@ from itertools import product
 from scipy.sparse.linalg import svds
 
 from ..setup.notebook import NotebookPage
+from ..filter import base as filter_base
 from .. import call_spots
 from .. import spot_colors
 from .. import utils
-from .. import scale
 from .. import logging
 
 
@@ -504,7 +504,7 @@ def call_reference_spots(
     nbp.gene_efficiency = gene_efficiency
 
     # Extract abs intensity percentile
-    central_tile = scale.base.central_tile(nbp_basic.tilepos_yx, nbp_basic.use_tiles)
+    central_tile = filter_base.central_tile(nbp_basic.tilepos_yx, nbp_basic.use_tiles)
     if nbp_basic.is_3d:
         mid_z = int(nbp_basic.use_z[0] + (nbp_basic.use_z[-1] - nbp_basic.use_z[0]) // 2 - min(nbp_basic.use_z))
     else:
