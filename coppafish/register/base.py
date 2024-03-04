@@ -77,13 +77,14 @@ def find_z_tower_shifts(subvol_base, subvol_target, position, pearson_r_threshol
         merged_subvol_target = preprocessing.merge_subvols(
             position=np.copy(position[z_start:z_end]), subvol=subvol_target[z_start:z_end]
         )
-        merged_subvol_target_windowed = preprocessing.window_image(merged_subvol_target)
         merged_subvol_base = np.zeros_like(merged_subvol_target)
         merged_subvol_base_windowed = np.zeros_like(merged_subvol_target)
         merged_subvol_min_z = position[z_start, 0]
         current_box_min_z = position[z, 0]
         merged_subvol_start_z = current_box_min_z - merged_subvol_min_z
         merged_subvol_base[merged_subvol_start_z : merged_subvol_start_z + z_box] = subvol_base[z]
+        # window the images
+        merged_subvol_target_windowed = preprocessing.window_image(merged_subvol_target)
         merged_subvol_base_windowed[merged_subvol_start_z : merged_subvol_start_z + z_box] = preprocessing.window_image(
             subvol_base[z]
         )
@@ -294,6 +295,8 @@ def round_registration(anchor_image: np.ndarray, round_image: list, config: dict
             y_box=y_box,
             x_box=x_box,
         )
+        # remove the round_image from memory
+        round_image[r] = None
 
         # Find the subvolume shifts
         shift, corr = find_shift_array(subvol_base, subvol_target, position=position.copy(), r_threshold=r_thresh)
