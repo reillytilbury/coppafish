@@ -319,11 +319,10 @@ class GESpotViewer():
         spots = nb.ref_spots.colors[self.gene_g_mask][:, :, nb.basic_info.use_channels]
         # remove background codes. To do this, repeat background_strenth along a new axis for rounds
         background_strength = nb.ref_spots.background_strength[self.gene_g_mask]
-        background_strength = np.repeat(background_strength[:, np.newaxis, :], spots.shape[1], axis=1)
         # remove background from spots
         spots = spots - background_strength
         spots = spots.reshape((spots.shape[0], spots.shape[1] * spots.shape[2]))
-        color_norm = np.repeat(nb.call_spots.color_norm_factor[np.ix_(nb.basic_info.use_rounds,
+        color_norm = np.repeat(np.mean(nb.call_spots.color_norm_factor, axis=0)[np.ix_(nb.basic_info.use_rounds,
                                                                       nb.basic_info.use_channels)].reshape((1, -1)),
                                spots.shape[0], axis=0)
         self.spots = spots / color_norm
