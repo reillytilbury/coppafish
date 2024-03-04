@@ -8,7 +8,6 @@ from ..utils import tiles_io
 from .. import logging
 
 
-
 def apply_transform(yxz: np.ndarray, flow: np.ndarray, icp_correction: np.ndarray,
                     tile_sz: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
@@ -37,7 +36,7 @@ def apply_transform(yxz: np.ndarray, flow: np.ndarray, icp_correction: np.ndarra
     # load in shifts for each pixel
     y_indices, x_indices, z_indices = yxz.T
     # apply shifts to each pixel
-    yxz_shifts = -flow[:, y_indices, x_indices, z_indices].T
+    yxz_shifts = (-flow[:, y_indices, x_indices, z_indices].T).astype(np.float32)
     yxz_transform = np.asarray(yxz + yxz_shifts)
     # apply icp correction
     yxz_transform = np.pad(yxz_transform, ((0, 0), (0, 1)), constant_values=1)

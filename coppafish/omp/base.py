@@ -43,7 +43,7 @@ def get_pixel_colours(
     pixel_yxz_tz = np.zeros((0, 3), dtype=np.int16)
     pixel_colours_tz = np.zeros((0, n_rounds, n_channels), dtype=np.float32)
     colour_tuple = spot_colors.base.get_spot_colors(
-        yxz_base=spot_colors.base.all_pixel_yxz(nbp_basic.tile_sz, nbp_basic.tile_sz, np.arange(z_min, z_max + 1)),
+        yxz_base=spot_colors.base.all_pixel_yxz(nbp_basic.tile_sz, nbp_basic.tile_sz, np.arange(z_min, z_max)),
         t=tile, transform=transform, bg_scale=nbp_filter.bg_scale, file_type=nbp_extract.file_type, nbp_file=nbp_file,
         nbp_basic=nbp_basic, return_in_bounds=True,
     )

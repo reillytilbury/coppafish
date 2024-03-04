@@ -11,6 +11,7 @@ from sklearn.linear_model import HuberRegressor
 from typing import Optional, Tuple
 from .. import logging
 from .. import utils
+from ..register import preprocessing
 
 
 def find_shift_array(subvol_base, subvol_target, position, r_threshold):
@@ -246,9 +247,9 @@ def huber_regression(shift, position, predict_shift=True):
     return transform
 
 
-def optical_flow_register(target: np.ndarray, base: np.ndarray, upsample_factor: tuple = (1, 4, 4),
+def optical_flow_register(target: np.ndarray, base: np.ndarray, sample_factor_yx: int = 4,
                           window_radius: int = 5, smooth_threshold: float = 0.9, smooth_sigma: float = 10,
-                          clip_val: np.ndarray = np.ndarray([15, 40, 40]),
+                          clip_val: np.ndarray = np.ndarray([40, 40, 15]),
                           output_dir: str = '', file_name: str = ''):
     """
     Function to carry out optical flow registration on a single tile and round.
@@ -261,16 +262,15 @@ def optical_flow_register(target: np.ndarray, base: np.ndarray, upsample_factor:
     the flow.
 
     Args:
-        target: np.ndarray size [n_z, n_y, n_x] of the target image (this will be the round image)
-        base: np.ndarray size [n_z, n_y, n_x] of the base image (this will be the anchor image)
-        upsample_factor: tuple of 3 ints specifying the upsample factor in z, y and x
+        target: np.ndarray size [n_y, n_x, n_z] of the target image (this will be the round image)
+        base: np.ndarray size [n_y, n_x, n_z] of the base image (this will be the anchor image)
+        sample_factor_yx: int specifying how much to downsample the images in y and x before computing the optical flow
         window_radius: int specifying the window radius for the optical flow algorithm and correlation calculation
         (Note that this is the radius on the downsampled image, so a radius of 5 with a downsample factor of 4 will
         correspond to a radius of 20 on the original image)
-        smooth_threshold: float specifying the threshold for the correlation coefficient to be considered for
-        interpolation
+        smooth_threshold: float specifying the threshold for the correlation coefficient to be considered for smoothing
         smooth_sigma: float specifying the standard deviation of the Gaussian filter to be used for smoothing the flow
-        clip_val: np.ndarray size [3] of the clip value for the optical flow in z, y and x
+        clip_val: np.ndarray size [3] of the clip value for the optical flow in y, x and z
         output_dir: str specifying the directory to save the optical flow information (flow, corr and smooth)
         file_name: str specifying the file name to save the optical flow information (flow, corr and smooth)
 
@@ -286,55 +286,60 @@ def optical_flow_register(target: np.ndarray, base: np.ndarray, upsample_factor:
     target = target.astype(np.float32)
     base = base.astype(np.float32)
     # down-sample the images
-    target_down = target[::upsample_factor[0], ::upsample_factor[1], ::upsample_factor[2]]
-    base_down = base[::upsample_factor[0], ::upsample_factor[1], ::upsample_factor[2]]
-    clip_val = clip_val / np.array(upsample_factor)
+    target = target[::sample_factor_yx, ::sample_factor_yx]
+    base = base[::sample_factor_yx, ::sample_factor_yx]
+    # update clip_val based on down-sampling
+    clip_val = np.array(clip_val, dtype=np.float32)
+    clip_val[:2] = clip_val[:2] / sample_factor_yx
 
     # compute the optical flow
-    flow = optical_flow_single(base_down, target_down, window_radius=window_radius, clip_val=clip_val,
-                               chunks=[1, 4, 4], n_cores=16, loc=os.path.join(output_dir, 'raw', file_name))
+    flow = optical_flow_single(base=base, target=target, window_radius=window_radius, clip_val=clip_val,
+                               chunks_yx=4, n_cores=16, loc=os.path.join(output_dir, 'raw', file_name))
     # compute the correlation between the base and target images within a small window of each pixel
-    correlation = flow_correlation(base_down, target_down, flow, win_size=np.array([2, 6, 6]),
+    correlation = flow_correlation(base=base, target=target, flow=flow, win_size=np.array([6, 6, 2]),
                                    loc=os.path.join(output_dir, 'corr', file_name))
-
     # smooth the flow
-    flow_smooth = interpolate_flow(flow, correlation, threshold=smooth_threshold, sigma=smooth_sigma,
-                                   loc=os.path.join(output_dir, 'smooth', file_name))
+    interpolate_flow(flow, correlation, threshold=smooth_threshold, sigma=smooth_sigma,
+                     loc=os.path.join(output_dir, 'smooth', file_name))
 
 
 def optical_flow_single(base: np.ndarray, target: np.ndarray, window_radius: int = 5,
-                        clip_val: np.ndarray = np.ndarray([15, 10, 10]),
-                        chunks: list = [1, 4, 4], n_cores: int = 16,
-                        upsample_factor: tuple = (1, 4, 4), loc: str = '') -> np.ndarray:
+                        clip_val: np.ndarray = np.ndarray([10, 10, 15]), upsample_factor_yx: int = 4,
+                        chunks_yx: int = 4, n_cores: int = 16, loc: str = '') -> np.ndarray:
     """
     Function to carry out optical flow registration on 2 3D images.
     Args:
-        base: np.ndarray size [n_z, n_y, n_x] of the base image
-        target: np.ndarray size [n_z, n_y, n_x] of the target image
+        base: np.ndarray size [n_y, n_x, n_z] of the base image
+        target: np.ndarray size [n_y, n_x, n_z] of the target image
         window_radius: int specifying the window radius for the optical flow algorithm
-        clip_val: np.ndarray size [3] of the clip value for the optical flow in z, y and x
-        chunks: list of 3 ints specifying the number of chunks to split the images into in z, y and x
+        clip_val: np.ndarray size [3] of the clip value for the optical flow in y, x and z
+        upsample_factor_yx: int specifying how much to upsample the optical flow in y and x
+        chunks_yx: int specifying the number of subvolumes to split the images into in y and x
         n_cores: int specifying the number of cores to use for parallel processing
-        upsample_factor: tuple of 3 ints specifying the upsample factor in z, y and x
         loc: str specifying the location to save/ load the optical flow
     Returns:
-        flow: np.ndarray size [3, n_z, n_y, n_x] of the optical flow
+        flow: np.ndarray size [3, n_y, n_x, n_z] of the optical flow
     """
     if os.path.exists(loc):
-        flow = np.load(loc).astype(np.float32)
+        # load the flow if it exists. As it is saved in the upsampled format, we need to downsample it
+        flow = np.load(loc, mmap_mode='r')[::upsample_factor_yx, ::upsample_factor_yx]
+        flow = flow.astype(np.float32)
+        flow[:2] = flow[:2] / upsample_factor_yx
         return flow
     t_start = time.time()
-    nz, ny, nx = target.shape
-    ny_sub, nx_sub = ny // chunks[1] + 24, nx // chunks[2] + 24
-    target_sub, pos = preprocessing.split_3d_image(image=target, z_subvolumes=chunks[0], y_subvolumes=chunks[1],
-                                                   x_subvolumes=chunks[2], z_box=nz, y_box=ny_sub, x_box=nx_sub)
-    base_sub, _ = preprocessing.split_3d_image(image=base, z_subvolumes=chunks[0], y_subvolumes=chunks[1],
-                                               x_subvolumes=chunks[2], z_box=nz, y_box=ny_sub, x_box=nx_sub)
+    ny, nx, nz = target.shape
+    yx_sub = ny // chunks_yx
+    target_sub, pos = preprocessing.split_3d_image(image=target,
+                                                   z_subvolumes=1, y_subvolumes=chunks_yx, x_subvolumes=chunks_yx,
+                                                   z_box=nz, y_box=yx_sub, x_box=yx_sub)
+    base_sub, _ = preprocessing.split_3d_image(image=base,
+                                               z_subvolumes=1, y_subvolumes=chunks_yx, x_subvolumes=chunks_yx,
+                                               z_box=nz, y_box=yx_sub, x_box=yx_sub)
     # this next line assumes that the images are split into 1 subvolume in z (which we always do)
     target_sub, base_sub = target_sub[0], base_sub[0]
     # flatten dims 0 and 1
-    target_sub = target_sub.reshape((chunks[1]*chunks[2], nz, ny_sub, nx_sub))
-    base_sub = base_sub.reshape((chunks[1]*chunks[2], nz, ny_sub, nx_sub))
+    target_sub = target_sub.reshape((chunks_yx ** 2, nz, yx_sub, yx_sub))
+    base_sub = base_sub.reshape((chunks_yx ** 2, nz, yx_sub, yx_sub))
     # divide each subvolume by its 99th percentile
     target_sub = target_sub / np.percentile(target_sub, 99, axis=(1, 2, 3))[:, np.newaxis, np.newaxis, np.newaxis]
     base_sub = base_sub / np.percentile(base_sub, 99, axis=(1, 2, 3))[:, np.newaxis, np.newaxis, np.newaxis]
@@ -350,15 +355,20 @@ def optical_flow_single(base: np.ndarray, target: np.ndarray, window_radius: int
     flow_sub = np.array(flow_sub)
     # swap so axis 0 is z,y,x and axis 1 is the subvolume
     flow_sub = flow_sub.swapaxes(0, 1)
-    flow = np.zeros((3, nz, ny, nx))
-    for i in range(3):
-        # merge the subvolumes
-        flow[i] = preprocessing.merge_subvols(pos, flow_sub[i])
-        # clip the flow
-        flow[i] = np.clip(flow[i], -clip_val[i], clip_val[i])
+    # merge the subvolumes
+    flow = np.array([preprocessing.merge_subvols(pos, flow_sub[i]) for i in range(3)])
+    # now convert flow back to yxz
+    flow = preprocessing.flow_zyx_to_yxz(flow)
+    # clip the flow
+    flow = np.array([np.clip(flow[i], -clip_val[i], clip_val[i]) for i in range(3)])
+    # upsample the flow
+    upsample_factor = (upsample_factor_yx, upsample_factor_yx, 1)
+    flow_up = np.array([upsample_yx(flow[i], upsample_factor_yx, order=1) * upsample_factor[i] for i in
+                        tqdm(range(3), desc="Upsampling raw flow")], dtype=np.float16)
     # save the flow
     if loc:
-        np.save(loc, flow)
+        # save in yxz format
+        np.save(loc, flow_up)
     t_end = time.time()
     print("Optical flow computation took " + str(t_end - t_start) + " seconds")
 
@@ -366,30 +376,35 @@ def optical_flow_single(base: np.ndarray, target: np.ndarray, window_radius: int
 
 
 def flow_correlation(base: np.ndarray, target: np.ndarray, flow: np.ndarray, win_size: np.ndarray,
-                     loc: str = '') -> np.ndarray:
+                     upsample_factor_yx: int = 4, loc: str = '') -> np.ndarray:
     """
     Compute the correlation between the base and target images within a small window of each pixel.
     This is done in a vectorized manner by reshaping the images into windows and then computing the correlation
     coefficient between the base and target images within each window. For this reason the window size must be a factor
     of the image size in each dimension.
     Args:
-        base: n_z x n_y x n_x array of the base image
-        target: n_z x n_y x n_x array of the target image
-        flow: 3 x n_z x n_y x n_x array of flow in z, y and x
-        win_size: 3 element array of the window size in z, y and x
+        base: n_y x n_x x n_z array of the base image
+        target: n_y x n_x x n_z array of the target image
+        flow: 3 x n_y x n_x x n_z array of flow in y, x and z
+        win_size: 3 element array of the window size in y, x and z
+        upsample_factor_yx: int specifying the upsample factor in y and x
         loc: str specifying the location to save/ load the correlation
 
     Returns:
-        correlation: n_z x n_y x n_x array of correlation coefficients
+        correlation: n_y x n_x x n_z array of correlation coefficients
     """
     t_start = time.time()
     if os.path.exists(loc):
-        return np.load(loc).astype(np.float32)
-    nz, ny, nx = target.shape
+        corr = np.load(loc, mmap_mode='r')[::upsample_factor_yx, ::upsample_factor_yx]
+        return corr.astype(np.float32)
+    ny, nx, nz = target.shape
     # apply the flow to the base image and compute the correlation between th shifted base and the target image
-    coords = np.array(np.meshgrid(range(nz), range(ny), range(nx), indexing='ij'), dtype=np.float32)
+    coords = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing='ij'), dtype=np.float32)
     base_warped = skimage.transform.warp(base, coords + flow, order=0, mode="constant", cval=0)
     del coords, base, flow
+    # divide base_warped and target by their max
+    base_warped = base_warped / np.max(base_warped)
+    target = target / np.max(target)
     # compute number of windows in each dimension
     n_win = np.array(target.shape) // win_size
     # reshape the images into windows
@@ -402,40 +417,38 @@ def flow_correlation(base: np.ndarray, target: np.ndarray, flow: np.ndarray, win
     base_warped = base_warped.reshape(np.product(n_win), np.product(win_size))
     target = target.reshape(np.product(n_win), np.product(win_size))
     # compute the correlation
-    # base_warped = base_warped - np.mean(base_warped, axis=1)[:, np.newaxis]
-    # target = target - np.mean(target, axis=1)[:, np.newaxis]
     correlation = np.sum(base_warped * target, axis=1)
     # reshape the correlation back to the window dimensions
     correlation = correlation.reshape(n_win)
     # upsample the correlation to the original image size just by repeating the correlation values
     correlation = np.repeat(np.repeat(np.repeat(correlation, win_size[2], axis=2),
                                       win_size[1], axis=1), win_size[0], axis=0)
-    # convert to float32
-    correlation = correlation.astype(np.float32)
+    # upsample
+    correlation_up = upsample_yx(correlation, upsample_factor_yx, order=0).astype(np.float16)
+
     # save the correlation
     if loc:
-        np.save(loc, correlation)
+        # save in yxz format
+        np.save(loc, correlation_up)
     t_end = time.time()
     print("Computing correlation took " + str(t_end - t_start) + " seconds")
     return correlation
 
 
 def interpolate_flow(flow: np.ndarray, correlation: np.ndarray, threshold: float = 0.95, sigma: float = 10,
-                     loc: str = '') -> np.ndarray:
+                     upsample_factor_yx: int = 4, loc: str = ''):
     """
     Interpolate the flow based on the correlation between the base and target images
     Args:
-        flow: 3 x n_z x n_y x n_x array of flow in z, y and x
-        correlation: n_z x n_y x n_x array of correlation coefficients
+        flow: 3 x n_y x n_x x n_z array of flow in y, x and z
+        correlation: n_y x n_x x n_z array of correlation coefficients
         threshold: threshold for correlation coefficient
         sigma: standard deviation of the Gaussian filter
+        upsample_factor_yx: int specifying the upsample factor in y and x
         loc: str specifying the location to save/ load the interpolated flow
-
-    Returns:
-        flow: 3 x n_z x n_y x n_x array of flow interpolated
     """
     if os.path.exists(loc):
-        return np.load(loc).astype(np.float32)
+        return
     time_start = time.time()
     mask = correlation > np.quantile(correlation, threshold)
     flow_indicator = mask.astype(np.float32)
@@ -445,29 +458,33 @@ def interpolate_flow(flow: np.ndarray, correlation: np.ndarray, threshold: float
     flow = np.array([gaussian_filter(flow[i] * flow_indicator, sigma) for i in range(3)])
     # divide the flow by the smoothed indicator
     flow = np.array([flow[i] / flow_indicator_smooth for i in range(3)])
-    # convert to float32
-    flow = flow.astype(np.float16)
+    upsample_factor = (upsample_factor_yx, upsample_factor_yx, 1)
+    # upsample the flow before saving
+    flow = np.array([upsample_yx(flow[i], upsample_factor_yx, order=1) * upsample_factor[i] for i in
+                     tqdm(range(3), desc="Upsampling smooth flow")], dtype=np.float16)
     # save the flow
     if loc:
+        # save in yxz format
         np.save(loc, flow)
     time_end = time.time()
     print("Interpolating flow took " + str(time_end - time_start) + " seconds")
 
-    return flow
 
-
-def upsample_flow(flow: np.ndarray, factor: tuple, order: int = 1) -> np.ndarray:
+def upsample_yx(im: np.ndarray, factor: float = 4, order: int = 1) -> np.ndarray:
     """
-    Function to upsample aa flow by a given factor/
+    Function to upsample an 3D image in yx.
     Args:
-        flow: np.ndarray size [3 x n_z, n_y, n_x] of the image to upsample
-        factor: tuple of 2 ints specifying the upsample factor in z, y and x
+        im: np.ndarray size [n_y, n_x, n_z] of the image to upsample
+        factor: float specifying the factor to upsample by in y and x
         order: int specifying the order of the interpolation
     Returns:
-        flow_up: np.ndarray size [3 x n_z, n_y, n_x] of the upsampled flow
+        im_up: np.ndarray size [n_y * factor, n_x * factor, n_z] of the upsampled image
     """
-    flow_up = np.array([zoom(flow[i], factor, order=order) * factor[i] for i in range(3)])
-    return flow_up
+    # upsampling is quicker when we do it in 2D
+    im_up = np.zeros((im.shape[0] * factor, im.shape[1] * factor, im.shape[2]), dtype=im.dtype)
+    for z in range(im.shape[2]):
+        im_up[:, :, z] = scipy.ndimage.zoom(im[:, :, z], factor, order=order)
+    return im_up
 
 
 def gaussian_kernel(sigma: float, size: int) -> np.ndarray:

@@ -8,6 +8,7 @@ from tqdm import tqdm
 from typing import Tuple
 from ..setup import NotebookPage
 from .. import find_spots, logging
+from .. import spot_colors
 from ..register import preprocessing
 from ..register import base as register_base
 from ..utils import system, tiles_io
@@ -89,33 +90,28 @@ def register(
     for t in tqdm(use_tiles, desc='Optical Flow on uncompleted tiles', total=len(use_tiles)):
         # Load in the anchor image and the round images. Note that here anchor means anchor round, not necessarily
         # anchor channel
-        anchor_image = preprocessing.yxz_to_zyx(
-            tiles_io.load_image(
+        anchor_image = tiles_io.load_image(
+            nbp_file,
+            nbp_basic,
+            nbp_extract.file_type,
+            t=t,
+            r=nbp_basic.anchor_round,
+            c=nbp_basic.dapi_channel,
+        )
+        use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
+        for r in tqdm(use_rounds, desc='Round', total=len(use_rounds)):
+            round_image = tiles_io.load_image(
                 nbp_file,
                 nbp_basic,
                 nbp_extract.file_type,
                 t=t,
-                r=nbp_basic.anchor_round,
+                r=r,
                 c=nbp_basic.dapi_channel,
-            )
-        )
-        use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
-        upsample_factor = (1, config["downsample_factor"], config["downsample_factor"])
-        for r in tqdm(use_rounds, desc='Round', total=len(use_rounds)):
-            round_image = preprocessing.yxz_to_zyx(
-                tiles_io.load_image(
-                    nbp_file,
-                    nbp_basic,
-                    nbp_extract.file_type,
-                    t=t,
-                    r=r,
-                    c=nbp_basic.dapi_channel,
-                    suffix="_raw" if r == nbp_basic.pre_seq_round else "",
-                )
+                suffix="_raw" if r == nbp_basic.pre_seq_round else "",
             )
             # Now run the registration algorithm on this tile and round
             register_base.optical_flow_register(target=round_image, base=anchor_image,
-                                                upsample_factor=upsample_factor,
+                                                sample_factor_yx=config["sample_factor_yx"],
                                                 window_radius=config["window_radius"],
                                                 smooth_sigma=config["smooth_sigma"],
                                                 smooth_threshold=config["smooth_thresh"],
@@ -143,8 +139,7 @@ def register(
             )
             for r in use_rounds:
                 flow_loc = os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy")
-                # convert flow to yxz
-                flow_tr = preprocessing.flow_zyx_to_yxz(np.load(flow_loc, mmap_mode='r'))
+                flow_tr = np.load(flow_loc, mmap_mode='r')
                 # put ref_spots from anchor frame into the round r frame
                 ref_spots_t = preprocessing.apply_flow(flow=flow_tr, points=ref_spots_t_ambient)
                 for c in use_channels:
@@ -176,7 +171,7 @@ def register(
         # Save registration data externally
         with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
             pickle.dump(registration_data, f)
-        del ref_spots_t_ambient, ref_spots_t, imaging_spots_trc
+        del ref_spots_t_ambient, ref_spots_t, imaging_spots_trc, flow_tr
     # Now add the registration data to the notebook pages (nbp and nbp_debug)
     nbp.flow_dir = os.path.join(nbp_file.output_dir, "flow")
     nbp.icp_correction = registration_data["icp"]["transform"]
@@ -187,7 +182,6 @@ def register(
     nbp_debug.converged = registration_data["icp"]["converged"]
 
     # first, let us blur the pre-seq round images
-
     # if nbp_basic.use_preseq:
     #     if pre_seq_blur_radius is None:
     #         pre_seq_blur_radius = 3
@@ -206,32 +200,31 @@ def register(
         r_pre = nbp_basic.pre_seq_round
         use_rounds = nbp_basic.use_rounds
         mid_z = len(nbp_basic.use_z) // 2
+        pixels_anchor = spot_colors.all_pixel_yxz(y_size=nbp_basic.tile_sz, x_size=nbp_basic.tile_sz, z_planes=[mid_z])
         for t, c in tqdm(
             itertools.product(use_tiles, use_channels),
             desc="Computing background scale factors",
             total=len(use_tiles) * len(use_channels),
         ):
-            # load in the flow for the pre-seq round
-            flow_pre = np.load(os.path.join(nbp.flow_dir, "smooth", f"t{t}_r{r_pre}.npy")).astype(np.float32)
-            grid = np.array(np.meshgrid(range(flow_pre.shape[1]), range(flow_pre.shape[2]),
-                                        range(flow_pre.shape[3]), indexing='ij'))
-            warp_pre = grid + flow_pre
-            image_preseq = preprocessing.yxz_to_zyx(
-                tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r_pre, c=c))
-            # warp the pre-seq round image
-            image_preseq = skimage.transform.warp(image_preseq, warp_pre, order=0)[mid_z]
-            del flow_pre, warp_pre
+            flow_t_pre = np.load(os.path.join(nbp.flow_dir, "smooth", f"t{t}_r{r_pre}.npy"), mmap_mode='r')
+            pixels_pre, in_range_pre = spot_colors.apply_transform(yxz=pixels_anchor, flow=flow_t_pre,
+                                                                   icp_correction=nbp.icp_correction[t, r_pre, c],
+                                                                   tile_sz=nbp_basic.tile_sz)
             for r in use_rounds:
-                # load in the flow for the round
-                flow_r = np.load(os.path.join(nbp.flow_dir, "smooth", f"t{t}_r{r}.npy"))
-                warp_r = grid + flow_r
-                image_seq = preprocessing.yxz_to_zyx(
-                    tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r, c=c))
-                # warp the sequence round image
-                image_seq = skimage.transform.warp(image_seq, warp_r, order=0)[mid_z]
-                del flow_r, warp_r
-                # Now compute the scale factor
-                bg_scale[t, r, c] = register_base.brightness_scale(image_preseq, image_seq, 99)[0]
+                flow_tr = np.load(os.path.join(nbp.flow_dir, "smooth", f"t{t}_r{r}.npy"), mmap_mode='r')
+                pixels_r, in_range_r = spot_colors.apply_transform(yxz=pixels_anchor, flow=flow_tr,
+                                                                   icp_correction=nbp.icp_correction[t, r, c],
+                                                                   tile_sz=nbp_basic.tile_sz)
+                in_range = in_range_pre * in_range_r
+                im_pre = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r_pre, c=c,
+                                             yxz=pixels_pre[in_range])
+                im_r = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r, c=c,
+                                           yxz=pixels_r[in_range])
+                bright = im_pre > np.percentile(im_pre, 99)
+                positive = (im_r > 0) * (im_pre > 0)
+                im_pre, im_r = im_pre[bright * positive], im_r[bright * positive]
+                bg_scale[t, r, c] = np.linalg.lstsq(im_pre[:, None], im_r, rcond=None)[0]
+
         # Now add the bg_scale to the nbp_filter page. To do this we need to delete the bg_scale attribute.
         nbp_filter.finalized = False
         del nbp_filter.bg_scale

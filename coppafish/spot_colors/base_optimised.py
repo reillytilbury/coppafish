@@ -2,9 +2,7 @@ from functools import partial
 import numpy as np
 from typing import List, Optional, Tuple, Union
 from tqdm import tqdm
-import jax.numpy as jnp
 import os
-import jax
 
 from ..setup.notebook import NotebookPage
 from ..utils import tiles_io

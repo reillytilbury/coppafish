@@ -155,7 +155,7 @@ _options = {
         {   # this parameter is for channel registration
             'bead_radii': 'maybe_list_number',
             # these parameters are for round registration
-            'downsample_factor': 'int',
+            'sample_factor_yx': 'int',
             'window_radius': 'int',
             'smooth_sigma': 'number',
             'smooth_thresh': 'number',
@@ -165,7 +165,6 @@ _options = {
             'icp_min_spots': 'int',
             'icp_max_iter': 'int'
         },
-    },
     "call_spots": {
         "bleed_matrix_method": "str",
         "bleed_matrix_score_thresh": "number",

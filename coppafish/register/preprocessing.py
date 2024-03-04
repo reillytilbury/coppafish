@@ -106,6 +106,20 @@ def yxz_to_zyx(image: np.ndarray):
     return image
 
 
+def zyx_to_yxz(image: np.ndarray):
+    """
+    Function to convert image from zyx to yxz
+    Args:
+        image: zyx image
+
+    Returns:
+        image_new: yxz image
+    """
+    image = np.swapaxes(image, 0, 2)
+    image = np.swapaxes(image, 0, 1)
+    return image
+
+
 def n_matches_to_frac_matches(n_matches: np.ndarray, spot_no: np.ndarray):
     """
     Function to convert n_matches to fraction of matches
@@ -132,7 +146,7 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
 
     Parameters
     ----------
-    image : (nz x ny x nx) ndarray
+    image : (nz x ny x nx) ndarray or (ny x nx x nz) ndarray
         The 3D image to be split.
     y_subvolumes : int
         The number of subvolumes to split the image into in the y dimension.
@@ -148,6 +162,10 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
     position: ndarray
         (y_subvolumes * x_subvolumes * z_sub_volumes) x 3 The middle coord of each subtile
     """
+    # Convert image to zyx
+    if np.argmin(image.shape) == 2:
+        image = yxz_to_zyx(image)
+
     # Make sure that box dims are even
     assert z_box % 2 == 0 and y_box % 2 == 0 and x_box % 2 == 0, "Box dimensions must be even numbers!"
     z_image, y_image, x_image = image.shape
@@ -435,60 +453,6 @@ def window_image(image: np.ndarray) -> np.ndarray:
     return image
 
 
-def compose_flows(flow_a: np.ndarray, flow_b: np.ndarray, order: int = 0) -> np.ndarray:
-    """
-    Compose two flows.
-
-    Args:
-        flow_a: 3 x n_z x n_y x n_x ndarray of shifts. This is the flow to be applied first.
-        flow_b: 3 x nz x ny x nx ndarray of shifts. This is the flow to be applied second.
-        order: order of the interpolation. Default: 0.
-
-    Returns:
-        flow: 3 x nz x ny x nx ndarray of shifts.
-    """
-    grid = np.array(np.meshgrid(np.arange(flow_a.shape[1]), np.arange(flow_a.shape[2]), np.arange(flow_a.shape[3]),
-                                indexing='ij')).astype(np.float32)
-    warp_a = grid + flow_a
-    warp_b = grid + flow_b
-    warp = np.zeros_like(warp_a)
-    del flow_a, flow_b
-
-    for i in range(3):
-        warp[i] = skimage.transform.warp(warp_b[i], warp_a, order=order, mode='constant', cval=0,
-                                         preserve_range=True)
-
-    flow = warp - grid
-    return flow
-
-
-def affine_transform_to_flow(affine: np.ndarray, shape: Tuple[int, int, int]) -> np.ndarray:
-    """
-    Convert an affine transform to a flow.
-
-    Args:
-        affine: 3 x 4 affine transform (zyx).
-        shape: shape of the warp. (nz, ny, nx)
-
-    Returns:
-        flow: flow. (3 x nz x ny x nx)
-    """
-    # define and pad the grid
-    grid = np.meshgrid(np.arange(shape[0]), np.arange(shape[1]), np.arange(shape[2]), indexing='ij')
-    grid = np.array(grid, dtype=np.float32)
-    grid = grid.reshape(3, -1)
-    grid = np.vstack((grid, np.ones(grid.shape[1])))
-    # apply the affine transform
-    warp = (affine @ grid)[:3]
-    # reshape the grid
-    warp = warp.reshape(3, *shape)
-    grid = grid[:3].reshape(3, *shape)
-    flow = warp - grid
-    # so that we are consistent, let's make this an inverse warp, meaning we need to negate the flow
-
-    return -flow.astype(np.float32)
-
-
 def flow_zyx_to_yxz(flow_zyx: np.ndarray) -> np.ndarray:
     """
     Convert a flow from zyx to yxz.
@@ -509,7 +473,7 @@ def apply_flow(flow: np.ndarray, points: np.ndarray, ignore_oob: bool = True) ->
     their location in the warp array.
 
     Args:
-        flow (np.ndarray): flow to apply. (3 x nz x ny x nx). In our case, this flow will always be the inverse flow,
+        flow (np.ndarray): flow to apply. (3 x ny x nx x nz). In our case, this flow will always be the inverse flow,
         so we need to apply the negative of the flow to the points.
         points: points to apply the warp to. (n_points x 3 in yxz coords)
         ignore_oob: remove points that go out of bounds. Default: True.
@@ -517,10 +481,9 @@ def apply_flow(flow: np.ndarray, points: np.ndarray, ignore_oob: bool = True) ->
     Returns:
         new_points: new points.
     """
-    # invert the flow
-    flow = -flow
+    # have to subtract the flow from the points as we are applying the inverse warp
     y_indices, x_indices, z_indices = points.T.astype(int)
-    new_points = points + flow[:, y_indices, x_indices, z_indices].T
+    new_points = points - (flow[:, y_indices, x_indices, z_indices].T).astype(int)
     ny, nx, nz = flow.shape[1:]
     if ignore_oob:
         oob = (new_points[:, 0] < 0) | (new_points[:, 0] >= ny) | (new_points[:, 1] < 0) | (new_points[:, 1] >= nx) | \
