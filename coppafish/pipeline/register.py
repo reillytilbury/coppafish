@@ -95,6 +95,9 @@ def register(
         for c in use_channels:
             cam_idx = cameras.index(nbp_basic.channel_camera[c])
             registration_data["channel_registration"]["transform"][c] = cam_transform[cam_idx]
+        # Save the data to file
+        with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
+            pickle.dump(registration_data, f)
 
     # round registration
     with tqdm(total=len(uncompleted_tiles)) as pbar:
@@ -102,7 +105,6 @@ def register(
         for t in uncompleted_tiles:
             # Load in the anchor image and the round images. Note that here anchor means anchor round, not necessarily
             # anchor channel
-            use_dapi = round_registration_channel == nbp_basic.dapi_channel
             anchor_image = preprocessing.yxz_to_zyx(
                 tiles_io.load_image(
                     nbp_file,
@@ -114,51 +116,32 @@ def register(
                     apply_shift=False,
                 )
             )
-            if not (use_dapi):
-                anchor_image = preprocessing.offset_pixels_by(anchor_image, -nbp_basic.tile_pixel_value_shift)
             use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
-            # split the rounds into two chunks, as we can't fit all of them into memory at once
-            round_chunks = [use_rounds[: len(use_rounds) // 2], use_rounds[len(use_rounds) // 2 :]]
-            for round_chunk in round_chunks:
-                round_image = []
-                for r in round_chunk:
-                    if not (use_dapi and r == nbp_basic.anchor_round):
-                        round_image.append(
-                            preprocessing.yxz_to_zyx(
-                                tiles_io.load_image(
-                                    nbp_file,
-                                    nbp_basic,
-                                    nbp_extract.file_type,
-                                    t=t,
-                                    r=r,
-                                    c=round_registration_channel,
-                                    suffix="_raw" if r == nbp_basic.pre_seq_round else "",
-                                )
-                            )
-                        )
-                    else:
-                        round_image.append(
-                            preprocessing.yxz_to_zyx(
-                                tiles_io.load_image(
-                                    nbp_file,
-                                    nbp_basic,
-                                    nbp_extract.file_type,
-                                    t=t,
-                                    r=r,
-                                    c=round_registration_channel,
-                                    suffix="_raw" if r == nbp_basic.pre_seq_round else "",
-                                    apply_shift=False,
-                                ),
-                            )
-                        )
-                round_reg_data = register_base.round_registration(
-                    anchor_image=anchor_image, round_image=round_image, config=config
+            round_image = []
+            for r in use_rounds:
+                round_image.append(
+                    preprocessing.yxz_to_zyx(
+                        tiles_io.load_image(
+                            nbp_file,
+                            nbp_basic,
+                            nbp_extract.file_type,
+                            t=t,
+                            r=r,
+                            c=round_registration_channel,
+                            suffix="_raw" if r == nbp_basic.pre_seq_round else "",
+                            apply_shift=False,
+                        ),
+                    )
                 )
-                # Now save the data
-                registration_data["round_registration"]["transform_raw"][t, round_chunk] = round_reg_data["transform"]
-                registration_data["round_registration"]["shift"][t, round_chunk] = round_reg_data["shift"]
-                registration_data["round_registration"]["shift_corr"][t, round_chunk] = round_reg_data["shift_corr"]
-                registration_data["round_registration"]["position"][t, round_chunk] = round_reg_data["position"]
+
+            round_reg_data = register_base.round_registration(
+                anchor_image=anchor_image, round_image=round_image, config=config
+            )
+            # Now save the data
+            registration_data["round_registration"]["transform_raw"][t] = round_reg_data["transform"]
+            registration_data["round_registration"]["shift"][t] = round_reg_data["shift"]
+            registration_data["round_registration"]["shift_corr"][t] = round_reg_data["shift_corr"]
+            registration_data["round_registration"]["position"][t] = round_reg_data["position"]
             # Now append anchor info and tile number to the registration data, then save to file
             registration_data["round_registration"]["tiles_completed"].append(t)
             # Save the data to file
