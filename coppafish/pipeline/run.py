@@ -71,6 +71,7 @@ def run_tile_indep_pipeline(nb: Notebook) -> None:
     BuildPDF(nb)
     run_find_spots(nb)
     run_register(nb)
+    BuildPDF(nb)
     check_spots.check_n_spots(nb)
 
 
