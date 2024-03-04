@@ -14,28 +14,28 @@ def detect_spots(
     se: Optional[np.ndarray] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Finds local maxima in image exceeding ```intensity_thresh```.
+    Finds local maxima in image exceeding `intensity_thresh`.
     This is achieved through a dilation being run on the whole image.
     Should use for a large se.
 
     Args:
-        image: ```float [n_y x n_x x n_z]```.
-            ```image``` to find spots on.
-        intensity_thresh: Spots are local maxima in image with ```pixel_value > intensity_thresh```.
+        image: `float [n_y x n_x x n_z]`.
+            `image` to find spots on.
+        intensity_thresh: Spots are local maxima in image with `pixel_value > intensity_thresh`.
         radius_xy: Radius of dilation structuring element in xy plane (approximately spot radius).
         radius_z: Radius of dilation structuring element in z direction (approximately spot radius).
             Must be more than 1 to be 3D.
-            If ```None```, 2D filter is used.
+            If `None`, 2D filter is used.
         remove_duplicates: Whether to only keep one pixel if two or more pixels are local maxima and have
             same intensity. Only works with integer image.
-        se: ```int [se_sz_y x se_sz_x x se_sz_z]```.
+        se: `int [se_sz_y x se_sz_x x se_sz_z]`.
             Can give structuring element manually rather than using a cuboid element.
             Must only contain zeros and ones.
 
     Returns:
-        - ```peak_yxz``` - ```int [n_peaks x image.ndim]```.
+        - `peak_yxz` - `int [n_peaks x image.ndim]`.
             yx or yxz location of spots found.
-        - ```peak_intensity``` - ```float [n_peaks]```.
+        - `peak_intensity` - `float [n_peaks]`.
             Pixel value of spots found.
     """
     if se is None:
@@ -65,7 +65,7 @@ def detect_spots(
 
     # set central pixel to 0
     se[np.ix_(*[(np.floor((se.shape[i] - 1) / 2).astype(int),) for i in range(se.ndim)])] = 0
-    se_shifts = utils.morphology.filter.get_shifts_from_kernel(se)
+    se_shifts = np.array(utils.morphology.filter.get_shifts_from_kernel(se))
 
     consider_yxz = np.where(image > intensity_thresh)
     n_consider = consider_yxz[0].shape[0]
@@ -79,20 +79,34 @@ def detect_spots(
         image[consider_yxz] = image[consider_yxz] + rand_im_shift
 
     consider_intensity = image[consider_yxz]
-    consider_yxz = list(consider_yxz)
-
-    paddings = np.asarray([pad_size_y, pad_size_x, pad_size_z])[: image.ndim]
-    keep = np.asarray(
-        get_local_maxima(
-            image, np.asarray(se_shifts), paddings, np.asarray(consider_yxz), np.asarray(consider_intensity)
+    consider_yxz = np.array(consider_yxz)
+    logging.debug(f"{consider_yxz.shape=}")
+    if consider_yxz.max() <= np.iinfo(np.int32).max:
+        consider_yxz = consider_yxz.astype(np.int32)
+    # Sometimes consider_yxz can have too many spots in it to be run all at once through get_local_maxima without
+    # running out of memory, so it is separated into smaller batches and then recombined after.
+    max_batch_size = np.floor(5_000_000 * utils.system.get_available_memory() / 64.5).astype(int)
+    logging.debug(f"{max_batch_size=}")
+    paddings = np.array([pad_size_y, pad_size_x, pad_size_z])[: image.ndim]
+    keep = np.zeros(n_consider, dtype=bool)
+    final_i = np.ceil(n_consider / max_batch_size) - 1
+    for i in range(np.ceil(n_consider / max_batch_size).astype(int)):
+        index_start = i * max_batch_size
+        if i == final_i:
+            index_end = n_consider
+        else:
+            index_end = (i + 1) * max_batch_size
+        consider_yxz_batch = consider_yxz[:, index_start:index_end]
+        consider_intensity_batch = consider_intensity[index_start:index_end]
+        keep[index_start:index_end] = get_local_maxima(
+            image, se_shifts, paddings, consider_yxz_batch, consider_intensity_batch
         )
-    )
     if remove_duplicates:
         peak_intensity = np.round(consider_intensity[keep]).astype(int)
     else:
         peak_intensity = consider_intensity[keep]
-    peak_yxz = np.array(consider_yxz).transpose()[keep]
-    return peak_yxz, peak_intensity
+    peak_yxz = consider_yxz.transpose()[keep]
+    return peak_yxz.astype(int), peak_intensity
 
 
 def get_local_maxima(
@@ -124,9 +138,9 @@ def get_local_maxima(
 
     image = np.pad(image, [(p, p) for p in pad_sizes], mode="constant", constant_values=0)
     # Local pixel positions of spots must change after padding is added
-    consider_yxz += pad_sizes[:, np.newaxis]
+    consider_yxz_se_shifted = consider_yxz + pad_sizes[:, np.newaxis]
     # (image.ndim, n_consider, n_shifts) shape
-    consider_yxz_se_shifted = np.repeat(consider_yxz[..., np.newaxis], se_shifts.shape[1], axis=2)
+    consider_yxz_se_shifted = np.repeat(consider_yxz_se_shifted[..., np.newaxis], se_shifts.shape[1], axis=2)
     consider_yxz_se_shifted += se_shifts[None].transpose((1, 0, 2))
     # image.ndim items in tuple of `(n_consider * n_shifts) ndarray[int]`
     consider_yxz_se_shifted = tuple(consider_yxz_se_shifted.reshape((image.ndim, -1)))
