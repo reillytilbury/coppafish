@@ -1,4 +1,5 @@
 2024/03/04 Alpha Update (v0.9.3):
+ * New "_register.pdf" diagnostic PDF added during pipeline and when calling BuildPDF.
  * Detect spots is now batched when run on too many spots to avoid memory crashing fix.
  * Gene efficiency in the Viewer bug fix.
 
