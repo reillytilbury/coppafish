@@ -35,8 +35,8 @@ def find_shift_array(subvol_base, subvol_target, position, r_threshold):
     shift_corr = np.zeros((z_subvolumes, y_subvolumes, x_subvolumes))
     position = np.reshape(position, (z_subvolumes, y_subvolumes, x_subvolumes, 3))
 
-    for y in range(y_subvolumes):
-        for x in range(x_subvolumes):
+    for y, x in tqdm(np.ndindex(y_subvolumes, x_subvolumes), desc="Computing subvolume shifts",
+                     total=y_subvolumes * x_subvolumes):
             shift[:, y, x], shift_corr[:, y, x] = find_z_tower_shifts(
                 subvol_base=subvol_base[:, y, x],
                 subvol_target=subvol_target[:, y, x],
@@ -273,11 +273,8 @@ def round_registration(anchor_image: np.ndarray, round_image: list, config: dict
         round_image = [skimage.filters.sobel(r) for r in round_image]
 
     # Now compute round shifts for this tile and the affine transform for each round
-    pbar = tqdm(total=len(round_image), desc="Computing round transforms")
-    for r in range(len(round_image)):
+    for r in tqdm(range(len(round_image)), desc="Computing round shifts", total=len(round_image)):
         # Set progress bar title
-        pbar.set_description("Computing shifts for round " + str(r))
-
         # next we split image into overlapping cuboids
         subvol_base, position = preprocessing.split_3d_image(
             image=anchor_image,
@@ -306,8 +303,6 @@ def round_registration(anchor_image: np.ndarray, round_image: list, config: dict
         round_registration_data["shift_corr"].append(corr)
         round_registration_data["position"].append(position)
         round_registration_data["transform"].append(transform)
-        pbar.update(1)
-    pbar.close()
     # Convert all lists to numpy arrays
     for key in round_registration_data.keys():
         round_registration_data[key] = np.array(round_registration_data[key])

@@ -76,13 +76,13 @@ def register(
 
     # Part 1: Initial affine transform
     # Start with channel registration
-    pbar = tqdm(total=len(uncompleted_tiles))
-    pbar.set_description(f"Running initial channel registration")
     if registration_data["channel_registration"]["transform"].max() == 0:
+        print("Running channel registration")
         if not nbp_basic.channel_camera:
             cameras = [0] * n_channels
         else:
             cameras = list(set(nbp_basic.channel_camera))
+
         cameras.sort()
         anchor_cam_idx = cameras.index(nbp_basic.channel_camera[nbp_basic.anchor_channel])
         cam_transform = register_base.channel_registration(
