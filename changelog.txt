@@ -15,6 +15,7 @@
  * New config variable in filter called "psf_max_spots". The default is 5,000, the same as previous versions.
  * Added more pipeline warnings.
  * Removed unnecessary jax code.
+ * Removed redundant max_background_scale_cores config variable in register.
  * New `invalid_auto_thresh` notebook variable in filter_debug added.
  * Optimised plotting function `remove_background` in spot_colors.
  * Docs + logo update for coppafish.

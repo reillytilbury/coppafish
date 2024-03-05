@@ -157,7 +157,6 @@ _options = {
         "icp_max_iter": "int",
         "round_registration_channel": "maybe_int",
         "sobel": "bool",
-        "max_background_scale_cores": "maybe_int",
     },
     "call_spots": {
         "bleed_matrix_method": "str",
