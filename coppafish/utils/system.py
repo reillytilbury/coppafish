@@ -2,7 +2,6 @@ import os
 import shutil
 import psutil
 import urllib
-import checksumdir
 import numpy as np
 from pathlib import PurePath
 from typing import Tuple
@@ -47,11 +46,8 @@ def get_software_hash() -> str:
     Returns:
         str: hash.
     """
-    # Exclude any python cache files (.pyc)
-    result = checksumdir.dirhash(
-        PurePath(os.path.dirname(os.path.realpath(__file__))).parent, excluded_extensions=["pyc"], ignore_hidden=True
-    )
-    return result
+    # TODO: Re-implement
+    return ""
 
 
 def get_available_memory() -> float:
