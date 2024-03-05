@@ -220,7 +220,6 @@ def filter_intense_spots(
         # set the intensity threshold to the 500th most intense spot and take the top 500 values
         z_spot_count = np.sum(local_yxz[:, 2] == z)
         if z_spot_count > max_spots:
-            logging.warn(f"Found {z_spot_count} spots in {z=}, selecting {max_spots} most intense spots")
             intensity_thresh = np.sort(spot_intensity[local_yxz[:, 2] == z])[-max_spots]
             keep[np.logical_and(local_yxz[:, 2] == z, spot_intensity < intensity_thresh)] = False
 
