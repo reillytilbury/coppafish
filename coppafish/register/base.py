@@ -2,6 +2,7 @@ import nd2
 import scipy
 import numpy as np
 import skimage
+import pickle
 from tqdm import tqdm
 from sklearn.linear_model import HuberRegressor
 from typing import Optional, Tuple
@@ -245,29 +246,24 @@ def huber_regression(shift, position, predict_shift=True):
 
 
 # Bridge function for all functions in round registration
-def round_registration(anchor_image: np.ndarray, round_image: list, config: dict) -> dict:
+def round_registration(anchor_image: np.ndarray, round_image: list, t: int, round_ind: list,
+                       config: dict, registration_data: dict, save_path: str):
     """
     Function to carry out sub-volume round registration on a single tile.
 
     Args:
         anchor_image: np.ndarray size [n_z, n_y, n_x] of the anchor image
         round_image: list of length n_rounds, where round_image[r] is  np.ndarray size [n_z, n_y, n_x] of round r
+        t: int index of the tile
+        round_ind: list (length n_rounds) of the round indices
         config: dict of configuration parameters for registration
-
-    Returns:
-        round_registration_data: dictionary containing the following keys:
-        'position': np.ndarray size [z_sv x y_sv x x_sv, 3] of the position of each sub-volume in zyx format
-        'shift': np.ndarray size [z_sv x y_sv x x_sv, 3] of the shift of each sub-volume in zyx format
-        'shift_corr': np.ndarray size [z_sv x y_sv x x_sv] of the correlation coefficient of each sub-volume shift
-        'transform': np.ndarray size [n_rounds, 3, 4] of the affine transform for each round in zyx format
+        registration_data: dict of registration data (to be updated)
+        save_path: str path to save the updated registration data
     """
     # Initialize variables from config
     z_subvols, y_subvols, x_subvols = config["subvols"]
     z_box, y_box, x_box = config["box_size"]
     r_thresh = config["pearson_r_thresh"]
-
-    # Create the directory for the round registration data
-    round_registration_data = {"position": [], "shift": [], "shift_corr": [], "transform": []}
 
     if config["sobel"]:
         anchor_image = skimage.filters.sobel(anchor_image)
@@ -302,15 +298,16 @@ def round_registration(anchor_image: np.ndarray, round_image: list, config: dict
         shift, corr = find_shift_array(subvol_base, subvol_target, position=position.copy(), r_threshold=r_thresh)
         transform = huber_regression(shift, position, predict_shift=False)
         # Append these arrays to the round_shift, round_shift_corr, round_transform and position storage
-        round_registration_data["shift"].append(shift)
-        round_registration_data["shift_corr"].append(corr)
-        round_registration_data["position"].append(position)
-        round_registration_data["transform"].append(transform)
-    # Convert all lists to numpy arrays
-    for key in round_registration_data.keys():
-        round_registration_data[key] = np.array(round_registration_data[key])
+        # note: r is not the round index, but the index of the round in the round_image list so need to use round_ind
+        registration_data["round_registration"]["shift"][t, round_ind[r]] = shift
+        registration_data["round_registration"]["shift_corr"][t, round_ind[r]] = corr
+        if registration_data["round_registration"]["position"].max() == 0:
+            registration_data["round_registration"]["position"] = position
+        registration_data["round_registration"]["transform_raw"][t, round_ind[r]] = transform
 
-    return round_registration_data
+        # Save the registration data
+        with open(save_path, "wb") as f:
+            pickle.dump(registration_data, f)
 
 
 def channel_registration(

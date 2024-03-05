@@ -57,8 +57,7 @@ def load_reg_data(nbp_file: NotebookPage, nbp_basic: NotebookPage, config: dict)
         n_tiles, n_rounds, n_channels = nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.n_extra_rounds, \
             nbp_basic.n_channels
         z_subvols, y_subvols, x_subvols = config['subvols']
-        round_registration = {'tiles_completed': [],
-                              'position': np.zeros((n_tiles, n_rounds, z_subvols * y_subvols * x_subvols, 3)),
+        round_registration = {'position': np.zeros((z_subvols * y_subvols * x_subvols, 3)),
                               'shift': np.zeros((n_tiles, n_rounds, z_subvols * y_subvols * x_subvols, 3)),
                               'shift_corr': np.zeros((n_tiles, n_rounds, z_subvols * y_subvols * x_subvols)),
                               'transform_raw': np.zeros((n_tiles, n_rounds, 3, 4)),

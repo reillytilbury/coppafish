@@ -72,7 +72,6 @@ def register(
 
     # Load in registration data from previous runs of the software
     registration_data = preprocessing.load_reg_data(nbp_file, nbp_basic, config)
-    uncompleted_tiles = np.setdiff1d(use_tiles, registration_data["round_registration"]["tiles_completed"])
 
     # Part 1: Initial affine transform
     # Start with channel registration
@@ -100,9 +99,10 @@ def register(
             pickle.dump(registration_data, f)
 
     # round registration
-    with tqdm(total=len(uncompleted_tiles)) as pbar:
+
+    with tqdm(total=len(use_tiles)) as pbar:
         pbar.set_description(f"Running initial round registration on all tiles")
-        for t in uncompleted_tiles:
+        for t in use_tiles:
             # Load in the anchor image and the round images. Note that here anchor means anchor round, not necessarily
             # anchor channel
             anchor_image = preprocessing.yxz_to_zyx(
@@ -117,8 +117,11 @@ def register(
                 )
             )
             use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
+            completed_rounds = [r for r in use_rounds if
+                                registration_data["round_registration"]["shift_corr"][t, r].max() > 0]
+            remaining_rounds = [r for r in use_rounds if r not in completed_rounds]
             round_image = []
-            for r in use_rounds:
+            for r in remaining_rounds:
                 round_image.append(
                     preprocessing.yxz_to_zyx(
                         tiles_io.load_image(
@@ -134,19 +137,11 @@ def register(
                     )
                 )
 
-            round_reg_data = register_base.round_registration(
-                anchor_image=anchor_image, round_image=round_image, config=config
+            register_base.round_registration(
+                anchor_image=anchor_image, round_image=round_image, t=t, round_ind=remaining_rounds, config=config,
+                registration_data=registration_data,
+                save_path=os.path.join(nbp_file.output_dir, "registration_data.pkl")
             )
-            # Now save the data
-            registration_data["round_registration"]["transform_raw"][t] = round_reg_data["transform"]
-            registration_data["round_registration"]["shift"][t] = round_reg_data["shift"]
-            registration_data["round_registration"]["shift_corr"][t] = round_reg_data["shift_corr"]
-            registration_data["round_registration"]["position"][t] = round_reg_data["position"]
-            # Now append anchor info and tile number to the registration data, then save to file
-            registration_data["round_registration"]["tiles_completed"].append(t)
-            # Save the data to file
-            with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
-                pickle.dump(registration_data, f)
             pbar.update(1)
 
     # Part 2: Regularisation
