@@ -103,7 +103,7 @@ def initialize_nb(config_file: str) -> Notebook:
         logging.warn(utils.warnings.NotebookPageWarning("basic_info"))
     if utils.system.get_software_version() not in nb.get_all_variable_instances(nb._SOFTWARE_VERSION):
         logging.warn(
-            f"You are running on software version {utils.system.get_software_version()}, but the notebook contains "
+            f"You are running on v{utils.system.get_software_version()}, but the notebook contains "
             + f"data from versions {nb.get_all_variable_instances(nb._SOFTWARE_VERSION)}.",
         )
         logging.warn("Are you sure you want to continue? (y or n) ")
@@ -111,6 +111,12 @@ def initialize_nb(config_file: str) -> Notebook:
         if user_input.strip().lower() != "y":
             logging.info("Exiting...")
             sys.exit()
+    online_version = utils.system.get_remote_software_version()
+    if online_version != utils.system.get_software_version():
+        logging.warn(
+            f"You are running on coppafish v{utils.system.get_software_version()} but the found online version is "
+            + f"v{online_version}"
+        )
     return nb
 
 

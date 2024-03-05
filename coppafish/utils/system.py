@@ -1,10 +1,15 @@
 import os
 import shutil
 import psutil
+import urllib
 import checksumdir
 import numpy as np
 from pathlib import PurePath
 from typing import Tuple
+
+VERSION_URL = "https://github.com/reillytilbury/coppafish/raw/HEAD/coppafish/_version.py"
+# The character(s) that encapsulate the software version tag in _version.py, in this case it is quotation marks
+VERSION_ENCAPSULATE = '"'
 
 
 def get_software_version() -> str:
@@ -15,8 +20,24 @@ def get_software_version() -> str:
         str: software version.
     """
     with open(PurePath(os.path.dirname(os.path.realpath(__file__))).parent.joinpath("_version.py"), "r") as f:
-        version_tag = f.read().split('"')[1]
+        version_tag = f.read().split(VERSION_ENCAPSULATE)[1]
     return version_tag
+
+
+def get_remote_software_version() -> str:
+    """
+    Get coppafish's latest version in `_version.py` found online at the default branch.
+
+    Returns:
+        str: version tag. None if the version could not be retrieved.
+    """
+    if not internet_is_active():
+        return None
+    f = urllib.request.urlopen(VERSION_URL)
+    version_contents = str(f.read())
+    index_start = version_contents.index(VERSION_ENCAPSULATE)
+    index_end = version_contents.index(VERSION_ENCAPSULATE, index_start + 1)
+    return version_contents[index_start + 1 : index_end]
 
 
 def get_software_hash() -> str:
@@ -78,3 +99,17 @@ def current_terminal_size_xy(x_offset: int = 0, y_offset: int = 0) -> Tuple[int,
         int(np.clip(terminal_size[0] + x_offset, a_min=1, a_max=None)),
         int(np.clip(terminal_size[1] + y_offset, a_min=1, a_max=None)),
     )
+
+
+def internet_is_active() -> bool:
+    """
+    Check for an internet connection.
+
+    Returns:
+        bool: whether the system is connected to the internet.
+    """
+    try:
+        urllib.request.urlopen("http://www.google.com")
+        return True
+    except:
+        return False
