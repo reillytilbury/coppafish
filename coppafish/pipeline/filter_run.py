@@ -228,7 +228,6 @@ def run_filter(
                     scale = min([scale, max_pixel_value / im_filtered.max()])
                     # A 60% margin for max/min pixel variability between images
                     scale = 0.40 * float(scale)
-                    nbp.image_scale = scale
                     logging.debug(f"{scale=} computed from {t=}, {r=}, {c=}")
                     # Save scale in case need to re-run without the notebook
                     filter_base.save_scale(nbp_file.scale, scale, scale)
@@ -261,6 +260,7 @@ def run_filter(
             del saved_im
             pbar.update()
     nbp.auto_thresh = auto_thresh
+    nbp.image_scale = scale
     # Add a variable for bg_scale (actually computed in register)
     nbp.bg_scale = None
     end_time = time.time()
