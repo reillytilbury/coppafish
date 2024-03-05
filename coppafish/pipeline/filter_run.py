@@ -138,7 +138,7 @@ def run_filter(
         nbp_debug.psf_tiles_used = None
     compute_scale = True
     if os.path.isfile(nbp_file.scale):
-        scale = filter_base.get_scale_from_txt(nbp_file.scale)[0]
+        scale = float(filter_base.get_scale_from_txt(nbp_file.scale)[0])
         logging.info(f"Using image scale {scale} found at {nbp_file.scale}")
         compute_scale = False
 
