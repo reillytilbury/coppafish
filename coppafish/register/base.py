@@ -582,7 +582,8 @@ def get_transform(
     distances = distances.flatten()
     use = distances < dist_thresh
     n_matches = np.sum(use)
-    error = np.sqrt(np.mean(distances[use] ** 2))
+    # Every point without a nearest-neighbour is given an error of dist_thresh ** 2
+    error = np.sqrt(np.mean(distances[use] ** 2 + np.sum(~use) * dist_thresh**2))
     base_pad_use = yxz_base_pad[neighbour[use], :]
     target_use = yxz_target[use, :]
 
