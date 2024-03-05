@@ -218,7 +218,9 @@ def filter_intense_spots(
     for z in range(n_z):
         # If the number of spots on this z-plane is > max_spots (500 by default for 3D) then we
         # set the intensity threshold to the 500th most intense spot and take the top 500 values
-        if np.sum(local_yxz[:, 2] == z) > max_spots:
+        z_spot_count = np.sum(local_yxz[:, 2] == z)
+        if z_spot_count > max_spots:
+            logging.warn(f"Found {z_spot_count} spots in {z=}, selecting {max_spots} most intense spots")
             intensity_thresh = np.sort(spot_intensity[local_yxz[:, 2] == z])[-max_spots]
             keep[np.logical_and(local_yxz[:, 2] == z, spot_intensity < intensity_thresh)] = False
 
