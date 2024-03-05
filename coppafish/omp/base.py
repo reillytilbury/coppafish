@@ -43,7 +43,7 @@ def get_pixel_colours(
     pixel_colours_tz = np.zeros((0, n_rounds, n_channels), dtype=np.float32)
     if nbp_basic.use_preseq:
         pixel_colours_t1, pixel_yxz_t1, _ = spot_colors.base.get_spot_colors(
-            spot_colors.base.all_pixel_yxz(nbp_basic.tile_sz, nbp_basic.tile_sz, np.arange(z_min, z_max + 1)),
+            spot_colors.base.all_pixel_yxz(nbp_basic.tile_sz, nbp_basic.tile_sz, np.arange(z_min, z_max)),
             int(tile),
             transform,
             nbp_file,
@@ -54,7 +54,7 @@ def get_pixel_colours(
         )
     else:
         pixel_colours_t1, pixel_yxz_t1 = spot_colors.base.get_spot_colors(
-            spot_colors.base.all_pixel_yxz(nbp_basic.tile_sz, nbp_basic.tile_sz, np.arange(z_min, z_max + 1)),
+            spot_colors.base.all_pixel_yxz(nbp_basic.tile_sz, nbp_basic.tile_sz, np.arange(z_min, z_max)),
             int(tile),
             transform,
             nbp_file,
