@@ -244,10 +244,11 @@ def register(
     nbp.transform = transform
 
     # first, let us blur the pre-seq round images
-    if nbp_basic.use_preseq:
+    if nbp_basic.use_preseq and registration_data['blur'] is False:
         if pre_seq_blur_radius is None:
             pre_seq_blur_radius = 3
-        for t, c in itertools.product(use_tiles, use_channels):
+        for t, c in tqdm(itertools.product(use_tiles, use_channels), desc="Blurring pre-seq images",
+                         total=len(use_tiles) * len(use_channels)):
             image_preseq = tiles_io.load_image(
                 nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=nbp_basic.pre_seq_round, c=c, suffix="_raw"
             )
@@ -255,6 +256,7 @@ def register(
             tiles_io.save_image(
                 nbp_file, nbp_basic, nbp_extract.file_type, image_preseq, t=t, r=nbp_basic.pre_seq_round, c=c
             )
+        registration_data['blur'] = True
 
     # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
     # fluorescence
