@@ -182,16 +182,16 @@ def register(
     nbp_debug.converged = registration_data["icp"]["converged"]
 
     # first, let us blur the pre-seq round images
-    # if nbp_basic.use_preseq:
-    #     if pre_seq_blur_radius is None:
-    #         pre_seq_blur_radius = 3
-    #     for t, c in tqdm(itertools.product(use_tiles, use_channels), total=len(use_tiles) * len(use_channels),
-    #                      desc="Blurring pre-seq round images"):
-    #         image_preseq = tiles_io.load_image(
-    #             nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=nbp_basic.pre_seq_round, c=c, suffix="_raw")
-    #         image_preseq = scipy.ndimage.gaussian_filter(image_preseq, pre_seq_blur_radius)
-    #         tiles_io.save_image(
-    #             nbp_file, nbp_basic, nbp_extract.file_type, image_preseq, t=t, r=nbp_basic.pre_seq_round, c=c)
+    if nbp_basic.use_preseq:
+        if pre_seq_blur_radius is None:
+            pre_seq_blur_radius = 3
+        for t, c in tqdm(itertools.product(use_tiles, use_channels), total=len(use_tiles) * len(use_channels),
+                         desc="Blurring pre-seq round images"):
+            image_preseq = tiles_io.load_image(
+                nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=nbp_basic.pre_seq_round, c=c, suffix="_raw")
+            image_preseq = scipy.ndimage.gaussian_filter(image_preseq, pre_seq_blur_radius)
+            tiles_io.save_image(
+                nbp_file, nbp_basic, nbp_extract.file_type, image_preseq, t=t, r=nbp_basic.pre_seq_round, c=c)
 
     # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
     # fluorescence

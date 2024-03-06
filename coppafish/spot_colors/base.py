@@ -106,15 +106,15 @@ def get_spot_colors(yxz_base: np.ndarray, t: np.ndarray, transform: np.ndarray, 
 
     with tqdm(total=n_use_rounds * n_use_channels, disable=no_verbose) as pbar:
         pbar.set_description(f"Reading {n_spots} spot_colors, from {file_type} files")
-        for r in range(n_use_rounds):
-            flow_r = np.load(os.path.join(nbp_file.output_dir, 'flow', 'smooth', f't{t}_r{use_rounds[r]}.npy'),
+        for i, r in enumerate(use_rounds):
+            flow_r = np.load(os.path.join(nbp_file.output_dir, 'flow', 'smooth', f't{t}_r{r}.npy'),
                              mmap_mode='r')
-            for c in range(n_use_channels):
-                transform_rc = transform[t, r, use_channels[c]]
-                pbar.set_postfix({'round': use_rounds[r], 'channel': use_channels[c]})
+            for j, c in enumerate(use_channels):
+                transform_rc = transform[t, r, c]
+                pbar.set_postfix({'round': r, 'channel': c})
                 if transform_rc[0, 0] == 0:
                     raise ValueError(
-                        f"Transform for tile {t}, round {use_rounds[r]}, channel {use_channels[c]} is zero:"
+                        f"Transform for tile {t}, round {r}, channel {c} is zero:"
                         f"\n{transform_rc}")
 
                 yxz_transform, in_range = apply_transform(yxz_base, flow_r, transform_rc, tile_sz)
@@ -126,8 +126,8 @@ def get_spot_colors(yxz_base: np.ndarray, t: np.ndarray, transform: np.ndarray, 
                     continue
 
                 # Read in the shifted uint16 colors here, and remove shift later.
-                spot_colors[in_range, r, c] = tiles_io.load_image(nbp_file, nbp_basic, file_type, t,
-                                                                  use_rounds[r], use_channels[c], yxz_transform,
+                spot_colors[in_range, i, j] = tiles_io.load_image(nbp_file, nbp_basic, file_type, t, r, c,
+                                                                  yxz_transform,
                                                                   apply_shift=False)
                 pbar.update(1)
             del flow_r
