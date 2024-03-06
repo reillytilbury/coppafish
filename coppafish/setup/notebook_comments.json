@@ -780,18 +780,13 @@
         ],
         "position": [
             "",
-            "n_tiles x n_rounds x (z_subvols * y_subvols * x_subvols) x 3:",
+            "z_subvols * y_subvols * x_subvols x 3:",
             "Position of each subvolume in z y x local tile coords"
         ],
         "round_transform_raw": [
             "",
             "[n_tiles x n_rounds x 3 x 4 ndarray]",
             " affine transforms taking $(t, r_{ref}, c_{ref})$ to $(t, r, c_{ref})$ for each tile $t$ and round $r $."
-        ],
-        "channel_transform": [
-            "",
-            "[n_channels x 3 x 4 ndarray]",
-            " affine transforms taking $(r_{mid}, c_{ref})$ to $(r_{mid}, c)$ for each tile $t$ and channel $c$."
         ]
     },
     "ref_spots": {

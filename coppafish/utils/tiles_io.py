@@ -295,8 +295,6 @@ def load_image(
         - May want to disable `apply_shift` to save memory and/or make loading quicker as there will be no dtype
             conversion. If loading in DAPI, dtype is always `uint16` as there is no shift.
     """
-    assert not apply_shift, "apply_shift is redundant, use register.preprocessing.apply_image_shift instead"
-
     if nbp_basic.is_3d:
         file_path = nbp_file.tile[t][r][c]
         if r == nbp_basic.pre_seq_round:
@@ -370,6 +368,8 @@ def load_image(
         else:
             # Use mmap when only loading in part of image
             image = _load_image(file_path, file_type, mmap_mode="r")[c]
+    if apply_shift:
+        image = preprocessing.offset_pixels_by(image, -nbp_basic.tile_pixel_value_shift)
     return image
 
 

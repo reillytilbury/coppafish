@@ -99,50 +99,47 @@ def register(
             pickle.dump(registration_data, f)
 
     # round registration
-
-    with tqdm(total=len(use_tiles)) as pbar:
-        pbar.set_description(f"Running initial round registration on all tiles")
-        for t in use_tiles:
-            # Load in the anchor image and the round images. Note that here anchor means anchor round, not necessarily
-            # anchor channel
-            anchor_image = preprocessing.yxz_to_zyx(
-                tiles_io.load_image(
-                    nbp_file,
-                    nbp_basic,
-                    nbp_extract.file_type,
-                    t=t,
-                    r=nbp_basic.anchor_round,
-                    c=round_registration_channel,
-                    apply_shift=False,
+    for t in []:
+    # for t in tqdm(use_tiles, desc="Running round registration", total=len(use_tiles)):
+        # Load in the anchor image and the round images. Note that here anchor means anchor round, not necessarily
+        # anchor channel
+        anchor_image = preprocessing.yxz_to_zyx(
+            tiles_io.load_image(
+                nbp_file,
+                nbp_basic,
+                nbp_extract.file_type,
+                t=t,
+                r=nbp_basic.anchor_round,
+                c=round_registration_channel,
+                apply_shift=False,
+            )
+        )
+        use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
+        completed_rounds = [r for r in use_rounds if
+                            registration_data["round_registration"]["shift_corr"][t, r].max() > 0]
+        remaining_rounds = [r for r in use_rounds if r not in completed_rounds]
+        round_image = []
+        for r in remaining_rounds:
+            round_image.append(
+                preprocessing.yxz_to_zyx(
+                    tiles_io.load_image(
+                        nbp_file,
+                        nbp_basic,
+                        nbp_extract.file_type,
+                        t=t,
+                        r=r,
+                        c=round_registration_channel,
+                        suffix="_raw" if r == nbp_basic.pre_seq_round else "",
+                        apply_shift=False,
+                    ),
                 )
             )
-            use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
-            completed_rounds = [r for r in use_rounds if
-                                registration_data["round_registration"]["shift_corr"][t, r].max() > 0]
-            remaining_rounds = [r for r in use_rounds if r not in completed_rounds]
-            round_image = []
-            for r in remaining_rounds:
-                round_image.append(
-                    preprocessing.yxz_to_zyx(
-                        tiles_io.load_image(
-                            nbp_file,
-                            nbp_basic,
-                            nbp_extract.file_type,
-                            t=t,
-                            r=r,
-                            c=round_registration_channel,
-                            suffix="_raw" if r == nbp_basic.pre_seq_round else "",
-                            apply_shift=False,
-                        ),
-                    )
-                )
 
-            register_base.round_registration(
-                anchor_image=anchor_image, round_image=round_image, t=t, round_ind=remaining_rounds, config=config,
-                registration_data=registration_data,
-                save_path=os.path.join(nbp_file.output_dir, "registration_data.pkl")
-            )
-            pbar.update(1)
+        register_base.round_registration(
+            anchor_image=anchor_image, round_image=round_image, t=t, round_ind=remaining_rounds, config=config,
+            registration_data=registration_data,
+            save_path=os.path.join(nbp_file.output_dir, "registration_data.pkl")
+        )
 
     # Part 2: Regularisation
     registration_data = register_base.regularise_transforms(
@@ -225,9 +222,6 @@ def register(
     nbp_debug.round_shift_corr = registration_data["round_registration"]["shift_corr"]
     nbp_debug.round_transform_raw = registration_data["round_registration"]["transform_raw"]
 
-    # Now add the channel registration statistics
-    nbp_debug.channel_transform = registration_data["channel_registration"]["transform"]
-
     # Now add the ICP statistics
     nbp_debug.mse = registration_data["icp"]["mse"]
     nbp_debug.n_matches = registration_data["icp"]["n_matches"]
@@ -271,31 +265,29 @@ def register(
             total=len(use_tiles) * len(use_channels),
         ):
             # load in pre-seq round
-            transform_pre = preprocessing.invert_affine(preprocessing.yxz_to_zyx_affine(transform[t, r_pre, c]))
-            z_scale_pre = transform_pre[0, 0]
-            z_shift_pre = transform_pre[0, 3]
-            mid_z_pre = int(np.clip((mid_z - z_shift_pre) / z_scale_pre, 0, len(nbp_basic.use_z) - 1))
+            inv_transform_pre = preprocessing.invert_affine(preprocessing.yxz_to_zyx_affine(transform[t, r_pre, c]))
+            z_scale_pre = inv_transform_pre[0, 0]
+            z_shift_pre = inv_transform_pre[0, 3]
+            # this is the z-coordinate of the middle z-plane in the pre-seq round (assuming that the transform is
+            # approximately diagonal)
+            mid_z_pre = (mid_z - z_shift_pre) / z_scale_pre
+            mid_z_pre = int(np.clip(mid_z_pre, a_min=0, a_max=len(nbp_basic.use_z) - 1))
             yxz = [None, None, mid_z_pre]
-            image_preseq = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r_pre, c=c, yxz=yxz)
-            image_preseq = image_preseq.astype(np.int32)
-            image_preseq = image_preseq - nbp_basic.tile_pixel_value_shift
-            image_preseq = image_preseq.astype(np.float32)
-            # we have to load in inverse transform to use scipy.ndimage.affine_transform
-            inv_transform_pre_yx = preprocessing.yxz_to_zyx_affine(transform[t, r_pre, c])[1:, 1:]
-            image_preseq = scipy.ndimage.affine_transform(image_preseq, inv_transform_pre_yx)
+            image_preseq = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r_pre, c=c, yxz=yxz,
+                                               apply_shift=True)
+            # we have to use the inverse transform to use scipy.ndimage.affine_transform
+            image_preseq = scipy.ndimage.affine_transform(image_preseq, inv_transform_pre[1:, 1:])
             for r in use_rounds:
-                transform_seq = preprocessing.invert_affine(preprocessing.yxz_to_zyx_affine(transform[t, r, c]))
-                z_scale_seq = transform_seq[0, 0]
-                z_shift_seq = transform_seq[0, 3]
-                mid_z_seq = int(np.clip((mid_z - z_shift_seq) / z_scale_seq, 0, len(nbp_basic.use_z) - 1))
+                inv_transform_seq = preprocessing.invert_affine(preprocessing.yxz_to_zyx_affine(transform[t, r, c]))
+                z_scale_seq = inv_transform_seq[0, 0]
+                z_shift_seq = inv_transform_seq[0, 3]
+                mid_z_seq = (mid_z - z_shift_seq) / z_scale_seq
+                mid_z_seq = int(np.clip(mid_z_seq, a_min=0, a_max=len(nbp_basic.use_z) - 1))
                 yxz = [None, None, mid_z_seq]
-                image_seq = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r, c=c, yxz=yxz)
-                image_seq = image_seq.astype(np.int32)
-                image_seq = image_seq - nbp_basic.tile_pixel_value_shift
-                image_seq = image_seq.astype(np.float32)
+                image_seq = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r, c=c, yxz=yxz,
+                                                apply_shift=True)
                 # we have to load in inverse transform to use scipy.ndimage.affine_transform
-                inv_transform_seq_yx = preprocessing.yxz_to_zyx_affine(transform[t, r, c])[1:, 1:]
-                image_seq = scipy.ndimage.affine_transform(image_seq, inv_transform_seq_yx)
+                image_seq = scipy.ndimage.affine_transform(image_seq, inv_transform_seq[1:, 1:])
                 # Now compute the scale factor
                 bg_scale[t, r, c] = register_base.brightness_scale(image_preseq, image_seq, 99)[0]
         # Now add the bg_scale to the nbp_filter page. To do this we need to delete the bg_scale attribute.

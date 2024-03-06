@@ -793,7 +793,7 @@ def view_round_regression_scatter(nb: Notebook, t: int, r: int):
     # Transpose shift and position variables so coord is dimension 0, makes plotting easier
     shift = nb.register_debug.round_shift[t, r]
     corr = nb.register_debug.round_shift_corr[t, r]
-    position = nb.register_debug.position[t, r]
+    position = nb.register_debug.position
     initial_transform = nb.register_debug.round_transform_raw[t, r]
     icp_transform = preprocessing.yxz_to_zyx_affine(A=nb.register.transform[t, r, nb.basic_info.anchor_channel])
 
