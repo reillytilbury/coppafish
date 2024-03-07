@@ -4,7 +4,8 @@
     difference_of_hanning to true in the scale config section.
  * Wiener deconvolve now does not shift pixel values after filtering fix.
  * Wiener deconvolution is now optimised in pytorch using the CPU, making filter ~90% faster.
- * The find spots intensity threshold multiplier "auto_thresh_multiplier" has been changed from 10 -> 15 by default.
+ * The find spots intensity threshold multiplier "auto_thresh_multiplier" has been changed from 10 -> 17 by default.
+ * ICP minimum spot distance threshold (neighb_dist_thresh_3d and neighb_dist_thresh_2d) moved to 6 by default.
  * Scale computation is now done in the filter section.
  * Scale section is removed.
  * A warning is raised if the latest online coppafish version does not match the current coppafish version.

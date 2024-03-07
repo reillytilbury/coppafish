@@ -26,7 +26,6 @@ def get_local_maxima(
     Returns:
         `[n_consider] ndarray[bool]`: whether each point in `consider_yxz` is a local maxima or not.
     """
-    print("Detect using pytorch")
     n_consider = consider_yxz.shape[1]
     n_shifts = se_shifts.shape[1]
 
