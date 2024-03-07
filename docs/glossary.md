@@ -44,7 +44,7 @@ the same spot in all sequencing rounds to reveal the gene code. Coppafish takes 
 and outputs the identity of each gene in situ.
 
 * Tile - A cuboid subset of the microscope image of size $n_z \times n_y \times n_x$ in z, y, and x, where $n_y = n_x$. 
-Typically, $n_z\le58$. Usually, all adjacent tiles overlap by $10\%-15\%$ to give coppafish information on how to best 
+Typically, $n_z\sim55$. Usually, all adjacent tiles overlap by $10\%-15\%$ to give coppafish information on how to best 
 align tiles (see [method](method.md) for details).
 
 
