@@ -226,34 +226,8 @@ def call_spots_omp(
                 z_scale,
                 config["shape_sign_thresh"],
             )
-            if not np.isin(-1, spot_shape):
-                # Rase error if computed average spot shape has no negative values
-                error_file = nbp_file.omp_spot_shape.replace(".npy", "_float_ERROR.npy")
-                if spot_shape_float.ndim == 3:
-                    # put z axis to front before saving if 3D
-                    np.save(error_file, np.moveaxis(spot_shape_float, 2, 0))
-                else:
-                    np.save(error_file, spot_shape_float)
-                shape_neg_values = spot_shape_float[spot_shape_float < 0]
-                message = (
-                    f"Error when computing nb.omp.spot_shape:\n"
-                    f"Average spot_shape in OMP Coefficient images was found with {spots_used.size} spots.\n"
-                    f"However, it contains no pixels with a value of -1.\n"
-                    f"nb.omp.spot_shape_float was saved as\n{error_file}\n"
-                )
-                if len(shape_neg_values) == 0:
-                    message += (
-                        "This contains no negative values either, so OMP section needs re-running with "
-                        "config['file_names']['omp_spot_shape'] specified"
-                    )
-                else:
-                    max_neg_value = utils.base.round_any(np.abs(shape_neg_values).max(), 0.001, "floor")
-                    message += (
-                        f"OMP section needs re-running with\n"
-                        f"config['omp']['shape_sign_thresh'] < {max_neg_value} or "
-                        f"config['file_names']['omp_spot_shape'] specified"
-                    )
-                logging.error(ValueError(message))
+            if not np.isin(0, spot_shape):
+                logging.warn(f"OMP spot shape contains no zeros")
             nbp.spot_shape_float = spot_shape_float
             nbp.shape_spot_local_yxz = spot_yxz[spots_used]
             nbp.shape_spot_gene_no = spot_gene_no[spots_used]
