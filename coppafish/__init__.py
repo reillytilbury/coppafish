@@ -5,4 +5,5 @@ from .utils.pciseq import export_to_pciseq
 from ._version import __version__
 from . import plot
 from .plot import Viewer
+from .plot.register.diagnostics import RegistrationViewer
 from .pdf.base import BuildPDF

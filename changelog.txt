@@ -12,8 +12,10 @@
  * Detecting spots is less memory intensive.
  * Incorrect `hist_counts` values in extract and filter pages. This caused the filter/extract PDF histograms to be 
     incorrectly ranged along the x axis. This has now been fixed.
+ * The ICP Mean Squared Error (MSE) has been fixed. This can be viewed by clicking MSE in the RegistrationViewer.
+ * The RegistrationViewer can be imported more easily by `from coppafish import RegistrationViewer`.
  * New config variable in filter called "psf_max_spots". The default is 5,000, the same as previous versions.
- * Added more pipeline warnings.
+ * Added pipeline warnings.
  * Removed unnecessary jax code.
  * Removed redundant max_background_scale_cores config variable in register.
  * New `invalid_auto_thresh` notebook variable in filter_debug added.
