@@ -3,7 +3,11 @@ from typing import Optional, Tuple
 
 from .. import utils
 from .. import logging
-from . import get_local_maxima
+
+try:
+    from .maxima_pytorch import get_local_maxima
+except ImportError:
+    from .maxima import get_local_maxima
 
 
 def detect_spots(
