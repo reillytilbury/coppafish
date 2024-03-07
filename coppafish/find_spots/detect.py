@@ -38,6 +38,8 @@ def detect_spots(
         - `peak_intensity` - `float [n_peaks]`.
             Pixel value of spots found.
     """
+    from .. import get_local_maxima
+
     if se is None:
         # Default is a cuboid se of all ones as is quicker than disk and very similar results.
         if radius_z is not None:
@@ -98,11 +100,6 @@ def detect_spots(
             index_end = (i + 1) * max_batch_size
         consider_yxz_batch = consider_yxz[:, index_start:index_end]
         consider_intensity_batch = consider_intensity[index_start:index_end]
-
-        try:
-            from .detect_pytorch import get_local_maxima
-        except ImportError:
-            from . import get_local_maxima
 
         keep[index_start:index_end] = get_local_maxima(
             image, se_shifts, paddings, consider_yxz_batch, consider_intensity_batch
