@@ -29,9 +29,9 @@ gene intensities would not combine linearly.
 * Point cloud - A series of spatial pixel positions. Typically used to represent detected spot positions during find 
 spots.
 
-* PSF - Stands for Point Spread Function and is used during image filtering. It is used in the Wiener deconvolution 
-which is applied to try and deblur images from noise which is caused by frequencies with a low signal-to-noise ratio. 
-See <a href="https://en.wikipedia.org/wiki/Wiener_deconvolution" target="_blank">here</a> for more details.
+* PSF - Stands for Point Spread Function and is used during image filtering. The Wiener deconvolution requires a PSF to 
+remove blurring caused by frequencies with a low signal-to-noise ratio. See 
+<a href="https://en.wikipedia.org/wiki/Wiener_deconvolution" target="_blank">here</a> for more details.
 
 * Sequencing round - An image of the tissue, made up of multiple tiles and sequencing channels. Before each imaging 
 round the tissue is treated with various solutions to remove the previous DNA probes and then hybridise new ones. Each 

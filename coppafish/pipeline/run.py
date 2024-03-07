@@ -48,6 +48,7 @@ def run_pipeline(
     logging.error_catch(run_tile_indep_pipeline, nb)
     logging.error_catch(run_stitch, nb)
     logging.error_catch(run_reference_spots, nb, overwrite_ref_spots)
+    logging.error_catch(BuildPDF, nb)
     logging.error_catch(run_omp, nb)
     logging.error_catch(BuildPDF, nb, auto_open=True)
     return nb
@@ -114,8 +115,7 @@ def initialize_nb(config_file: str) -> Notebook:
     online_version = utils.system.get_remote_software_version()
     if online_version != utils.system.get_software_version():
         logging.warn(
-            f"You are running on coppafish v{utils.system.get_software_version()} but the found online version is "
-            + f"v{online_version}"
+            f"You are running v{utils.system.get_software_version()} but the online version is v{online_version}"
         )
     return nb
 
