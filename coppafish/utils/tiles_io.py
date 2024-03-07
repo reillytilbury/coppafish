@@ -180,6 +180,8 @@ def save_image(
     num_rotations: int = 0,
     suffix: str = "",
     apply_shift: bool = True,
+    n_clip_warn: int = 1,
+    n_clip_error: int = None,
 ) -> npt.NDArray[np.uint16]:
     """
     Wrapper function to save tiles as npy files with correct shift. Moves z-axis to first axis before saving as it is
@@ -199,7 +201,10 @@ def save_image(
             Applied to the `x` and `y` axes, to 3d `image` data only. Default: `0`.
         suffix (str, optional): suffix to add to file name before the file extension. Default: empty.
         apply_shift (bool, optional): if true and saving a non-dapi channel, will apply the shift to the image.
-
+        n_clip_warn (int, optional): if the number of pixels clipped off by saving is at least this number, a warning
+            is logged. Default: 1.
+        n_clip_error (int, optional): if the number of pixels clipped off by saving is at least this number, then an
+            error is raised. Default: never raise an error.
 
     Returns:
         `(nz x ny x nx) ndarray[uint16]`: the saved, manipulated image.
@@ -227,8 +232,13 @@ def save_image(
                 np.zeros_like(image, dtype=np.uint16),
                 casting="unsafe",
             )
-        if clipped_pixels > 0:
-            logging.warn(f"{t=}, {r=}, {c=} saved image has clipped {clipped_pixels} pixels")
+        message = f"{t=}, {r=}, {c=} saved image has clipped {clipped_pixels} pixels"
+        if n_clip_error is not None and clipped_pixels >= n_clip_error:
+            logging.error(message)
+        if clipped_pixels >= n_clip_warn:
+            logging.warn(message)
+        if clipped_pixels >= 1:
+            logging.debug(message)
         # In 3D, cannot possibly save any un-used channel hence no exception for this case.
         expected_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
         if not utils.errors.check_shape(image, expected_shape):

@@ -227,7 +227,7 @@ def run_filter(
                     scale = np.abs(min_pixel_value) / np.abs(im_filtered.min())
                     scale = min([scale, max_pixel_value / im_filtered.max()])
                     # A 60% margin for max/min pixel variability between images
-                    scale = 0.40 * float(scale)
+                    scale = config["scale_multiplier"] * float(scale)
                     logging.debug(f"{scale=} computed from {t=}, {r=}, {c=}")
                     # Save scale in case need to re-run without the notebook
                     filter_base.save_scale(nbp_file.scale, scale, scale)
@@ -249,6 +249,8 @@ def run_filter(
                 c,
                 suffix="_raw" if r == nbp_basic.pre_seq_round else "",
                 num_rotations=config["num_rotations"],
+                n_clip_warn=config["n_clip_warn"],
+                n_clip_error=config["n_clip_error"],
             )
             # zyx -> yxz
             saved_im = saved_im.transpose((1, 2, 0))

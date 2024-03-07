@@ -110,6 +110,9 @@ _options = {
         "difference_of_hanning": "bool",
         "num_rotations": "int",
         "pre_seq_blur_radius": "maybe_int",
+        "scale_multiplier": "number",
+        "n_clip_warn": "int",
+        "n_clip_error": "int",
     },
     "find_spots": {
         "radius_xy": "int",
