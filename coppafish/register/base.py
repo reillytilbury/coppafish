@@ -288,6 +288,9 @@ def optical_flow_register(target: np.ndarray, base: np.ndarray, sample_factor_yx
     # down-sample the images
     target = target[::sample_factor_yx, ::sample_factor_yx]
     base = base[::sample_factor_yx, ::sample_factor_yx]
+    # normalise each z-plane to have the mean 1
+    target = target / np.mean(target, axis=(0, 1))[None, None, :]
+    base = base / np.mean(base, axis=(0, 1))[None, None, :]
     # update clip_val based on down-sampling
     clip_val = np.array(clip_val, dtype=np.float32)
     clip_val[:2] = clip_val[:2] / sample_factor_yx
@@ -328,7 +331,7 @@ def optical_flow_single(base: np.ndarray, target: np.ndarray, window_radius: int
         return flow
     t_start = time.time()
     ny, nx, nz = target.shape
-    yx_sub = ny // chunks_yx
+    yx_sub = int((ny / chunks_yx) * 1.25)
     target_sub, pos = preprocessing.split_3d_image(image=target,
                                                    z_subvolumes=1, y_subvolumes=chunks_yx, x_subvolumes=chunks_yx,
                                                    z_box=nz, y_box=yx_sub, x_box=yx_sub)
@@ -340,9 +343,6 @@ def optical_flow_single(base: np.ndarray, target: np.ndarray, window_radius: int
     # flatten dims 0 and 1
     target_sub = target_sub.reshape((chunks_yx ** 2, nz, yx_sub, yx_sub))
     base_sub = base_sub.reshape((chunks_yx ** 2, nz, yx_sub, yx_sub))
-    # divide each subvolume by its 99th percentile
-    target_sub = target_sub / np.percentile(target_sub, 99, axis=(1, 2, 3))[:, np.newaxis, np.newaxis, np.newaxis]
-    base_sub = base_sub / np.percentile(base_sub, 99, axis=(1, 2, 3))[:, np.newaxis, np.newaxis, np.newaxis]
     # compute the optical flow (in parallel)
     n_cores = min(utils.system.get_core_count(), n_cores)
     print(f"Computing optical flow using {n_cores} cores")
