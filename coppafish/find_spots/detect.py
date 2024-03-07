@@ -102,7 +102,7 @@ def detect_spots(
         try:
             from .detect_pytorch import get_local_maxima
         except ImportError:
-            pass
+            from . import get_local_maxima
 
         keep[index_start:index_end] = get_local_maxima(
             image, se_shifts, paddings, consider_yxz_batch, consider_intensity_batch
