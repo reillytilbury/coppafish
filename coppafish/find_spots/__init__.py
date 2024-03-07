@@ -4,6 +4,6 @@ from .base import load_spot_info, filter_intense_spots
 from .check_spots import check_n_spots
 
 try:
-    from .detect_pytorch import get_local_maxima
+    from .maxima_pytorch import get_local_maxima
 except ImportError:
-    from .detect import get_local_maxima
+    from .maxima import get_local_maxima
