@@ -36,6 +36,18 @@ recommend a value $\ge1$, but there is no known optimal value.
 
 ## RegistrationViewer
 
+### Opening
+
+```python
+from coppafish import RegistrationViewer, Notebook
+
+nb = Notebook("path/to/notebook.npz")
+RegistrationViewer(nb, t=t)
+```
+
+where `t` is a tile index you want to view registration results for. If `t` is set to `None` (default), then the lowest 
+tile index is displayed.
+
 ## PDF Diagnostics
 
 During a pipeline run, multiple .pdf files are created for different sections. These are located in the output 
