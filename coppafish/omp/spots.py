@@ -324,6 +324,10 @@ def get_spots(
         - n_neg_neighbours - `int [n_spots]` (Only if `spot_shape` given).
             Number of negative pixels around each spot in neighbourhood given by `spot_shape==-1`.
     """
+    # TODO: Refactor this function to return spot positions exceeding whatever thresholds are given and their scores.
+    # The actual scoring mechanism should be in another function which is given the minimal amount of information
+    # needed to compute. This way the OMP scoring can also be computed for the Viewer too. Currently, the OMP Viewer
+    # scoring is computed at call_spots/qual_check.py omp_spot_score.
 
     n_pixels, n_genes = pixel_coefs.shape
     if not utils.errors.check_shape(pixel_yxz, [n_pixels, 3]):

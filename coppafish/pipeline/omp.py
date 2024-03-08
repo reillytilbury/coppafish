@@ -227,7 +227,7 @@ def call_spots_omp(
                 config["shape_sign_thresh"],
             )
             if not np.isin(0, spot_shape):
-                logging.warn(f"OMP spot shape contains no zeros")
+                logging.warn(f"OMP spot shape contains no zeros, {config["shape_sign_thresh"]=} may be too low")
             nbp.spot_shape_float = spot_shape_float
             nbp.shape_spot_local_yxz = spot_yxz[spots_used]
             nbp.shape_spot_gene_no = spot_gene_no[spots_used]
@@ -242,6 +242,7 @@ def call_spots_omp(
         else:
             spot_yxzg = None
 
+        logging.info(f"Saving OMP gene reads")
         if initial_pos_neighbour_thresh is None:
             # Only save spots which have 10% of max possible number of positive neighbours
             initial_pos_neighbour_thresh = config["initial_pos_neighbour_thresh_param"] * np.sum(spot_shape > 0)
