@@ -65,10 +65,11 @@ def register(
     if round_registration_channel is None:
         round_registration_channel = nbp_basic.anchor_channel
     # Initialise variables for ICP step
+    icp_dist_thresh_yx = config["icp_dist_thresh_yx"]
     if nbp_basic.is_3d:
-        neighb_dist_thresh = config["neighb_dist_thresh_3d"]
-    else:
-        neighb_dist_thresh = config["neighb_dist_thresh_2d"]
+        icp_dist_thresh_z = config["icp_dist_thresh_z"]
+        if icp_dist_thresh_z > icp_dist_thresh_yx:
+            logging.warn(f"neighb_dist_thresh_z is set larger than neighb_dist_thresh_yx in the register config")
 
     # Load in registration data from previous runs of the software
     registration_data = preprocessing.load_reg_data(nbp_file, nbp_basic, config)
@@ -228,7 +229,8 @@ def register(
                     icp_transform[t, r, c], n_matches[t, r, c], mse[t, r, c], converged[t, r, c] = register_base.icp(
                         yxz_base=ref_spots_t,
                         yxz_target=imaging_spots_trc,
-                        dist_thresh=neighb_dist_thresh,
+                        dist_thresh_yx=icp_dist_thresh_yx,
+                        dist_thresh_z=icp_dist_thresh_z,
                         start_transform=registration_data["initial_transform"][t, r, c],
                         n_iters=config["icp_max_iter"],
                         robust=False,

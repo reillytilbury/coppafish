@@ -540,7 +540,12 @@ def regularise_transforms(
 
 # Function which runs a single iteration of the icp algorithm
 def get_transform(
-    yxz_base: np.ndarray, yxz_target: np.ndarray, transform_old: np.ndarray, dist_thresh: float, robust=False
+    yxz_base: np.ndarray,
+    yxz_target: np.ndarray,
+    transform_old: np.ndarray,
+    dist_thresh_yx: float,
+    dist_thresh_z: float,
+    robust=False,
 ):
     """
     This finds the affine transform that transforms ```yxz_base``` such that the distances between the neighbours
@@ -553,8 +558,9 @@ def get_transform(
             Affine transform found for previous iteration of PCR algorithm.
         yxz_target: ```float [n_target_spots x 3]```.
             Coordinates of spots in image that you want to transform ```yxz_base``` to.
-        dist_thresh: If neighbours closer than this, they are used to compute the new transform.
-            Typical: ```5```.
+        dist_thresh_yx: distance threshold in y and x directions. If neighbours closer than this, they are used to
+            compute the new transform.
+        dist_thresh_z:
         robust: Boolean option to make regression robust. Selecting true will result in the algorithm maximising
             correntropy as opposed to minimising mse.
 
@@ -573,24 +579,27 @@ def get_transform(
     # their nearest neighbours within yxz_transform, which is the initial transform applied to yxz_base
     yxz_base_pad = np.pad(yxz_base, [(0, 0), (0, 1)], constant_values=1)
     yxz_transform = yxz_base_pad @ transform_old
+    yxz_transform[:, 2] *= dist_thresh_yx / dist_thresh_z
     yxz_transform_tree = scipy.spatial.KDTree(yxz_transform)
     # the next query works the following way. For each point in yxz_target, we look for the closest neighbour in the
     # anchor, which we have now applied the initial transform to. If this is below dist_thresh, we append its distance
     # to distances and append the index of this neighbour to neighbour
-    distances, neighbour = yxz_transform_tree.query(yxz_target, distance_upper_bound=dist_thresh)
+    distances, neighbour = yxz_transform_tree.query(yxz_target, distance_upper_bound=dist_thresh_yx)
     neighbour = neighbour.flatten()
     distances = distances.flatten()
-    use = distances < dist_thresh
-    n_matches = np.sum(use)
-    # Every point without a nearest-neighbour is given an error of dist_thresh ** 2
-    error = np.sqrt(np.mean(distances[use] ** 2 + np.sum(~use) * dist_thresh**2))
+    use = distances < dist_thresh_yx
+    n_matches = use.sum()
+    if n_matches == 0:
+        raise ValueError(f"ICP found 0 matching spots, consider increasing the distance thresholding")
+    # Every point without a nearest-neighbour is given an error of dist_thresh_yx ** 2
+    error = np.sqrt(np.mean(distances[use] ** 2 + np.sum(~use) * dist_thresh_yx**2))
     base_pad_use = yxz_base_pad[neighbour[use], :]
     target_use = yxz_target[use, :]
 
     if not robust:
         transform = np.linalg.lstsq(base_pad_use, target_use, rcond=None)[0]
     else:
-        sigma = dist_thresh / 2
+        sigma = dist_thresh_yx / 2
         target_pad_use = np.pad(target_use, [(0, 0), (0, 1)], constant_values=1)
         D = np.diag(np.exp(-0.5 * (np.linalg.norm(base_pad_use @ transform_old - target_use, axis=1) / sigma) ** 2))
         transform = (target_pad_use.T @ D @ base_pad_use @ np.linalg.inv(base_pad_use.T @ D @ base_pad_use))[:3, :4].T
@@ -599,7 +608,7 @@ def get_transform(
 
 
 # Simple ICP implementation, calls above until no change
-def icp(yxz_base, yxz_target, dist_thresh, start_transform, n_iters, robust=False):
+def icp(yxz_base, yxz_target, dist_thresh_yx, dist_thresh_z, start_transform, n_iters, robust=False):
     """
     Applies n_iters rounds of the above least squares regression
     Args:
@@ -608,8 +617,9 @@ def icp(yxz_base, yxz_target, dist_thresh, start_transform, n_iters, robust=Fals
         yxz_target: ```float [n_target_spots x 3]```.
             Coordinates of spots in image that you want to transform ```yxz_base``` to.
         start_transform: initial transform
-        dist_thresh: If neighbours closer than this, they are used to compute the new transform.
-            Typical: ```3```.
+        dist_thresh_yx: distance threshold in x and y directions. If neighbours closer than this, they are used to
+            compute the new transform.
+        dist_thresh_z: distance threshold in z direction.
         n_iters: max number of times to compute regression
         robust: whether to compute robust icp
     Returns:
@@ -630,13 +640,15 @@ def icp(yxz_base, yxz_target, dist_thresh, start_transform, n_iters, robust=Fals
 
     # Update transform. We want this to have max n_iters iterations. We will end sooner if all neighbours do not change
     # in 2 successive iterations. Define the variables for iteration 0 before we start the loop
-    transform, neighbour, n_matches[0], error[0] = get_transform(yxz_base, yxz_target, transform, dist_thresh, robust)
+    transform, neighbour, n_matches[0], error[0] = get_transform(
+        yxz_base, yxz_target, transform, dist_thresh_yx, dist_thresh_z, robust
+    )
     i = 0
     while i + 1 < n_iters and not all(prev_neighbour == neighbour):
         # update i and prev_neighbour
         prev_neighbour, i = neighbour, i + 1
         transform, neighbour, n_matches[i], error[i] = get_transform(
-            yxz_base, yxz_target, transform, dist_thresh, robust
+            yxz_base, yxz_target, transform, dist_thresh_yx, dist_thresh_z, robust
         )
     # now fill in any variables that were not completed due to early exit
     n_matches[i:] = n_matches[i] * np.ones(n_iters - i)

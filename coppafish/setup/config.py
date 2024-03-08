@@ -149,8 +149,8 @@ _options = {
         "flip_x": "bool",
     },
     "register": {
-        "neighb_dist_thresh_2d": "number",
-        "neighb_dist_thresh_3d": "number",
+        "icp_dist_thresh_yx": "number",
+        "icp_dist_thresh_z": "number",
         "subvols": "list_int",
         "box_size": "list_int",
         "pearson_r_thresh": "number",

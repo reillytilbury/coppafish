@@ -119,7 +119,8 @@ about every config variable can be found at
 <a href="https://github.com/reillytilbury/coppafish/blob/alpha/coppafish/setup/settings.default.ini" target="_blank">
 `coppafish/setup/settings.default.ini`</a> in the source code. `use_z` contains all selected z planes, they should all 
 be adjacent planes. It is recommended to use microscopic images where the middle z plane is roughly the brightest for 
-best performance; this can be configured by changing the selected z planes in `use_z`.
+best performance; this can be configured by changing the selected z planes in `use_z`. The z direction can be treated 
+differently to the y and x directions because typically a z pixel corresponds to a larger, real distance.
 
 ## Running
 
