@@ -6,7 +6,7 @@ from scipy.ndimage import correlate, convolve
 from scipy.signal import oaconvolve
 
 from .base import ensure_odd_kernel
-from ... import logging
+from ... import logging, utils
 
 
 def imfilter(
@@ -198,7 +198,16 @@ def imfilter_coords(
     else:
         image_pad = np.pad(np.asarray(image), pad_size, padding).astype(int)
     y_shifts, x_shifts, z_shifts = get_shifts_from_kernel(np.asarray(np.flip(kernel)))
-    return np.asarray(manual_convolve(image_pad, y_shifts, x_shifts, z_shifts, pad_coords))
+    # manual_convolve can be memory limited, hence the for loop
+    n_points = pad_coords.shape[0]
+    n_max_points = int(1_000_000 * utils.system.get_available_memory() / 107)
+    n_batches = int(np.ceil(n_points / n_max_points))
+    output = np.asarray([], dtype=image.dtype)
+    for i in range(n_batches):
+        index_start, index_end = i * n_max_points, min([(i + 1) * n_max_points, n_points])
+        pad_coords_batch = pad_coords[index_start:index_end]
+        output = np.append(output, manual_convolve(image_pad, y_shifts, x_shifts, z_shifts, pad_coords_batch))
+    return output
 
 
 def get_shifts_from_kernel(kernel: npt.NDArray) -> Tuple[npt.NDArray, npt.NDArray, npt.NDArray]:
