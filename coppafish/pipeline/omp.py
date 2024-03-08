@@ -227,7 +227,7 @@ def call_spots_omp(
                 config["shape_sign_thresh"],
             )
             if not np.isin(0, spot_shape):
-                logging.warn(f"OMP spot shape contains no zeros, {config["shape_sign_thresh"]=} may be too low")
+                logging.warn(f"OMP spot shape contains no zeros, {config['shape_sign_thresh']=} may be too low")
             nbp.spot_shape_float = spot_shape_float
             nbp.shape_spot_local_yxz = spot_yxz[spots_used]
             nbp.shape_spot_gene_no = spot_gene_no[spots_used]
