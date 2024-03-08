@@ -579,18 +579,24 @@ def get_transform(
     # their nearest neighbours within yxz_transform, which is the initial transform applied to yxz_base
     yxz_base_pad = np.pad(yxz_base, [(0, 0), (0, 1)], constant_values=1)
     yxz_transform = yxz_base_pad @ transform_old
-    yxz_transform[:, 2] *= dist_thresh_yx / dist_thresh_z
+    z_multiplier = dist_thresh_yx / dist_thresh_z
+    yxz_transform[:, 2] *= z_multiplier
+    yxz_target_scaled = yxz_target.copy().astype(float)
+    yxz_target_scaled[:, 2] *= z_multiplier
     yxz_transform_tree = scipy.spatial.KDTree(yxz_transform)
     # the next query works the following way. For each point in yxz_target, we look for the closest neighbour in the
     # anchor, which we have now applied the initial transform to. If this is below dist_thresh, we append its distance
     # to distances and append the index of this neighbour to neighbour
-    distances, neighbour = yxz_transform_tree.query(yxz_target, distance_upper_bound=dist_thresh_yx)
+    distances, neighbour = yxz_transform_tree.query(yxz_target_scaled, distance_upper_bound=dist_thresh_yx)
     neighbour = neighbour.flatten()
     distances = distances.flatten()
     use = distances < dist_thresh_yx
     n_matches = use.sum()
     if n_matches == 0:
-        raise ValueError(f"ICP found 0 matching spots, consider increasing the distance thresholding")
+        raise ValueError(
+            f"ICP found no matching spots, consider increasing the icp distance thresholding. Currently, "
+            f"{dist_thresh_yx=} and {dist_thresh_z=}."
+        )
     # Every point without a nearest-neighbour is given an error of dist_thresh_yx ** 2
     error = np.sqrt(np.mean(distances[use] ** 2 + np.sum(~use) * dist_thresh_yx**2))
     base_pad_use = yxz_base_pad[neighbour[use], :]
@@ -737,6 +743,7 @@ def brightness_scale(
     return m.item(), sub_image_seq, sub_image_preseq
 
 
+# TODO: This function will not work anymore. Either remove it or fix it
 def get_single_affine_transform(
     spot_yxz_base: np.ndarray,
     spot_yxz_transform: np.ndarray,

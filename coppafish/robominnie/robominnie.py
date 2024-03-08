@@ -998,7 +998,6 @@ class RoboMinnie:
         box_size = {box_size_z}, {box_size_yx}, {box_size_yx}
         pearson_r_thresh = 0.25
         round_registration_channel = {self.dapi_channel if (self.include_dapi and register_with_dapi) else ''}
-        sobel = {not self.include_dapi}
         icp_min_spots = 10
 
         [omp]

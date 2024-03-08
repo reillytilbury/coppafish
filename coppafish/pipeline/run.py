@@ -114,7 +114,9 @@ def initialize_nb(config_file: str) -> Notebook:
             sys.exit()
     online_version = utils.system.get_remote_software_version()
     if online_version != utils.system.get_software_version():
-        logging.warn(f"You are running v{utils.system.get_software_version()}. The online version is v{online_version}")
+        logging.warn(
+            f"You are running v{utils.system.get_software_version()}. The latest online version is v{online_version}"
+        )
     return nb
 
 

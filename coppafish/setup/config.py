@@ -150,7 +150,7 @@ _options = {
     },
     "register": {
         "icp_dist_thresh_yx": "number",
-        "icp_dist_thresh_z": "number",
+        "icp_dist_thresh_z": "maybe_number",
         "subvols": "list_int",
         "box_size": "list_int",
         "pearson_r_thresh": "number",

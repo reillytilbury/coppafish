@@ -3,6 +3,7 @@ import scipy
 import pickle
 import itertools
 import numpy as np
+import math as maths
 from tqdm import tqdm
 from typing import Tuple
 
@@ -67,7 +68,12 @@ def register(
     # Initialise variables for ICP step
     icp_dist_thresh_yx = config["icp_dist_thresh_yx"]
     if nbp_basic.is_3d:
+        if config["icp_dist_thresh_z"] is None:
+            config["icp_dist_thresh_z"] = float(
+                maths.ceil(icp_dist_thresh_yx * nbp_basic.pixel_size_xy / nbp_basic.pixel_size_z)
+            )
         icp_dist_thresh_z = config["icp_dist_thresh_z"]
+        logging.debug(f"{icp_dist_thresh_z=}")
         if icp_dist_thresh_z > icp_dist_thresh_yx:
             logging.warn(f"neighb_dist_thresh_z is set larger than neighb_dist_thresh_yx in the register config")
 
@@ -165,7 +171,7 @@ def register(
             # Save the data to file
             with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
                 pickle.dump(registration_data, f)
-            pbar.update(1)
+            pbar.update()
     logging.debug("Compute round transforms complete")
 
     # Part 2: Regularisation
@@ -235,7 +241,7 @@ def register(
                         n_iters=config["icp_max_iter"],
                         robust=False,
                     )
-                    pbar.update(1)
+                    pbar.update()
         # Save ICP data
         registration_data["icp"] = {
             "transform": icp_transform,
