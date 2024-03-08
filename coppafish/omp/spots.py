@@ -57,6 +57,8 @@ def count_spot_neighbours(
     if spot_yxz_out_of_bounds.size > 0:
         logging.error(utils.errors.OutOfBoundsError("spot_yxz", spot_yxz_out_of_bounds[0], [0] * image.ndim, max_yxz))
 
+    n_spots = spot_yxz.shape[0]
+    zero_counts = np.asarray([0] * n_spots, dtype=int)
     if np.isin([-1, 1], kernel_vals).all():
         # Return positive and negative counts
         n_pos = utils.morphology.imfilter_coords(image > 0, kernel > 0, spot_yxz)
@@ -64,10 +66,10 @@ def count_spot_neighbours(
         return n_pos, n_neg
     elif np.isin(-1, kernel_vals):
         # Return negative counts
-        return utils.morphology.imfilter_coords(image < 0, kernel < 0, spot_yxz).astype(int)
+        return zero_counts, utils.morphology.imfilter_coords(image < 0, kernel < 0, spot_yxz).astype(int)
     elif np.isin(1, kernel_vals):
         # Return positive counts
-        return utils.morphology.imfilter_coords(image > 0, kernel > 0, spot_yxz).astype(int)
+        return utils.morphology.imfilter_coords(image > 0, kernel > 0, spot_yxz).astype(int), zero_counts
     else:
         logging.error(ValueError("filter contains only 0."))
 
@@ -217,7 +219,7 @@ def spot_neighbourhood(
             g_spot_yxz = spot_yxz[use] - coord_shift
 
             # Only keep spots with all neighbourhood having positive coefficient.
-            n_pos_neighb = count_spot_neighbours(coef_sign_image, g_spot_yxz, pos_filter)
+            n_pos_neighb, _ = count_spot_neighbours(coef_sign_image, g_spot_yxz, pos_filter)
             g_use = n_pos_neighb == pos_filter.sum()
             use[np.where(use)[0][np.invert(g_use)]] = False
             if coef_sign_image.ndim == 2:
