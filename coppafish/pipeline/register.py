@@ -99,8 +99,7 @@ def register(
             pickle.dump(registration_data, f)
 
     # round registration
-    for t in []:
-    # for t in tqdm(use_tiles, desc="Running round registration", total=len(use_tiles)):
+    for t in tqdm(use_tiles, desc="Running round registration", total=len(use_tiles)):
         # Load in the anchor image and the round images. Note that here anchor means anchor round, not necessarily
         # anchor channel
         anchor_image = preprocessing.yxz_to_zyx(
