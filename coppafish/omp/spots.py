@@ -337,13 +337,6 @@ def get_spots(
                     f"neighbourhood about a spot where we expect a positive coefficient."
                 )
             )
-        if np.sum(spot_shape == -1) == 0:
-            logging.error(
-                ValueError(
-                    f"spot_shape contains no pixels with a value of -1 which indicates the "
-                    f"neighbourhood about a spot where we expect a negative coefficient."
-                )
-            )
         if pos_neighbour_thresh < 0 or pos_neighbour_thresh >= np.sum(spot_shape > 0):
             # Out of bounds if threshold for positive neighbours is above the maximum possible.
             logging.error(
