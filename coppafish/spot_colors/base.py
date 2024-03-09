@@ -205,6 +205,8 @@ def get_spot_colors(
                 pbar.update(1)
         # subtract tile pixel shift value so that bg_colours are in range -15_000 to 50_000 (approx)
         bg_colours = bg_colours - nbp_basic.tile_pixel_value_shift
+        # only keep positive values
+        bg_colours = np.maximum(bg_colours, 0)
         # repeat bg_colours so it is the same shape as spot_colors
         bg_colours = np.repeat(bg_colours[:, None, :], n_use_rounds, axis=1)
         bg_valid = (bg_colours > -nbp_basic.tile_pixel_value_shift).all(axis=(1, 2))
