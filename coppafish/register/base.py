@@ -688,16 +688,18 @@ def brightness_scale(
         sub_image_preseq, sub_image_seq = preseq[yx_range], seq[yx_range]
         sub_image_seq_windowed = sub_image_seq * window
         sub_image_preseq_windowed = sub_image_preseq * window
+        # phase cross correlation struggles with all zeros so we will skip this sub-image if it is all zeros
+        if min(np.max(sub_image_seq_windowed), np.max(sub_image_preseq_windowed)) == 0:
+            sub_image_shifts[i, j] = np.array([0, 0])
+            sub_image_shift_score[i, j] = 0
+            continue
+        print(i, j)
         sub_image_shifts[i, j] = skimage.registration.phase_cross_correlation(
             sub_image_preseq_windowed, sub_image_seq_windowed, overlap_ratio=0.75, disambiguate=True
         )[0]
-        # skip calculation of correlation coefficient if all pixels of either image are 0
-        if min(np.max(sub_image_seq), np.max(sub_image_preseq)) == 0:
-            sub_image_shift_score[i, j] = 0
-        else:
-            # Now calculate the correlation coefficient
-            sub_image_seq_shifted = preprocessing.custom_shift(sub_image_seq, sub_image_shifts[i, j].astype(int))
-            sub_image_shift_score[i, j] = np.corrcoef(sub_image_preseq.ravel(), sub_image_seq_shifted.ravel())[0, 1]
+        # Now calculate the correlation coefficient
+        sub_image_seq_shifted = preprocessing.custom_shift(sub_image_seq, sub_image_shifts[i, j].astype(int))
+        sub_image_shift_score[i, j] = np.corrcoef(sub_image_preseq.ravel(), sub_image_seq_shifted.ravel())[0, 1]
     # Now find the best sub-image
     max_score = np.max(sub_image_shift_score)
     i_max, j_max = np.argwhere(sub_image_shift_score == max_score)[0]
