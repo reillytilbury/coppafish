@@ -6,9 +6,8 @@ spots at once in the same microscope image.
 channels to distinguish every dye colour (almost always the number of channels is equal to the number of unique dyes). 
 But, a dye can have "bleed through", i.e. brightness in multiple channels from the same dye.
 
-* DAPI - A dye that fluoresces the nuclei of all cells. It can be used to register the round images to one another (not 
-recommended). The DAPI is not essential for coppafish but is recommended as a debugging tool, where it can be used as 
-an overlay in the [Viewer](diagnostics.md#viewer).
+* DAPI - A dye that fluoresces the nuclei of all cells. It is used to register the round images to one another. The 
+DAPI is also an overlay in the [Viewer](diagnostics.md#viewer).
 
 * Gene code - A sequence of dyes that are assigned to a gene for each sequencing round. Each gene has a unique gene 
 code. For example, if the dyes are labelled `0, 1, 2` and there are 2 sequencing rounds, some example gene codes are 
