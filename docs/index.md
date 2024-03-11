@@ -17,6 +17,7 @@ reference.
 
 ### Prerequisites
 
+* Windows or Linux operating system.
 * At least 48GB of RAM for tile sizes `58x2048x2048`.
 * Python version 3.9 or 3.10.
 
@@ -53,7 +54,7 @@ Our latest coppafish release can be cloned locally
 git clone --depth 1 https://github.com/reillytilbury/coppafish
 ```
 
-to install the optimised, [pytorch](https://github.com/pytorch) GPU code (Windows and Linux support)
+to install the optimised, [pytorch](https://github.com/pytorch) GPU code
 ```console
 cd coppafish
 python -m pip install --upgrade pip
@@ -61,7 +62,7 @@ python -m pip install -r requirements-pytorchgpu.txt
 python -m pip install -e .
 ```
 
-or for the optimised, [pytorch](https://github.com/pytorch) CPU code (Windows and Linux support)
+or for the optimised, [pytorch](https://github.com/pytorch) CPU code
 ```console
 cd coppafish
 python -m pip install --upgrade pip
@@ -69,15 +70,7 @@ python -m pip install -r requirements-pytorch.txt
 python -m pip install -e .
 ```
 
-or for the optimised [jax](https://github.com/google/jax) code (Linux only and is less stable)
-```console
-cd coppafish
-python -m pip install --upgrade pip
-python -m pip install -r requirements-optimised.txt
-python -m pip install -e .
-```
-
-or for the slower, numpy-only reliant code (Windows and Linux support)
+or for the slower, numpy-only reliant code
 ```console
 cd coppafish
 python -m pip install --upgrade pip
