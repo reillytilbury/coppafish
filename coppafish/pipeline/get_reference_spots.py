@@ -1,11 +1,5 @@
-import numpy as np
-
-try:
-    import jax.numpy as jnp
-    from ..spot_colors import base_optimised as spot_colors_base
-except ImportError:
-    import numpy as jnp
-    from ..spot_colors import base as spot_colors_base
+import numpy as jnp
+from ..spot_colors import base as spot_colors_base
 from ..call_spots import base as call_spots_base
 from .. import find_spots as fs
 from .. import utils, logging
