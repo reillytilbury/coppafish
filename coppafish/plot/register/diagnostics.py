@@ -46,10 +46,7 @@ class RegistrationViewer:
         self.transform = nb.register.initial_transform
         self.z_scale = nbp_basic.pixel_size_z / nbp_basic.pixel_size_xy
         self.r_ref, self.c_ref = nbp_basic.anchor_round, nb.basic_info.anchor_channel
-        if nb.get_config()['register']['round_registration_channel'] is None:
-            self.round_registration_channel = nbp_basic.anchor_channel
-        else:
-            self.round_registration_channel = nb.get_config()['register']['round_registration_channel']
+        self.round_registration_channel = nbp_basic.dapi_channel
         self.r_mid = len(use_rounds) // 2
         y_mid, x_mid, z_mid = nbp_basic.tile_centre
         self.new_origin = np.array([z_mid - 5, y_mid - 250, x_mid - 250])
@@ -793,7 +790,7 @@ def view_round_regression_scatter(nb: Notebook, t: int, r: int):
     # Transpose shift and position variables so coord is dimension 0, makes plotting easier
     shift = nb.register_debug.round_shift[t, r]
     corr = nb.register_debug.round_shift_corr[t, r]
-    position = nb.register_debug.position[t, r]
+    position = nb.register_debug.position
     initial_transform = nb.register_debug.round_transform_raw[t, r]
     icp_transform = preprocessing.yxz_to_zyx_affine(A=nb.register.transform[t, r, nb.basic_info.anchor_channel])
 
@@ -1729,7 +1726,7 @@ class ViewSubvolReg:
         # load in shifts
         self.shift = nb.register_debug.round_shift[self.t, self.r]
         self.shift_corr = nb.register_debug.round_shift_corr[self.t, self.r]
-        self.position = nb.register_debug.position[self.t, self.r]
+        self.position = nb.register_debug.position
         shift_prediction_matrix = huber_regression(self.shift, self.position)
         self.predicted_shift = np.pad(self.position, ((0, 0), (0, 1)), constant_values=1) @ shift_prediction_matrix.T
         self.shift_residual = np.linalg.norm(self.shift - self.predicted_shift, axis=-1)
@@ -1755,7 +1752,7 @@ class ViewSubvolReg:
         """
         # load in images
         config = self.nb.get_config()['register']
-        round_registration_channel = config['round_registration_channel']
+        round_registration_channel = 0
         anchor_image = preprocessing.yxz_to_zyx(tiles_io.load_image(self.nb.file_names, self.nb.basic_info, self.nb.extract.file_type,
                                                       self.t, self.nb.basic_info.anchor_round,
                                                       round_registration_channel, apply_shift=False))

@@ -297,23 +297,20 @@ def run_register(nb: Notebook) -> None:
             nb.find_spots,
             config["register"],
             np.pad(nb.basic_info.tilepos_yx, ((0, 0), (0, 1)), mode="constant", constant_values=1),
-            pre_seq_blur_radius=0,
+            pre_seq_blur_radius=None,
         )
         nb += nbp
         nb += nbp_debug
     reg_images_dir = os.path.join(nb.file_names.output_dir, "reg_images")
     if not os.path.isdir(reg_images_dir) or len(os.listdir(reg_images_dir)) == 0:
         # Save reg images
-        round_registration_channel = config["register"]["round_registration_channel"]
+        round_registration_channel = nb.basic_info.dapi_channel
         for t in nb.basic_info.use_tiles:
             use_rounds_with_preseq = nb.basic_info.use_rounds + [nb.basic_info.pre_seq_round] * nb.basic_info.use_preseq
             with tqdm.tqdm(total=len(use_rounds_with_preseq), desc="Saving registration images") as pbar:
                 for r in use_rounds_with_preseq:
                     pbar.set_postfix({"tile": t, "round": r})
-                    if round_registration_channel is not None:
-                        register.preprocessing.generate_reg_images(nb, t, r, round_registration_channel)
-                    if round_registration_channel is None:
-                        register.preprocessing.generate_reg_images(nb, t, r, nb.basic_info.anchor_channel)
+                    register.preprocessing.generate_reg_images(nb, t, r, round_registration_channel)
                     pbar.update(1)
             with tqdm.tqdm(total=len(nb.basic_info.use_channels), desc="Saving registration images") as pbar:
                 for c in nb.basic_info.use_channels:

@@ -2,6 +2,7 @@ import nd2
 import scipy
 import numpy as np
 import skimage
+import pickle
 from tqdm import tqdm
 from sklearn.linear_model import HuberRegressor
 from typing import Optional, Tuple
@@ -35,8 +36,8 @@ def find_shift_array(subvol_base, subvol_target, position, r_threshold):
     shift_corr = np.zeros((z_subvolumes, y_subvolumes, x_subvolumes))
     position = np.reshape(position, (z_subvolumes, y_subvolumes, x_subvolumes, 3))
 
-    for y in range(y_subvolumes):
-        for x in range(x_subvolumes):
+    for y, x in tqdm(np.ndindex(y_subvolumes, x_subvolumes), desc="Computing subvolume shifts",
+                     total=y_subvolumes * x_subvolumes):
             shift[:, y, x], shift_corr[:, y, x] = find_z_tower_shifts(
                 subvol_base=subvol_base[:, y, x],
                 subvol_target=subvol_target[:, y, x],
@@ -77,13 +78,14 @@ def find_z_tower_shifts(subvol_base, subvol_target, position, pearson_r_threshol
         merged_subvol_target = preprocessing.merge_subvols(
             position=np.copy(position[z_start:z_end]), subvol=subvol_target[z_start:z_end]
         )
-        merged_subvol_target_windowed = preprocessing.window_image(merged_subvol_target)
         merged_subvol_base = np.zeros_like(merged_subvol_target)
         merged_subvol_base_windowed = np.zeros_like(merged_subvol_target)
         merged_subvol_min_z = position[z_start, 0]
         current_box_min_z = position[z, 0]
         merged_subvol_start_z = current_box_min_z - merged_subvol_min_z
         merged_subvol_base[merged_subvol_start_z : merged_subvol_start_z + z_box] = subvol_base[z]
+        # window the images
+        merged_subvol_target_windowed = preprocessing.window_image(merged_subvol_target)
         merged_subvol_base_windowed[merged_subvol_start_z : merged_subvol_start_z + z_box] = preprocessing.window_image(
             subvol_base[z]
         )
@@ -244,40 +246,32 @@ def huber_regression(shift, position, predict_shift=True):
 
 
 # Bridge function for all functions in round registration
-def round_registration(anchor_image: np.ndarray, round_image: list, config: dict) -> dict:
+def round_registration(anchor_image: np.ndarray, round_image: list, t: int, round_ind: list,
+                       config: dict, registration_data: dict, save_path: str):
     """
     Function to carry out sub-volume round registration on a single tile.
 
     Args:
         anchor_image: np.ndarray size [n_z, n_y, n_x] of the anchor image
         round_image: list of length n_rounds, where round_image[r] is  np.ndarray size [n_z, n_y, n_x] of round r
+        t: int index of the tile
+        round_ind: list (length n_rounds) of the round indices
         config: dict of configuration parameters for registration
-
-    Returns:
-        round_registration_data: dictionary containing the following keys:
-        'position': np.ndarray size [z_sv x y_sv x x_sv, 3] of the position of each sub-volume in zyx format
-        'shift': np.ndarray size [z_sv x y_sv x x_sv, 3] of the shift of each sub-volume in zyx format
-        'shift_corr': np.ndarray size [z_sv x y_sv x x_sv] of the correlation coefficient of each sub-volume shift
-        'transform': np.ndarray size [n_rounds, 3, 4] of the affine transform for each round in zyx format
+        registration_data: dict of registration data (to be updated)
+        save_path: str path to save the updated registration data
     """
     # Initialize variables from config
     z_subvols, y_subvols, x_subvols = config["subvols"]
     z_box, y_box, x_box = config["box_size"]
     r_thresh = config["pearson_r_thresh"]
 
-    # Create the directory for the round registration data
-    round_registration_data = {"position": [], "shift": [], "shift_corr": [], "transform": []}
-
     if config["sobel"]:
         anchor_image = skimage.filters.sobel(anchor_image)
         round_image = [skimage.filters.sobel(r) for r in round_image]
 
     # Now compute round shifts for this tile and the affine transform for each round
-    pbar = tqdm(total=len(round_image), desc="Computing round transforms")
-    for r in range(len(round_image)):
+    for r in tqdm(range(len(round_image)), desc="Computing round shifts", total=len(round_image)):
         # Set progress bar title
-        pbar.set_description("Computing shifts for round " + str(r))
-
         # next we split image into overlapping cuboids
         subvol_base, position = preprocessing.split_3d_image(
             image=anchor_image,
@@ -297,22 +291,23 @@ def round_registration(anchor_image: np.ndarray, round_image: list, config: dict
             y_box=y_box,
             x_box=x_box,
         )
+        # remove the round_image from memory
+        round_image[r] = None
 
         # Find the subvolume shifts
         shift, corr = find_shift_array(subvol_base, subvol_target, position=position.copy(), r_threshold=r_thresh)
         transform = huber_regression(shift, position, predict_shift=False)
         # Append these arrays to the round_shift, round_shift_corr, round_transform and position storage
-        round_registration_data["shift"].append(shift)
-        round_registration_data["shift_corr"].append(corr)
-        round_registration_data["position"].append(position)
-        round_registration_data["transform"].append(transform)
-        pbar.update(1)
-    pbar.close()
-    # Convert all lists to numpy arrays
-    for key in round_registration_data.keys():
-        round_registration_data[key] = np.array(round_registration_data[key])
+        # note: r is not the round index, but the index of the round in the round_image list so need to use round_ind
+        registration_data["round_registration"]["shift"][t, round_ind[r]] = shift
+        registration_data["round_registration"]["shift_corr"][t, round_ind[r]] = corr
+        if registration_data["round_registration"]["position"].max() == 0:
+            registration_data["round_registration"]["position"] = position
+        registration_data["round_registration"]["transform_raw"][t, round_ind[r]] = transform
 
-    return round_registration_data
+        # Save the registration data
+        with open(save_path, "wb") as f:
+            pickle.dump(registration_data, f)
 
 
 def channel_registration(
@@ -693,16 +688,17 @@ def brightness_scale(
         sub_image_preseq, sub_image_seq = preseq[yx_range], seq[yx_range]
         sub_image_seq_windowed = sub_image_seq * window
         sub_image_preseq_windowed = sub_image_preseq * window
+        # phase cross correlation struggles with all zeros so we will skip this sub-image if it is all zeros
+        if min(np.max(sub_image_seq_windowed), np.max(sub_image_preseq_windowed)) == 0:
+            sub_image_shifts[i, j] = np.array([0, 0])
+            sub_image_shift_score[i, j] = 0
+            continue
         sub_image_shifts[i, j] = skimage.registration.phase_cross_correlation(
             sub_image_preseq_windowed, sub_image_seq_windowed, overlap_ratio=0.75, disambiguate=True
         )[0]
-        # skip calculation of correlation coefficient if all pixels of either image are 0
-        if min(np.max(sub_image_seq), np.max(sub_image_preseq)) == 0:
-            sub_image_shift_score[i, j] = 0
-        else:
-            # Now calculate the correlation coefficient
-            sub_image_seq_shifted = preprocessing.custom_shift(sub_image_seq, sub_image_shifts[i, j].astype(int))
-            sub_image_shift_score[i, j] = np.corrcoef(sub_image_preseq.ravel(), sub_image_seq_shifted.ravel())[0, 1]
+        # Now calculate the correlation coefficient
+        sub_image_seq_shifted = preprocessing.custom_shift(sub_image_seq, sub_image_shifts[i, j].astype(int))
+        sub_image_shift_score[i, j] = np.corrcoef(sub_image_preseq.ravel(), sub_image_seq_shifted.ravel())[0, 1]
     # Now find the best sub-image
     max_score = np.max(sub_image_shift_score)
     i_max, j_max = np.argwhere(sub_image_shift_score == max_score)[0]
