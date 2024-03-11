@@ -1,4 +1,4 @@
-2024/02/dd Alpha Update (v0.10.0):
+2024/03/dd Alpha Update (v0.10.0):
  * Default Wiener deconvolution configuration in the filter stage is improved.
  * Difference of Hanning is now turned off in filter by default. This can be changed by setting the new variable 
     difference_of_hanning to true in the scale config section.
@@ -23,6 +23,18 @@
  * Optimised plotting function `remove_background` in spot_colors.
  * Docs + logo update for coppafish.
  * Removed unnecessary jax code.
+
+
+2024/03/11 Alpha Update (v0.9.4):
+ * Background subtraction is now using the correct alignment parameters so it is actually working again
+ * Background subtraction blurring was turned off by a bug but this is no longer the case
+ * Background subtraction is only done if the background pixel is positive, which gives much better results
+ * Sobel filtering was being applied by default on alpha. If there was no parameter for sobel in Merry, then this would 
+    at least partially explain why it was taking longer Izzie
+ * Fixed the diagnostic to turn off the background image in the main viewer by clicking i
+ * Fixed the viewer to view the spots in the gene efficiency viewer
+ * All viewers are back in the traditional black layout so that we can see the white text on them again
+ * An OMP optimisation which reduces the amount of read time by a factor of 2. This speeds up the OMP step significantly.
 
 
 2024/02/15 Alpha Update (v0.9.2):
