@@ -693,7 +693,6 @@ def brightness_scale(
             sub_image_shifts[i, j] = np.array([0, 0])
             sub_image_shift_score[i, j] = 0
             continue
-        print(i, j)
         sub_image_shifts[i, j] = skimage.registration.phase_cross_correlation(
             sub_image_preseq_windowed, sub_image_seq_windowed, overlap_ratio=0.75, disambiguate=True
         )[0]

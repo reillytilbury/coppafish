@@ -303,7 +303,6 @@ def register(
                 # we have to load in inverse transform to use scipy.ndimage.affine_transform
                 image_seq = scipy.ndimage.affine_transform(image_seq, inv_transform_seq[1:, 1:])
                 # Now compute the scale factor
-                print(t, r, c)
                 bg_scale[t, r, c] = register_base.brightness_scale(image_preseq, image_seq, 99)[0]
         # Now add the bg_scale to the nbp_filter page. To do this we need to delete the bg_scale attribute.
         nbp_filter.finalized = False

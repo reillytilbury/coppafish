@@ -337,7 +337,7 @@ def get_all_coefs(
 
     rng = np.random.RandomState(0)
     check_spot = rng.randint(n_pixels)
-    diff_to_int = np.round(pixel_colors[check_spot]).astype(int) - pixel_colors[check_spot]
+    # diff_to_int = np.round(pixel_colors[check_spot]).astype(int) - pixel_colors[check_spot]
     # if np.abs(diff_to_int).max() == 0:
     #     logging.error(
     #         ValueError(
