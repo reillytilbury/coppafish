@@ -273,7 +273,7 @@ def spot_neighbourhood(
 
 
 def get_spots(
-    pixel_coefs: Union[csr_matrix, np.array],
+    pixel_coefs: Union[csr_matrix, np.ndarray],
     pixel_yxz: np.ndarray,
     radius_xy: int,
     radius_z: Optional[int],
