@@ -71,6 +71,7 @@ def run_tile_indep_pipeline(nb: Notebook) -> None:
     BuildPDF(nb)
     run_find_spots(nb)
     run_register(nb)
+    BuildPDF(nb)
     check_spots.check_n_spots(nb)
 
 
@@ -295,22 +296,31 @@ def run_register(nb: Notebook) -> None:
             nb.filter,
             nb.find_spots,
             config["register"],
-            pre_seq_blur_radius=config["filter"]["pre_seq_blur_radius"],
+            np.pad(nb.basic_info.tilepos_yx, ((0, 0), (0, 1)), mode="constant", constant_values=1),
+            pre_seq_blur_radius=None,
         )
         nb += nbp
         nb += nbp_debug
     reg_images_dir = os.path.join(nb.file_names.output_dir, "reg_images")
     if not os.path.isdir(reg_images_dir) or len(os.listdir(reg_images_dir)) == 0:
         # Save reg images
-        use_rounds = nb.basic_info.use_rounds + [nb.basic_info.pre_seq_round] * nb.basic_info.use_preseq
+        round_registration_channel = nb.basic_info.dapi_channel
         for t in nb.basic_info.use_tiles:
-            for r in tqdm.tqdm(use_rounds, total=len(use_rounds), desc="Saving reg images"):
-                register.preprocessing.generate_reg_images(nb, t, r, nb.basic_info.dapi_channel)
-            for c in tqdm.tqdm(nb.basic_info.use_channels, total=len(nb.basic_info.use_channels),
-                               desc="Saving reg images"):
-                register.preprocessing.generate_reg_images(nb, t, 3, c)
-            # save dapi and anchor channel for anchor round
-            register.preprocessing.generate_reg_images(nb, t, nb.basic_info.anchor_round, nb.basic_info.dapi_channel)
+            use_rounds_with_preseq = nb.basic_info.use_rounds + [nb.basic_info.pre_seq_round] * nb.basic_info.use_preseq
+            with tqdm.tqdm(total=len(use_rounds_with_preseq), desc="Saving registration images") as pbar:
+                for r in use_rounds_with_preseq:
+                    pbar.set_postfix({"tile": t, "round": r})
+                    register.preprocessing.generate_reg_images(nb, t, r, round_registration_channel)
+                    pbar.update(1)
+            with tqdm.tqdm(total=len(nb.basic_info.use_channels), desc="Saving registration images") as pbar:
+                for c in nb.basic_info.use_channels:
+                    pbar.set_postfix({"tile": t, "channel": c})
+                    register.preprocessing.generate_reg_images(nb, t, 3, c)
+                    pbar.update(1)
+            if round_registration_channel is not None:
+                register.preprocessing.generate_reg_images(
+                    nb, t, nb.basic_info.anchor_round, round_registration_channel
+                )
             register.preprocessing.generate_reg_images(nb, t, nb.basic_info.anchor_round, nb.basic_info.anchor_channel)
     else:
         logging.warn(utils.warnings.NotebookPageWarning("register"))

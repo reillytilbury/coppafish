@@ -68,10 +68,12 @@ def register(
 
     # Part 1: Channel registration
     if registration_data["channel_registration"]["transform"].max() == 0:
+        print("Running channel registration")
         if not nbp_basic.channel_camera:
             cameras = [0] * n_channels
         else:
             cameras = list(set(nbp_basic.channel_camera))
+
         cameras.sort()
         anchor_cam_idx = cameras.index(nbp_basic.channel_camera[nbp_basic.anchor_channel])
         cam_transform = register_base.channel_registration(
@@ -83,6 +85,7 @@ def register(
         # Now loop through all channels and set the channel transform to its cam transform
         for c in use_channels:
             cam_idx = cameras.index(nbp_basic.channel_camera[c])
+
             registration_data["channel_registration"]["transform"][c] = (
                 preprocessing.zyx_to_yxz_affine(A=cam_transform[cam_idx]))
 
@@ -182,16 +185,33 @@ def register(
     nbp_debug.converged = registration_data["icp"]["converged"]
 
     # first, let us blur the pre-seq round images
-    if nbp_basic.use_preseq:
+    if nbp_basic.use_preseq and registration_data['blur'] is False:
         if pre_seq_blur_radius is None:
             pre_seq_blur_radius = 3
-        for t, c in tqdm(itertools.product(use_tiles, use_channels), total=len(use_tiles) * len(use_channels),
-                         desc="Blurring pre-seq round images"):
+        for t, c in tqdm(itertools.product(use_tiles, use_channels), desc="Blurring pre-seq images",
+                         total=len(use_tiles) * len(use_channels)):
             image_preseq = tiles_io.load_image(
-                nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=nbp_basic.pre_seq_round, c=c, suffix="_raw")
+                nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=nbp_basic.pre_seq_round, c=c, suffix="_raw",
+                apply_shift=True,
+            )
             image_preseq = scipy.ndimage.gaussian_filter(image_preseq, pre_seq_blur_radius)
             tiles_io.save_image(
-                nbp_file, nbp_basic, nbp_extract.file_type, image_preseq, t=t, r=nbp_basic.pre_seq_round, c=c)
+                nbp_file, nbp_basic, nbp_extract.file_type, image_preseq, t=t, r=nbp_basic.pre_seq_round, c=c
+            )
+        for t in use_tiles:
+            image_preseq = tiles_io.load_image(
+                nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=nbp_basic.pre_seq_round, c=nbp_basic.dapi_channel,
+                suffix="_raw",
+            )
+            tiles_io.save_image(
+                nbp_file, nbp_basic, nbp_extract.file_type, image_preseq, t=t, r=nbp_basic.pre_seq_round,
+                c=nbp_basic.dapi_channel
+            )
+
+        registration_data['blur'] = True
+    # Save registration data externally
+    with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
+        pickle.dump(registration_data, f)
 
     # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
     # fluorescence
@@ -201,6 +221,7 @@ def register(
         use_rounds = nbp_basic.use_rounds
         mid_z = len(nbp_basic.use_z) // 2
         pixels_anchor = spot_colors.all_pixel_yxz(y_size=nbp_basic.tile_sz, x_size=nbp_basic.tile_sz, z_planes=[mid_z])
+
         for t, c in tqdm(
             itertools.product(use_tiles, use_channels),
             desc="Computing background scale factors",

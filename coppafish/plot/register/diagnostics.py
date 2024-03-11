@@ -42,6 +42,7 @@ class RegistrationViewer:
         use_rounds, use_channels = (nbp_basic.use_rounds + nbp_basic.use_preseq * [nbp_basic.pre_seq_round],
                                     nbp_basic.use_channels)
         self.r_ref, self.c_ref = nbp_basic.anchor_round, nb.basic_info.anchor_channel
+        self.round_registration_channel = nbp_basic.dapi_channel
         self.r_mid = len(use_rounds) // 2
         y_mid, x_mid = nbp_basic.tile_centre[:-1]
         z_mid = len(nbp_basic.use_z) // 2
@@ -750,187 +751,402 @@ def set_style(button):
     return button
 
 
-# TODO: This could be interesting to use with the optical flow, get pixel shifts and see how well a linear model fits
-#  them
-# def view_round_regression_scatter(nb: Notebook, t: int, r: int):
-#     """
-#     view 9 scatter plots for each data set shift vs positions
-#     Args:
-#         nb: Notebook
-#         t: tile
-#         r: round
-#     """
-#     # Transpose shift and position variables so coord is dimension 0, makes plotting easier
-#     shift = nb.register_debug.round_shift[t, r]
-#     corr = nb.register_debug.round_shift_corr[t, r]
-#     position = nb.register_debug.position[t, r]
-#     initial_transform = nb.register_debug.round_transform_raw[t, r]
-#     icp_transform = preprocessing.yxz_to_zyx_affine(A=nb.register.transform[t, r, nb.basic_info.anchor_channel])
-#
-#     r_thresh = nb.get_config()['register']['pearson_r_thresh']
-#     shift = shift[corr > r_thresh].T
-#     position = position[corr > r_thresh].T
-#
-#     # Make ranges, wil be useful for plotting lines
-#     z_range = np.arange(np.min(position[0]), np.max(position[0]))
-#     yx_range = np.arange(np.min(position[1]), np.max(position[1]))
-#     coord_range = [z_range, yx_range, yx_range]
-#     # Need to add a central offset to all lines plotted
-#     tile_centre_zyx = np.roll(nb.basic_info.tile_centre, 1)
-#
-#     # We want to plot the shift of each coord against the position of each coord. The gradient when the dependent var
-#     # is coord i and the independent var is coord j should be the transform[i,j] - int(i==j)
-#     gradient_svr = initial_transform[:3, :3] - np.eye(3)
-#     gradient_icp = icp_transform[:3, :3] - np.eye(3)
-#     # Now we need to compute what the intercept should be for each coord. Usually this would just be given by the final
-#     # column of the transform, but we need to add a central offset to this. If the dependent var is coord i, and the
-#     # independent var is coord j, then the intercept should be the transform[i,3] + central_offset[i,j]. This central
-#     # offset is given by the formula: central_offset[i, j] = gradient[i, k1] * tile_centre[k1] + gradient[i, k2] *
-#     # tile_centre[k2], where k1 and k2 are the coords that are not j.
-#     central_offset_svr = np.zeros((3, 3))
-#     central_offset_icp = np.zeros((3, 3))
-#     intercpet_svr = np.zeros((3, 3))
-#     intercpet_icp = np.zeros((3, 3))
-#     for i in range(3):
-#         for j in range(3):
-#             # k1 and k2 are the coords that are not j
-#             k1 = (j + 1) % 3
-#             k2 = (j + 2) % 3
-#             central_offset_svr[i, j] = gradient_svr[i, k1] * tile_centre_zyx[k1] + gradient_svr[i, k2] * \
-#                                        tile_centre_zyx[k2]
-#             central_offset_icp[i, j] = gradient_icp[i, k1] * tile_centre_zyx[k1] + gradient_icp[i, k2] * \
-#                                        tile_centre_zyx[k2]
-#             # Now compute the intercepts
-#             intercpet_svr[i, j] = initial_transform[i, 3] + central_offset_svr[i, j]
-#             intercpet_icp[i, j] = icp_transform[i, 3] + central_offset_icp[i, j]
-#
-#     # Define the axes
-#     fig, axes = plt.subplots(3, 3)
-#     coord = ['Z', 'Y', 'X']
-#     # Now plot n_matches
-#     for i in range(3):
-#         for j in range(3):
-#             ax = axes[i, j]
-#             ax.scatter(x=position[j], y=shift[i], alpha=0.3)
-#             ax.plot(coord_range[j], gradient_svr[i, j] * coord_range[j] + intercpet_svr[i, j], label='SVR')
-#             ax.plot(coord_range[j], gradient_icp[i, j] * coord_range[j] + intercpet_icp[i, j], label='ICP')
-#             ax.legend()
-#     # Label subplot rows and columns with coord names
-#     for ax, col in zip(axes[0], coord):
-#         ax.set_title(col)
-#     for ax, row in zip(axes[:, 0], coord):
-#         ax.set_ylabel(row, rotation=90, size='large')
-#     # common axis labels
-#     fig.supxlabel('Position')
-#     fig.supylabel('Shift')
-#     # Add title
-#     round_registration_channel = nb.get_config()['register']['round_registration_channel']
-#     if round_registration_channel is None:
-#         round_registration_channel = nb.basic_info.anchor_channel
-#     plt.suptitle('Round regression for Tile ' + str(t) + ', Round ' + str(r) + 'Channel '
-#                  + str(round_registration_channel))
-#     plt.show()
+# 1
+def view_round_regression_scatter(nb: Notebook, t: int, r: int):
+    """
+    view 9 scatter plots for each data set shift vs positions
+    Args:
+        nb: Notebook
+        t: tile
+        r: round
+    """
+    # Transpose shift and position variables so coord is dimension 0, makes plotting easier
+    shift = nb.register_debug.round_shift[t, r]
+    corr = nb.register_debug.round_shift_corr[t, r]
+    position = nb.register_debug.position
+    initial_transform = nb.register_debug.round_transform_raw[t, r]
+    icp_transform = preprocessing.yxz_to_zyx_affine(A=nb.register.transform[t, r, nb.basic_info.anchor_channel])
+
+    r_thresh = nb.get_config()['register']['pearson_r_thresh']
+    shift = shift[corr > r_thresh].T
+    position = position[corr > r_thresh].T
+
+    # Make ranges, wil be useful for plotting lines
+    z_range = np.arange(np.min(position[0]), np.max(position[0]))
+    yx_range = np.arange(np.min(position[1]), np.max(position[1]))
+    coord_range = [z_range, yx_range, yx_range]
+    # Need to add a central offset to all lines plotted
+    tile_centre_zyx = np.roll(nb.basic_info.tile_centre, 1)
+
+    # We want to plot the shift of each coord against the position of each coord. The gradient when the dependent var
+    # is coord i and the independent var is coord j should be the transform[i,j] - int(i==j)
+    gradient_svr = initial_transform[:3, :3] - np.eye(3)
+    gradient_icp = icp_transform[:3, :3] - np.eye(3)
+    # Now we need to compute what the intercept should be for each coord. Usually this would just be given by the final
+    # column of the transform, but we need to add a central offset to this. If the dependent var is coord i, and the
+    # independent var is coord j, then the intercept should be the transform[i,3] + central_offset[i,j]. This central
+    # offset is given by the formula: central_offset[i, j] = gradient[i, k1] * tile_centre[k1] + gradient[i, k2] *
+    # tile_centre[k2], where k1 and k2 are the coords that are not j.
+    central_offset_svr = np.zeros((3, 3))
+    central_offset_icp = np.zeros((3, 3))
+    intercpet_svr = np.zeros((3, 3))
+    intercpet_icp = np.zeros((3, 3))
+    for i in range(3):
+        for j in range(3):
+            # k1 and k2 are the coords that are not j
+            k1 = (j + 1) % 3
+            k2 = (j + 2) % 3
+            central_offset_svr[i, j] = gradient_svr[i, k1] * tile_centre_zyx[k1] + gradient_svr[i, k2] * \
+                                       tile_centre_zyx[k2]
+            central_offset_icp[i, j] = gradient_icp[i, k1] * tile_centre_zyx[k1] + gradient_icp[i, k2] * \
+                                       tile_centre_zyx[k2]
+            # Now compute the intercepts
+            intercpet_svr[i, j] = initial_transform[i, 3] + central_offset_svr[i, j]
+            intercpet_icp[i, j] = icp_transform[i, 3] + central_offset_icp[i, j]
+
+    # Define the axes
+    fig, axes = plt.subplots(3, 3)
+    coord = ['Z', 'Y', 'X']
+    # Now plot n_matches
+    for i in range(3):
+        for j in range(3):
+            ax = axes[i, j]
+            ax.scatter(x=position[j], y=shift[i], alpha=0.3)
+            ax.plot(coord_range[j], gradient_svr[i, j] * coord_range[j] + intercpet_svr[i, j], label='SVR')
+            ax.plot(coord_range[j], gradient_icp[i, j] * coord_range[j] + intercpet_icp[i, j], label='ICP')
+            ax.legend()
+    # Label subplot rows and columns with coord names
+    for ax, col in zip(axes[0], coord):
+        ax.set_title(col)
+    for ax, row in zip(axes[:, 0], coord):
+        ax.set_ylabel(row, rotation=90, size='large')
+    # common axis labels
+    fig.supxlabel('Position')
+    fig.supylabel('Shift')
+    # Add title
+    round_registration_channel = nb.get_config()['register']['round_registration_channel']
+    if round_registration_channel is None:
+        round_registration_channel = nb.basic_info.anchor_channel
+    plt.suptitle('Round regression for Tile ' + str(t) + ', Round ' + str(r) + 'Channel '
+                 + str(round_registration_channel))
+    plt.show()
 
 
-# TODO: This could be interesting to use with the optical flow, would maybe be cool to view the optical flow as a vector
-#  field. Could do a red and blue vector field, red for linear model from optical flow, blue for actual optical flow
-# def shift_vector_field(nb: Notebook):
-#     """
-#     Function to plot vector fields of predicted shifts vs shifts to see if we classify a shift as an outlier.
-#     Args:
-#         nb: Notebook
-#     """
-#     nbp_basic, nbp_register_debug = nb.basic_info, nb.register_debug
-#     residual_thresh = nb.get_config()['register']['residual_thresh']
-#     use_tiles = nbp_basic.use_tiles
-#     shift = nbp_register_debug.round_transform_raw[use_tiles, :, :, 3]
-#     # record number of rounds, tiles and initialise predicted shift
-#     n_tiles, n_rounds = shift.shape[0], nbp_basic.n_rounds
-#     tilepos_yx = nbp_basic.tilepos_yx[use_tiles]
-#     tilepos_yx_padded = np.vstack((tilepos_yx.T, np.ones(n_tiles))).T
-#     predicted_shift = np.zeros_like(shift)
-#     # When we are scaling the vector field, it will be useful to store the following
-#     n_vectors_x = tilepos_yx[:, 1].max() - tilepos_yx[:, 1].min() + 1
-#     shift_norm = np.linalg.norm(shift, axis=2)
-#
-#     fig, axes = plt.subplots(nrows=3, ncols=n_rounds)
-#     for r in range(n_rounds):
-#         # generate predicted shift for this round
-#         lb, ub = np.percentile(shift_norm[:, r], [10, 90])
-#         valid = (shift_norm[:, r] > lb) * (shift_norm[:, r] < ub)
-#         # Carry out regression, first predicitng yx shift, then z shift
-#         transform_yx = np.linalg.lstsq(tilepos_yx_padded[valid], shift[valid, r, 1:], rcond=None)[0]
-#         predicted_shift[:, r, 1:] = tilepos_yx_padded @ transform_yx
-#         transform_z = np.linalg.lstsq(tilepos_yx_padded[valid], shift[valid, r, 0][:, None], rcond=None)[0]
-#         predicted_shift[:, r, 0] = (tilepos_yx_padded @ transform_z)[:, 0]
-#         # Defining this scale will mean that the length of the largest vector will be equal to 1/n_vectors_x of the
-#         # width of the plot
-#         scale = n_vectors_x * np.sqrt(np.sum(predicted_shift[:, r, 1:] ** 2, axis=1))
-#
-#         # plot the predicted yx shift vs actual yx shift in row 0
-#         ax = axes[0, r]
-#         # Make sure the vector field is properly scaled
-#         ax.quiver(tilepos_yx[:, 1], tilepos_yx[:, 0], predicted_shift[:, r, 2], predicted_shift[:, r, 1],
-#                   color='b', scale=scale, scale_units='width', width=.05, alpha=0.5)
-#         ax.quiver(tilepos_yx[:, 1], tilepos_yx[:, 0], shift[:, r, 2], shift[:, r, 1], color='r', scale=scale,
-#                   scale_units='width', width=.05, alpha=0.5)
-#         # We want to set the xlims and ylims to include a bit of padding so we can see the vectors
-#         ax.set_xlim(tilepos_yx[:, 1].min() - 1, tilepos_yx[:, 1].max() + 1)
-#         ax.set_ylim(tilepos_yx[:, 0].min() - 1, tilepos_yx[:, 0].max() + 1)
-#         ax.set_xticks([])
-#         ax.set_yticks([])
-#
-#         # plot the predicted z shift vs actual z shift in row 1
-#         ax = axes[1, r]
-#         # we only want 1 label so make this for r = 0
-#         if r == 0:
-#             ax.quiver(tilepos_yx[:, 1], tilepos_yx[:, 0], 0, predicted_shift[:, r, 0], color='b', scale=scale,
-#                       scale_units='width', width=.05, alpha=0.5, label='Predicted')
-#             ax.quiver(tilepos_yx[:, 1], tilepos_yx[:, 0], 0, shift[:, r, 2], color='r', scale=scale,
-#                       scale_units='width', width=.05, alpha=0.5, label='Actual')
-#         else:
-#             ax.quiver(tilepos_yx[:, 1], tilepos_yx[:, 0], 0, predicted_shift[:, r, 0], color='b', scale=scale,
-#                       scale_units='width', width=.05, alpha=0.5)
-#             ax.quiver(tilepos_yx[:, 1], tilepos_yx[:, 0], 0, shift[:, r, 2], color='r', scale=scale,
-#                       scale_units='width', width=.05, alpha=0.5)
-#         # We want to set the xlims and ylims to include a bit of padding so we can see the vectors
-#         ax.set_xlim(tilepos_yx[:, 1].min() - 1, tilepos_yx[:, 1].max() + 1)
-#         ax.set_ylim(tilepos_yx[:, 0].min() - 1, tilepos_yx[:, 0].max() + 1)
-#         ax.set_xticks([])
-#         ax.set_yticks([])
-#
-#         # Plot image of norms of residuals at each tile in row 3
-#         ax = axes[2, r]
-#         diff = create_tiled_image(data=np.linalg.norm(predicted_shift[:, r] - shift[:, r], axis=1),
-#                                   nbp_basic=nbp_basic)
-#         outlier = np.argwhere(diff > residual_thresh)
-#         n_outliers = outlier.shape[0]
-#         im = ax.imshow(diff, vmin=0, vmax=10)
-#         # Now we want to outline the outlier pixels with a dotted red rectangle
-#         for i in range(n_outliers):
-#             rect = patches.Rectangle((outlier[i, 1] - 0.5, outlier[i, 0] - 0.5), 1, 1, linewidth=1,
-#                                      edgecolor='r', facecolor='none', linestyle='--')
-#             ax.add_patch(rect)
-#         ax.set_xticks([])
-#         ax.set_yticks([])
-#
-#     # Set row and column labels
-#     for ax, col in zip(axes[0], nbp_basic.use_rounds):
-#         ax.set_title(col)
-#     for ax, row in zip(axes[:, 0], ['XY-shifts', 'Z-shifts', 'Residuals']):
-#         ax.set_ylabel(row, rotation=90, size='large')
-#     # Add row and column labels
-#     fig.supxlabel('Round')
-#     fig.supylabel('Diagnostic')
-#     # Add global colour bar and legend
-#     lines_labels = [ax.get_legend_handles_labels() for ax in fig.axes]
-#     lines, labels = [sum(lol, []) for lol in zip(*lines_labels)]
-#     fig.legend(lines, labels)
-#     fig.subplots_adjust(right=0.8)
-#     cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-#     fig.colorbar(im, cax=cbar_ax, label='Residual Norm')
-#     # Add title
-#     fig.suptitle('Diagnostic plots for round shift outlier removal', size='x-large')
+# 1
+def view_pearson_hists(nb, t, num_bins=30):
+    """
+    function to view histogram of correlation coefficients for all subvol shifts of all round/channels.
+    Args:
+        nb: Notebook
+        t: int tile under consideration
+        num_bins: int number of bins in the histogram
+    """
+    nbp_basic, nbp_register_debug = nb.basic_info, nb.register_debug
+    thresh = nb.get_config()['register']['pearson_r_thresh']
+    round_corr = nbp_register_debug.round_shift_corr[t]
+    n_rounds = nbp_basic.n_rounds
+    cols = n_rounds
+
+    for r in range(n_rounds):
+        plt.subplot(1, cols, r + 1)
+        counts, _ = np.histogram(round_corr[r], np.linspace(0, 1, num_bins))
+        plt.hist(round_corr[r], bins=np.linspace(0, 1, num_bins))
+        plt.vlines(x=thresh, ymin=0, ymax=np.max(counts), colors='r')
+        # change fontsize from default 10 to 7
+        plt.title('r = ' + str(r) +
+                  '\n Pass = ' + str(
+            round(100 * sum(round_corr[r] > thresh) / round_corr.shape[1], 2)) + '%', fontsize=7)
+        # remove x ticks and y ticks
+        plt.xticks([])
+        plt.yticks([])
+
+    plt.suptitle('Similarity Score Distributions for all Sub-Volume Shifts')
+    plt.show()
+
+
+# 1
+def view_pearson_colourmap(nb, t):
+    """
+    function to view colourmap of correlation coefficients for all subvol shifts for all channels and rounds.
+
+    Args:
+        nb: Notebook
+        t: int tile under consideration
+    """
+    # initialise frequently used variables
+    nbp_basic, nbp_register_debug = nb.basic_info, nb.register_debug
+    round_corr = nbp_register_debug.round_shift_corr[t]
+
+    # Replace 0 with nans so they get plotted as black
+    round_corr[round_corr == 0] = np.nan
+    # plot round correlation
+    fig, ax = plt.subplots(1, 1)
+    # ax1 refers to round shifts
+    im = ax.imshow(round_corr, vmin=0, vmax=1, aspect='auto', interpolation='none')
+    ax.set_xlabel('Sub-volume index')
+    ax.set_ylabel('Round')
+    ax.set_title('Round sub-volume shift scores')
+
+    # Add common colour bar. Also give it the label 'Pearson correlation coefficient'
+    fig.subplots_adjust(right=0.8)
+    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+    fig.colorbar(im, cax=cbar_ax, label='Correlation coefficient')
+
+    plt.suptitle('Similarity score distributions for all sub-volume shifts')
+
+
+# 1
+def view_pearson_colourmap_spatial(nb: Notebook, t: int):
+    """
+    function to view colourmap of correlation coefficients along with spatial info for either all round shifts of a tile
+    or all channel shifts of a tile.
+
+    Args:
+        nb: Notebook
+        round: True if round, false if channel
+        t: tile under consideration
+    """
+
+    # initialise frequently used variables
+    config = nb.get_config()['register']
+    use = nb.basic_info.use_rounds
+    corr = nb.register_debug.round_shift_corr[t, use]
+    mode = 'Round'
+
+    # Set 0 correlations to nan, so they are plotted as black
+    corr[corr == 0] = np.nan
+    z_subvols, y_subvols, x_subvols = config['subvols']
+    n_rc = corr.shape[0]
+
+    fig, axes = plt.subplots(nrows=z_subvols, ncols=n_rc)
+    if axes.ndim == 1:
+        axes = axes[None]
+    # Now plot each image
+    for elem in range(n_rc):
+        for z in range(z_subvols):
+            ax = axes[z, elem]
+            ax.set_xticks([])
+            ax.set_yticks([])
+            im = ax.imshow(np.reshape(corr[elem, z * y_subvols * x_subvols: (z + 1) * x_subvols * y_subvols],
+                                      (y_subvols, x_subvols)), vmin=0, vmax=1)
+    # common axis labels
+    fig.supxlabel(mode)
+    fig.supylabel('Z-Subvolume')
+    # Set row and column labels
+    for ax, col in zip(axes[0], use):
+        ax.set_title(col, size='large')
+    for ax, row in zip(axes[:, 0], np.arange(z_subvols)):
+        ax.set_ylabel(row, rotation=0, size='large', x=-0.1)
+    # add colour bar
+    fig.subplots_adjust(right=0.8)
+    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+    fig.colorbar(im, cax=cbar_ax, label='Correlation coefficient')
+
+    plt.suptitle(mode + ' shift similarity scores for tile ' + str(t) + ' plotted spatially')
+
+
+# 2
+def shift_vector_field(nb: Notebook):
+    """
+    Function to plot vector fields of predicted shifts vs shifts to see if we classify a shift as an outlier.
+    Args:
+        nb: Notebook
+    """
+    nbp_basic, nbp_register_debug = nb.basic_info, nb.register_debug
+    residual_thresh = nb.get_config()['register']['residual_thresh']
+    use_tiles = nbp_basic.use_tiles
+    shift = nbp_register_debug.round_transform_raw[use_tiles, :, :, 3]
+    # record number of rounds, tiles and initialise predicted shift
+    n_tiles, n_rounds = shift.shape[0], nbp_basic.n_rounds
+    tilepos_yx = nbp_basic.tilepos_yx[use_tiles]
+    tilepos_yx_padded = np.vstack((tilepos_yx.T, np.ones(n_tiles))).T
+    predicted_shift = np.zeros_like(shift)
+    # When we are scaling the vector field, it will be useful to store the following
+    n_vectors_x = tilepos_yx[:, 1].max() - tilepos_yx[:, 1].min() + 1
+    shift_norm = np.linalg.norm(shift, axis=2)
+
+    fig, axes = plt.subplots(nrows=3, ncols=n_rounds)
+    for r in range(n_rounds):
+        # generate predicted shift for this round
+        lb, ub = np.percentile(shift_norm[:, r], [10, 90])
+        valid = (shift_norm[:, r] > lb) * (shift_norm[:, r] < ub)
+        # Carry out regression, first predicitng yx shift, then z shift
+        transform_yx = np.linalg.lstsq(tilepos_yx_padded[valid], shift[valid, r, 1:], rcond=None)[0]
+        predicted_shift[:, r, 1:] = tilepos_yx_padded @ transform_yx
+        transform_z = np.linalg.lstsq(tilepos_yx_padded[valid], shift[valid, r, 0][:, None], rcond=None)[0]
+        predicted_shift[:, r, 0] = (tilepos_yx_padded @ transform_z)[:, 0]
+        # Defining this scale will mean that the length of the largest vector will be equal to 1/n_vectors_x of the
+        # width of the plot
+        scale = n_vectors_x * np.sqrt(np.sum(predicted_shift[:, r, 1:] ** 2, axis=1))
+
+        # plot the predicted yx shift vs actual yx shift in row 0
+        ax = axes[0, r]
+        # Make sure the vector field is properly scaled
+        ax.quiver(tilepos_yx[:, 1], tilepos_yx[:, 0], predicted_shift[:, r, 2], predicted_shift[:, r, 1],
+                  color='b', scale=scale, scale_units='width', width=.05, alpha=0.5)
+        ax.quiver(tilepos_yx[:, 1], tilepos_yx[:, 0], shift[:, r, 2], shift[:, r, 1], color='r', scale=scale,
+                  scale_units='width', width=.05, alpha=0.5)
+        # We want to set the xlims and ylims to include a bit of padding so we can see the vectors
+        ax.set_xlim(tilepos_yx[:, 1].min() - 1, tilepos_yx[:, 1].max() + 1)
+        ax.set_ylim(tilepos_yx[:, 0].min() - 1, tilepos_yx[:, 0].max() + 1)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+        # plot the predicted z shift vs actual z shift in row 1
+        ax = axes[1, r]
+        # we only want 1 label so make this for r = 0
+        if r == 0:
+            ax.quiver(tilepos_yx[:, 1], tilepos_yx[:, 0], 0, predicted_shift[:, r, 0], color='b', scale=scale,
+                      scale_units='width', width=.05, alpha=0.5, label='Predicted')
+            ax.quiver(tilepos_yx[:, 1], tilepos_yx[:, 0], 0, shift[:, r, 2], color='r', scale=scale,
+                      scale_units='width', width=.05, alpha=0.5, label='Actual')
+        else:
+            ax.quiver(tilepos_yx[:, 1], tilepos_yx[:, 0], 0, predicted_shift[:, r, 0], color='b', scale=scale,
+                      scale_units='width', width=.05, alpha=0.5)
+            ax.quiver(tilepos_yx[:, 1], tilepos_yx[:, 0], 0, shift[:, r, 2], color='r', scale=scale,
+                      scale_units='width', width=.05, alpha=0.5)
+        # We want to set the xlims and ylims to include a bit of padding so we can see the vectors
+        ax.set_xlim(tilepos_yx[:, 1].min() - 1, tilepos_yx[:, 1].max() + 1)
+        ax.set_ylim(tilepos_yx[:, 0].min() - 1, tilepos_yx[:, 0].max() + 1)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+        # Plot image of norms of residuals at each tile in row 3
+        ax = axes[2, r]
+        diff = create_tiled_image(data=np.linalg.norm(predicted_shift[:, r] - shift[:, r], axis=1),
+                                  nbp_basic=nbp_basic)
+        outlier = np.argwhere(diff > residual_thresh)
+        n_outliers = outlier.shape[0]
+        im = ax.imshow(diff, vmin=0, vmax=10)
+        # Now we want to outline the outlier pixels with a dotted red rectangle
+        for i in range(n_outliers):
+            rect = patches.Rectangle((outlier[i, 1] - 0.5, outlier[i, 0] - 0.5), 1, 1, linewidth=1,
+                                     edgecolor='r', facecolor='none', linestyle='--')
+            ax.add_patch(rect)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    # Set row and column labels
+    for ax, col in zip(axes[0], nbp_basic.use_rounds):
+        ax.set_title(col)
+    for ax, row in zip(axes[:, 0], ['XY-shifts', 'Z-shifts', 'Residuals']):
+        ax.set_ylabel(row, rotation=90, size='large')
+    # Add row and column labels
+    fig.supxlabel('Round')
+    fig.supylabel('Diagnostic')
+    # Add global colour bar and legend
+    lines_labels = [ax.get_legend_handles_labels() for ax in fig.axes]
+    lines, labels = [sum(lol, []) for lol in zip(*lines_labels)]
+    fig.legend(lines, labels)
+    fig.subplots_adjust(right=0.8)
+    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+    fig.colorbar(im, cax=cbar_ax, label='Residual Norm')
+    # Add title
+    fig.suptitle('Diagnostic plots for round shift outlier removal', size='x-large')
+
+
+# 2
+def zyx_shift_image(nb: Notebook, round: bool = True):
+    """
+        Function to plot overlaid images of predicted shifts vs shifts to see if we classify a shift as an outlier.
+        Args:
+            nb: Notebook
+            round: Boolean indicating whether we are looking at round outlier removal, True if r, False if c
+    """
+    nbp_basic, nbp_register, nbp_register_debug = nb.basic_info, nb.register, nb.register_debug
+    use_tiles = nbp_basic.use_tiles
+
+    # Load in shift
+    if round:
+        mode = 'Round'
+        use = nbp_basic.use_rounds
+        shift_raw = nbp_register_debug.round_transform_raw[use_tiles, :, :, 3]
+        shift = nbp_register.round_transform[use_tiles, :, :, 3]
+    else:
+        mode = 'Channel'
+        use = nbp_basic.use_channels
+        shift_raw = nbp_register_debug.channel_transform_raw[use_tiles, :, :, 3]
+        shift = nbp_register.channel_transform[use_tiles, :, :, 3]
+
+    coord_label = ['Z', 'Y', 'X']
+    n_t, n_rc = shift.shape[0], shift.shape[1]
+    fig, axes = plt.subplots(nrows=3, ncols=n_rc)
+    # common axis labels
+    fig.supxlabel(mode)
+    fig.supylabel('Coordinate (Z, Y, X)')
+
+    # Set row and column labels
+    for ax, col in zip(axes[0], use):
+        ax.set_title(col)
+    for ax, row in zip(axes[:, 0], coord_label):
+        ax.set_ylabel(row, rotation=0, size='large')
+
+    # Now we will plot 3 rows of subplots and n_rc columns of subplots. Each subplot will be made up of 2 further subplots
+    # The Left subplot will be the raw shift and the right will be the regularised shift
+    # We will also outline pixels in these images that are different between raw and regularised with a dotted red rectangle
+    for elem in range(n_rc):
+        for coord in range(3):
+            ax = axes[coord, elem]
+            # remove the ticks
+            ax.set_xticks([])
+            ax.set_yticks([])
+            # Create 2 subplots within each subplot
+            gs = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=ax, wspace=0.1)
+            ax1 = plt.subplot(gs[0])
+            ax2 = plt.subplot(gs[1])
+            # Plot the raw shift in the left subplot
+            im = ax1.imshow(create_tiled_image(shift_raw[:, elem, coord], nbp_basic))
+            # Plot the regularised shift in the right subplot
+            im = ax2.imshow(create_tiled_image(shift[:, elem, coord], nbp_basic))
+            # Now we want to outline the pixels that are different between raw and regularised with a dotted red rectangle
+            diff = np.abs(shift_raw[:, elem, coord] - shift[:, elem, coord])
+            outlier = np.argwhere(diff > 0.1)
+            n_outliers = outlier.shape[0]
+            for i in range(n_outliers):
+                rect = patches.Rectangle((outlier[i, 1] - 0.5, outlier[i, 0] - 0.5), 1, 1, linewidth=1, edgecolor='r',
+                                         facecolor='none', linestyle='--')
+                # Add the rectangle to both subplots
+                ax1.add_patch(rect)
+                ax2.add_patch(rect)
+                # Remove ticks and labels from the left subplot
+                ax1.set_xticks([])
+                ax1.set_yticks([])
+                # Remove ticks and labels from the right subplot
+                ax2.set_xticks([])
+                ax2.set_yticks([])
+
+    fig.canvas.draw()
+    plt.show()
+    # Add a title
+    fig.suptitle('Diagnostic plots for {} shift outlier removal'.format(mode), size='x-large')
+    # add a global colour bar
+    fig.subplots_adjust(right=0.8)
+    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+    fig.colorbar(im, cax=cbar_ax)
+
+
+# 2
+def create_tiled_image(data, nbp_basic):
+    """
+    generate image of 1d tile data along with tile positions
+    Args:
+        data: n_tiles_use x 1 list of residuals
+        nbp_basic: basic info notebook page
+    """
+    # Initialise frequently used variables
+    use_tiles = nbp_basic.use_tiles
+    tilepos_yx = nbp_basic.tilepos_yx[nbp_basic.use_tiles]
+    n_rows = np.max(tilepos_yx[:, 0]) - np.min(tilepos_yx[:, 0]) + 1
+    n_cols = np.max(tilepos_yx[:, 1]) - np.min(tilepos_yx[:, 1]) + 1
+    tilepos_yx = tilepos_yx - np.min(tilepos_yx, axis=0)
+    diff = np.zeros((n_rows, n_cols))
+
+    for t in range(len(use_tiles)):
+        diff[tilepos_yx[t, 0], tilepos_yx[t, 1]] = data[t]
+
+    diff[diff == 0] = np.nan
+
+    return diff
 
 # 3
 # TODO: Update this so it uses icp transforms...
@@ -1415,3 +1631,210 @@ def view_shifts_and_scales(nb: Notebook, t: int, bg_on: bool = False):
                 ax[i, j].set_xlabel('Round')
     plt.suptitle('Shifts and scales for tile ' + str(t))
     plt.show()
+
+
+class ViewSubvolReg:
+    def __init__(self, nb: Notebook, t: int = None, r: int = None):
+        """
+            Class to view the subvolume registration for a given tile, round, channel.
+            Args:
+                nb: Notebook
+                t: tile
+                r: round
+        """
+        self.nb, self.t, self.r = nb, t, r
+        if self.t is None:
+            self.t = nb.basic_info.use_tiles[0]
+        if self.r is None:
+            self.r = nb.basic_info.use_rounds[0]
+        # load in shifts
+        self.shift = nb.register_debug.round_shift[self.t, self.r]
+        self.shift_corr = nb.register_debug.round_shift_corr[self.t, self.r]
+        self.position = nb.register_debug.position
+        shift_prediction_matrix = huber_regression(self.shift, self.position)
+        self.predicted_shift = np.pad(self.position, ((0, 0), (0, 1)), constant_values=1) @ shift_prediction_matrix.T
+        self.shift_residual = np.linalg.norm(self.shift - self.predicted_shift, axis=-1)
+        # load in subvolumes
+        self.subvol_base, self.subvol_target = None, None
+        self.subvol_z, self.subvol_y, self.subvol_x = None, None, None
+        self.box_z, self.box_y, self.box_x = None, None, None
+        self.load_subvols()
+        # reshape shifts
+        self.shift = self.shift.reshape((self.subvol_z, self.subvol_y, self.subvol_x, 3))
+        self.shift_corr = self.shift_corr.reshape((self.subvol_z, self.subvol_y, self.subvol_x))
+        self.position = self.position.reshape((self.subvol_z, self.subvol_y, self.subvol_x, 3)).astype(int)
+        self.predicted_shift = self.predicted_shift.reshape((self.subvol_z, self.subvol_y, self.subvol_x, 3))
+        self.shift_residual = self.shift_residual.reshape((self.subvol_z, self.subvol_y, self.subvol_x))
+        self.transform = nb.register_debug.round_transform_raw[self.t, self.r]
+        # create viewer
+        self.viewer = napari.Viewer()
+        napari.run()
+
+    def load_subvols(self):
+        """
+        Load in subvolumes for the given tile and round
+        """
+        # load in images
+        config = self.nb.get_config()['register']
+        round_registration_channel = 0
+        anchor_image = preprocessing.yxz_to_zyx(tiles_io.load_image(self.nb.file_names, self.nb.basic_info, self.nb.extract.file_type,
+                                                      self.t, self.nb.basic_info.anchor_round,
+                                                      round_registration_channel, apply_shift=False))
+        round_image = preprocessing.yxz_to_zyx(tiles_io.load_image(self.nb.file_names, self.nb.basic_info, self.nb.extract.file_type,
+                                                     self.t, self.r, round_registration_channel, apply_shift=False))
+
+        # split images into subvolumes
+        z_subvols, y_subvols, x_subvols = config['subvols']
+        z_box, y_box, x_box = config['box_size']
+        subvol_base, _ = preprocessing.split_3d_image(image=anchor_image,
+                                        z_subvolumes=z_subvols, y_subvolumes=y_subvols, x_subvolumes=x_subvols,
+                                        z_box=z_box, y_box=y_box, x_box=x_box)
+        subvol_target, _ = preprocessing.split_3d_image(image=round_image,
+                                          z_subvolumes=z_subvols, y_subvolumes=y_subvols, x_subvolumes=x_subvols,
+                                          z_box=z_box, y_box=y_box, x_box=x_box)
+        self.subvol_z, self.subvol_y, self.subvol_x = int(z_subvols), int(y_subvols), int(x_subvols)
+        self.box_z, self.box_y, self.box_x = int(z_box), int(y_box), int(x_box)
+        self.subvol_base, self.subvol_target = subvol_base, subvol_target
+
+    def view_subvol_cross_corr(self, z: int = 0, y: int = 0, x: int = 0, grid_view: bool = False):
+        """
+        View the cross correlation for a single subvolume for the given tile and round
+        Args:
+            z: z index of subvolume
+            y: y index of subvolume
+            x: x index of subvolume
+            grid_view: whether to view the images in a 2D grid, or as a 3D stack
+        """
+        # check if there are any layers in the viewer, if so, remove them
+        if len(self.viewer.layers) > 0:
+            for i in range(len(self.viewer.layers)):
+                self.viewer.layers.pop()
+        z_start, z_end = int(max(0, z - 1)), int(min(self.subvol_z, z + 1) + 1)
+        merged_subvol_target = preprocessing.merge_subvols(position=self.position[z_start:z_end, y, x].copy(),
+                                                           subvol=self.subvol_target[z_start:z_end, y, x])
+        merged_subvol_target_windowed = preprocessing.window_image(merged_subvol_target)
+        merged_subvol_base = np.zeros_like(merged_subvol_target)
+        merged_subvol_base_windowed = np.zeros_like(merged_subvol_target)
+        merged_subvol_min_z = self.position[z_start, y, x][0]
+        current_box_min_z = self.position[z, y, x][0]
+        merged_subvol_start_z = current_box_min_z - merged_subvol_min_z
+        merged_subvol_base[merged_subvol_start_z:merged_subvol_start_z + self.box_z] = (
+            self.subvol_base[z, y, x])
+        merged_subvol_base_windowed[merged_subvol_start_z:merged_subvol_start_z + self.box_z] = (
+            preprocessing.window_image(self.subvol_base[z, y, x]))
+
+        # compute cross correlation
+        im_centre = np.array(merged_subvol_base_windowed.shape) // 2
+        f_hat = fft.fftn(merged_subvol_base_windowed)
+        g_hat = fft.fftn(merged_subvol_target_windowed)
+        phase_cross = f_hat * np.conj(g_hat) / (np.abs(f_hat) * np.abs(g_hat))
+        phase_cross_ifft = fft.fftshift(np.abs(fft.ifftn(phase_cross)))
+        phase_cross_shift = -(np.unravel_index(np.argmax(phase_cross_ifft), phase_cross_ifft.shape) - im_centre)
+
+        # add images
+        y_size, x_size = merged_subvol_base.shape[1:]
+        if not grid_view:
+            self.viewer.add_image(phase_cross_ifft, name=f'Phase cross correlation. z = {z}, y = {y}, x = {x}')
+            self.viewer.add_points([-phase_cross_shift + im_centre], name='Phase cross correlation shift', size=5,
+                                   face_color='blue', symbol='cross')
+            # add overlays below this
+            translation_offset = np.array([0, 1.1 * y_size, 0])
+            self.viewer.add_image(merged_subvol_target, name=f'Target. z = {z}, y = {y}, x = {x}', colormap='green',
+                                  blending='additive', translate=translation_offset)
+            self.viewer.add_image(merged_subvol_base, name=f'Base. Shift = {phase_cross_shift}', colormap='red',
+                                  blending='additive', translate=translation_offset + phase_cross_shift)
+            # add predicted shift
+            translation_offset = np.array([0, 1.1 * y_size, 1.1 * x_size])
+            self.viewer.add_image(merged_subvol_target, name=f'Target. z = {z}, y = {y}, x = {x}', colormap='green',
+                                  blending='additive', translate=translation_offset)
+            self.viewer.add_image(merged_subvol_base, name=f'Base. Predicted Shift = '
+                                                           f'{np.rint(self.predicted_shift[z, y, x])}',
+                                  colormap='red', blending='additive',
+                                  translate=translation_offset + self.predicted_shift[z, y, x])
+        else:
+            # generate transformed image
+            new_origin = np.array([merged_subvol_min_z, self.position[z, y, x, 1], self.position[z, y, x, 2]])
+            transform = (self.transform).copy()
+            # need to adjust shift as we are changing the origin
+            transform[:, 3] += (transform[:3, :3] - np.eye(3)) @ new_origin
+            transform = preprocessing.invert_affine(transform)
+            merged_subvol_base_transformed = affine_transform(merged_subvol_base, transform, order=0)
+
+            # initialise grid
+            phase_cross_shift_yx = phase_cross_shift[1:]
+            predicted_shift_yx = self.predicted_shift[z, y, x, 1:]
+            nz = merged_subvol_target.shape[0]
+            features_z = {'z': np.arange(nz)}
+            text_z = {'string': 'Z: {z}', 'size': 8, 'color': 'white'}
+            for i in range(nz):
+                # 1. Plot cross correlation
+                translation_offset = np.array([0, 1.1 * x_size * i])
+                self.viewer.add_image(phase_cross_ifft[i], name=f'Phase cross correlation. z = {z}, y = {y}, x = {x}',
+                                      translate=translation_offset)
+                # 2. Plot base and target, with base shifted by phase_cross_shift
+                translation_offset = np.array([1.1 * y_size, 1.1 * x_size * i])
+                self.viewer.add_image(merged_subvol_target[i], name=f'Target. z = {z}, y = {y}, x = {x}',
+                                      colormap='green', blending='additive', translate=translation_offset)
+                base_i = (i - np.rint(self.shift[z, y, x, 0])).astype(int)
+                if (base_i >= 0) and (base_i < nz):
+                    self.viewer.add_image(merged_subvol_base[base_i], name=f'Base. Shift = {phase_cross_shift}',
+                                          colormap='red', blending='additive',
+                                          translate=translation_offset + phase_cross_shift_yx)
+                # 3. Plot base and target, with base shifted by predicted_shift
+                translation_offset = np.array([2.2 * y_size, 1.1 * x_size * i])
+                self.viewer.add_image(merged_subvol_target[i], name=f'Target. z = {z}, y = {y}, x = {x}',
+                                      colormap='green', blending='additive', translate=translation_offset)
+                base_i = (i - np.rint(self.predicted_shift[z, y, x, 0])).astype(int)
+                if (base_i >= 0) and (base_i < nz):
+                    self.viewer.add_image(merged_subvol_base[base_i], name=f'Base. Predicted Shift = '
+                                                                      f'{np.rint(self.predicted_shift[z, y, x])}',
+                                          colormap='red', blending='additive',
+                                          translate=translation_offset + predicted_shift_yx)
+                # 4. Plot affine transformed image
+                translation_offset = np.array([3.3 * y_size, 1.1 * x_size * i])
+                self.viewer.add_image(merged_subvol_target[i], name=f'Target. z = {z}, y = {y}, x = {x}',
+                                        colormap='green', blending='additive', translate=translation_offset)
+                self.viewer.add_image(merged_subvol_base_transformed[i], name=f'Base. Affine transformed',
+                                        colormap='red', blending='additive', translate=translation_offset)
+
+            # plot z plane numbers above each z plane
+            z_label_coords = [np.array([-20, 1.1 * x_size * i + x_size // 2]) for i in range(nz)]
+            self.viewer.add_points(z_label_coords, features=features_z, text=text_z, size=0)
+            self.viewer.window.qt_viewer.dockLayerControls.setVisible(False)
+            self.viewer.window.qt_viewer.dockLayerList.setVisible(False)
+
+        self.viewer.window.qt_viewer.dockLayerControls.setVisible(False)
+
+        napari.run()
+
+
+class ButtonSubvolWindow(QMainWindow):
+    def __init__(self, nz: int, ny: int, nx: int, active_button: list = [0, 0, 0]):
+        super().__init__()
+        # Loop through subvolumes and create a button for each
+        for z, y, x in np.ndindex(nz, ny, nx):
+            # Create a button for each subvol
+            button = QPushButton(str([z, y, x]), self)
+            # set the button to be checkable iff t in use_tiles
+            button.setCheckable(True)
+            button.setGeometry(500 * z + y * 70, x * 40, 50, 28)
+            # set active button as checked
+            if active_button == [z, y, x]:
+                button.setChecked(True)
+                self.subvol = [z, y, x]
+            # Set button color = grey when hovering over
+            # set colour of tiles in use to blue amd not in use to red
+            button.setStyleSheet("QPushButton"
+                                 "{"
+                                 "background-color : rgb(135, 206, 250);"
+                                 "}"
+                                 "QPushButton::hover"
+                                 "{"
+                                 "background-color : lightgrey;"
+                                 "}"
+                                 "QPushButton::pressed"
+                                 "{"
+                                 "background-color : white;"
+                                 "}")
+            # Finally add this button as an attribute to self
+            self.__setattr__(str([z, y, x]), button)

@@ -756,7 +756,6 @@
             "before transform converged."
         ],
         "channel_transform_initial": [
-            "",
             "[n_channels x 4 x 3 ndarray]",
             " affine transforms taking $(r_{mid}, c_{ref})$ to $(r_{mid}, c)$ for each tile $t$ and channel $c$."
         ]

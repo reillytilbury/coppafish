@@ -199,7 +199,7 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
     # Reshape the position array
     position = np.reshape(position, (z_subvolumes * y_subvolumes * x_subvolumes, 3))
 
-    return subvolume, position
+    return subvolume.astype(np.float32), position
 
 
 def compose_affine(A1, A2):

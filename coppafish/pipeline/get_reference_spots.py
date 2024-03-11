@@ -1,9 +1,4 @@
 import numpy as np
-
-try:
-    import jax.numpy as jnp
-except ImportError:
-    import numpy as jnp
 from ..spot_colors import base as spot_colors_base
 from ..call_spots import base as call_spots_base
 from .. import find_spots as fs
@@ -127,6 +122,7 @@ def get_reference_spots(
     n_spots, n_rounds, n_channels = len(local_yxz), nbp_basic.n_rounds, nbp_basic.n_channels
     spot_colours_full = np.full((n_spots, n_rounds, n_channels), invalid_value, dtype=np.int32)
     spot_colours_full[np.ix_(np.arange(n_spots), use_rounds, use_channels)] = spot_colours
+
     # save spot info to notebook
     nbp.local_yxz = local_yxz
     nbp.isolated = isolated
