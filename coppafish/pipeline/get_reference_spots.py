@@ -1,4 +1,4 @@
-import numpy as jnp
+import numpy as np
 from ..spot_colors import base as spot_colors_base
 from ..call_spots import base as call_spots_base
 from .. import find_spots as fs
@@ -101,7 +101,7 @@ def get_reference_spots(
     n_use_tiles = use_tiles.size
     nd_spot_colors_use = np.zeros((nd_local_tile.shape[0], n_use_rounds, n_use_channels), dtype=np.int32)
     bg_colours = np.zeros_like(nd_spot_colors_use)
-    transform = jnp.asarray(transform)
+    transform = np.asarray(transform)
     logging.info("Reading in spot_colors for ref_round spots")
     for t in nbp_basic.use_tiles:
         in_tile = nd_local_tile == t
@@ -110,11 +110,11 @@ def get_reference_spots(
             # this line will return invalid_value for spots outside tile bounds on particular r/c.
             if nbp_basic.use_preseq:
                 nd_spot_colors_use[in_tile], yxz_base, bg_colours[in_tile] = spot_colors_base.get_spot_colors(
-                    jnp.asarray(nd_local_yxz[in_tile]), t, transform, nbp_file, nbp_basic, nbp_extract, nbp_filter
+                    np.asarray(nd_local_yxz[in_tile]), t, transform, nbp_file, nbp_basic, nbp_extract, nbp_filter
                 )
             if not nbp_basic.use_preseq:
                 nd_spot_colors_use[in_tile], yxz_base = spot_colors_base.get_spot_colors(
-                    jnp.asarray(nd_local_yxz[in_tile]), t, transform, nbp_file, nbp_basic, nbp_extract, nbp_filter
+                    np.asarray(nd_local_yxz[in_tile]), t, transform, nbp_file, nbp_basic, nbp_extract, nbp_filter
                 )
 
     # good means all spots that were in bounds of tile on every imaging round and channel that was used.
