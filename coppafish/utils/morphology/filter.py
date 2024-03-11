@@ -200,7 +200,7 @@ def imfilter_coords(
     y_shifts, x_shifts, z_shifts = get_shifts_from_kernel(np.asarray(np.flip(kernel)))
     # manual_convolve can be memory limited, hence the for loop
     n_points = pad_coords.shape[0]
-    n_max_points = int(1_000_000 * utils.system.get_available_memory() / 107)
+    n_max_points = int(100_000 * utils.system.get_available_memory() / 107)
     n_batches = int(np.ceil(n_points / n_max_points))
     output = np.asarray([], dtype=image.dtype)
     for i in range(n_batches):
