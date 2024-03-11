@@ -711,27 +711,15 @@
             "to each imaging round/channel for every tile.",
             "Page added to *Notebook* in *pipeline/register.py*"
         ],
-        "initial_transform": [
+        "flow_dir": [
             "",
-            "(n_tiles x n_rounds x n_channels x 4 x 3) ndarray[float]",
-            " affine transforms taking $(t, r_{ref}, c_{ref})$ to $(t, r, c)$ for each tile $t$, round $r $ and channel $c$.",
-            " These are computed from start_transform and corrected via an ICP algorithm."
+            "String",
+            "Directory where the flow files are saved"
         ],
-        "transform": [
+        "icp_correction": [
             "",
-            "(n_tiles x n_rounds x n_channels x 4 x 3) ndarray[float]",
-            " affine transforms taking $(t, r_{ref}, c_{ref})$ to $(t, r, c)$ for each tile $t$, round $r $ and channel $c$.",
-            " These are computed from start_transform and corrected via an ICP algorithm."
-        ],
-        "round_transform": [
-            "",
-            "(n_tiles x n_rounds x 3 x 4) ndarray[float]",
-            " affine transforms taking $(t, r_{ref}, c_{ref})$ to $(t, r, c_{ref})$ for each tile $t$ and round $r $."
-        ],
-        "channel_transform": [
-            "",
-            "[n_channels x 3 x 4 ndarray]",
-            " affine transforms taking $(t, r_{mid}, c_{ref})$ to $(t, r_{mid}, c)$ for each tile $t$ and channel $c$."
+            "Numpy float array [n_tiles x n_rounds x n_channels x 4 x 3]",
+            "yxz affine corrections to be applied after the warp."
         ],
         "software_version": [
             "",
@@ -767,26 +755,9 @@
             "This is `False` for transforms where the *ICP* algorithm reached `config['register']['n_iter']` iterations",
             "before transform converged."
         ],
-        "round_shift": [
-            "",
-            "[n_tiles x n_rounds x (z_subvols * y_subvols * x_subvols) x 3]",
-            " Shift of sub-volumes used for the round registration. Specifically, round_shift[t, r, z, y, x] is the shift",
-            " taking sub-volume  [z, y, x] from $(t, r_{ref}, c_{ref})$ to its corresponding sub-volume in $(t, r, c_{ref})$."
-        ],
-        "round_shift_corr": [
-            "",
-            "n_tiles x n_rounds x (z_subvols * y_subvols * x_subvols)]",
-            " score of shift of sub-volumes used for the round registration. "
-        ],
-        "position": [
-            "",
-            "z_subvols * y_subvols * x_subvols x 3:",
-            "Position of each subvolume in z y x local tile coords"
-        ],
-        "round_transform_raw": [
-            "",
-            "[n_tiles x n_rounds x 3 x 4 ndarray]",
-            " affine transforms taking $(t, r_{ref}, c_{ref})$ to $(t, r, c_{ref})$ for each tile $t$ and round $r $."
+        "channel_transform_initial": [
+            "[n_channels x 4 x 3 ndarray]",
+            " affine transforms taking $(r_{mid}, c_{ref})$ to $(r_{mid}, c)$ for each tile $t$ and channel $c$."
         ]
     },
     "ref_spots": {
@@ -862,11 +833,6 @@
             "",
             "Numpy int32 array [n_spots x n_rounds x n_channels]",
             "Background colour of each spot. Calculated as the median of the channel across rounds."
-        ],
-        "in_bounds": [
-            "",
-            "Numpy boolean array [n_tiles, n_rounds, n_channels]",
-            "fraction of each tile that is in bounds"
         ],
         "software_version": [
             "",
