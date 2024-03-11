@@ -61,9 +61,7 @@ def register(
     nbp.revision_hash = system.get_git_revision_hash()
     use_tiles, use_rounds, use_channels = nbp_basic.use_tiles, nbp_basic.use_rounds, nbp_basic.use_channels
     n_tiles, n_rounds, n_channels = nbp_basic.n_tiles, nbp_basic.n_rounds, nbp_basic.n_channels
-    round_registration_channel = config["round_registration_channel"]
-    if round_registration_channel is None:
-        round_registration_channel = nbp_basic.anchor_channel
+    round_registration_channel = nbp_basic.dapi_channel
     # Initialise variables for ICP step
     if nbp_basic.is_3d:
         neighb_dist_thresh = config["neighb_dist_thresh_3d"]
@@ -243,13 +241,27 @@ def register(
         for t, c in tqdm(itertools.product(use_tiles, use_channels), desc="Blurring pre-seq images",
                          total=len(use_tiles) * len(use_channels)):
             image_preseq = tiles_io.load_image(
-                nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=nbp_basic.pre_seq_round, c=c, suffix="_raw"
+                nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=nbp_basic.pre_seq_round, c=c, suffix="_raw",
+                apply_shift=True,
             )
             image_preseq = scipy.ndimage.gaussian_filter(image_preseq, pre_seq_blur_radius)
             tiles_io.save_image(
                 nbp_file, nbp_basic, nbp_extract.file_type, image_preseq, t=t, r=nbp_basic.pre_seq_round, c=c
             )
+        for t in use_tiles:
+            image_preseq = tiles_io.load_image(
+                nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=nbp_basic.pre_seq_round, c=nbp_basic.dapi_channel,
+                suffix="_raw",
+            )
+            tiles_io.save_image(
+                nbp_file, nbp_basic, nbp_extract.file_type, image_preseq, t=t, r=nbp_basic.pre_seq_round,
+                c=nbp_basic.dapi_channel
+            )
+
         registration_data['blur'] = True
+    # Save registration data externally
+    with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
+        pickle.dump(registration_data, f)
 
     # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
     # fluorescence
@@ -258,6 +270,9 @@ def register(
         r_pre = nbp_basic.pre_seq_round
         use_rounds = nbp_basic.use_rounds
         mid_z = nbp_basic.use_z[len(nbp_basic.use_z) // 2]
+        # exclude channels 23 and 27 from bg subtraction as they are over comprensated by the bg scale due to not having
+        # very much background fluorescence
+        use_channels = nbp_basic.use_channels[:-2]
         for t, c in tqdm(
             itertools.product(use_tiles, use_channels),
             desc="Computing background scale factors",

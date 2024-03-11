@@ -6,6 +6,7 @@ import napari
 import time
 import skimage
 import warnings
+import matplotlib.pyplot as plt
 from qtpy.QtCore import Qt
 from superqt import QDoubleRangeSlider, QDoubleSlider, QRangeSlider
 from PyQt5.QtWidgets import QPushButton, QMainWindow, QSlider
@@ -27,6 +28,8 @@ from ..omp.coefs import view_score  # gives import error if call from call_spots
 from ... import call_spots
 from ... import utils
 from ...setup import Notebook
+# set matplotlib background to dark
+plt.style.use('dark_background')
 
 
 class Viewer:
@@ -196,7 +199,9 @@ class Viewer:
                     self.diagnostic_layer_ind += 1
 
         if self.diagnostic_layer_ind > 0:
-            self.image_layer_ind = slice(self.diagnostic_layer_ind)
+            self.image_layer_ind = np.arange(self.diagnostic_layer_ind)
+        else:
+            self.image_layer_ind = [0]
 
         # Add legend indicating genes plotted
         self.legend = {'fig': None, 'ax': None}
@@ -575,10 +580,11 @@ class Viewer:
         def remove_background_image(viewer):
             # Make background image visible / remove it
             if self.image_layer_ind is not None:
-                if viewer.layers[self.image_layer_ind].visible:
-                    viewer.layers[self.image_layer_ind].visible = False
-                else:
-                    viewer.layers[self.image_layer_ind].visible = True
+                for i in self.image_layer_ind:
+                    if viewer.layers[i].visible:
+                        viewer.layers[i].visible = False
+                    else:
+                        viewer.layers[i].visible = True
 
         @self.viewer.bind_key(KeyBinds.view_bleed_matrix)
         def call_to_view_bm(viewer):

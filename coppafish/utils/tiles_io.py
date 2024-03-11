@@ -297,8 +297,6 @@ def load_image(
     """
     if nbp_basic.is_3d:
         file_path = nbp_file.tile[t][r][c]
-        if r == nbp_basic.pre_seq_round:
-            suffix = "_raw"
         file_path = file_path[: file_path.index(file_type)] + suffix + file_type
     if not image_exists(file_path, file_type):
         logging.error(FileNotFoundError(f"Could not find image at {file_path} to load from"))

@@ -340,14 +340,14 @@ def get_all_coefs(
     torch.manual_seed(0)
     check_spot = torch.randint(0, n_pixels, size=(1,))[0].item()
     diff_to_int = torch.round(pixel_colors[check_spot]).to(int) - pixel_colors[check_spot]
-    if torch.abs(diff_to_int).max() == 0:
-        logging.error(
-            ValueError(
-                f"pixel_coefs should be found using normalised pixel_colors."
-                f"\nBut for pixel {check_spot}, pixel_colors given are integers indicating they are "
-                f"the raw intensities."
-            )
-        )
+    # if torch.abs(diff_to_int).max() == 0:
+    #     logging.error(
+    #         ValueError(
+    #             f"pixel_coefs should be found using normalised pixel_colors."
+    #             f"\nBut for pixel {check_spot}, pixel_colors given are integers indicating they are "
+    #             f"the raw intensities."
+    #         )
+    #     )
 
     n_genes, n_rounds, n_channels = bled_codes.shape
     if not utils.errors.check_shape(pixel_colors, [n_pixels, n_rounds, n_channels]):
