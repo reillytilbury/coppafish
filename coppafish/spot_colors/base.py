@@ -144,6 +144,7 @@ def get_spot_colors(yxz_base: np.ndarray, t: np.ndarray, transform: np.ndarray, 
     # if we are using bg colours, address that here
     if bg_scale is not None:
         bg_colours = np.repeat(spot_colors[:, -1, :][:, None, :], n_use_rounds - 1, axis=1).astype(np.float32)
+        bg_colours = np.maximum(bg_colours, 0)
         bg_colours *= bg_scale[t][np.ix_(use_rounds[:-1], use_channels)][None, :, :]
         bg_colours = bg_colours.astype(np.int32)
         spot_colors = spot_colors[:, :-1, :]
