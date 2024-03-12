@@ -213,7 +213,14 @@ def call_spots_omp(
         if spot_shape is None:
             logging.info("Computing OMP spot shape")
             nbp.shape_tile = int(t)
-            spot_yxz, spot_gene_no = omp.get_spots(pixel_coefs_t, pixel_yxz_t, config["radius_xy"], detect_radius_z)
+            spot_yxz, spot_gene_no = omp.get_spots(
+                pixel_coefs_t,
+                pixel_yxz_t,
+                config["radius_xy"],
+                detect_radius_z,
+                config["sigmoid_score_weight"],
+                config["score_threshold"],
+            )
             z_scale = nbp_basic.pixel_size_z / nbp_basic.pixel_size_xy
             spot_shape, spots_used, spot_shape_float = omp.spot_neighbourhood(
                 pixel_coefs_t,
@@ -263,10 +270,12 @@ def call_spots_omp(
             pixel_yxz_t,
             config["radius_xy"],
             detect_radius_z,
-            0,
-            spot_shape,
-            initial_pos_neighbour_thresh,
-            spot_yxzg,
+            config["sigmoid_score_weight"],
+            config["score_threshold"],
+            coef_thresh=0.0,
+            spot_shape=spot_shape,
+            spot_shape_float=spot_shape_float,
+            spot_yxzg=spot_yxzg,
         )
         del spot_yxzg
         n_spots = spot_info_t[0].shape[0]

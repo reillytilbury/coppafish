@@ -1,4 +1,3 @@
-import time
 import tqdm
 from typing import Union, List, Tuple, Optional
 import numpy as np
@@ -7,8 +6,87 @@ import numpy_indexed
 
 from .. import utils
 from .. import logging
-from ..utils.spot_images import get_spot_images, get_average_spot_image
+from ..utils import morphology
+from ..utils.spot_images import get_average_spot_image, get_spot_images
 from ..find_spots import detect_spots, get_isolated_points
+
+
+def score_omp_spots(
+    spot_shape: np.ndarray,
+    spot_shape_mean: np.ndarray,
+    pixel_yxz: np.ndarray,
+    pixel_coefs: Union[np.ndarray, csr_matrix],
+    sigmoid_weight: float,
+    spot_no: np.ndarray = None,
+) -> np.ndarray:
+    """
+    Computes score(s) for omp gene reads at `pixel_yxz[spot_no]` positions.
+
+    Args:
+        spot_shape (`(size_y x size_x x size_z) ndarray[int]`): OMP spot shape. It is a made up of only zeros and ones.
+            Ones indicate where the spot coefficient is likely to be positive.
+        spot_shape_mean (`(size_y x size_x x size_z) ndarray[float]`): OMP mean spot shape. This should range from 0
+            and 1 with the recommended, default filtering configuration.
+        pixel_yxz (`(n_pixels x 3) ndarray[int]`): all local spot positions.
+        pixel_coefs (`(n_pixels x n_genes) ndarray[float]` or csr_matrix): the gene weight assigned by OMP for each
+            pixel and gene, most will be zero so it is often kept as a `scipy` csr matrix.
+        sigmoid_weight (float): specifies the sigmoid constant. A value of 0 gives equal weighting to all coefficients,
+            whereas a value > 0 gives a stronger weighting to large coefficients.
+        spot_no (`(n_pixels_consider) ndarray[int]`): Which spots to get score for. If `None`, all scores will be found.
+
+    Returns:
+        `(n_pixels_consider x n_genes) ndarray[float]`: score for each spot in spot_no if given, otherwise all n_pixels
+            spot scores.
+    """
+    assert spot_shape.ndim == 3, "spot_shape must be three-dimensional"
+    assert np.isin(spot_shape, [-1, 0, 1]).all(), "OMP spot shape should only contain -1, 0, and 1"
+    assert spot_shape.shape == spot_shape_mean.shape, "spot_shape and spot_shape_mean should have the same shape"
+    assert np.logical_and(-1 <= spot_shape_mean, spot_shape_mean <= 1).all(), "spot_shape_mean must range -1 to 1"
+    assert sigmoid_weight >= 0, "sigmoid weighting cannot be negative"
+
+    # Step 1: Gather the required coefficients from pixel_coefs. These are the coefficients around each
+    # pixel_yxz[spot_no] position where the spot_shape is 1 (i.e. confidently expecting a positive coefficient there).
+    # If the coefficient was not computed by OMP, then it is set to zero.
+    spot_shape_shifts = np.array(morphology.filter.get_shifts_from_kernel(spot_shape), dtype=int)
+    n_shifts = spot_shape_shifts[0].shape[0]
+    message = f"OMP gene scores is being computed with {n_shifts} local coefficients."
+    if n_shifts < 25:
+        message += f" Consider reducing the shape_sign_thresh in OMP config"
+        logging.warn(message)
+    else:
+        logging.info(message)
+    n_genes = pixel_coefs.shape[1]
+    mid_spot_shape_yxz = np.array(spot_shape.shape, dtype=int) // 2
+    spot_shape_mean_consider = spot_shape_mean[tuple(mid_spot_shape_yxz[:, np.newaxis] + spot_shape_shifts)]
+    if spot_no is None:
+        pixel_yxz_consider = pixel_yxz
+    else:
+        pixel_yxz_consider = pixel_yxz[spot_no]
+    n_pixels_consider = pixel_yxz_consider.shape[0]
+    # (3 x n_shifts x n_pixels_consider) positions to consider
+    pixel_yxz_consider = np.repeat(pixel_yxz_consider.T[:, np.newaxis], n_shifts, axis=1)
+    pixel_yxz_consider += spot_shape_shifts[:, :, np.newaxis]
+    # (3 x n_shifts * n_pixels_consider)
+    pixel_yxz_consider = pixel_yxz_consider.reshape((3, -1))
+    pixel_yxz_consider_exists = np.logical_and(
+        np.logical_and(np.isin(pixel_yxz_consider[0], pixel_yxz.T[0]), np.isin(pixel_yxz_consider[1], pixel_yxz.T[1])),
+        np.isin(pixel_yxz_consider[2], pixel_yxz.T[2]),
+    )
+    pixel_coefs_consider = np.zeros((pixel_yxz_consider.shape[1], n_genes))
+    pixel_coefs_consider[pixel_yxz_consider_exists] = pixel_coefs[
+        np.where((pixel_yxz_consider[:, pixel_yxz_consider_exists] == pixel_yxz.T).all(0))
+    ]
+    del pixel_yxz_consider, pixel_yxz_consider_exists
+
+    # Step 2: Since coefficients can range from 0 to infinity, they are sigmoided individually to give values from 0 to
+    # 1 using the formula 1 / (sigmoid_weight * e^{- x} + 1) where x is a coefficient.
+    pixel_coefs_consider = 1 / (1 + sigmoid_weight * np.exp(-pixel_coefs_consider))
+    pixel_coefs_consider = pixel_coefs_consider.reshape((n_shifts, n_pixels_consider, n_genes))
+
+    # Step 3: The sigmoided coefficients are then weight-averaged with the spot shape mean and divided such that the
+    # scores range from 0 to 1.
+    pixel_coefs_consider *= spot_shape_mean_consider[:, np.newaxis, np.newaxis]
+    return pixel_coefs_consider.sum(axis=0) / spot_shape_mean_consider.sum()
 
 
 def count_spot_neighbours(
@@ -82,8 +160,8 @@ def cropped_coef_image(
 
     Args:
         pixel_yxz: `int [n_pixels x 3]`
-            ```pixel_yxz[s, :2]``` are the local yx coordinates in ```yx_pixels``` for pixel ```s```.
-            ```pixel_yxz[s, 2]``` is the local z coordinate in ```z_pixels``` for pixel ```s```.
+            `pixel_yxz[s, :2]` are the local yx coordinates in `yx_pixels` for pixel `s`.
+            `pixel_yxz[s, 2]` is the local z coordinate in `z_pixels` for pixel `s`.
         pixel_coefs: `float [n_pixels x 1]`.
             `pixel_coefs[s]` is the weighting of pixel `s` for a given gene found by the omp algorithm.
              Most are zero hence sparse form used.
@@ -140,14 +218,14 @@ def spot_neighbourhood(
         pixel_coefs: `float [n_pixels x n_genes]`.
             `pixel_coefs[s, g]` is the weighting of pixel `s` for gene `g` found by the omp algorithm.
              Most are zero hence sparse form used.
-        pixel_yxz: ```int [n_pixels x 3]```.
-            ```pixel_yxz[s, :2]``` are the local yx coordinates in ```yx_pixels``` for pixel ```s```.
-            ```pixel_yxz[s, 2]``` is the local z coordinate in ```z_pixels``` for pixel ```s```.
-        spot_yxz: ```int [n_spots x 3]```.
-            ```spot_yxz[s, :2]``` are the local yx coordinates in ```yx_pixels``` for spot ```s```.
-            ```spot_yxz[s, 2]``` is the local z coordinate in ```z_pixels``` for spot ```s```.
-        spot_gene_no: ```int [n_spots]```.
-            ```spot_gene_no[s]``` is the gene that this spot is assigned to.
+        pixel_yxz: `int [n_pixels x 3]`.
+            `pixel_yxz[s, :2]` are the local yx coordinates in `yx_pixels` for pixel `s`.
+            `pixel_yxz[s, 2]` is the local z coordinate in `z_pixels` for pixel `s`.
+        spot_yxz: `int [n_spots x 3]`.
+            `spot_yxz[s, :2]` are the local yx coordinates in `yx_pixels` for spot `s`.
+            `spot_yxz[s, 2]` is the local z coordinate in `z_pixels` for spot `s`.
+        spot_gene_no: `int [n_spots]`.
+            `spot_gene_no[s]` is the gene that this spot is assigned to.
         max_size: `int [3]`.
             max YXZ size of spot shape returned. Zeros at extremities will be cropped in `av_spot_image`.
         pos_neighbour_thresh: For spot to be used to find av_spot_image, it must have this many pixels
@@ -157,8 +235,8 @@ def spot_neighbourhood(
         isolation_dist: Spots are isolated if nearest neighbour (across all genes) is further away than this.
             Only isolated spots are used to find av_spot_image.
         z_scale: Scale factor to multiply z coordinates to put them in units of yx pixels.
-            I.e. ```z_scale = pixel_size_z / pixel_size_yx``` where both are measured in microns.
-            typically, ```z_scale > 1``` because ```z_pixels``` are larger than the ```yx_pixels```.
+            I.e. `z_scale = pixel_size_z / pixel_size_yx` where both are measured in microns.
+            typically, `z_scale > 1` because `z_pixels` are larger than the `yx_pixels`.
         mean_sign_thresh: If the mean absolute coefficient sign is less than this in a region near a spot,
             we set the expected coefficient in av_spot_image to be 0.
 
@@ -169,7 +247,6 @@ def spot_neighbourhood(
             indices of spots in `spot_yxzg` used to make av_spot_image.
         - av_spot_image_float - `float [max_size[0] x max_size[1] x max_size[2]]`
             Mean of omp coefficient sign in neighbourhood centered on spot.
-            This is before cropping and thresholding.
     """
     # TODO: Maybe provide pixel_coef_sign instead of pixel_coef as less memory or use csr_matrix.
     n_pixels, n_genes = pixel_coefs.shape
@@ -247,8 +324,11 @@ def spot_neighbourhood(
     av_spot_image[np.abs(av_spot_image) < mean_sign_thresh] = 0
     av_spot_image = np.sign(av_spot_image).astype(np.int8)
 
-    # Crop image to remove zeros at extremities
+    # Crop image and mean image by removing zeros at extremities
     # may get issue here if there is a positive sign pixel further away than negative but think unlikely.
+    av_spot_image_float = av_spot_image_float[:, :, ~np.all(av_spot_image == 0, axis=(0, 1))]
+    av_spot_image_float = av_spot_image_float[:, ~np.all(av_spot_image == 0, axis=(0, 2)), :]
+    av_spot_image_float = av_spot_image_float[~np.all(av_spot_image == 0, axis=(1, 2)), :, :]
     av_spot_image = av_spot_image[:, :, ~np.all(av_spot_image == 0, axis=(0, 1))]
     av_spot_image = av_spot_image[:, ~np.all(av_spot_image == 0, axis=(0, 2)), :]
     av_spot_image = av_spot_image[~np.all(av_spot_image == 0, axis=(1, 2)), :, :]
@@ -277,9 +357,11 @@ def get_spots(
     pixel_yxz: np.ndarray,
     radius_xy: int,
     radius_z: Optional[int],
+    sigmoid_score_weight: float,
+    spot_score_thresh: float,
     coef_thresh: float = 0,
     spot_shape: Optional[np.ndarray] = None,
-    pos_neighbour_thresh: int = 0,
+    spot_shape_float: Optional[np.ndarray] = None,
     spot_yxzg: Optional[np.ndarray] = None,
 ) -> Union[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
     """
@@ -291,40 +373,43 @@ def get_spots(
         pixel_coefs: `float [n_pixels x n_genes]`.
             `pixel_coefs[s, g]` is the weighting of pixel `s` for gene `g` found by the omp algorithm.
              Most are zero hence sparse form used.
-        pixel_yxz: ```int [n_pixels x 3]```.
-            ```pixel_yxz[s, :2]``` are the local yx coordinates in ```yx_pixels``` for pixel ```s```.
-            ```pixel_yxz[s, 2]``` is the local z coordinate in ```z_pixels``` for pixel ```s```.
+        pixel_yxz: `int [n_pixels x 3]`.
+            `pixel_yxz[s, :2]` are the local yx coordinates in `yx_pixels` for pixel `s`.
+            `pixel_yxz[s, 2]` is the local z coordinate in `z_pixels` for pixel `s`.
         radius_xy: Radius of dilation structuring element in xy plane (approximately spot radius).
         radius_z: Radius of dilation structuring element in z direction (approximately spot radius).
-            If ```None```, 2D filter is used.
+            If `None`, 2D filter is used.
+        sigmoid_score_weighting (float): how "sigmoid-y" the function is that is applied to every coefficient before a
+            weighted average is computed on the OMP gene scores. 0 means that the coefficients all have equal weighting
+            and all scores are 1.
         coef_thresh: Local maxima in `coef_image` exceeding this value are considered spots.
         spot_shape: `int [shape_size_y x shape_size_x x shape_size_z]` or `None`.
             Indicates expected sign of coefficients in neighbourhood of spot.
             1 means expected positive coefficient.
             -1 means expected negative coefficient.
             0 means unsure of expected sign so ignore.
-        pos_neighbour_thresh: Only spots with number of positive neighbours exceeding this will be kept
-            if `spot_shape` provided.
+        spot_shape_float (`(shape_size_y x shape_size_x x shape_size_z) ndarray[float]`, optional): the mean spot
+            shape, which spot_shape was found using. Default: not given.
+        spot_score_thresh (float): Only spots with a score greater than this value will be kept if `spot_shape` is
+            given.
         spot_yxzg: `float [n_spots x 4]`.
             Can provide location and gene identity of spots if already computed.
             Where spots are local maxima above `coef_thresh` in `pixel_coefs` image for each gene.
             If None, spots are determined from `pixel_coefs`.
-            ```spot_yxzg[s, :2]``` are the local yx coordinates in ```yx_pixels``` for spot ```s```.
-            ```spot_yxzg[s, 2]``` is the local z coordinate in ```z_pixels``` for spot ```s```.
-            ```spot_yxzg[s, 3]``` is the gene number of spot ```s```.
+            `spot_yxzg[s, :2]` are the local yx coordinates in `yx_pixels` for spot `s`.
+            `spot_yxzg[s, 2]` is the local z coordinate in `z_pixels` for spot `s`.
+            `spot_yxzg[s, 3]` is the gene number of spot `s`.
 
     Returns:
         - spot_yxz - `int [n_spots x 3]`
-            ```spot_yxz[s, :2]``` are the local yx coordinates in ```yx_pixels``` for spot ```s```.
-            ```spot_yxz[s, 2]``` is the local z coordinate in ```z_pixels``` for spot ```s```.
+            `spot_yxz[s, :2]` are the local yx coordinates in `yx_pixels` for spot `s`.
+            `spot_yxz[s, 2]` is the local z coordinate in `z_pixels` for spot `s`.
         - spot_gene_no - `int [n_spots]`.
-            ```spot_gene_no[s]``` is the gene that spot s is assigned to.
-        - n_pos_neighbours - `int [n_spots]` (Only if `spot_shape` given).
-            Number of positive pixels around each spot in neighbourhood given by `spot_shape==1`.
-        - n_neg_neighbours - `int [n_spots]` (Only if `spot_shape` given).
-            Number of negative pixels around each spot in neighbourhood given by `spot_shape==-1`.
+            `spot_gene_no[s]` is the gene that spot s is assigned to.
+        - `(n_spots) ndarray[float]` (Only given if `spot_shape` is not None).
+            gene score for each spot exceeding the thresholds.
     """
-    # TODO: Refactor this function to return spot positions exceeding whatever thresholds are given and their scores.
+    # TODO: Refactor this function to return spot positions exceeding whatever thresholds are given and the spot scores.
     # The actual scoring mechanism should be in another function which is given the minimal amount of information
     # needed to compute. This way the OMP scoring can also be computed for the Viewer too. Currently, the OMP Viewer
     # scoring is computed at call_spots/qual_check.py omp_spot_score.
@@ -333,7 +418,7 @@ def get_spots(
     if not utils.errors.check_shape(pixel_yxz, [n_pixels, 3]):
         logging.error(utils.errors.ShapeError("pixel_yxz", pixel_yxz.shape, (n_pixels, 3)))
 
-    if spot_shape is None:
+    if spot_shape is None or spot_shape_float is None:
         spot_info = np.zeros((0, 4), dtype=int)
     else:
         if np.sum(spot_shape == 1) == 0:
@@ -343,14 +428,14 @@ def get_spots(
                     f"neighbourhood about a spot where we expect a positive coefficient."
                 )
             )
-        if pos_neighbour_thresh < 0 or pos_neighbour_thresh >= np.sum(spot_shape > 0):
-            # Out of bounds if threshold for positive neighbours is above the maximum possible.
-            logging.error(
-                utils.errors.OutOfBoundsError(
-                    "pos_neighbour_thresh", pos_neighbour_thresh, 0, np.sum(spot_shape > 0) - 1
-                )
-            )
-        spot_info = np.zeros((0, 6), dtype=int)
+        # if pos_neighbour_thresh < 0 or pos_neighbour_thresh >= np.sum(spot_shape > 0):
+        #     # Out of bounds if threshold for positive neighbours is above the maximum possible.
+        #     logging.error(
+        #         utils.errors.OutOfBoundsError(
+        #             "pos_neighbour_thresh", pos_neighbour_thresh, 0, np.sum(spot_shape > 0) - 1
+        #         )
+        #     )
+        spot_info = np.zeros((0, 5), dtype=int)
 
     if spot_yxzg is not None:
         # check pixel coefficient is positive for random subset of 500 spots.
@@ -368,12 +453,13 @@ def get_spots(
                 )
             )
         del spots_to_check, pixel_index
-    # TODO: if 2D can do all genes together.
+    # TODO: this loop over genes can be removed with numpy magic but would require some function refactoring
     for g in tqdm.trange(n_genes, desc=f"Finding spots for all {n_genes} genes from omp_coef images"):
         logging.debug(f"Finding spots {g=} started")
         # shift nzg_pixel_yxz so min is 0 in each axis so smaller image can be formed.
         # Note size of image will be different for each gene.
         coef_image, coord_shift = cropped_coef_image(pixel_yxz, pixel_coefs[:, g])
+        image_dims = coef_image.ndim
         if coef_image is None:
             # If no non-zero coefficients, go to next gene
             continue
@@ -381,22 +467,35 @@ def get_spots(
             spot_yxz = detect_spots(coef_image, coef_thresh, radius_xy, radius_z, False)[0]
         else:
             # spot_yxz match pixel_yxz so if crop pixel_yxz need to crop spot_yxz too.
-            spot_yxz = spot_yxzg[spot_yxzg[:, 3] == g, : coef_image.ndim] - coord_shift[: coef_image.ndim]
+            spot_yxz = spot_yxzg[spot_yxzg[:, 3] == g, :image_dims] - coord_shift[:image_dims]
+        del coef_image
         if spot_yxz.shape[0] == 0:
             continue
-        if spot_shape is None:
+        if spot_shape is None or spot_shape_float is None:
             keep = np.ones(spot_yxz.shape[0], dtype=bool)
             spot_info_g = np.zeros((np.sum(keep), 4), dtype=int)
         else:
-            n_pos_neighb, n_neg_neighb = count_spot_neighbours(coef_image, spot_yxz, spot_shape)
-            keep = n_pos_neighb > pos_neighbour_thresh
-            spot_info_g = np.zeros((np.sum(keep), 6), dtype=int)
-            spot_info_g[:, 4] = n_pos_neighb[keep]
-            spot_info_g[:, 5] = n_neg_neighb[keep]
-            del n_pos_neighb, n_neg_neighb
+            # n_pos_neighb, n_neg_neighb = count_spot_neighbours(coef_image, spot_yxz, spot_shape)
+            # keep = n_pos_neighb > pos_neighbour_thresh
+            # spot_info_g = np.zeros((np.sum(keep), 6), dtype=int)
+            # spot_info_g[:, 4] = n_pos_neighb[keep]
+            # spot_info_g[:, 5] = n_neg_neighb[keep]
+            # del n_pos_neighb, n_neg_neighb
+            scores = score_omp_spots(
+                spot_shape,
+                spot_shape_float,
+                pixel_yxz,
+                pixel_coefs[:, [g]],
+                sigmoid_score_weight,
+                spot_no=np.argwhere(),  # TODO: set spot_no to select the spot_yxz positions in pixel_coefs
+                # spot_yxz + coord_shift[:image_dims],
+            ).ravel()
+            keep = scores > spot_score_thresh
+            spot_info_g = np.zeros((np.sum(keep), 5), dtype=int)
+            spot_info_g[:, 4] = scores[keep]
 
-        spot_info_g[:, : coef_image.ndim] = spot_yxz[keep]
-        del coef_image, spot_yxz
+        spot_info_g[:, :image_dims] = spot_yxz[keep]
+        del spot_yxz
         spot_info_g[:, :3] = spot_info_g[:, :3] + coord_shift  # shift spot_yxz back
         del coord_shift
         spot_info_g[:, 3] = g

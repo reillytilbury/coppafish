@@ -201,6 +201,8 @@ _options = {
         "shape_pos_neighbour_thresh": "int",
         "shape_isolation_dist": "number",
         "shape_sign_thresh": "number",
+        "sigmoid_score_weight": "number",
+        "score_threshold": "number",
     },
     "thresholds": {
         "intensity": "maybe_number",
