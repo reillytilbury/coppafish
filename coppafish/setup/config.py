@@ -161,7 +161,8 @@ _options = {
             'smooth_thresh': 'number',
             'flow_clip': 'maybe_list_number',
             # these parameters are for icp
-            'neighb_dist_thresh': 'number',
+            'neighb_dist_thresh_yx': 'number',
+            'neighb_dist_thresh_z': 'number',
             'icp_min_spots': 'int',
             'icp_max_iter': 'int'
         },

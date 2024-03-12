@@ -296,7 +296,6 @@ def run_register(nb: Notebook) -> None:
             nb.filter,
             nb.find_spots,
             config["register"],
-            np.pad(nb.basic_info.tilepos_yx, ((0, 0), (0, 1)), mode="constant", constant_values=1),
             pre_seq_blur_radius=None,
         )
         nb += nbp

@@ -99,7 +99,7 @@ def get_reference_spots(
     bg_colours = np.zeros_like(spot_colours)
     isolated = np.zeros(0, dtype=bool)
     tile = np.zeros(0, dtype=np.int16)
-    transform = jnp.asarray(icp_correction)
+    transform = np.asarray(icp_correction)
     print("Reading in spot_colors for ref_round spots")
     for t in nbp_basic.use_tiles:
         in_tile = nd_local_tile == t

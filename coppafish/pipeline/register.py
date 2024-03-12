@@ -61,7 +61,8 @@ def register(
     use_tiles, use_rounds, use_channels = nbp_basic.use_tiles, nbp_basic.use_rounds, nbp_basic.use_channels
     n_tiles, n_rounds, n_channels = nbp_basic.n_tiles, nbp_basic.n_rounds, nbp_basic.n_channels
     # Initialise variable for ICP step
-    neighb_dist_thresh = config["neighb_dist_thresh"]
+    neighb_dist_thresh_yx = config["neighb_dist_thresh_yx"]
+    neighb_dist_thresh_z = config["neighb_dist_thresh_z"]
 
     # Load in registration data from previous runs of the software
     registration_data = preprocessing.load_reg_data(nbp_file, nbp_basic)
@@ -158,7 +159,8 @@ def register(
                     icp_correction[t, r, c], n_matches[t, r, c], mse[t, r, c], converged[t, r, c] = register_base.icp(
                         yxz_base=ref_spots_t,
                         yxz_target=imaging_spots_trc,
-                        dist_thresh=neighb_dist_thresh,
+                        dist_thresh_yx=neighb_dist_thresh_yx,
+                        dist_thresh_z=neighb_dist_thresh_z,
                         start_transform=registration_data["channel_registration"]["transform"][c],
                         n_iters=config["icp_max_iter"],
                         robust=False,
