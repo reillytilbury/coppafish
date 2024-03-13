@@ -1,8 +1,9 @@
 import tqdm
-from typing import Union, List, Tuple, Optional
 import numpy as np
 from scipy.sparse import csr_matrix
 import numpy_indexed
+import numpy.typing as npt
+from typing import Union, List, Tuple, Optional
 
 from .. import utils
 from .. import logging
@@ -49,12 +50,12 @@ def score_omp_spots(
     # If the coefficient was not computed by OMP, then it is set to zero.
     spot_shape_shifts = np.array(morphology.filter.get_shifts_from_kernel(spot_shape), dtype=int)
     n_shifts = spot_shape_shifts[0].shape[0]
-    message = f"OMP gene scores is being computed with {n_shifts} local coefficients."
+    message = f"OMP gene scores is being computed with {n_shifts} local coefficients for each spot."
     if n_shifts < 25:
         message += f" Consider reducing the shape_sign_thresh in OMP config"
         logging.warn(message)
     else:
-        logging.info(message)
+        logging.debug(message)
     n_genes = pixel_coefs.shape[1]
     mid_spot_shape_yxz = np.array(spot_shape.shape, dtype=int) // 2
     spot_shape_mean_consider = spot_shape_mean[tuple(mid_spot_shape_yxz[:, np.newaxis] + spot_shape_shifts)]
@@ -68,14 +69,14 @@ def score_omp_spots(
     pixel_yxz_consider += spot_shape_shifts[:, :, np.newaxis]
     # (3 x n_shifts * n_pixels_consider)
     pixel_yxz_consider = pixel_yxz_consider.reshape((3, -1))
-    pixel_yxz_consider_exists = np.logical_and(
-        np.logical_and(np.isin(pixel_yxz_consider[0], pixel_yxz.T[0]), np.isin(pixel_yxz_consider[1], pixel_yxz.T[1])),
-        np.isin(pixel_yxz_consider[2], pixel_yxz.T[2]),
-    )
+    # Learn what pixel_yxz_consider are found in pixel_yxz/pixel_coefs so pixel_coefs_consider can be populated.
+    equal_positions = (pixel_yxz_consider[:, :, np.newaxis] == pixel_yxz.T[:, np.newaxis, :]).all(0)
+    pixel_yxz_consider_exists = equal_positions.any(1)
+    # Finds pixel indices for each pixel_yxz_consider that exists in pixel_yxz so that pixel_coefs_consider is filled
+    indices = equal_positions.nonzero()
+    del equal_positions
     pixel_coefs_consider = np.zeros((pixel_yxz_consider.shape[1], n_genes))
-    pixel_coefs_consider[pixel_yxz_consider_exists] = pixel_coefs[
-        np.where((pixel_yxz_consider[:, pixel_yxz_consider_exists] == pixel_yxz.T).all(0))
-    ]
+    pixel_coefs_consider[indices[0]] = pixel_coefs[indices[1]].toarray()
     del pixel_yxz_consider, pixel_yxz_consider_exists
 
     # Step 2: Since coefficients can range from 0 to infinity, they are sigmoided individually to give values from 0 to
@@ -406,8 +407,9 @@ def get_spots(
             `spot_yxz[s, 2]` is the local z coordinate in `z_pixels` for spot `s`.
         - spot_gene_no - `int [n_spots]`.
             `spot_gene_no[s]` is the gene that spot s is assigned to.
-        - `(n_spots) ndarray[float]` (Only given if `spot_shape` is not None).
-            gene score for each spot exceeding the thresholds.
+        - `(n_spots) ndarray[int]` (Only given if `spot_shape` is not None).
+            gene score for each spot exceeding the thresholds. The scores are between 0 and 1, so they are multiplied
+            by `np.iinfo(int).max` and rounded to the nearest integer.
     """
     # TODO: Refactor this function to return spot positions exceeding whatever thresholds are given and the spot scores.
     # The actual scoring mechanism should be in another function which is given the minimal amount of information
@@ -487,10 +489,12 @@ def get_spots(
                 pixel_yxz,
                 pixel_coefs[:, [g]],
                 sigmoid_score_weight,
-                spot_no=np.argwhere(),  # TODO: set spot_no to select the spot_yxz positions in pixel_coefs
-                # spot_yxz + coord_shift[:image_dims],
+                spot_no=np.argwhere(
+                    ((spot_yxz + coord_shift[np.newaxis, :image_dims])[None, :] == pixel_yxz[:, None]).all(2).any(1)
+                )[:, 0],
             ).ravel()
             keep = scores > spot_score_thresh
+            scores = omp_scores_float_to_int(scores)
             spot_info_g = np.zeros((np.sum(keep), 5), dtype=int)
             spot_info_g[:, 4] = scores[keep]
 
@@ -506,4 +510,16 @@ def get_spots(
     if spot_shape is None:
         return spot_info[:, :3], spot_info[:, 3]
     else:
-        return spot_info[:, :3], spot_info[:, 3], spot_info[:, 4], spot_info[:, 5]
+        return spot_info[:, :3], spot_info[:, 3], spot_info[:, 4]
+
+
+def omp_scores_float_to_int(scores: npt.NDArray[np.float_]) -> npt.NDArray[np.int16]:
+    assert (0 <= scores).all() and (scores <= 1).all(), "scores should be between 0 and 1 inclusive"
+
+    return np.round(scores * np.iinfo(np.int16).max, 0).astype(np.int16)
+
+
+def omp_scores_int_to_float(scores: npt.NDArray[np.int16]) -> npt.NDArray[np.float32]:
+    assert (0 <= scores).all() and (scores <= np.iinfo(np.int16).max).all()
+
+    return (scores / np.iinfo(np.int16).max).astype(np.float32)

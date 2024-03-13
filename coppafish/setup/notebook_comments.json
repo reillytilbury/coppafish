@@ -1006,6 +1006,12 @@
             "`local_yxz[s]` are the $yxz$ coordinates of spot $s$ found on `tile[s]`, `ref_round`, `ref_channel`.",
             "To get `global_yxz`, add `nb.stitch.tile_origin[tile[s]]`."
         ],
+        "scores": [
+            "",
+            "Numpy int16 array [n_spots]",
+            "For each spot `s`, specified by position `local_yxz[s]` at tile `tile[s]` with gene read `gene_no[s]`, ",
+            "has gene read score of `scores[s]`. Each score is between 0 and `np.iinfo(np.int16).max`."
+        ],
         "tile": [
             "",
             "Numpy int16 array [n_spots]",
@@ -1021,18 +1027,6 @@
             "",
             "Numpy int16 array [n_spots]",
             "`gene_no[s]` is the index of the gene assigned to spot $s$."
-        ],
-        "n_neighbours_pos": [
-            "",
-            "Numpy int16 array [n_spots]",
-            "Number of positive pixels around each spot in neighbourhood given by `spot_shape==1`.",
-            "Max is `sum(spot_shape==1)`."
-        ],
-        "n_neighbours_neg": [
-            "",
-            "Numpy int16 array [n_spots]",
-            "Number of negative pixels around each spot in neighbourhood given by `spot_shape==-1`.",
-            "Max is `sum(spot_shape==-1)`."
         ],
         "intensity": [
             "",

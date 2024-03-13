@@ -221,7 +221,7 @@ class view_codes(ColorPlotBase):
             page_name = 'omp'
             t = nb.omp.tile[spot_no]
             config = nb.get_config()['thresholds']
-            spot_score = omp_spot_score(nb.omp, config['score_omp_multiplier'], spot_no)
+            spot_score = omp_spot_score(nb.omp, spot_no)
         else:
             page_name = 'ref_spots'
             spot_score = nb.ref_spots.score[spot_no]
@@ -350,7 +350,7 @@ class view_spot(ColorPlotBase):
             config = nb.get_config()['thresholds']
             page_name = 'omp'
             t = nb.omp.tile[spot_no]
-            spot_score = omp_spot_score(nb.omp, config['score_omp_multiplier'], spot_no)
+            spot_score = omp_spot_score(nb.omp, spot_no)
         else:
             page_name = 'ref_spots'
             t = nb.ref_spots.tile[spot_no]

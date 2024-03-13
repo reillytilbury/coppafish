@@ -2,6 +2,7 @@ import os
 import numpy as np
 import numpy_indexed
 from scipy import sparse
+import numpy.typing as npt
 from typing import Optional
 
 try:
@@ -280,11 +281,11 @@ def call_spots_omp(
         del spot_yxzg
         n_spots = spot_info_t[0].shape[0]
         spot_info_t = np.concatenate(
-            [spot_var.reshape(n_spots, -1).astype(np.int16) for spot_var in spot_info_t], axis=1
+            [spot_var.reshape(n_spots, -1).astype(np.int16, casting="same_kind") for spot_var in spot_info_t], axis=1
         )
         spot_info_t = np.append(spot_info_t, np.ones((n_spots, 1), dtype=np.int16) * t, axis=1)
 
-        # find index of each spot in pixel array to add colors and coefs
+        # find index of each spot in pixel array to add colours and coefs
         pixel_index = numpy_indexed.indices(pixel_yxz_t, spot_info_t[:, :3])
 
         # append this tile info to all tile info
@@ -313,14 +314,16 @@ def call_spots_omp(
     spot_info = np.load(nbp_file.omp_spot_info)
     # find duplicate spots as those detected on a tile which is not tile centre they are closest to
     not_duplicate = call_spots.get_non_duplicate(
-        tile_origin, nbp_basic.use_tiles, nbp_basic.tile_centre, spot_info[:, :3], spot_info[:, 6]
+        tile_origin, nbp_basic.use_tiles, nbp_basic.tile_centre, spot_info[:, :3], spot_info[:, 5]
     )
 
     # Add spot info to notebook page
     nbp.local_yxz = spot_info[not_duplicate, :3]
-    nbp.tile = spot_info[not_duplicate, 6]
+    nbp.gene_no = spot_info[not_duplicate, 3]
+    nbp.scores = spot_info[not_duplicate, 4]
+    nbp.tile = spot_info[not_duplicate, 5]
 
-    # Get colors, background_coef and intensity of final spots.
+    # Get colours, background_coef and intensity of final spots.
     n_spots = np.sum(not_duplicate)
     invalid_value = -nbp_basic.tile_pixel_value_shift
     # Only read in used colors first for background/intensity calculation.
@@ -350,9 +353,6 @@ def call_spots_omp(
     nbp.colors = nd_spot_colors
     del nd_spot_colors_use
 
-    nbp.gene_no = spot_info[not_duplicate, 3]
-    nbp.n_neighbours_pos = spot_info[not_duplicate, 4]
-    nbp.n_neighbours_neg = spot_info[not_duplicate, 5]
     logging.debug("OMP complete")
 
     return nbp

@@ -8,11 +8,12 @@ import jax.numpy as jnp
 
 from . import base
 from .. import utils, call_spots, logging
+from ..utils import system
 from ..setup import NotebookPage
 from ..call_spots import dot_product_optimised
 
 if jax.default_backend() == "cpu":
-    os.environ["XLA_FLAGS"] = f"--xla_force_host_platform_device_count={utils.system.get_core_count()}"
+    os.environ["XLA_FLAGS"] = f"--xla_force_host_platform_device_count={system.get_core_count()}"
 
 
 def fit_coefs_single(

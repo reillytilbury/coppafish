@@ -391,7 +391,7 @@ def run_omp(nb: Notebook) -> None:
         # i.e. indices should match up.
         spot_info = np.load(nb.file_names.omp_spot_info)
         not_duplicate = call_spots_base.get_non_duplicate(
-            nb.stitch.tile_origin, nb.basic_info.use_tiles, nb.basic_info.tile_centre, spot_info[:, :3], spot_info[:, 6]
+            nb.stitch.tile_origin, nb.basic_info.use_tiles, nb.basic_info.tile_centre, spot_info[:, :3], spot_info[:, 5]
         )
         spot_coefs = sparse.load_npz(nb.file_names.omp_spot_coef)
         sparse.save_npz(nb.file_names.omp_spot_coef, spot_coefs[not_duplicate])

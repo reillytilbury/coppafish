@@ -402,7 +402,7 @@ class Viewer:
         # This updates the spots plotted to reflect score_range and intensity threshold selected by sliders,
         # method selected by button and genes selected through clicking on the legend.
         if self.method_buttons.method == "OMP":
-            score = call_spots.qual_check.omp_spot_score(self.nb.omp, self.omp_score_multiplier_slider.value())
+            score = call_spots.qual_check.omp_spot_score(self.nb.omp)
             method_ind = np.arange(self.omp_0_ind * 2, self.n_spots)
             intensity_ok = self.nb.omp.intensity > self.intensity_thresh_slider.value()
         elif self.method_buttons.method == "Anchor":
