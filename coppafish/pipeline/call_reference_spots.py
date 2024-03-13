@@ -452,13 +452,14 @@ def call_reference_spots(
     colour_norm_factor *= colour_norm_factor_update
 
     # Part 4: Estimate gene_efficiency[g, r] for each gene g and round r
+    ge_spot_no_thresh = 10
     gene_prob_ge_thresh = max(np.percentile(gene_prob_score, 75), 0.75)
     use_ge = np.zeros(n_spots, dtype=bool)
     for g in tqdm(range(n_genes), desc="Estimating gene efficiencies"):
         keep = (gene_no == g) * (gene_prob_score > gene_prob_ge_thresh)
         gene_g_colours = colours[keep]
         # Skip gene if not enough spots.
-        if len(gene_g_colours) == 0:
+        if len(gene_g_colours) < ge_spot_no_thresh:
             continue
         for r in range(n_rounds):
             expected_dye_colour = bleed_matrix[:, gene_codes[g, r]]
