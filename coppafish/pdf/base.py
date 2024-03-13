@@ -256,10 +256,7 @@ class BuildPDF:
                 for t in nb.basic_info.use_tiles:
                     target_round_image, target_channel_image = [], []
                     target_round_names, target_channel_names = [], []
-                    if nb.get_config()["register"]["round_registration_channel"] is None:
-                        round_registration_channel = nb.basic_info.anchor_channel
-                    else:
-                        round_registration_channel = nb.get_config()["register"]["round_registration_channel"]
+                    round_registration_channel = nb.basic_info.dapi_channel
                     r_mid = min([3, max(nb.basic_info.use_rounds)])
                     y_mid, x_mid, z_mid = nb.basic_info.tile_centre
                     new_origin = np.array([z_mid - 5, y_mid - 250, x_mid - 250])
