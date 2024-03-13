@@ -584,7 +584,8 @@ def channel_registration(
                 yxz_target=bead_point_clouds[i],
                 start_transform=initial_transform[i],
                 n_iters=50,
-                dist_thresh=5,
+                dist_thresh_yx=5,
+                dist_thresh_z=5,
             )
             if not converged:
                 transform[i] = np.eye(4, 3)
@@ -781,8 +782,9 @@ def get_transform(
     neighbour = neighbour.flatten()
     distances = distances.flatten()
     use = distances < 1
+    distances[~use] = 1
     n_matches = np.sum(use)
-    error = np.sqrt(np.mean(distances[use] ** 2))
+    error = np.sqrt(np.mean(distances ** 2))
     base_pad_use = yxz_base_pad[neighbour[use], :]
     target_use = yxz_target[use, :]
 
@@ -844,6 +846,11 @@ def icp(yxz_base, yxz_target, dist_thresh_yx, dist_thresh_z, start_transform, n_
     n_matches[i:] = n_matches[i] * np.ones(n_iters - i)
     error[i:] = error[i] * np.ones(n_iters - i)
     converged = i < n_iters
+
+    # if the final error is higher than the initial error, we will return the initial transform
+    if error[-1] > error[0]:
+        transform = start_transform
+        converged = False
 
     return transform, n_matches, error, converged
 
