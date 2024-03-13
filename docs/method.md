@@ -70,8 +70,9 @@ contributed to by previous genes are fitted with less importance in the next ite
 will try correct for any large outlier pixel intensities.
 
 <!-- TODO: Should expand more on the OMP gene scoring here -->
-After a pixel map of gene coefficients is found through OMP on many image pixels, the spots that are detected (see 
-[find spots](#find-spots)) are scored by how close their OMP coefficient signs match to the expected pixel shape.
+After a pixel map of gene coefficients is found through OMP on many image pixels, spots are detected as local 
+coefficient maxima. Spots are scored by a weighted average around a small local region of the spot where the spot is 
+expressed most strongly. The scoring is controlled by config parameters `shape_sign_thresh` and `sigmoid_score_weight`.
 
 Since OMP is parameter- and filter-dependent, it can be difficult to optimise. This is why [call spots](#call-spots) is 
 part of the gene calling pipeline, known for its simpler and more intuitive method.

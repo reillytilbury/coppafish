@@ -19,7 +19,7 @@ def score_omp_spots(
     pixel_coefs: Union[np.ndarray, csr_matrix],
     sigmoid_weight: float,
     spot_no: np.ndarray = None,
-) -> np.ndarray:
+) -> npt.NDArray[np.float32]:
     """
     Computes score(s) for omp gene reads at `pixel_yxz[spot_no]` positions.
 
@@ -50,7 +50,7 @@ def score_omp_spots(
     # If the coefficient was not computed by OMP, then it is set to zero.
     spot_shape_shifts = np.array(morphology.filter.get_shifts_from_kernel(spot_shape), dtype=int)
     n_shifts = spot_shape_shifts[0].shape[0]
-    message = f"OMP gene scores is being computed with {n_shifts} local coefficients for each spot."
+    message = f"OMP gene scores are being computed with {n_shifts} local coefficients for each spot."
     if n_shifts < 25:
         message += f" Consider reducing the shape_sign_thresh in OMP config"
         logging.warn(message)
@@ -70,17 +70,33 @@ def score_omp_spots(
     # (3 x n_shifts * n_pixels_consider)
     pixel_yxz_consider = pixel_yxz_consider.reshape((3, -1))
     # Learn what pixel_yxz_consider are found in pixel_yxz/pixel_coefs so pixel_coefs_consider can be populated.
-    equal_positions = (pixel_yxz_consider[:, :, np.newaxis] == pixel_yxz.T[:, np.newaxis, :]).all(0)
-    pixel_yxz_consider_exists = equal_positions.any(1)
+    # This can often be too large to compute in one go due to memory crashing, so this for loop has been added.
+    max_batch_size = max([int(utils.system.get_available_memory() * 1e9 * 0.75 / pixel_yxz.size), 1])
+    n_batches = int(np.ceil(pixel_yxz_consider.shape[1] / max_batch_size))
+    logging.debug(f"{max_batch_size=}, {n_batches=}")
+    logging.debug(f"{pixel_yxz.shape=}, {pixel_yxz_consider.shape=}")
+    pixel_yxz_consider_exists = np.zeros(0, dtype=bool)
+    indices_0 = np.zeros(0, dtype=np.int32)
+    indices_1 = np.zeros(0, dtype=np.int32)
+    for i in range(n_batches):
+        logging.debug(f"batch {i}")
+        index_start, index_end = i * max_batch_size, min([(i + 1) * max_batch_size, pixel_yxz_consider.shape[1]])
+        logging.debug(f"{index_start=}, {index_end=}")
+        equal_positions = (
+            pixel_yxz_consider[:, index_start:index_end, np.newaxis] == pixel_yxz.T[:, np.newaxis, :]
+        ).all(0)
+        pixel_yxz_consider_exists = np.append(pixel_yxz_consider_exists, equal_positions.any(1), axis=0)
+        indices_0_batch, indices_1_batch = equal_positions.nonzero()
+        indices_0 = np.append(indices_0, indices_0_batch, axis=0)
+        indices_1 = np.append(indices_1, indices_1_batch, axis=0)
+        del equal_positions, indices_0_batch, indices_1_batch
     # Finds pixel indices for each pixel_yxz_consider that exists in pixel_yxz so that pixel_coefs_consider is filled
-    indices = equal_positions.nonzero()
-    del equal_positions
     pixel_coefs_consider = np.zeros((pixel_yxz_consider.shape[1], n_genes))
     if isinstance(pixel_coefs, csr_matrix):
-        pixel_coefs_consider[indices[0]] = pixel_coefs[indices[1]].toarray()
+        pixel_coefs_consider[indices_0] = pixel_coefs[indices_1].toarray().astype(np.float32)
     else:
-        pixel_coefs_consider[indices[0]] = pixel_coefs[indices[1]]
-    del pixel_yxz_consider, pixel_yxz_consider_exists
+        pixel_coefs_consider[indices_0] = pixel_coefs[indices_1].astype(np.float32)
+    del pixel_yxz_consider, pixel_yxz_consider_exists, indices_0, indices_1
 
     # Step 2: Since coefficients can range from 0 to infinity, they are sigmoided individually to give values from 0 to
     # 1 using the formula 1 / (sigmoid_weight * e^{- x} + 1) where x is a coefficient.
@@ -414,11 +430,6 @@ def get_spots(
             gene score for each spot exceeding the thresholds. The scores are between 0 and 1, so they are multiplied
             by `np.iinfo(int).max` and rounded to the nearest integer.
     """
-    # TODO: Refactor this function to return spot positions exceeding whatever thresholds are given and the spot scores.
-    # The actual scoring mechanism should be in another function which is given the minimal amount of information
-    # needed to compute. This way the OMP scoring can also be computed for the Viewer too. Currently, the OMP Viewer
-    # scoring is computed at call_spots/qual_check.py omp_spot_score.
-
     n_pixels, n_genes = pixel_coefs.shape
     if not utils.errors.check_shape(pixel_yxz, [n_pixels, 3]):
         logging.error(utils.errors.ShapeError("pixel_yxz", pixel_yxz.shape, (n_pixels, 3)))
@@ -433,13 +444,6 @@ def get_spots(
                     f"neighbourhood about a spot where we expect a positive coefficient."
                 )
             )
-        # if pos_neighbour_thresh < 0 or pos_neighbour_thresh >= np.sum(spot_shape > 0):
-        #     # Out of bounds if threshold for positive neighbours is above the maximum possible.
-        #     logging.error(
-        #         utils.errors.OutOfBoundsError(
-        #             "pos_neighbour_thresh", pos_neighbour_thresh, 0, np.sum(spot_shape > 0) - 1
-        #         )
-        #     )
         spot_info = np.zeros((0, 5), dtype=int)
 
     if spot_yxzg is not None:
@@ -458,9 +462,8 @@ def get_spots(
                 )
             )
         del spots_to_check, pixel_index
-    # TODO: this loop over genes can be removed with numpy magic but would require some function refactoring
-    for g in tqdm.trange(n_genes, desc=f"Finding spots for all {n_genes} genes from omp_coef images"):
-        logging.debug(f"Finding spots {g=} started")
+    for g in tqdm.trange(n_genes, desc=f"Finding and scoring OMP spots for all {n_genes} genes"):
+        logging.debug(f"Finding and scoring spots {g=} started")
         # shift nzg_pixel_yxz so min is 0 in each axis so smaller image can be formed.
         # Note size of image will be different for each gene.
         coef_image, coord_shift = cropped_coef_image(pixel_yxz, pixel_coefs[:, g])
@@ -502,7 +505,7 @@ def get_spots(
         spot_info_g[:, 3] = g
         spot_info = np.append(spot_info, spot_info_g, axis=0)
         del spot_info_g, keep
-        logging.debug(f"Finding spots {g=} complete")
+        logging.debug(f"Finding and scoring spots {g=} complete")
 
     if spot_shape is None:
         return spot_info[:, :3], spot_info[:, 3]
