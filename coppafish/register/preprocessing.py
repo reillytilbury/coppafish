@@ -482,8 +482,9 @@ def apply_flow(flow: np.ndarray, points: np.ndarray, ignore_oob: bool = True) ->
         new_points: new points.
     """
     # have to subtract the flow from the points as we are applying the inverse warp
-    y_indices, x_indices, z_indices = points.T.astype(int)
-    new_points = points - (flow[:, y_indices, x_indices, z_indices].T).astype(int)
+    y_indices, x_indices, z_indices = points.T
+    new_points = points - flow[:, y_indices, x_indices, z_indices].T
+    new_points = np.round(new_points).astype(int)
     ny, nx, nz = flow.shape[1:]
     if ignore_oob:
         oob = (new_points[:, 0] < 0) | (new_points[:, 0] >= ny) | (new_points[:, 1] < 0) | (new_points[:, 1] >= nx) | \
