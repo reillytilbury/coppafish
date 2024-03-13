@@ -76,7 +76,10 @@ def score_omp_spots(
     indices = equal_positions.nonzero()
     del equal_positions
     pixel_coefs_consider = np.zeros((pixel_yxz_consider.shape[1], n_genes))
-    pixel_coefs_consider[indices[0]] = pixel_coefs[indices[1]].toarray()
+    if isinstance(pixel_coefs, csr_matrix):
+        pixel_coefs_consider[indices[0]] = pixel_coefs[indices[1]].toarray()
+    else:
+        pixel_coefs_consider[indices[0]] = pixel_coefs[indices[1]]
     del pixel_yxz_consider, pixel_yxz_consider_exists
 
     # Step 2: Since coefficients can range from 0 to infinity, they are sigmoided individually to give values from 0 to
@@ -477,12 +480,6 @@ def get_spots(
             keep = np.ones(spot_yxz.shape[0], dtype=bool)
             spot_info_g = np.zeros((np.sum(keep), 4), dtype=int)
         else:
-            # n_pos_neighb, n_neg_neighb = count_spot_neighbours(coef_image, spot_yxz, spot_shape)
-            # keep = n_pos_neighb > pos_neighbour_thresh
-            # spot_info_g = np.zeros((np.sum(keep), 6), dtype=int)
-            # spot_info_g[:, 4] = n_pos_neighb[keep]
-            # spot_info_g[:, 5] = n_neg_neighb[keep]
-            # del n_pos_neighb, n_neg_neighb
             scores = score_omp_spots(
                 spot_shape,
                 spot_shape_float,
