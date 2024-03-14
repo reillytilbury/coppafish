@@ -973,14 +973,9 @@ class RoboMinnie:
         anchor_channel = {self.anchor_channel if self.include_anchor else ''}
         dapi_channel = {self.dapi_channel if self.include_dapi else ''}
         
-        [extract]
-        file_type = .zarr
-        continuous_dapi = {self.include_dapi}
-        
         [filter]
         deconvolve = {True}
         auto_thresh_multiplier = 2
-        ;#? Should probably be 0 for robominnie multi-tile setup? Unsure tho
         num_rotations = 0
         psf_isolation_dist = 4
         psf_min_spots = 100

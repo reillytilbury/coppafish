@@ -86,7 +86,6 @@ _options = {
     "extract": {
         "file_type": "str",
         "wait_time": "int",
-        "continuous_dapi": "bool",
     },
     "filter": {
         "r_dapi": "maybe_int",

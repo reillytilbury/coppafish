@@ -417,11 +417,6 @@
             "String",
             "File type used to save tiles after extraction."
         ],
-        "continuous_dapi": [
-            "eq",
-            "Bool",
-            "Whether or not we have a dapi image in each round"
-        ],
         "software_version": [
             "eq",
             "String",

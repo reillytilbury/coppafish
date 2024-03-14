@@ -39,7 +39,6 @@ def run_extract(
     nbp.software_version = utils.system.get_software_version()
     nbp.revision_hash = utils.system.get_software_hash()
     nbp.file_type = config["file_type"]
-    nbp.continuous_dapi = config["continuous_dapi"]
 
     logging.debug("Extraction started")
 
