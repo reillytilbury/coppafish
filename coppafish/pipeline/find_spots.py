@@ -89,7 +89,7 @@ def find_spots(
     with tqdm(
         total=np.sum(uncompleted),
         postfix={"tile": t, "round": r, "channel": c},
-        desc=f"Detecting spots on filtered {nbp_extract.file_type} images",
+        desc=f"Detecting spots on filtered images",
     ) as pbar:
         # Loop over uncompleted tiles, rounds and channels
         for t, r, c in np.argwhere(uncompleted):

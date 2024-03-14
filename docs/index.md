@@ -17,7 +17,7 @@ reference.
 
 ### Prerequisites
 
-* Windows or Linux operating system.
+* Windows or Linux operating system. MacOS is not tested.
 * At least 48GB of RAM for tile sizes `58x2048x2048`.
 * Python version 3.9 or 3.10.
 
@@ -70,7 +70,7 @@ python -m pip install -r requirements-pytorch.txt
 python -m pip install -e .
 ```
 
-or for the slower, numpy-only reliant code
+or for the slower, numpy-only code
 ```console
 cd coppafish
 python -m pip install --upgrade pip
@@ -78,11 +78,26 @@ python -m pip install -r requirements.txt
 python -m pip install -e .
 ```
 
-this can be useful for people with limited disk space for large packages like jax and pytorch who do not mind 
-sacrificing computation speed.
+this can be useful for people with limited disk space for large packages like pytorch who do not mind sacrificing 
+some computation speed.
 
 If you do not wish to keep a local copy of coppafish (i.e. not interested in `git pull`ing higher coppafish versions 
 later) then remove the `-e` option. The source code can then be deleted after installing.
 
 If pytorch GPU is installed, but no cuda device is found available, then coppafish will automatically revert back to 
 CPU.
+
+## Updating
+
+Coppafish will not automatically install updates, but you will see a warning at the start of a pipeline if a new online 
+version is available.
+
+If you already have the source code downloaded, navigate inside of the `coppafish` directory, then `git pull` the 
+latest code changes. Then, follow the [install](#install) steps again, excluding the `git clone` command, while inside 
+your coppafish environment.
+
+If you do not have the source code downloaded anymore, follow all the [install](#install) again while inside your 
+coppafish environment.
+
+To verify your install, run `pip show coppafish` and check that the coppafish version now matches the latest version 
+found in our coppafish repository.
