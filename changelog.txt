@@ -23,7 +23,8 @@
  * New `invalid_auto_thresh` notebook variable in filter_debug added.
  * Optimised plotting function `remove_background` in spot_colors.
  * Docs + logo update for coppafish.
- * Removed unnecessary jax code.
+ * Removed all jax code.
+ * Removed obsolete "continuous_dapi" config variable in extract section.
 
 
 2024/03/11 Alpha Update (v0.9.4):
