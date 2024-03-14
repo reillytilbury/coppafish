@@ -2,7 +2,7 @@ from typing import Optional, Union, List
 import numpy as np
 import numpy.typing as npt
 
-from ..omp import spots
+from ..omp.scores import omp_scores_int_to_float
 from ..setup import NotebookPage, Notebook
 from .. import logging
 
@@ -48,7 +48,7 @@ def omp_spot_score(
     else:
         scores = nbp.scores[spot_no]
 
-    return spots.omp_scores_int_to_float(scores)
+    return omp_scores_int_to_float(scores)
 
 
 def get_intensity_thresh(nb: Notebook) -> float:

@@ -1,4 +1,3 @@
-import pytest
 import numpy as np
 
 from coppafish import omp
@@ -15,10 +14,10 @@ def test_score_omp_spots():
     pixel_yxz = np.zeros((n_pixels, 3), dtype=int)
     pixel_coefs = rng.rand(n_pixels, n_genes)
     sigmoid_weight = 0.25
-    scores = omp.spots.score_omp_spots(spot_shape, spot_shape_mean, pixel_yxz, pixel_coefs, sigmoid_weight)
+    scores = omp.scores.score_omp_spots(spot_shape, spot_shape_mean, pixel_yxz, pixel_coefs, sigmoid_weight)
     assert np.allclose(
         scores,
-        omp.spots.score_omp_spots(spot_shape, spot_shape_mean, pixel_yxz, pixel_coefs, sigmoid_weight, np.array([0])),
+        omp.scores.score_omp_spots(spot_shape, spot_shape_mean, pixel_yxz, pixel_coefs, sigmoid_weight, np.array([0])),
     )
     assert scores.shape == (n_pixels, n_genes), "Expected OMP scores to be shape (n_pixels, n_genes)"
     assert (scores >= 0).all() and (scores <= 1).all(), "Expected all OMP scores to be between 0 and 1 inclusive"

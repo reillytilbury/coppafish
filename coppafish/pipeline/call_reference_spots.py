@@ -431,7 +431,7 @@ def call_reference_spots(
             ) * np.isin(gene_no, my_genes)
             colours_trd = colours[keep, r, :]
             logging.info(
-                "Tile " + str(t) + " Round " + str(r) + "Dye" + str(d) + " has " + str(len(colours_trd)) + " spots."
+                "Tile " + str(t) + " Round " + str(r) + " Dye" + str(d) + " has " + str(len(colours_trd)) + " spots."
             )
             if len(colours_trd) == 0:
                 pseudo_bleed_matrix[t, r, :, d] = bleed_matrix[:, d]
