@@ -1,8 +1,6 @@
 import torch
 import numpy as np
-from scipy.sparse import csr_matrix
 import numpy.typing as npt
-from typing import Union
 
 from .. import logging
 from ..utils import morphology

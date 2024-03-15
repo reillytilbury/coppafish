@@ -1,14 +1,12 @@
 import numpy as np
-from scipy.sparse import csr_matrix
 import numpy.typing as npt
-from typing import Union
 
 from .. import logging
 from ..utils import morphology
 
 
 def score_coefficient_image(
-    coefs_image: Union[np.ndarray, csr_matrix],
+    coefs_image: np.ndarray,
     spot_shape: np.ndarray,
     spot_shape_mean: np.ndarray,
     high_coef_bias: float,
@@ -18,8 +16,8 @@ def score_coefficient_image(
     in a local area with their corresponding functioned coefficients. Effectively just a convolution.
 
     Args:
-        coefs_image (`(im_y x im_x x im_z x n_genes) ndarray[float32]` or `csr_matrix`): OMP coefficients in 3D shape.
-            Any non-computed or out of bounds coefficients will be zero.
+        coefs_image (`(im_y x im_x x im_z x n_genes) ndarray[float32]`): OMP coefficients in 3D shape. Any non-computed
+            or out of bounds coefficients will be zero.
         spot_shape (`(size_y x size_x x size_z) ndarray[int]`): OMP spot shape. It is a made up of only zeros and ones.
             Ones indicate where the spot coefficient is likely to be positive.
         spot_shape_mean (`(size_y x size_x x size_z) ndarray[float]`): OMP mean spot shape. This can range from -1 and
