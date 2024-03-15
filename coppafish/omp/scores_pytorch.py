@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 from scipy.sparse import csr_matrix
 import numpy.typing as npt
@@ -8,7 +9,7 @@ from ..utils import morphology
 
 
 def score_coefficient_image(
-    coefs_image: Union[np.ndarray, csr_matrix],
+    coefs_image: np.ndarray,
     spot_shape: np.ndarray,
     spot_shape_mean: np.ndarray,
     high_coef_bias: float,
@@ -18,8 +19,8 @@ def score_coefficient_image(
     in a local area with their corresponding functioned coefficients. Effectively just a convolution.
 
     Args:
-        coefs_image (`(im_y x im_x x im_z x n_genes) ndarray[float32]` or `csr_matrix`): OMP coefficients in 3D shape.
-            Any non-computed or out of bounds coefficients will be zero.
+        coefs_image (`(im_y x im_x x im_z x n_genes) ndarray[float32]`): OMP coefficients in a 3D grid. Can contain
+            zeros. Any non-computed or out of bounds coefficients will be zero.
         spot_shape (`(size_y x size_x x size_z) ndarray[int]`): OMP spot shape. It is a made up of only zeros and ones.
             Ones indicate where the spot coefficient is likely to be positive.
         spot_shape_mean (`(size_y x size_x x size_z) ndarray[float]`): OMP mean spot shape. This can range from -1 and
@@ -44,10 +45,16 @@ def score_coefficient_image(
     assert np.logical_and(-1 <= spot_shape_mean, spot_shape_mean <= 1).all(), "spot_shape_mean must range -1 to 1"
     assert high_coef_bias >= 0, "high_coef_bias cannot be negative"
 
+    coefs_image = torch.asarray(coefs_image, dtype=torch.float32)
+    spot_shape = torch.asarray(spot_shape, dtype=int)
+    spot_shape_mean = torch.asarray(spot_shape_mean, dtype=torch.float32)
+
     # Step 1: Get the neighbouring coefficients around each pixel where the spot shape is one (i.e. the coefficient is
     # expected to be positive).
     # (3, n_shifts)
-    spot_shape_shifts_yxz = np.array(morphology.filter.get_shifts_from_kernel(spot_shape), dtype=int)
+    spot_shape_shifts_yxz = torch.asarray(
+        np.array(morphology.filter.get_shifts_from_kernel(spot_shape)), dtype=torch.int32
+    )
     im_y, im_x, im_z = coefs_image.shape[:3]
     n_shifts = spot_shape_shifts_yxz.shape[1]
     message = f"OMP gene scores are being computed with {n_shifts} local coefficients for each spot."
@@ -56,18 +63,23 @@ def score_coefficient_image(
         logging.warn(message)
     else:
         logging.debug(message)
-    mid_spot_shape_yxz = np.array(spot_shape.shape, dtype=int) // 2
+    mid_spot_shape_yxz = torch.asarray(spot_shape.shape, dtype=torch.int32) // 2
     spot_shape_mean_consider = spot_shape_mean[tuple(mid_spot_shape_yxz[:, np.newaxis] + spot_shape_shifts_yxz)]
     # (3 x im_y x im_x x im_z)
-    pixel_yxz_consider = np.array(
-        np.meshgrid(np.arange(im_y), np.arange(im_x), np.arange(im_z), indexing="ij"), dtype=np.int32
+    pixel_yxz_consider = torch.asarray(
+        np.array(
+            torch.meshgrid(torch.arange(im_y), torch.arange(im_x), torch.arange(im_z), indexing="ij"), dtype=np.int32
+        ),
+        dtype=torch.int32,
     )
     # (3 x im_y x im_x x im_z x n_shifts) all coordinate positions to consider for each coefs_image
-    pixel_yxz_consider = pixel_yxz_consider[..., np.newaxis].repeat(n_shifts, axis=4)
+    pixel_yxz_consider = pixel_yxz_consider[..., np.newaxis].repeat(1, 1, 1, 1, n_shifts)
     pixel_yxz_consider += spot_shape_shifts_yxz[:, np.newaxis, np.newaxis, np.newaxis]
     # Pad coefs_image with zeros for pixels on the outer edges of the image
-    pad_widths = tuple([(0, spot_shape_shifts_yxz[i].max()) for i in range(3)]) + ((0, 0),)
-    coefs_image_padded = np.pad(coefs_image, pad_widths, mode="constant", constant_values=0)
+    pad_widths = (0, 0)
+    for i in range(3):
+        pad_widths += (0, spot_shape_shifts_yxz[2 - i].max())
+    coefs_image_padded = torch.nn.functional.pad(coefs_image, pad_widths, mode="constant", value=0)
     # (im_y x im_x x im_z x n_shifts x n_genes)
     coefs_image_consider = coefs_image_padded[tuple(pixel_yxz_consider)]
     del pixel_yxz_consider, coefs_image_padded
@@ -81,16 +93,4 @@ def score_coefficient_image(
     # Step 3: The functioned coefficients are then weight-averaged with the spot shape mean and divided such that the
     # scores range from 0 to 1.
     coefs_image_consider *= spot_shape_mean_consider[np.newaxis, np.newaxis, np.newaxis, :, np.newaxis]
-    return coefs_image_consider.sum(axis=3) / spot_shape_mean_consider.sum()
-
-
-def omp_scores_float_to_int(scores: npt.NDArray[np.float_]) -> npt.NDArray[np.int16]:
-    assert (0 <= scores).all() and (scores <= 1).all(), "scores should be between 0 and 1 inclusive"
-
-    return np.round(scores * np.iinfo(np.int16).max, 0).astype(np.int16)
-
-
-def omp_scores_int_to_float(scores: npt.NDArray[np.int16]) -> npt.NDArray[np.float32]:
-    assert (0 <= scores).all() and (scores <= np.iinfo(np.int16).max).all()
-
-    return (scores / np.iinfo(np.int16).max).astype(np.float32)
+    return (coefs_image_consider.sum(dim=3) / spot_shape_mean_consider.sum()).numpy()

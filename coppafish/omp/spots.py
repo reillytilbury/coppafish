@@ -4,10 +4,13 @@ from scipy.sparse import csr_matrix
 import numpy_indexed
 from typing import Union, List, Tuple, Optional
 
-from .scores import score_coefficient_image, omp_scores_float_to_int
+try:
+    from .scores_pytorch import score_coefficient_image
+except ImportError:
+    from .scores import score_coefficient_image
+from .scores import omp_scores_float_to_int
 from .. import utils
 from .. import logging
-from ..utils import indexing
 from ..utils.spot_images import get_average_spot_image, get_spot_images
 from ..find_spots import detect_spots, get_isolated_points
 
@@ -363,7 +366,9 @@ def get_spots(
                 )
             )
         del spots_to_check, pixel_index
-    for g in tqdm.trange(n_genes, desc=f"Finding{' and scoring' * (spot_shape is not None)} OMP spots for all genes"):
+    for g in tqdm.trange(
+        n_genes, desc=f"Finding{' and scoring' * (spot_shape is not None)} OMP spots for all genes", unit="gene"
+    ):
         logging.debug(f"Finding and scoring spots {g=} started")
         # shift nzg_pixel_yxz so min is 0 in each axis so smaller image can be formed.
         # Note size of image will be different for each gene.
@@ -381,21 +386,21 @@ def get_spots(
             continue
         if spot_shape is None or spot_shape_float is None:
             keep = np.ones(spot_yxz.shape[0], dtype=bool)
-            spot_info_g = np.zeros((np.sum(keep), 4), dtype=int)
+            spot_info_g = np.zeros((keep.sum(), 4), dtype=int)
         else:
             # Score every detected OMP spot.
             coef_image_scores = score_coefficient_image(
                 coef_image[..., np.newaxis], spot_shape, spot_shape_float, high_coef_bias
             )
-            spot_scores = coef_image_scores[..., 0][tuple(spot_yxz.T)]
+            spot_scores = coef_image_scores[..., 0][tuple(spot_yxz.T)].copy()
             del coef_image_scores
             keep = spot_scores > spot_score_thresh
             logging.debug(f"For gene {g}, keeping {keep.sum()} out of {keep.size} spots")
             if keep.sum() == 0:
                 logging.warn(f"Out of {keep.size} spots, gene {g} had no kept spots due to scores <{spot_score_thresh}")
                 continue
-            spot_scores = omp_scores_float_to_int(spot_scores[keep].ravel())
-            spot_info_g = np.zeros((np.sum(keep), 5), dtype=int)
+            spot_scores = omp_scores_float_to_int(spot_scores)
+            spot_info_g = np.zeros((keep.sum(), 5), dtype=int)
             spot_info_g[:, 4] = spot_scores[keep]
             del spot_scores
         del coef_image
