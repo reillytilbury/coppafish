@@ -4,10 +4,7 @@ from scipy.sparse import csr_matrix
 import numpy_indexed
 from typing import Union, List, Tuple, Optional
 
-try:
-    from .scores_pytorch import score_coefficient_image
-except ImportError:
-    from .scores import score_coefficient_image
+from .scores import score_coefficient_image
 from .scores import omp_scores_float_to_int
 from .. import utils
 from .. import logging

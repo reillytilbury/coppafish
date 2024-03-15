@@ -1,15 +1,16 @@
 import torch
 import numpy as np
 import numpy.typing as npt
+from typing import Union
 
 from .. import logging
 from ..utils import morphology
 
 
 def score_coefficient_image(
-    coefs_image: np.ndarray,
-    spot_shape: np.ndarray,
-    spot_shape_mean: np.ndarray,
+    coefs_image: Union[np.ndarray, torch.Tensor],
+    spot_shape: Union[np.ndarray, torch.Tensor],
+    spot_shape_mean: Union[np.ndarray, torch.Tensor],
     high_coef_bias: float,
 ) -> npt.NDArray[np.float32]:
     """
@@ -51,7 +52,7 @@ def score_coefficient_image(
     # expected to be positive).
     # (3, n_shifts)
     spot_shape_shifts_yxz = torch.asarray(
-        np.array(morphology.filter.get_shifts_from_kernel(spot_shape)), dtype=torch.int32
+        np.array(morphology.filter.get_shifts_from_kernel(spot_shape)), dtype=torch.int16
     )
     im_y, im_x, im_z = coefs_image.shape[:3]
     n_shifts = spot_shape_shifts_yxz.shape[1]
@@ -66,20 +67,22 @@ def score_coefficient_image(
     # (3 x im_y x im_x x im_z)
     pixel_yxz_consider = torch.asarray(
         np.array(
-            torch.meshgrid(torch.arange(im_y), torch.arange(im_x), torch.arange(im_z), indexing="ij"), dtype=np.int32
+            np.meshgrid(torch.arange(im_y), torch.arange(im_x), torch.arange(im_z), indexing="ij"), dtype=np.int16
         ),
         dtype=torch.int32,
     )
     # (3 x im_y x im_x x im_z x n_shifts) all coordinate positions to consider for each coefs_image
     pixel_yxz_consider = pixel_yxz_consider[..., np.newaxis].repeat(1, 1, 1, 1, n_shifts)
     pixel_yxz_consider += spot_shape_shifts_yxz[:, np.newaxis, np.newaxis, np.newaxis]
+    pixel_yxz_consider = tuple(pixel_yxz_consider)
     # Pad coefs_image with zeros for pixels on the outer edges of the image
     pad_widths = (0, 0)
     for i in range(3):
-        pad_widths += (0, spot_shape_shifts_yxz[2 - i].max())
-    coefs_image_padded = torch.nn.functional.pad(coefs_image, pad_widths, mode="constant", value=0)
+        pad_widths += (0, torch.abs(spot_shape_shifts_yxz[2 - i]).max())
+    coefs_image_padded = torch.nn.functional.pad(coefs_image, pad_widths, mode="constant", value=0).type(torch.float32)
     # (im_y x im_x x im_z x n_shifts x n_genes)
-    coefs_image_consider = coefs_image_padded[tuple(pixel_yxz_consider)]
+    # FIXME: pytorch likes to run out of memory at this point sometimes.
+    coefs_image_consider = coefs_image_padded[pixel_yxz_consider]
     del pixel_yxz_consider, coefs_image_padded
 
     # Step 2: Since coefficients can range from -infinity to infinity, they are functioned element-wise to give values

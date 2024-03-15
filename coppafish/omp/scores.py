@@ -58,16 +58,17 @@ def score_coefficient_image(
     spot_shape_mean_consider = spot_shape_mean[tuple(mid_spot_shape_yxz[:, np.newaxis] + spot_shape_shifts_yxz)]
     # (3 x im_y x im_x x im_z)
     pixel_yxz_consider = np.array(
-        np.meshgrid(np.arange(im_y), np.arange(im_x), np.arange(im_z), indexing="ij"), dtype=np.int32
+        np.meshgrid(np.arange(im_y), np.arange(im_x), np.arange(im_z), indexing="ij"), dtype=np.int16
     )
     # (3 x im_y x im_x x im_z x n_shifts) all coordinate positions to consider for each coefs_image
     pixel_yxz_consider = pixel_yxz_consider[..., np.newaxis].repeat(n_shifts, axis=4)
     pixel_yxz_consider += spot_shape_shifts_yxz[:, np.newaxis, np.newaxis, np.newaxis]
+    pixel_yxz_consider = tuple(pixel_yxz_consider)
     # Pad coefs_image with zeros for pixels on the outer edges of the image
-    pad_widths = tuple([(0, spot_shape_shifts_yxz[i].max()) for i in range(3)]) + ((0, 0),)
+    pad_widths = tuple([(0, np.abs(spot_shape_shifts_yxz[i]).max()) for i in range(3)]) + ((0, 0),)
     coefs_image_padded = np.pad(coefs_image, pad_widths, mode="constant", constant_values=0)
     # (im_y x im_x x im_z x n_shifts x n_genes)
-    coefs_image_consider = coefs_image_padded[tuple(pixel_yxz_consider)]
+    coefs_image_consider = coefs_image_padded[pixel_yxz_consider]
     del pixel_yxz_consider, coefs_image_padded
 
     # Step 2: Since coefficients can range from -infinity to infinity, they are functioned element-wise to give values
