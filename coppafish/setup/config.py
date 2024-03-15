@@ -151,20 +151,21 @@ _options = {
         "flip_y": "bool",
         "flip_x": "bool",
     },
-    "register": {
-        "neighb_dist_thresh_2d": "number",
-        "neighb_dist_thresh_3d": "number",
-        "subvols": "list_int",
-        "box_size": "list_int",
-        "pearson_r_thresh": "number",
-        "residual_thresh": "int",
-        "bead_radii": "maybe_list_number",
-        "icp_min_spots": "int",
-        "icp_max_iter": "int",
-        "round_registration_channel": "maybe_int",
-        "sobel": "bool",
-        "max_background_scale_cores": "maybe_int",
-    },
+    'register':
+        {   # this parameter is for channel registration
+            'bead_radii': 'maybe_list_number',
+            # these parameters are for round registration
+            'sample_factor_yx': 'int',
+            'window_radius': 'int',
+            'smooth_sigma': 'number',
+            'smooth_thresh': 'number',
+            'flow_clip': 'maybe_list_number',
+            # these parameters are for icp
+            'neighb_dist_thresh_yx': 'number',
+            'neighb_dist_thresh_z': 'number',
+            'icp_min_spots': 'int',
+            'icp_max_iter': 'int'
+        },
     "call_spots": {
         "bleed_matrix_method": "str",
         "bleed_matrix_score_thresh": "number",

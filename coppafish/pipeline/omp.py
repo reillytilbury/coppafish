@@ -3,12 +3,6 @@ import numpy as np
 import numpy_indexed
 from scipy import sparse
 from typing import Optional
-
-try:
-    import jax.numpy as jnp
-except ImportError:
-    import numpy as jnp
-
 from .. import utils
 from .. import logging
 from ..setup.notebook import NotebookPage
@@ -51,7 +45,7 @@ def call_spots_omp(
         transform: `float [n_tiles x n_rounds x n_channels x 4 x 3]`.
             `transform[t, r, c]` is the affine transform to get from tile `t`, `ref_round`, `ref_channel` to
             tile `t`, round `r`, channel `c`.
-            This is saved in the register notebook page i.e. `nb.register.transform`.
+            This is saved in the register notebook page i.e. `nb.register.icp_correction`.
         shape_tile: Tile to use to compute the expected shape of a spot in the gene coefficient images.
             Should be the tile, for which the most spots where found in the `call_reference_spots` step.
             If `None`, will be set to the centre tile.
@@ -76,9 +70,9 @@ def call_spots_omp(
                 "nbp_call_spots.bled_codes_ge don't all have an L2 norm of 1 over " "use_rounds and use_channels."
             )
         )
-    bled_codes = jnp.asarray(bled_codes)
-    transform = jnp.asarray(transform)
-    color_norm_factor = jnp.asarray(nbp_call_spots.color_norm_factor[trc_ind])
+    bled_codes = np.asarray(bled_codes)
+    transform = np.asarray(transform)
+    color_norm_factor = np.asarray(nbp_call_spots.color_norm_factor[trc_ind])
     n_genes, n_rounds_use, n_channels_use = bled_codes.shape
     dp_norm_shift = 0
 
@@ -345,13 +339,14 @@ def call_spots_omp(
         in_tile = nbp.tile == t
         if np.sum(in_tile) > 0:
             nd_spot_colors_use[in_tile] = spot_colors.get_spot_colors(
-                jnp.asarray(nbp.local_yxz[in_tile]),
-                t,
-                transform,
-                nbp_file,
-                nbp_basic,
-                nbp_extract,
-                nbp_filter,
+                yxz_base=nbp.local_yxz[in_tile],
+                t=t,
+                transform=transform,
+                bg_scale=nbp_filter.bg_scale,
+                file_type=nbp_extract.file_type,
+                nbp_file=nbp_file,
+                nbp_basic=nbp_basic,
+                return_in_bounds=True,
             )[0]
             spot_colors_norm[in_tile] = nd_spot_colors_use[in_tile] / color_norm_factor[i]
     nbp.intensity = np.asarray(call_spots.get_spot_intensity(spot_colors_norm))

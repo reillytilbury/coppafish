@@ -241,36 +241,36 @@ def run_stitch(nb: Notebook) -> None:
     # Two conditions below:
     # 1. Check if there is a big dapi_image
     # 2. Check if there is NOT a file in the path directory for the dapi image
-    if nb.file_names.big_dapi_image is not None and not os.path.isfile(nb.file_names.big_dapi_image):
-        # save stitched dapi
-        # Will load in from nd2 file if nb.filter_debug.r_dapi is None i.e. if no DAPI filtering performed.
-        utils.tiles_io.save_stitched(
-            nb.file_names.big_dapi_image,
-            nb.file_names,
-            nb.basic_info,
-            nb.extract,
-            nb.stitch.tile_origin,
-            nb.basic_info.anchor_round,
-            nb.basic_info.dapi_channel,
-            nb.filter_debug.r_dapi is None,
-            config["stitch"]["save_image_zero_thresh"],
-            config["filter"]["num_rotations"],
-        )
-
-    if nb.file_names.big_anchor_image is not None and not os.path.isfile(nb.file_names.big_anchor_image):
-        # save stitched reference round/channel
-        utils.tiles_io.save_stitched(
-            nb.file_names.big_anchor_image,
-            nb.file_names,
-            nb.basic_info,
-            nb.extract,
-            nb.stitch.tile_origin,
-            nb.basic_info.anchor_round,
-            nb.basic_info.anchor_channel,
-            False,
-            config["stitch"]["save_image_zero_thresh"],
-            config["filter"]["num_rotations"],
-        )
+    # if nb.file_names.big_dapi_image is not None and not os.path.isfile(nb.file_names.big_dapi_image):
+    #     # save stitched dapi
+    #     # Will load in from nd2 file if nb.filter_debug.r_dapi is None i.e. if no DAPI filtering performed.
+    #     utils.tiles_io.save_stitched(
+    #         nb.file_names.big_dapi_image,
+    #         nb.file_names,
+    #         nb.basic_info,
+    #         nb.extract,
+    #         nb.stitch.tile_origin,
+    #         nb.basic_info.anchor_round,
+    #         nb.basic_info.dapi_channel,
+    #         nb.filter_debug.r_dapi is None,
+    #         config["stitch"]["save_image_zero_thresh"],
+    #         config["filter"]["num_rotations"],
+    #     )
+    #
+    # if nb.file_names.big_anchor_image is not None and not os.path.isfile(nb.file_names.big_anchor_image):
+    #     # save stitched reference round/channel
+    #     utils.tiles_io.save_stitched(
+    #         nb.file_names.big_anchor_image,
+    #         nb.file_names,
+    #         nb.basic_info,
+    #         nb.extract,
+    #         nb.stitch.tile_origin,
+    #         nb.basic_info.anchor_round,
+    #         nb.basic_info.anchor_channel,
+    #         False,
+    #         config["stitch"]["save_image_zero_thresh"],
+    #         config["filter"]["num_rotations"],
+    #     )
 
 
 def run_register(nb: Notebook) -> None:
@@ -296,7 +296,6 @@ def run_register(nb: Notebook) -> None:
             nb.filter,
             nb.find_spots,
             config["register"],
-            np.pad(nb.basic_info.tilepos_yx, ((0, 0), (0, 1)), mode="constant", constant_values=1),
             pre_seq_blur_radius=None,
         )
         nb += nbp
@@ -358,7 +357,7 @@ def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None
             nb.extract,
             nb.filter,
             nb.stitch.tile_origin,
-            nb.register.transform,
+            nb.register.icp_correction,
         )
         nb += nbp  # save to Notebook with gene_no, score, score_diff, intensity = None.
         # These will be added in call_reference_spots
@@ -373,7 +372,7 @@ def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None
             nb.ref_spots,
             nb.extract,
             nb.filter,
-            transform=nb.register.transform,
+            transform=nb.register.icp_correction,
             overwrite_ref_spots=overwrite_ref_spots,
         )
         nb += nbp
@@ -406,7 +405,7 @@ def run_omp(nb: Notebook) -> None:
             nb.filter,
             nb.call_spots,
             nb.stitch.tile_origin,
-            nb.register.transform,
+            nb.register.icp_correction,
             tile_most_spots,
         )
         nb += nbp
