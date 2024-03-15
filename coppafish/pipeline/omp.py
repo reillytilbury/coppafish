@@ -2,7 +2,6 @@ import os
 import numpy as np
 import numpy_indexed
 from scipy import sparse
-import numpy.typing as npt
 from typing import Optional
 
 try:
