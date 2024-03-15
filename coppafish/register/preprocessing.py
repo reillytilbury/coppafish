@@ -467,7 +467,7 @@ def flow_zyx_to_yxz(flow_zyx: np.ndarray) -> np.ndarray:
     return flow_yxz
 
 
-def apply_flow(flow: np.ndarray, points: np.ndarray, ignore_oob: bool = True) -> np.ndarray:
+def apply_flow(flow: np.ndarray, points: np.ndarray, ignore_oob: bool = True, round_to_int: bool = True) -> np.ndarray:
     """
     Apply a flow to a set of points. Note that this is applying forward warping, meaning that the points are moved to
     their location in the warp array.
@@ -475,7 +475,7 @@ def apply_flow(flow: np.ndarray, points: np.ndarray, ignore_oob: bool = True) ->
     Args:
         flow (np.ndarray): flow to apply. (3 x ny x nx x nz). In our case, this flow will always be the inverse flow,
         so we need to apply the negative of the flow to the points.
-        points: points to apply the warp to. (n_points x 3 in yxz coords)
+        points: integer points to apply the warp to. (n_points x 3 in yxz coords)
         ignore_oob: remove points that go out of bounds. Default: True.
 
     Returns:
@@ -484,7 +484,8 @@ def apply_flow(flow: np.ndarray, points: np.ndarray, ignore_oob: bool = True) ->
     # have to subtract the flow from the points as we are applying the inverse warp
     y_indices, x_indices, z_indices = points.T
     new_points = points - flow[:, y_indices, x_indices, z_indices].T
-    new_points = np.round(new_points).astype(int)
+    if round_to_int:
+        new_points = np.round(new_points).astype(int)
     ny, nx, nz = flow.shape[1:]
     if ignore_oob:
         oob = (new_points[:, 0] < 0) | (new_points[:, 0] >= ny) | (new_points[:, 1] < 0) | (new_points[:, 1] >= nx) | \

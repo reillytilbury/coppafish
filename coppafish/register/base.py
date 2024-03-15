@@ -847,11 +847,6 @@ def icp(yxz_base, yxz_target, dist_thresh_yx, dist_thresh_z, start_transform, n_
     error[i:] = error[i] * np.ones(n_iters - i)
     converged = i < n_iters
 
-    # if the final error is higher than the initial error, we will return the initial transform
-    if error[-1] > error[0]:
-        transform = start_transform
-        converged = False
-
     return transform, n_matches, error, converged
 
 
