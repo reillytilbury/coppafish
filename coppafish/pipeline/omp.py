@@ -219,7 +219,7 @@ def call_spots_omp(
                 pixel_yxz_t,
                 config["radius_xy"],
                 detect_radius_z,
-                config["sigmoid_score_weight"],
+                config["high_coef_bias"],
                 config["score_threshold"],
             )
             z_scale = nbp_basic.pixel_size_z / nbp_basic.pixel_size_xy
@@ -271,7 +271,7 @@ def call_spots_omp(
             pixel_yxz_t,
             config["radius_xy"],
             detect_radius_z,
-            config["sigmoid_score_weight"],
+            config["high_coef_bias"],
             config["score_threshold"],
             coef_thresh=0.0,
             spot_shape=spot_shape,

@@ -4,9 +4,10 @@ from scipy.sparse import csr_matrix
 import numpy_indexed
 from typing import Union, List, Tuple, Optional
 
-from .scores import score_omp_spots, omp_scores_float_to_int
+from .scores import score_coefficient_image, omp_scores_float_to_int
 from .. import utils
 from .. import logging
+from ..utils import indexing
 from ..utils.spot_images import get_average_spot_image, get_spot_images
 from ..find_spots import detect_spots, get_isolated_points
 
@@ -279,7 +280,7 @@ def get_spots(
     pixel_yxz: np.ndarray,
     radius_xy: int,
     radius_z: Optional[int],
-    sigmoid_score_weight: float,
+    high_coef_bias: float,
     spot_score_thresh: float,
     coef_thresh: float = 0,
     spot_shape: Optional[np.ndarray] = None,
@@ -301,9 +302,7 @@ def get_spots(
         radius_xy: Radius of dilation structuring element in xy plane (approximately spot radius).
         radius_z: Radius of dilation structuring element in z direction (approximately spot radius).
             If `None`, 2D filter is used.
-        sigmoid_score_weighting (float): how "sigmoid-y" the function is that is applied to every coefficient before a
-            weighted average is computed on the OMP gene scores. 0 means that the coefficients all have equal weighting
-            and all scores are 1.
+        high_coef_bias (float): how much emphasis to put on large coefficients in the OMP spot scoring.
         coef_thresh: Local maxima in `coef_image` exceeding this value are considered spots.
         spot_shape: `int [shape_size_y x shape_size_x x shape_size_z]` or `None`.
             Indicates expected sign of coefficients in neighbourhood of spot.
@@ -364,7 +363,7 @@ def get_spots(
                 )
             )
         del spots_to_check, pixel_index
-    for g in tqdm.trange(n_genes, desc=f"Finding and scoring OMP spots for all {n_genes} genes"):
+    for g in tqdm.trange(n_genes, desc=f"Finding{' and scoring' * (spot_shape is not None)} OMP spots for all genes"):
         logging.debug(f"Finding and scoring spots {g=} started")
         # shift nzg_pixel_yxz so min is 0 in each axis so smaller image can be formed.
         # Note size of image will be different for each gene.
@@ -378,31 +377,31 @@ def get_spots(
         else:
             # spot_yxz match pixel_yxz so if crop pixel_yxz need to crop spot_yxz too.
             spot_yxz = spot_yxzg[spot_yxzg[:, 3] == g, :image_dims] - coord_shift[:image_dims]
-        del coef_image
         if spot_yxz.shape[0] == 0:
             continue
         if spot_shape is None or spot_shape_float is None:
             keep = np.ones(spot_yxz.shape[0], dtype=bool)
             spot_info_g = np.zeros((np.sum(keep), 4), dtype=int)
         else:
-            scores = score_omp_spots(
-                spot_shape,
-                spot_shape_float,
-                pixel_yxz,
-                pixel_coefs[:, [g]],
-                sigmoid_score_weight,
-                spot_no=np.argwhere(
-                    ((spot_yxz + coord_shift[np.newaxis, :image_dims])[None, :] == pixel_yxz[:, None]).all(2).any(1)
-                )[:, 0],
-            ).ravel()
-            keep = scores > spot_score_thresh
-            scores = omp_scores_float_to_int(scores)
+            # Score every detected OMP spot.
+            coef_image_scores = score_coefficient_image(
+                coef_image[..., np.newaxis], spot_shape, spot_shape_float, high_coef_bias
+            )
+            spot_scores = coef_image_scores[..., 0][tuple(spot_yxz.T)]
+            del coef_image_scores
+            keep = spot_scores > spot_score_thresh
+            logging.debug(f"For gene {g}, keeping {keep.sum()} out of {keep.size} spots")
+            if keep.sum() == 0:
+                logging.warn(f"Out of {keep.size} spots, gene {g} had no kept spots due to scores <{spot_score_thresh}")
+                continue
+            spot_scores = omp_scores_float_to_int(spot_scores[keep].ravel())
             spot_info_g = np.zeros((np.sum(keep), 5), dtype=int)
-            spot_info_g[:, 4] = scores[keep]
-
+            spot_info_g[:, 4] = spot_scores[keep]
+            del spot_scores
+        del coef_image
         spot_info_g[:, :image_dims] = spot_yxz[keep]
         del spot_yxz
-        spot_info_g[:, :3] = spot_info_g[:, :3] + coord_shift  # shift spot_yxz back
+        spot_info_g[:, :3] = spot_info_g[:, :image_dims] + coord_shift[np.newaxis, :image_dims]  # shift spot_yxz back
         del coord_shift
         spot_info_g[:, 3] = g
         spot_info = np.append(spot_info, spot_info_g, axis=0)
