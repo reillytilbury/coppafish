@@ -74,7 +74,7 @@ After a pixel map of gene coefficients is found through OMP on many image pixels
 coefficient maxima. Spots are scored by a weighted average around a small local region of the spot where the spot is 
 expressed most strongly. The scoring is controlled by config parameters `shape_sign_thresh` and `sigmoid_score_weight`.
 
-Since OMP is parameter- and filter-dependent, it can be difficult to optimise. This is why [call spots](#call-spots) is 
+Since OMP is sensitive to many steps before, it can be difficult to optimise. This is why [call spots](#call-spots) is 
 part of the gene calling pipeline, known for its simpler and more intuitive method.
 
 [^1]:
