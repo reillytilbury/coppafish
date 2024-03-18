@@ -10,7 +10,7 @@
 
 * [Homepage](https://reillytilbury.github.io/coppafish/)
     * [Installation](https://reillytilbury.github.io/coppafish/#installation)
-    * [Installation](https://reillytilbury.github.io/coppafish/#updating)
+    * [Updating](https://reillytilbury.github.io/coppafish/#updating)
 * [Basic usage](https://reillytilbury.github.io/coppafish/basic_usage/)
     * [Input data](https://reillytilbury.github.io/coppafish/basic_usage/#input-data)
         * [Data format](https://reillytilbury.github.io/coppafish/basic_usage/#numpy)
