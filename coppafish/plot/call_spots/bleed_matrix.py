@@ -108,11 +108,6 @@ class view_bled_codes(ColorPlotBase):
         for i in range(self.n_images):
             # change image to different normalisation and change clim
             self.im[i].set_data(self.im_data[i] * self.color_norm[i] if self.method == 'raw' else self.im_data[i])
-            [p.remove() for p in reversed(self.ax[i].patches)]  # remove current rectangles
-            for j in range(len(intense_gene_cr[0])):
-                rectangle = plt.Rectangle((intense_gene_cr[1][j] - 0.5, intense_gene_cr[0][j] - 0.5), 1, 1,
-                                          fill=False, ec="g", linestyle=':', lw=2)
-                self.ax[i].add_patch(rectangle)
         self.update_title()
         self.im[-1].axes.figure.canvas.draw()
 
