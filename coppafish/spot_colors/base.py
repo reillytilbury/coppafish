@@ -140,11 +140,9 @@ def get_spot_colors(
                 transform_rc = transforms[t, use_rounds[r], use_channels[c]]
                 pbar.set_postfix({"round": use_rounds[r], "channel": use_channels[c]})
                 if transform_rc[0, 0] == 0:
-                    logging.error(
-                        ValueError(
-                            f"Transform for tile {t}, round {use_rounds[r]}, channel {use_channels[c]} is zero:"
-                            f"\n{transform_rc}"
-                        )
+                    raise ValueError(
+                        f"Transform for tile {t}, round {use_rounds[r]}, channel {use_channels[c]} is zero:"
+                        f"\n{transform_rc}"
                     )
                 yxz_transform, in_range = apply_transform(yxz_base, transform_rc, tile_sz)
                 yxz_transform = np.asarray(yxz_transform)
@@ -174,18 +172,14 @@ def get_spot_colors(
     colours_valid = (spot_colors > -nbp_basic.tile_pixel_value_shift).all(axis=(1, 2))
     if use_bg:
         with tqdm(total=n_use_channels, disable=no_verbose) as pbar:
-            pbar.set_description(
-                f"Reading {n_spots} background spot_colors, tile {t} from {nbp_extract.file_type} files"
-            )
+            pbar.set_description(f"Reading {n_spots} background colours from tile {t} {nbp_extract.file_type} files")
             for c in range(n_use_channels):
                 transform_rc = transforms[t, nbp_basic.pre_seq_round, use_channels[c]]
                 pbar.set_postfix({"round": use_rounds[r], "channel": use_channels[c]})
                 if transform_rc[0, 0] == 0:
-                    logging.error(
-                        ValueError(
-                            f"Transform for tile {t}, round {nbp_basic.pre_seq_round}, channel {use_channels[c]} is zero:"
-                            f"\n{transform_rc}"
-                        )
+                    raise ValueError(
+                        f"Transform for tile {t}, round {nbp_basic.pre_seq_round}, channel {use_channels[c]} is zero:"
+                        f"\n{transform_rc}"
                     )
                 yxz_transform, in_range = apply_transform(yxz_base, transform_rc, tile_sz)
                 yxz_transform = yxz_transform[in_range]
