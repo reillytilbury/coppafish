@@ -23,3 +23,38 @@ def test_score_coefficient_image():
         omp.scores.score_coefficient_image(coefs_image, spot_shape, spot_shape_mean, high_coef_bias),
         coefs_image / (spot_shape_mean[spot_shape == 1].sum() * (coefs_image + high_coef_bias)),
     )
+
+    n_genes = 21
+    coefs_image = np.zeros((3, 3, 1), dtype=np.float32)
+    coefs_image[0, 1, 0] = 1
+    coefs_image[1, 0, 0] = 1
+    coefs_image[1, 1, 0] = 1
+    coefs_image[1, 2, 0] = 1
+    coefs_image[2, 1, 0] = 1
+    # Create a "plus-sign" spot shape with a centre mean of 1
+    spot_shape = np.zeros((3, 3, 1), dtype=int)
+    spot_shape[0, 1, 0] = 1
+    spot_shape[1, 0, 0] = 1
+    spot_shape[1, 2, 0] = 1
+    spot_shape[2, 1, 0] = 1
+    spot_shape[1, 1, 0] = 1
+    spot_shape_mean = np.zeros((3, 3, 1), dtype=np.float32)
+    spot_shape_mean[spot_shape == 1] = 0.5
+    spot_shape_mean[1, 1, 0] = 1
+    scores = omp.scores.score_coefficient_image(
+        coefs_image[..., np.newaxis].repeat(n_genes, axis=3), spot_shape, spot_shape_mean, 0.25
+    )
+    expected_scores = np.zeros_like(coefs_image, dtype=np.float32)
+    expected_scores[0, 0, 0] = 0.8
+    expected_scores[2, 0, 0] = 0.8
+    expected_scores[0, 2, 0] = 0.8
+    expected_scores[2, 2, 0] = 0.8
+    expected_scores[1, 0, 0] = 1.2
+    expected_scores[0, 1, 0] = 1.2
+    expected_scores[2, 1, 0] = 1.2
+    expected_scores[1, 2, 0] = 1.2
+    expected_scores[1, 1, 0] = 2.4
+    expected_scores /= spot_shape_mean.sum()
+    expected_scores = expected_scores[..., np.newaxis].repeat(n_genes, axis=3)
+    assert scores.shape == expected_scores.shape
+    assert np.allclose(scores, expected_scores)

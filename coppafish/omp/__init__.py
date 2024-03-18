@@ -15,7 +15,3 @@ except ImportError:
             from .coefs_pytorch import get_pixel_coefs_yxz
     except ImportError:
         from .coefs import get_pixel_coefs_yxz
-try:
-    from . import scores_pytorch
-except ImportError:
-    pass

@@ -4,8 +4,7 @@ from scipy.sparse import csr_matrix
 import numpy_indexed
 from typing import Union, List, Tuple, Optional
 
-from .scores import score_coefficient_image
-from .scores import omp_scores_float_to_int
+from .scores import score_coefficient_image, omp_scores_float_to_int
 from .. import utils
 from .. import logging
 from ..utils.spot_images import get_average_spot_image, get_spot_images
@@ -259,11 +258,6 @@ def spot_neighbourhood(
     if np.sum(av_spot_image == 1) == 0:
         logging.warn(
             f"In av_spot_image, no pixels have a value of 1.\n"
-            f"Maybe mean_sign_thresh = {mean_sign_thresh} is too high."
-        )
-    if np.sum(av_spot_image == -1) == 0:
-        logging.warn(
-            f"In av_spot_image, no pixels have a value of -1.\n"
             f"Maybe mean_sign_thresh = {mean_sign_thresh} is too high."
         )
     if np.sum(av_spot_image == 0) == 0:
