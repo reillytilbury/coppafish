@@ -180,6 +180,9 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
     y_unit = (y_image - y_box) // (y_subvolumes - 1)
     x_unit = (x_image - x_box) // (x_subvolumes - 1)
 
+    assert (y_image - y_box) % (y_subvolumes - 1) == 0, "y_box and y_subvolumes do not match"
+    assert (x_image - x_box) % (x_subvolumes - 1) == 0, "x_box and x_subvolumes do not match"
+
     # Create an array to store the subvolumes in
     subvolume = np.zeros((z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box, x_box))
 

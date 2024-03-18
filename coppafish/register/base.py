@@ -300,7 +300,7 @@ def optical_flow_register(target: np.ndarray, base: np.ndarray, sample_factor_yx
     flow = optical_flow_single(base=base, target=target, window_radius=window_radius, clip_val=clip_val,
                                chunks_yx=4, n_cores=16, loc=os.path.join(output_dir, 'raw', file_name))
     # compute the correlation between the base and target images within a small window of each pixel
-    correlation = flow_correlation(base=base, target=target, flow=flow, win_size=np.array([6, 6, 2]),
+    correlation, _ = flow_correlation(base=base, target=target, flow=flow, win_size=np.array([6, 6, 2]),
                                    loc=os.path.join(output_dir, 'corr', file_name))
     # smooth the flow
     interpolate_flow(flow, correlation, threshold=smooth_threshold, sigma=smooth_sigma,
@@ -308,7 +308,7 @@ def optical_flow_register(target: np.ndarray, base: np.ndarray, sample_factor_yx
 
 
 def optical_flow_single(base: np.ndarray, target: np.ndarray, window_radius: int = 5,
-                        clip_val: np.ndarray = np.ndarray([10, 10, 15]), upsample_factor_yx: int = 4,
+                        clip_val: np.ndarray = np.array([10, 10, 15]), upsample_factor_yx: int = 4,
                         chunks_yx: int = 4, n_cores: int = 16, loc: str = '') -> np.ndarray:
     """
     Function to carry out optical flow registration on 2 3D images.
@@ -331,8 +331,13 @@ def optical_flow_single(base: np.ndarray, target: np.ndarray, window_radius: int
         flow[:2] = flow[:2] / upsample_factor_yx
         return flow
     t_start = time.time()
+    # start by ensuring images are float32
+    base = base.astype(np.float32)
+    target = target.astype(np.float32)
     ny, nx, nz = target.shape
     yx_sub = int((ny / chunks_yx) * 1.25)
+    while (ny-yx_sub) % (chunks_yx-1) != 0 or yx_sub % 2 != 0:
+        yx_sub += 1
     target_sub, pos = preprocessing.split_3d_image(image=target,
                                                    z_subvolumes=1, y_subvolumes=chunks_yx, x_subvolumes=chunks_yx,
                                                    z_box=nz, y_box=yx_sub, x_box=yx_sub)
@@ -433,7 +438,7 @@ def flow_correlation(base: np.ndarray, target: np.ndarray, flow: np.ndarray, win
         np.save(loc, correlation_up)
     t_end = time.time()
     print("Computing correlation took " + str(t_end - t_start) + " seconds")
-    return correlation
+    return correlation, correlation_up
 
 
 def interpolate_flow(flow: np.ndarray, correlation: np.ndarray, threshold: float = 0.95, sigma: float = 10,
@@ -451,7 +456,7 @@ def interpolate_flow(flow: np.ndarray, correlation: np.ndarray, threshold: float
     if os.path.exists(loc):
         return
     time_start = time.time()
-    mask = correlation > np.quantile(correlation, threshold)
+    mask = correlation >= np.quantile(correlation, threshold)
     flow_indicator = mask.astype(np.float32)
     # smooth the flow indicator
     flow_indicator_smooth = gaussian_filter(flow_indicator, sigma, truncate=4)
@@ -469,6 +474,7 @@ def interpolate_flow(flow: np.ndarray, correlation: np.ndarray, threshold: float
         np.save(loc, flow)
     time_end = time.time()
     print("Interpolating flow took " + str(time_end - time_start) + " seconds")
+    return flow
 
 
 def upsample_yx(im: np.ndarray, factor: float = 4, order: int = 1) -> np.ndarray:
