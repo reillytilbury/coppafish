@@ -5,6 +5,7 @@ import numpy.typing as npt
 from .. import logging
 
 
+# TODO: Optimise this function with pytorch
 def score_coefficient_image(
     coefs_image: np.ndarray,
     spot_shape: np.ndarray,
