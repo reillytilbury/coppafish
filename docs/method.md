@@ -31,7 +31,7 @@ filter (which is just a 2D top hat kernel) of size `r_dapi` if it is set manuall
 default, this is not applied.
 
 After filtering is applied, the images are scaled by a computed scale factor and then saved in `uint16` format again. 
-By default, only the Wiener deconvolving is applied as this is expected to be near optimal.
+By default, only the Wiener deconvolve is applied as this is expected to be near optimal.
 
 ## Find spots
 
