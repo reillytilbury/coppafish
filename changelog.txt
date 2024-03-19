@@ -22,6 +22,8 @@
  * Removed redundant max_background_scale_cores config variable in register.
  * New `invalid_auto_thresh` notebook variable in filter_debug added.
  * Optimised plotting function `remove_background` in spot_colors.
+ * New support to safely move output and tile directories.
+ * Shape of OMP colours in notebook changed.
  * Docs + logo update for coppafish.
  * Removed all jax code.
  * Removed obsolete "continuous_dapi" config variable in extract section.

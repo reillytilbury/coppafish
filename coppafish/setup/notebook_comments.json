@@ -205,12 +205,12 @@
         "tile_dir": [
             "eq",
             "Directory",
-            "Where tile files are saved, from both extract and filter sections of the pipeline"
+            "Where filtered image files are saved, from both extract and filter sections of the pipeline"
         ],
         "tile_unfiltered_dir": [
             "eq",
             "Directory",
-            "Where extract, unfiltered tile files are saved"
+            "Where extract, unfiltered image files are saved"
         ],
         "round": [
             "eq",
@@ -1014,8 +1014,8 @@
         ],
         "colors": [
             "",
-            "Numpy int32 array [n_spots x n_rounds x n_channels]",
-            "`[s, r, c]` is the intensity of spot $s$ on round $r$, channel $c$.",
+            "Numpy int32 array [n_spots x len(use_rounds) x len(use_channels)]",
+            "`[s, r, c]` is the intensity of spot $s$ on round $use_rounds[r]$, channel $use_channels[c]$.",
             "It will be `-tile_pixel_value_shift` if that round/channel not used otherwise integer."
         ],
         "gene_no": [

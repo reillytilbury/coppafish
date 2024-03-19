@@ -4,14 +4,11 @@ from .scores import omp_scores_float_to_int, omp_scores_int_to_float
 from . import scores
 
 try:
-    from .coefs_optimised import get_pixel_coefs_yxz
-except ImportError:
-    try:
-        import torch
+    import torch
 
-        if torch.cuda.is_available():
-            from .coefs_pytorchgpu import get_pixel_coefs_yxz
-        else:
-            from .coefs_pytorch import get_pixel_coefs_yxz
-    except ImportError:
-        from .coefs import get_pixel_coefs_yxz
+    if torch.cuda.is_available():
+        from .coefs_pytorchgpu import get_pixel_coefs_yxz
+    else:
+        from .coefs_pytorch import get_pixel_coefs_yxz
+except ImportError:
+    from .coefs import get_pixel_coefs_yxz

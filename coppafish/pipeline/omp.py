@@ -313,6 +313,7 @@ def call_spots_omp(
 
     spot_info = np.load(nbp_file.omp_spot_info)
     # find duplicate spots as those detected on a tile which is not tile centre they are closest to
+    logging.debug(f"Finding duplicate spots")
     not_duplicate = call_spots.get_non_duplicate(
         tile_origin, nbp_basic.use_tiles, nbp_basic.tile_centre, spot_info[:, :3], spot_info[:, 5]
     )
@@ -322,18 +323,23 @@ def call_spots_omp(
     nbp.gene_no = spot_info[not_duplicate, 3]
     nbp.scores = spot_info[not_duplicate, 4]
     nbp.tile = spot_info[not_duplicate, 5]
+    del spot_info
 
     # Get colours, background_coef and intensity of final spots.
     n_spots = np.sum(not_duplicate)
+    logging.info(f"Getting colours, background coefficients, and intensity of {n_spots} OMP spots")
     invalid_value = -nbp_basic.tile_pixel_value_shift
-    # Only read in used colors first for background/intensity calculation.
+    # Only read in used colours first for background/intensity calculation.
     nd_spot_colors_use = np.ones((0, n_rounds_use, n_channels_use), dtype=np.int32) * invalid_value
-    spot_colors_norm = np.ones((0, n_rounds_use, n_channels_use), dtype=np.float32) * invalid_value
+    # Store the maximum normalised spot colour for each channel over rounds.
+    spot_colors_norm_max = np.ones((0, n_channels_use), dtype=np.float32) * invalid_value
+    # TODO: This part of OMP is most likely to memory crash if there are tons of spots and tiles. We might want to
+    # think of a way to eliminate the combining of tiles like this so that each tile can be done separately.
     for i, t in enumerate(nbp_basic.use_tiles):
         in_tile = nbp.tile == t
         if np.sum(in_tile) > 0:
             nd_spot_colors_t = spot_colors.get_spot_colors(
-                jnp.asarray(nbp.local_yxz[in_tile]),
+                np.asarray(nbp.local_yxz[in_tile]),
                 t,
                 transform,
                 nbp_file,
@@ -343,15 +349,14 @@ def call_spots_omp(
                 return_in_bounds=True,
             )[0]
             nd_spot_colors_use = np.append(nd_spot_colors_use, nd_spot_colors_t, axis=0)
-            spot_colors_norm = np.append(spot_colors_norm, nd_spot_colors_t / color_norm_factor[i], axis=0)
-    nbp.intensity = np.asarray(call_spots.get_spot_intensity(spot_colors_norm))
-    del spot_colors_norm
 
-    # When saving to notebook, include unused rounds/channels.
-    nd_spot_colors = np.ones((n_spots, nbp_basic.n_rounds, nbp_basic.n_channels), dtype=np.int32) * invalid_value
-    nd_spot_colors[np.ix_(np.arange(n_spots), nbp_basic.use_rounds, nbp_basic.use_channels)] = nd_spot_colors_use
-    nbp.colors = nd_spot_colors
-    del nd_spot_colors_use
+            nd_spot_colors_t = nd_spot_colors_t.astype(np.float32)
+            nd_spot_colors_t /= color_norm_factor[i]
+            spot_colors_norm_max = np.append(spot_colors_norm_max, nd_spot_colors_t.max(2), axis=0)
+            del nd_spot_colors_t
+    nbp.intensity = np.asarray(call_spots.get_spot_intensity(spot_colors_norm_max[:, :, np.newaxis]))
+    del spot_colors_norm_max
+    nbp.colors = nd_spot_colors_use
 
     logging.debug("OMP complete")
 
