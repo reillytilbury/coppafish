@@ -977,13 +977,6 @@
             "Mean of *OMP* coefficient sign in neighbourhood centered on spot.",
             "`None` if `spot_shape` not computed in this experiment."
         ],
-        "initial_pos_neighbour_thresh": [
-            "",
-            "Integer",
-            "Only spots with number of positive coefficient neighbours greater than this are saved to notebook.",
-            "",
-            "Typical = 4 in *2D* and 40 in *3D* (set to 10% of max number by default)."
-        ],
         "spot_shape": [
             "",
             "Numpy integer array [shape_size_y x shape_size_y x shape_size_x]",

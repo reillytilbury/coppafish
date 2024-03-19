@@ -4,10 +4,6 @@ import numpy_indexed
 from scipy import sparse
 from typing import Optional
 
-try:
-    import jax.numpy as jnp
-except ImportError:
-    import numpy as jnp
 
 from ..filter import base as filter_base
 from ..setup.notebook import NotebookPage
@@ -72,9 +68,9 @@ def call_spots_omp(
                 "nbp_call_spots.bled_codes_ge don't all have an L2 norm of 1 over " "use_rounds and use_channels."
             )
         )
-    bled_codes = jnp.asarray(bled_codes)
-    transform = jnp.asarray(transform)
-    color_norm_factor = jnp.asarray(nbp_call_spots.color_norm_factor[trc_ind])
+    bled_codes = np.asarray(bled_codes)
+    transform = np.asarray(transform)
+    color_norm_factor = np.asarray(nbp_call_spots.color_norm_factor[trc_ind])
     n_genes, n_rounds_use, n_channels_use = bled_codes.shape
     dp_norm_shift = 0
 
@@ -185,7 +181,6 @@ def call_spots_omp(
         )
 
     logging.info(f"Finding OMP coefficients for all pixels on tiles {use_tiles}:")
-    initial_pos_neighbour_thresh = config["initial_pos_neighbour_thresh"]
     for i, t in enumerate(use_tiles):
         logging.info(f"Tile {np.where(use_tiles == t)[0][0] + 1}/{len(use_tiles)}")
 
@@ -255,17 +250,6 @@ def call_spots_omp(
             spot_yxzg = None
 
         logging.info(f"Saving OMP gene reads")
-        if initial_pos_neighbour_thresh is None:
-            # Only save spots which have 10% of max possible number of positive neighbours
-            initial_pos_neighbour_thresh = config["initial_pos_neighbour_thresh_param"] * np.sum(spot_shape > 0)
-            initial_pos_neighbour_thresh = np.floor(initial_pos_neighbour_thresh)
-            initial_pos_neighbour_thresh = int(
-                np.clip(
-                    initial_pos_neighbour_thresh,
-                    config["initial_pos_neighbour_thresh_min"],
-                    config["initial_pos_neighbour_thresh_max"],
-                )
-            )
         spot_info_t = omp.get_spots(
             pixel_coefs_t,
             pixel_yxz_t,
@@ -309,7 +293,6 @@ def call_spots_omp(
             del spot_info_t
 
     nbp.spot_shape = spot_shape
-    nbp.initial_pos_neighbour_thresh = initial_pos_neighbour_thresh
 
     spot_info = np.load(nbp_file.omp_spot_info)
     # find duplicate spots as those detected on a tile which is not tile centre they are closest to
@@ -332,7 +315,7 @@ def call_spots_omp(
     # Only read in used colours first for background/intensity calculation.
     nd_spot_colors_use = np.ones((0, n_rounds_use, n_channels_use), dtype=np.int32) * invalid_value
     # Store the maximum normalised spot colour for each channel over rounds.
-    spot_colors_norm_max = np.ones((0, n_channels_use), dtype=np.float32) * invalid_value
+    spot_colors_norm_max = np.ones((0, n_rounds_use), dtype=np.float32) * invalid_value
     # TODO: This part of OMP is most likely to memory crash if there are tons of spots and tiles. We might want to
     # think of a way to eliminate the combining of tiles like this so that each tile can be done separately.
     for i, t in enumerate(nbp_basic.use_tiles):

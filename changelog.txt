@@ -24,6 +24,7 @@
  * Optimised plotting function `remove_background` in spot_colors.
  * New support to safely move output and tile directories.
  * Shape of OMP colours in notebook changed.
+ * OMP config initial_intensity_thresh_percentile default 25 -> 50.
  * Docs + logo update for coppafish.
  * Removed all jax code.
  * Removed obsolete "continuous_dapi" config variable in extract section.

@@ -675,7 +675,7 @@ class RoboMinnie:
         output_dir: str,
         overwrite: bool = True,
         omp_iterations: int = 2,
-        omp_initial_intensity_thresh_percentile: int = 90,
+        omp_initial_intensity_thresh_percentile: int = 50,
         register_with_dapi: bool = True,
     ) -> None:
         """
@@ -1017,8 +1017,6 @@ class RoboMinnie:
         time_pipeline: bool = True,
         include_stitch: bool = True,
         include_omp: bool = True,
-        jax_profile: bool = False,
-        jax_profile_omp: bool = False,
         profile_omp: bool = False,
         save_ref_spots_data: bool = True,
     ):
@@ -1029,9 +1027,6 @@ class RoboMinnie:
             time_pipeline (bool, optional): print the time taken to run the coppafish pipeline and OMP. Default: true.
             include_stitch (bool, optional): run up to at least stitch. Default: true.
             include_omp (bool, optional): run up to and including coppafish OMP stage. Default: true.
-            jax_profile (bool, optional): profile entire coppafish pipeline. Default: false.
-            jax_profile_omp (bool, optional): profile coppafish OMP using the jax tensorboard profiler. Requires
-                tensorflow, install by running `pip install tensorflow tensorboard-plugin-profile`. Default: false.
             profile_omp (bool, optional): profile coppafish OMP stage using a default Python profiler called
                 `cprofile`. Dumps the results into a text file in output_coppafish. Default: false.
             save_ref_spots_data (bool, optional): if true, will save ref_spots data, which is used for comparing
@@ -1043,18 +1038,12 @@ class RoboMinnie:
         """
         self.instructions.append(utils.base.get_function_name())
         print(f"Running coppafish")
-        if jax_profile or jax_profile_omp:
-            assert jax_profile != jax_profile_omp, "Cannot run two jax profilers at once"
 
         coppafish_output = self.coppafish_output
         config_filepath = self.config_filepath
         n_planes = self.n_planes
         n_tiles = self.n_tiles
 
-        if jax_profile:
-            import jax
-
-            jax.profiler.start_trace(coppafish_output, create_perfetto_link=True, create_perfetto_trace=True)
         # Run the non-parallel pipeline code
         nb = run.initialize_nb(config_filepath)
         if time_pipeline:
@@ -1085,10 +1074,6 @@ class RoboMinnie:
 
         if time_pipeline:
             start_time_omp = time.time()
-        if jax_profile_omp:
-            import jax
-
-            jax.profiler.start_trace(coppafish_output, create_perfetto_link=True, create_perfetto_trace=True)
         if profile_omp:
             import cProfile, pstats
 
@@ -1099,10 +1084,6 @@ class RoboMinnie:
             profiler.disable()
             stats = pstats.Stats(profiler).sort_stats("tottime")
             stats.dump_stats(os.path.join(coppafish_output, "cprofile"))
-        if jax_profile_omp:
-            jax.profiler.stop_trace()
-        if jax_profile:
-            jax.profiler.stop_trace()
         if time_pipeline:
             end_time = time.time()
             print(f"OMP run time: {round((end_time - start_time_omp)/60, 2)}mins")
