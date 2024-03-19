@@ -126,7 +126,7 @@ def move_tile_dir(current_tile_dir: str, new_tile_dir: str, notebook_path: str) 
     """
     assert os.path.isfile(notebook_path), f"Notebook at {notebook_path} not found"
     assert os.path.isdir(current_tile_dir), f"Current tile directory {current_tile_dir} not found"
-    assert len(os.listdir(current_tile_dir)), f"Current tile directory {current_tile_dir} is empty"
+    assert len(os.listdir(current_tile_dir)) > 0, f"Current tile directory {current_tile_dir} is empty"
     if not os.path.isdir(new_tile_dir):
         logging.warn(f"{new_tile_dir} tile directory does not exist, creating it...")
         os.mkdir(new_tile_dir)
@@ -136,6 +136,9 @@ def move_tile_dir(current_tile_dir: str, new_tile_dir: str, notebook_path: str) 
             pbar.set_postfix({"filename": name})
             path = os.path.join(current_tile_dir, name)
             new_path = os.path.join(new_tile_dir, name)
+            if os.path.isfile(new_path) or os.path.isdir(new_path):
+                logging.warn(f"Path {new_path} already exists, skipping.")
+                continue
             if os.path.isfile(path):
                 shutil.copy2(path, new_path)
             elif os.path.isdir(path):
