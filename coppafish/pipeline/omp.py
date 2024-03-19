@@ -43,7 +43,7 @@ def call_spots_omp(
         transform: `float [n_tiles x n_rounds x n_channels x 4 x 3]`.
             `transform[t, r, c]` is the affine transform to get from tile `t`, `ref_round`, `ref_channel` to
             tile `t`, round `r`, channel `c`.
-            This is saved in the register notebook page i.e. `nb.register.transform`.
+            This is saved in the register notebook page i.e. `nb.register.icp_correction`.
         shape_tile: Tile to use to compute the expected shape of a spot in the gene coefficient images.
             Should be the tile, for which the most spots where found in the `call_reference_spots` step.
             If `None`, will be set to the centre tile.

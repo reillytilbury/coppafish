@@ -152,7 +152,7 @@ def add_legend(
     else:
         print("Both gene_legend_info and cell_legend_info are None so no legend added.")
         return None
-    plt.style.use("default")
+    plt.style.use("dark_background")
     return mpl_widget, ax, n_gene_label_letters
 
 

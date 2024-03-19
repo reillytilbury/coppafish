@@ -69,6 +69,7 @@ def run_tile_indep_pipeline(nb: Notebook) -> None:
     BuildPDF(nb)
     run_find_spots(nb)
     run_register(nb)
+    BuildPDF(nb)
     check_spots.check_n_spots(nb)
 
 
@@ -211,36 +212,36 @@ def run_stitch(nb: Notebook) -> None:
     # Two conditions below:
     # 1. Check if there is a big dapi_image
     # 2. Check if there is NOT a file in the path directory for the dapi image
-    if nb.file_names.big_dapi_image is not None and not os.path.isfile(nb.file_names.big_dapi_image):
-        # save stitched dapi
-        # Will load in from nd2 file if nb.filter_debug.r_dapi is None i.e. if no DAPI filtering performed.
-        utils.tiles_io.save_stitched(
-            nb.file_names.big_dapi_image,
-            nb.file_names,
-            nb.basic_info,
-            nb.extract,
-            nb.stitch.tile_origin,
-            nb.basic_info.anchor_round,
-            nb.basic_info.dapi_channel,
-            nb.filter_debug.r_dapi is None,
-            config["stitch"]["save_image_zero_thresh"],
-            config["filter"]["num_rotations"],
-        )
-
-    if nb.file_names.big_anchor_image is not None and not os.path.isfile(nb.file_names.big_anchor_image):
-        # save stitched reference round/channel
-        utils.tiles_io.save_stitched(
-            nb.file_names.big_anchor_image,
-            nb.file_names,
-            nb.basic_info,
-            nb.extract,
-            nb.stitch.tile_origin,
-            nb.basic_info.anchor_round,
-            nb.basic_info.anchor_channel,
-            False,
-            config["stitch"]["save_image_zero_thresh"],
-            config["filter"]["num_rotations"],
-        )
+    # if nb.file_names.big_dapi_image is not None and not os.path.isfile(nb.file_names.big_dapi_image):
+    #     # save stitched dapi
+    #     # Will load in from nd2 file if nb.filter_debug.r_dapi is None i.e. if no DAPI filtering performed.
+    #     utils.tiles_io.save_stitched(
+    #         nb.file_names.big_dapi_image,
+    #         nb.file_names,
+    #         nb.basic_info,
+    #         nb.extract,
+    #         nb.stitch.tile_origin,
+    #         nb.basic_info.anchor_round,
+    #         nb.basic_info.dapi_channel,
+    #         nb.filter_debug.r_dapi is None,
+    #         config["stitch"]["save_image_zero_thresh"],
+    #         config["filter"]["num_rotations"],
+    #     )
+    #
+    # if nb.file_names.big_anchor_image is not None and not os.path.isfile(nb.file_names.big_anchor_image):
+    #     # save stitched reference round/channel
+    #     utils.tiles_io.save_stitched(
+    #         nb.file_names.big_anchor_image,
+    #         nb.file_names,
+    #         nb.basic_info,
+    #         nb.extract,
+    #         nb.stitch.tile_origin,
+    #         nb.basic_info.anchor_round,
+    #         nb.basic_info.anchor_channel,
+    #         False,
+    #         config["stitch"]["save_image_zero_thresh"],
+    #         config["filter"]["num_rotations"],
+    #     )
 
 
 def run_register(nb: Notebook) -> None:
@@ -266,8 +267,7 @@ def run_register(nb: Notebook) -> None:
             nb.filter,
             nb.find_spots,
             config["register"],
-            np.pad(nb.basic_info.tilepos_yx, ((0, 0), (0, 1)), mode="constant", constant_values=1),
-            pre_seq_blur_radius=0,
+            pre_seq_blur_radius=None,
         )
         nb += nbp
         nb += nbp_debug
@@ -277,16 +277,13 @@ def run_register(nb: Notebook) -> None:
     reg_images_dir = os.path.join(nb.file_names.output_dir, "reg_images")
     if not os.path.isdir(reg_images_dir) or len(os.listdir(reg_images_dir)) == 0:
         # Save reg images
-        round_registration_channel = config["register"]["round_registration_channel"]
+        round_registration_channel = nb.basic_info.dapi_channel
         for t in nb.basic_info.use_tiles:
             use_rounds_with_preseq = nb.basic_info.use_rounds + [nb.basic_info.pre_seq_round] * nb.basic_info.use_preseq
             with tqdm.tqdm(total=len(use_rounds_with_preseq), desc="Saving registration images") as pbar:
                 for r in use_rounds_with_preseq:
                     pbar.set_postfix({"tile": t, "round": r})
-                    if round_registration_channel is not None:
-                        register.preprocessing.generate_reg_images(nb, t, r, round_registration_channel)
-                    if round_registration_channel is None:
-                        register.preprocessing.generate_reg_images(nb, t, r, nb.basic_info.anchor_channel)
+                    register.preprocessing.generate_reg_images(nb, t, r, round_registration_channel)
                     pbar.update(1)
             with tqdm.tqdm(total=len(nb.basic_info.use_channels), desc="Saving registration images") as pbar:
                 for c in nb.basic_info.use_channels:
@@ -331,7 +328,7 @@ def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None
             nb.extract,
             nb.filter,
             nb.stitch.tile_origin,
-            nb.register.transform,
+            nb.register.icp_correction,
         )
         nb += nbp  # save to Notebook with gene_no, score, score_diff, intensity = None.
         # These will be added in call_reference_spots
@@ -346,7 +343,7 @@ def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None
             nb.ref_spots,
             nb.extract,
             nb.filter,
-            transform=nb.register.transform,
+            transform=nb.register.icp_correction,
             overwrite_ref_spots=overwrite_ref_spots,
         )
         nb += nbp
@@ -379,7 +376,7 @@ def run_omp(nb: Notebook) -> None:
             nb.filter,
             nb.call_spots,
             nb.stitch.tile_origin,
-            nb.register.transform,
+            nb.register.icp_correction,
             tile_most_spots,
         )
         nb += nbp

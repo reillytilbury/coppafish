@@ -10,6 +10,7 @@ from .. import call_spots
 from .. import spot_colors
 from .. import utils
 from .. import logging
+from scipy.sparse.linalg import svds
 
 
 def call_reference_spots(
@@ -361,7 +362,11 @@ def call_reference_spots(
     # Part 1: Estimate norm_factor[t, r, c] for each tile t, round r and channel c + remove background
     for t in tqdm(nbp_basic.use_tiles, desc="Estimating norm_factors for each tile"):
         tile_colours = colours[spot_tile == t]
-        tile_bg_colours = bg_colours[spot_tile == t]
+        if nbp_basic.use_preseq:
+            tile_bg_colours = bg_colours[spot_tile == t]
+        else:
+            tile_bg_colours = np.percentile(tile_colours, 25, axis=1)
+            tile_bg_colours = np.repeat(tile_bg_colours[:, np.newaxis, :], n_rounds, axis=1)
         tile_bg_strength = np.sum(np.abs(tile_bg_colours), axis=(1, 2))
         if tile_bg_strength.size == 0 or np.allclose(tile_bg_strength, tile_bg_strength[0]):
             logging.warn(
@@ -450,13 +455,15 @@ def call_reference_spots(
     colour_norm_factor *= colour_norm_factor_update
 
     # Part 4: Estimate gene_efficiency[g, r] for each gene g and round r
-    gene_prob_ge_thresh = max(np.percentile(gene_prob_score, 50), 0.5)
+
+    ge_min_spots = 10
+    gene_prob_ge_thresh = max(np.percentile(gene_prob_score, 75), 0.75)
     use_ge = np.zeros(n_spots, dtype=bool)
     for g in tqdm(range(n_genes), desc="Estimating gene efficiencies"):
         keep = (gene_no == g) * (gene_prob_score > gene_prob_ge_thresh)
         gene_g_colours = colours[keep]
         # Skip gene if not enough spots.
-        if len(gene_g_colours) == 0:
+        if len(gene_g_colours) < ge_min_spots:
             continue
         for r in range(n_rounds):
             expected_dye_colour = bleed_matrix[:, gene_codes[g, r]]
@@ -509,16 +516,10 @@ def call_reference_spots(
         mid_z = int(nbp_basic.use_z[0] + (nbp_basic.use_z[-1] - nbp_basic.use_z[0]) // 2 - min(nbp_basic.use_z))
     else:
         mid_z = None
-    pixel_colors = spot_colors.get_spot_colors(
-        spot_colors.all_pixel_yxz(nbp_basic.tile_sz, nbp_basic.tile_sz, mid_z),
-        central_tile,
-        transform,
-        nbp_file,
-        nbp_basic,
-        nbp_extract,
-        nbp_filter,
-        return_in_bounds=True,
-    )[0]
+    pixel_colors = spot_colors.get_spot_colors(yxz_base=spot_colors.all_pixel_yxz(nbp_basic.tile_sz, nbp_basic.tile_sz, mid_z),
+                                               t=central_tile, transform=transform, bg_scale=nbp_filter.bg_scale,
+                                               file_type=nbp_extract.file_type,
+                                               nbp_file=nbp_file, nbp_basic=nbp_basic, return_in_bounds=True)[0]
     pixel_intensity = call_spots.get_spot_intensity(np.abs(pixel_colors) / colour_norm_factor[central_tile])
     nbp.abs_intensity_percentile = np.percentile(pixel_intensity, np.arange(1, 101))
     logging.debug("Call ref spots complete")

@@ -219,7 +219,7 @@ def save_image(
             clipped_pixels = (image < 0).sum()
             clipped_pixels += (image > get_pixel_max()).sum()
             image = image.astype(IMAGE_SAVE_DTYPE)
-        else:
+        elif apply_shift and c != nbp_basic.dapi_channel:
             # need to shift and clip image so fits into uint16 dtype.
             # clip at 1 not 0 because 0 (or -tile_pixel_value_shift)
             # will be used as an invalid value when reading in spot_colors.

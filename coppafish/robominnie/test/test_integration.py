@@ -212,6 +212,9 @@ def test_pdf_builder() -> None:
     notebook_path = os.path.join(
         os.path.dirname(os.path.realpath(__file__)), ".integration_dir/output_coppafish/notebook.npz"
     )
+    for file_name in os.listdir(os.path.dirname(notebook_path)):
+        if file_name[-4:].lower() == ".pdf":
+            os.remove(os.path.join(os.path.dirname(notebook_path), file_name))
     BuildPDF(notebook_path, auto_open=False)
 
 

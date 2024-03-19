@@ -226,6 +226,7 @@ def view_spot_brightness_hists(nb: Notebook):
 
     plt.show()
 
+
 # We are now going to create a new class that will allow us to view the spots used to calculate the gene efficiency
 # for a given gene. This will be useful for checking that the spots used are representative of the gene as a whole.
 class GEViewer():
@@ -319,11 +320,10 @@ class GESpotViewer():
         spots = nb.ref_spots.colors[self.gene_g_mask][:, :, nb.basic_info.use_channels]
         # remove background codes. To do this, repeat background_strenth along a new axis for rounds
         background_strength = nb.ref_spots.background_strength[self.gene_g_mask]
-        background_strength = np.repeat(background_strength[:, np.newaxis, :], spots.shape[1], axis=1)
         # remove background from spots
         spots = spots - background_strength
         spots = spots.reshape((spots.shape[0], spots.shape[1] * spots.shape[2]))
-        color_norm = np.repeat(nb.call_spots.color_norm_factor[np.ix_(nb.basic_info.use_rounds,
+        color_norm = np.repeat(np.mean(nb.call_spots.color_norm_factor, axis=0)[np.ix_(nb.basic_info.use_rounds,
                                                                       nb.basic_info.use_channels)].reshape((1, -1)),
                                spots.shape[0], axis=0)
         self.spots = spots / color_norm
@@ -331,7 +331,10 @@ class GESpotViewer():
         # self.spots = self.spots[np.argsort(nb.ref_spots.score[self.gene_g_mask]), :]
         # We need to find the expected spot profile for each round/channel
         self.spots_expected = nb.call_spots.bled_codes[self.gene_index, :, nb.basic_info.use_channels].T
-        self.spots_expected = np.repeat(self.spots_expected.reshape((1, -1)), self.spots.shape[0], axis=0)
+        # normalise so that mean brightness is the same as that of the observed spots
+        mean_row_strength = np.mean(np.sum(self.spots, axis=1))
+        self.spots_expected = self.spots_expected.reshape((1, -1)) * mean_row_strength / np.sum(self.spots_expected)
+        self.spots_expected = np.repeat(self.spots_expected, self.spots.shape[0], axis=0)
         # Now for each spot we would like to store a dye_efficiency vector. This is the least squares solution to
         # the equation spots[i, r, :] = dye_efficiency * spots_expected[0, r, :].
         auxilliary_spots = self.spots.reshape((self.spots.shape[0], self.spots.shape[1] // n_channels, n_channels))
@@ -365,8 +368,8 @@ class GESpotViewer():
             self.fig, self.ax = plt.subplots(1, 2, figsize=(10, 10))
         # Now we can plot the spots. We want to create 2 subplots. One with the spots observed and one with the expected
         # spots. We will use the same color scale for both subplots.
-        vmax = np.max([np.max(self.spots), np.max(self.spots_expected)]) / 2
-        vmin = np.min([np.min(self.spots), np.min(self.spots_expected)]) / 5
+        vmax = np.max([np.percentile(self.spots, 99), np.percentile(self.spots_expected, 99)])
+        vmin = np.min([np.percentile(self.spots, 1), np.percentile(self.spots_expected, 1)])
         # We can then plot the spots observed and the spots expected.
         self.ax[0].imshow(self.spots, cmap='viridis', vmin=vmin, vmax=vmax, aspect='auto', interpolation='none')
         self.ax[1].imshow(self.spots_expected, cmap='viridis', vmin=vmin, vmax=vmax, aspect='auto', interpolation='none')
