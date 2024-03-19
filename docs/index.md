@@ -99,5 +99,4 @@ your coppafish environment.
 If you do not have the source code downloaded anymore, follow all the [install](#install) again while inside your 
 coppafish environment.
 
-To verify your install, run `pip show coppafish` and check that the coppafish version now matches the latest version 
-found in our coppafish repository.
+You can verify your install by running `pip show coppafish` in the terminal to check the coppafish version.
