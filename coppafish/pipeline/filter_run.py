@@ -172,7 +172,6 @@ def run_filter(
                 file_path_raw = nbp_file.tile_unfiltered[t][r][c]
                 file_path_raw = file_path_raw[: file_path_raw.index(file_type)] + "_raw" + file_type
                 raw_image_exists = tiles_io.image_exists(file_path_raw, file_type)
-            assert raw_image_exists, f"Raw, extracted file at\n\t{file_path_raw}\nnot found"
             pbar.set_postfix(
                 {
                     "round": r,
@@ -194,6 +193,7 @@ def run_filter(
                 pbar.update()
                 continue
 
+            assert raw_image_exists, f"Raw, extracted file at\n\t{file_path_raw}\nnot found"
             # Get t, r, c image from raw files
             im_raw = tiles_io._load_image(file_path_raw, file_type)
             # zyx -> yxz
