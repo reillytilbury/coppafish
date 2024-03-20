@@ -15,9 +15,9 @@ also support saving as uncompressed numpy arrays by setting `file_type` to `.npy
 
 Extract also saves metadata inside of the `tile_dir` directory if the raw files are ND2 format.
 
-Extract takes $\textsf{n_tile_pixels}\times2.3\times10^{-8}$ minutes to complete from raw npy files and 
-$\textsf{n_tile_pixels}\times$ minutes to complete from raw ND2 files, where $\textsf{n_tile_pixels}$ is the number of 
-pixels in one tile[^1].
+Extract takes $\textsf{n_tile_pixels}\times2.3\times10^{-8}$ minutes to complete from raw npy files on a local NVMe SSD 
+and $\textsf{n_tile_pixels}\times1.3\times10^{-6}$ minutes to complete from raw ND2 files with 100MB/s reading speed, 
+where $\textsf{n_tile_pixels}$ is the number of pixels in one tile[^1].
 
 ## Filter
 
