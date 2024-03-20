@@ -108,8 +108,8 @@ def initialize_nb(config_file: str) -> Notebook:
             f"You are running on v{utils.system.get_software_version()}, but the notebook contains "
             + f"data from versions {nb.get_all_variable_instances(nb._SOFTWARE_VERSION)}.",
         )
-        logging.warn("Are you sure you want to continue? (y or n) ")
-        user_input = input()
+        logging.warn("Are you sure you want to continue? (automatically continuing in 60s)")
+        user_input = utils.system.input_timeout("type y or n: ", timeout_result="y")
         if user_input.strip().lower() != "y":
             logging.info("Exiting...")
             sys.exit()
