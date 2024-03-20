@@ -314,13 +314,6 @@ class Viewer:
         self.score_thresh_slider.sliderReleased.connect(self.update_plot)
         self.viewer.window.add_dock_widget(self.score_thresh_slider, area="left", name="Score Range")
 
-        # OMP Score Multiplier Slider
-        self.omp_score_multiplier_slider = QDoubleSlider(Qt.Orientation.Horizontal)
-        self.omp_score_multiplier_slider.setValue(self.score_omp_multiplier)
-        self.omp_score_multiplier_slider.setRange(0, 50)
-        self.omp_score_multiplier_slider.valueChanged.connect(lambda x: self.show_omp_score_multiplier(x))
-        self.omp_score_multiplier_slider.sliderReleased.connect(self.update_plot)
-
         # intensity is calculated same way for anchor / omp method so do not reset intensity threshold when change
         # method.
         self.intensity_thresh_slider = QDoubleSlider(Qt.Orientation.Horizontal)
@@ -343,10 +336,6 @@ class Viewer:
         self.method_buttons.button_anchor.clicked.connect(self.button_anchor_clicked)
         self.method_buttons.button_prob.clicked.connect(self.button_prob_clicked)
         self.viewer.window.add_dock_widget(self.method_buttons, area="left", name="Method")
-        if self.nb.has_page("omp"):
-            self.viewer.window.add_dock_widget(
-                self.omp_score_multiplier_slider, area="left", name="OMP Score Multiplier"
-            )
 
         self.key_call_functions()
         if self.nb.basic_info.is_3d:
@@ -491,9 +480,6 @@ class Viewer:
         self.viewer.status = self.method_buttons.method + ": Score Range = [{:.2f}, {:.2f}]".format(
             low_value, high_value
         )
-
-    def show_omp_score_multiplier(self, value):
-        self.viewer.status = "OMP Score Multiplier = {:.2f}".format(value)
 
     def show_intensity_thresh(self, value):
         self.viewer.status = "Intensity Threshold = {:.3f}".format(value)

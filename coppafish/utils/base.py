@@ -179,7 +179,6 @@ def set_notebook_tile_dir(notebook_path: str, new_tile_dir: str) -> None:
     old_tile_unfiltered = nb.file_names.tile_unfiltered.copy()
     new_tile = old_tile.copy()
     new_tile_unfiltered = old_tile_unfiltered.copy()
-    del nb.file_names.tile
     for i, j, k in itertools.product(range(len(old_tile)), range(len(old_tile[0])), range(len(old_tile[0][0]))):
         old_tile_ijk = os.path.normpath(old_tile[i][j][k])
         new_tile[i][j][k] = os.path.join(nb.file_names.tile_dir, PurePath(old_tile_ijk).name)
@@ -187,7 +186,9 @@ def set_notebook_tile_dir(notebook_path: str, new_tile_dir: str) -> None:
         new_tile_unfiltered[i][j][k] = os.path.join(
             nb.file_names.tile_unfiltered_dir, PurePath(old_tile_unfiltered_ijk).name
         )
+    del nb.file_names.tile
     nb.file_names.tile = new_tile
+    del nb.file_names.tile_unfiltered
     nb.file_names.tile_unfiltered = new_tile_unfiltered
 
     nb.file_names.finalized = True
