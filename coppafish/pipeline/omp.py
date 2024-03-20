@@ -325,10 +325,10 @@ def call_spots_omp(
                 np.asarray(nbp.local_yxz[in_tile]),
                 t,
                 transform,
+                nbp_filter.bg_scale,
+                nbp_extract.file_type,
                 nbp_file,
                 nbp_basic,
-                nbp_extract,
-                nbp_filter,
                 return_in_bounds=True,
             )[0]
             nd_spot_colors_use = np.append(nd_spot_colors_use, nd_spot_colors_t, axis=0)
