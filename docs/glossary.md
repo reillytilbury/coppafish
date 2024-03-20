@@ -48,5 +48,4 @@ align tiles (see [method](method.md) for details).
 
 
 [^1]:
-    There are some cases of a notebook being "rewritten", but these are done only by the developers. This includes 
-    the combining of single tile notebooks into a multi-tile notebook.
+    There are some minor cases of a notebook being "rewritten", see [advanced usage](advanced_usage.md).

@@ -25,7 +25,7 @@ from coppafish.utils import move_tile_dir
 move_tile_dir("old/tile_dir", "new/tile_dir", "path/to/notebook.npz")
 ```
 
-note that this will only apply the new tile directory to the given notebook. You can run the function multiple times to 
+Note that this will only apply the new tile directory to the given notebook. You can run the function multiple times to 
 update every notebook clone. If no notebook is attached to the old tile directory, you can safely move the directory 
 manually.
 
@@ -38,10 +38,13 @@ starting condition once it has run through the pipeline. To access a notebook's 
 from coppafish import Notebook
 
 nb = Notebook("path/to/notebook.npz")
-nb._config # Dictionary of dictionaries. Each key is a page name, each item is a dictionary of every set config variable
+nb._config
 ```
 
-You can also access the path to the config file used to run the pipeline:
+`_config` is a dictionary of dictionaries. Each key is a section/page name, each item is a dictionary containing each 
+config variable and its set value.
+
+Access the file path to the config file by:
 
 ```python
 nb._config_file
