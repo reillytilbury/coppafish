@@ -607,14 +607,12 @@ class Viewer:
         @self.viewer.bind_key(KeyBinds.view_gene_counts)
         def call_to_gene_counts(viewer):
             if self.nb.has_page("omp"):
-                score_multiplier = self.omp_score_multiplier_slider.value()
                 score_omp_thresh = self.score_range["omp"][0]
             else:
-                score_multiplier = None
                 score_omp_thresh = None
             score_thresh = self.score_range["anchor"][0]
             intensity_thresh = self.intensity_thresh_slider.value()
-            gene_counts(self.nb, None, None, score_thresh, intensity_thresh, score_omp_thresh, score_multiplier)
+            gene_counts(self.nb, None, None, score_thresh, intensity_thresh, score_omp_thresh)
 
         @self.viewer.bind_key(KeyBinds.view_histogram_scores)
         def call_to_view_omp_score(viewer):

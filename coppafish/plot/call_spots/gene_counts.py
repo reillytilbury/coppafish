@@ -23,7 +23,6 @@ class gene_counts:
         score_thresh: Optional[float] = None,
         intensity_thresh: Optional[float] = None,
         score_omp_thresh: Optional[float] = None,
-        score_omp_multiplier: Optional[float] = None,
     ):
         """
         This shows the number of reference spots assigned to each gene which pass the quality thresholding based on
@@ -52,8 +51,6 @@ class gene_counts:
             score_thresh: Threshold for score for ref_spots. Can be changed with text box.
             intensity_thresh: Threshold for intensity. Can be changed with text box.
             score_omp_thresh: Threshold for score for omp_spots. Can be changed with text box.
-            score_omp_multiplier: Can specify the value of score_omp_multiplier to use to compute omp score.
-                If `None`, will use value in config file. Can be changed with text box.
         """
         # Add fake genes
         if fake_bled_codes is None:
@@ -104,9 +101,6 @@ class gene_counts:
 
         # Add omp gene assignment if have page
         if nb.has_page("omp"):
-            if score_omp_multiplier is None:
-                score_omp_multiplier = config["score_omp_multiplier"]
-            self.score_multiplier = score_omp_multiplier
             self.nbp_omp = nb.omp
             if score_omp_thresh is None:
                 score_omp_thresh = config["score_omp"]
@@ -162,7 +156,7 @@ class gene_counts:
         if self.omp:
             text_box_labels += [r"OMP Score, $\gamma_s$" + "\nThreshold", "Score\n" + r"Multiplier, $\rho$"]
             text_box_values += [np.around(self.score_thresh[2], 2), np.around(self.score_multiplier, 2)]
-            text_box_funcs += [self.update_score_omp_thresh, self.update_score_multiplier]
+            text_box_funcs += [self.update_score_omp_thresh]
         self.text_boxes = [None] * len(text_box_labels)
         for i in range(len(text_box_labels)):
             text_ax = self.fig.add_axes(
@@ -281,21 +275,6 @@ class gene_counts:
             score_omp_thresh = 1
         self.score_thresh[2] = score_omp_thresh
         self.text_boxes[2].set_val(np.around(score_omp_thresh, 2))
-        self.update([2])
-
-    def update_score_multiplier(self, text):
-        # Can see how changing score_multiplier affects number of spots over threshold
-        try:
-            score_multiplier = float(text)
-        except (ValueError, TypeError):
-            warnings.warn(f"\nScore multiplier given, {text}, is not valid")
-            score_multiplier = self.score_multiplier
-        if score_multiplier < 0:
-            warnings.warn("Score multiplier cannot be negative")
-            score_multiplier = self.score_multiplier
-        self.score_multiplier = score_multiplier
-        self.score[2] = omp_spot_score(self.nbp_omp)
-        self.text_boxes[3].set_val(np.around(score_multiplier, 2))
         self.update([2])
 
     def choose_plots(self, label):
