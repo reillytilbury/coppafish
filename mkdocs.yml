@@ -37,7 +37,7 @@ nav:
   - Method: method.md
   - Diagnostics: diagnostics.md
   - Advanced Usage: advanced_usage.md
-  - Troubleshooting: troubleshooting.md
+  - Troubleshoot: troubleshoot.md
   - Glossary: glossary.md
 
 # This part allows mathematics to be displayed LaTeX style, by using $...$ for in line or $$...$$ for multi-line.

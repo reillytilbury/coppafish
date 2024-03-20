@@ -15,6 +15,10 @@ also support saving as uncompressed numpy arrays by setting `file_type` to `.npy
 
 Extract also saves metadata inside of the `tile_dir` directory if the raw files are ND2 format.
 
+Extract takes $\textsf{n_tile_pixels}\times2.3\times10^{-8}$ minutes to complete from raw npy files and 
+$\textsf{n_tile_pixels}\times$ minutes to complete from raw ND2 files, where $\textsf{n_tile_pixels}$ is the number of 
+pixels in one tile[^1].
+
 ## Filter
 
 All images are filtered to help minimise scattering of light (bright points will appear as cones initially, hence the 
@@ -56,7 +60,7 @@ overlapping genes to be detected. It is an iterative,
 <a href="https://en.wikipedia.org/wiki/Greedy_algorithm" target="_blank">greedy algorithm</a> that runs on individual 
 pixels in the microscope images. At each OMP iteration, a new gene is assigned to the pixel. OMP is also 
 self-correcting. "Orthogonal" refers to how OMP will re-compute its gene contributions after every iteration by least 
-squares. Background genes[^1] are considered valid genes in OMP. The iterations stop if:
+squares. Background genes[^2] are considered valid genes in OMP. The iterations stop if:
 
 * `max_genes` in the `omp` config section is reached. 
 * assigning the next best gene to the pixel does not have a dot product score above `dp_thresh` in the `omp` config. 
@@ -77,7 +81,10 @@ expressed most strongly. The scoring is controlled by config parameters `shape_s
 Since OMP is sensitive to many steps before, it can be difficult to optimise. This is why [call spots](#call-spots) is 
 part of the gene calling pipeline, known for its simpler and more intuitive method.
 
+
 [^1]:
+    All time estimations are rough and made using CPU pytorch with an Intel i9-13900K @ 5.500GHz.
+[^2]:
     Background genes refer to constant pixel intensity across all sequencing rounds in one channel. This is an 
     indicator of an anomalous fluorescing feature that is not a spot. No spot codes are made to be the same channel in 
     all rounds so they are not mistaken with background fluorescence.
