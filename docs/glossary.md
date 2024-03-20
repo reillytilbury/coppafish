@@ -30,7 +30,7 @@ spots.
 
 * PSF - Stands for Point Spread Function and is used during image filtering. The Wiener deconvolution requires a PSF to 
 remove blurring caused by frequencies with a low signal-to-noise ratio. See 
-<a href="https://en.wikipedia.org/wiki/Wiener_deconvolution" target="_blank">here</a> for more details.
+<a href="https://en.wikipedia.org/wiki/Wiener_deconvolution" target="_blank">Wikipedia</a> for more details.
 
 * Sequencing round - An image of the tissue, made up of multiple tiles and sequencing channels. Before each imaging 
 round the tissue is treated with various solutions to remove the previous DNA probes and then hybridise new ones. Each 
@@ -44,7 +44,7 @@ and outputs the identity of each gene in situ.
 
 * Tile - A cuboid subset of the microscope image of size $n_z \times n_y \times n_x$ in z, y, and x, where $n_y = n_x$. 
 Typically, $n_z\sim55$. Usually, all adjacent tiles overlap by $10\%-15\%$ to give coppafish information on how to best 
-align tiles (see [method](method.md) for details).
+align tiles (see [stitch](method.md#stitch) for details).
 
 
 [^1]:
