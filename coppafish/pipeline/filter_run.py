@@ -226,8 +226,8 @@ def run_filter(
                     # Images cannot scale too much as to make negative pixels below the invalid pixel value of -15,000
                     scale = np.abs(min_pixel_value) / np.abs(im_filtered.min())
                     scale = min([scale, max_pixel_value / im_filtered.max()])
-                    # A 60% margin for max/min pixel variability between images
-                    scale = config["scale_multiplier"] * float(scale)
+                    # A margin for max/min pixel variability between images. Scale can never be below 1.
+                    scale = max([config["scale_multiplier"] * float(scale), 1])
                     logging.debug(f"{scale=} computed from {t=}, {r=}, {c=}")
                     # Save scale in case need to re-run without the notebook
                     filter_base.save_scale(nbp_file.scale, scale, scale)
