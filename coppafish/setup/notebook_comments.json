@@ -963,7 +963,7 @@
         ],
         "spot_shape": [
             "",
-            "Numpy integer array [shape_size_y x shape_size_y x shape_size_x]",
+            "Numpy integer array [shape_size_y x shape_size_x x shape_size_z]",
             "Expected sign of *OMP* coefficient in neighbourhood centered on spot.",
             "",
             "1 means expected positive coefficient.",

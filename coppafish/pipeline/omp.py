@@ -181,6 +181,7 @@ def call_spots_omp(
         )
 
     logging.info(f"Finding OMP coefficients for all pixels on tiles {use_tiles}:")
+    spot_shape_float = None
     for i, t in enumerate(use_tiles):
         logging.info(f"Tile {np.where(use_tiles == t)[0][0] + 1}/{len(use_tiles)}")
 
@@ -234,7 +235,6 @@ def call_spots_omp(
                 f"OMP spot shape contains {(spot_shape == -1).sum()} negatives, {(spot_shape == 1).sum()} positives, "
                 f"and {(spot_shape == 0).sum()} zeros"
             )
-            nbp.spot_shape_float = spot_shape_float
             np.save(os.path.join(nbp_file.output_dir, "omp_spot_shape_float.npy"), spot_shape_float)
             nbp.shape_spot_local_yxz = spot_yxz[spots_used]
             nbp.shape_spot_gene_no = spot_gene_no[spots_used]
@@ -293,6 +293,7 @@ def call_spots_omp(
             del spot_info_t
 
     nbp.spot_shape = spot_shape
+    nbp.spot_shape_float = spot_shape_float
 
     spot_info = np.load(nbp_file.omp_spot_info)
     # find duplicate spots as those detected on a tile which is not tile centre they are closest to

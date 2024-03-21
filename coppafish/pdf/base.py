@@ -5,10 +5,10 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from scipy import ndimage
 from matplotlib.backends.backend_pdf import PdfPages
 from typing import Union, Optional, Tuple
 
+from ..omp import scores as omp_scores
 from ..setup import Notebook, NotebookPage
 from ..utils import tiles_io
 from .. import logging
@@ -51,7 +51,7 @@ class BuildPDF:
         if output_dir is None:
             output_dir = nb.file_names.output_dir
         output_dir = os.path.abspath(output_dir)
-        assert os.path.isdir(output_dir), "output_dir must be a valid directory"
+        assert os.path.isdir(output_dir), f"output_dir {output_dir} is not a valid directory"
 
         # Light theme
         plt.style.use("default")
@@ -236,100 +236,111 @@ class BuildPDF:
         pbar.set_postfix_str("Stitch")
         pbar.update()
 
-        if (
-            not os.path.isfile(os.path.join(output_dir, "_ref_call_spots.pdf"))
-            and nb.has_page("ref_spots")
-            and nb.has_page("call_spots")
-        ):
-            with PdfPages(os.path.join(output_dir, "_ref_call_spots.pdf")) as pdf:
-                pbar.set_postfix_str("Reference and call spots")
-                if nb.has_page("ref_spots") and nb.has_page("call_spots"):
-                    # Create a page for every gene
-                    gene_probs = nb.ref_spots.gene_probs
-                    # bg colour was subtracted if use_preseq
-                    colours = (
-                        nb.ref_spots.colors[
-                            np.ix_(
-                                range(nb.ref_spots.colors.shape[0]),
-                                nb.basic_info.use_rounds,
-                                nb.basic_info.use_channels,
-                            )
-                        ]
-                        / nb.call_spots.color_norm_factor[
-                            np.ix_(
-                                nb.ref_spots.tile,
-                                nb.basic_info.use_rounds,
-                                nb.basic_info.use_channels,
-                            )
-                        ]
+        pbar.set_postfix_str("Reference and call spots")
+        ref_spots_filepath = os.path.join(output_dir, "_ref_call_spots.pdf")
+        if not os.path.isfile(ref_spots_filepath) and nb.has_page("ref_spots") and nb.has_page("call_spots"):
+            with PdfPages(ref_spots_filepath) as pdf:
+                # Create a page for every gene
+                gene_probs = nb.ref_spots.gene_probs
+                # bg colour was subtracted if use_preseq
+                scores = (
+                    nb.ref_spots.colors[
+                        np.ix_(
+                            range(nb.ref_spots.colors.shape[0]),
+                            nb.basic_info.use_rounds,
+                            nb.basic_info.use_channels,
+                        )
+                    ]
+                    / nb.call_spots.color_norm_factor[
+                        np.ix_(
+                            nb.ref_spots.tile,
+                            nb.basic_info.use_rounds,
+                            nb.basic_info.use_channels,
+                        )
+                    ]
+                )
+                n_genes = gene_probs.shape[1]
+                gene_names = nb.call_spots.gene_names
+                spot_colours_rnorm = scores / np.linalg.norm(scores, axis=2)[:, :, None]
+                signs = np.sign(np.sum(spot_colours_rnorm, axis=(1, 2)))
+                spot_colours_rnorm *= signs[:, None, None]
+                n_rounds = spot_colours_rnorm.shape[1]
+                for g in range(n_genes):
+                    g_spots = np.argsort(-gene_probs[:, g])
+                    # Sorted probabilities, with greatest score at index 0
+                    g_probs = gene_probs[g_spots, g]
+                    # Bled codes are of shape (rounds, channels, )
+                    g_bled_code = nb.call_spots.bled_codes[g][:, nb.basic_info.use_channels]
+                    g_bled_code /= np.linalg.norm(g_bled_code, axis=1)[:, None]
+                    g_bled_code_ge = nb.call_spots.bled_codes_ge[g][:, nb.basic_info.use_channels]
+                    g_bled_code_ge /= np.linalg.norm(g_bled_code_ge, axis=1)[:, None]
+                    g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code_ge[None, :, :], axis=2))
+                    thresh_spots = np.argmax(gene_probs, axis=1) == g
+                    thresh_spots = thresh_spots * (np.max(gene_probs) > GENE_PROB_THRESHOLD)
+                    colours_mean = np.mean(scores[thresh_spots], axis=0)
+                    fig, axes = self.create_empty_page(2, 2, gridspec_kw={"width_ratios": [2, 1]})
+                    self.empty_plot_ticks(axes[1, 1])
+                    fig.suptitle(f"{gene_names[g]}", size=NORMAL_FONTSIZE)
+                    im = axes[0, 0].imshow(g_r_dot_products[g_spots[:N_GENES_SHOW], :].T, vmin=0, vmax=1, aspect="auto")
+                    axes[0, 0].set_yticks(range(n_rounds))
+                    axes[0, 0].set_ylim([n_rounds - 0.5, -0.5])
+                    axes[0, 0].set_ylabel("round")
+                    axes[0, 0].set_title(f"dye code match")
+                    self.empty_plot_ticks(axes[1, 0], show_bottom_frame=True, show_left_frame=True)
+                    axes[1, 0].plot(np.arange(N_GENES_SHOW), g_probs[:N_GENES_SHOW])
+                    axes[1, 0].plot(np.arange(N_GENES_SHOW), g_r_dot_products[g_spots[:N_GENES_SHOW]].mean(1))
+                    axes[1, 0].legend(("probability score", "mean match"), loc="lower right")
+                    for ax in [axes[0, 0], axes[1, 0]]:
+                        ax.set_xlim([0, N_GENES_SHOW - 1])
+                        ax.set_xticks([0, N_GENES_SHOW - 1], labels=["1", N_GENES_SHOW])
+                    axes[1, 0].set_xlabel("spot number (ranked by probability)")
+                    axes[1, 0].set_ylim([0, 1])
+                    axes[1, 0].set_yticks([0, 0.25, 0.5, 0.75, 1])
+                    axes[1, 0].grid(True)
+                    axes[0, 0].autoscale(enable=True, axis="x", tight=True)
+                    axes[0, 1].imshow(g_bled_code_ge, vmin=0, vmax=1)
+                    axes[0, 1].set_title("bled code GE")
+                    axes[0, 1].set_xlabel("channels")
+                    axes[0, 1].set_xticks(
+                        range(len(nb.basic_info.use_channels)), labels=(str(c) for c in nb.basic_info.use_channels)
                     )
-                    n_genes = gene_probs.shape[1]
-                    gene_names = nb.call_spots.gene_names
-                    spot_colours_rnorm = colours / np.linalg.norm(colours, axis=2)[:, :, None]
-                    signs = np.sign(np.sum(spot_colours_rnorm, axis=(1, 2)))
-                    spot_colours_rnorm *= signs[:, None, None]
-                    n_rounds = spot_colours_rnorm.shape[1]
-                    for g in range(n_genes):
-                        g_spots = np.argsort(-gene_probs[:, g])
-                        # Sorted probabilities, with greatest score at index 0
-                        g_probs = gene_probs[g_spots, g]
-                        # Bled codes are of shape (rounds, channels, )
-                        g_bled_code = nb.call_spots.bled_codes[g][:, nb.basic_info.use_channels]
-                        g_bled_code /= np.linalg.norm(g_bled_code, axis=1)[:, None]
-                        g_bled_code_ge = nb.call_spots.bled_codes_ge[g][:, nb.basic_info.use_channels]
-                        g_bled_code_ge /= np.linalg.norm(g_bled_code_ge, axis=1)[:, None]
-                        g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code_ge[None, :, :], axis=2))
-                        thresh_spots = np.argmax(gene_probs, axis=1) == g
-                        thresh_spots = thresh_spots * (np.max(gene_probs) > GENE_PROB_THRESHOLD)
-                        colours_mean = np.mean(colours[thresh_spots], axis=0)
-                        fig, axes = self.create_empty_page(2, 2, gridspec_kw={"width_ratios": [2, 1]})
-                        self.empty_plot_ticks(axes[1, 1])
-                        fig.suptitle(f"{gene_names[g]}", size=NORMAL_FONTSIZE)
-                        im = axes[0, 0].imshow(
-                            g_r_dot_products[g_spots[:N_GENES_SHOW], :].T, vmin=0, vmax=1, aspect="auto"
-                        )
-                        axes[0, 0].set_yticks(range(n_rounds))
-                        axes[0, 0].set_ylim([n_rounds - 0.5, -0.5])
-                        axes[0, 0].set_ylabel("round")
-                        axes[0, 0].set_title(f"dye code match")
-                        self.empty_plot_ticks(axes[1, 0], show_bottom_frame=True, show_left_frame=True)
-                        axes[1, 0].plot(np.arange(N_GENES_SHOW), g_probs[:N_GENES_SHOW])
-                        axes[1, 0].plot(np.arange(N_GENES_SHOW), g_r_dot_products[g_spots[:N_GENES_SHOW]].mean(1))
-                        axes[1, 0].legend(("probability score", "mean match"), loc="lower right")
-                        for ax in [axes[0, 0], axes[1, 0]]:
-                            ax.set_xlim([0, N_GENES_SHOW - 1])
-                            ax.set_xticks([0, N_GENES_SHOW - 1], labels=["1", N_GENES_SHOW])
-                        axes[1, 0].set_xlabel("spot number (ranked by probability)")
-                        axes[1, 0].set_ylim([0, 1])
-                        axes[1, 0].set_yticks([0, 0.25, 0.5, 0.75, 1])
-                        axes[1, 0].grid(True)
-                        axes[0, 0].autoscale(enable=True, axis="x", tight=True)
-                        axes[0, 1].imshow(g_bled_code_ge, vmin=0, vmax=1)
-                        axes[0, 1].set_title("bled code GE")
-                        axes[0, 1].set_xlabel("channels")
-                        axes[0, 1].set_xticks(
-                            range(len(nb.basic_info.use_channels)), labels=(str(c) for c in nb.basic_info.use_channels)
-                        )
-                        axes[1, 1].imshow(colours_mean, vmin=0, vmax=1)
-                        axes[1, 1].set_title(f"mean spot colour\nspots with prob > {GENE_PROB_THRESHOLD}")
-                        axes[1, 1].set_ylabel("rounds")
-                        axes[1, 1].set_yticks(
-                            range(len(nb.basic_info.use_rounds)), labels=(str(r) for r in nb.basic_info.use_rounds)
-                        )
-                        axes[1, 1].set_xlabel("channels")
-                        axes[1, 1].set_xticks(
-                            range(len(nb.basic_info.use_channels)), labels=(str(c) for c in nb.basic_info.use_channels)
-                        )
-                        cbar = fig.colorbar(im, ax=axes[0, 1], orientation="vertical")
-                        cbar.ax.set_ylabel("Score", rotation=-90, va="bottom")
-                        cbar = fig.colorbar(im, ax=axes[1, 1], orientation="vertical")
-                        cbar.ax.set_ylabel("Score", rotation=-90, va="bottom")
-                        fig.tight_layout()
-                        pdf.savefig(fig)
-                        plt.close(fig)
+                    axes[1, 1].imshow(colours_mean, vmin=0, vmax=1)
+                    axes[1, 1].set_title(f"mean spot colour\nspots with prob > {GENE_PROB_THRESHOLD}")
+                    axes[1, 1].set_ylabel("rounds")
+                    axes[1, 1].set_yticks(
+                        range(len(nb.basic_info.use_rounds)), labels=(str(r) for r in nb.basic_info.use_rounds)
+                    )
+                    axes[1, 1].set_xlabel("channels")
+                    axes[1, 1].set_xticks(
+                        range(len(nb.basic_info.use_channels)), labels=(str(c) for c in nb.basic_info.use_channels)
+                    )
+                    cbar = fig.colorbar(im, ax=axes[0, 1], orientation="vertical")
+                    cbar.ax.set_ylabel("Score", rotation=-90, va="bottom")
+                    cbar = fig.colorbar(im, ax=axes[1, 1], orientation="vertical")
+                    cbar.ax.set_ylabel("Score", rotation=-90, va="bottom")
+                    fig.tight_layout()
+                    pdf.savefig(fig)
+                    plt.close(fig)
         pbar.update()
 
-        pbar.set_postfix_str("OMP")
+        pbar.set_postfix_str("omp")
+        omp_filepath = os.path.join(output_dir, "_omp.pdf")
+        if nb.has_page("omp") and not os.path.isfile(omp_filepath):
+            with PdfPages(omp_filepath) as pdf:
+                fig, axes = self.create_empty_page(1, 1)
+                info = self.get_omp_text_info(nb.omp, nb.get_config()["omp"])
+                axes[0, 0].set_title(info, fontdict=INFO_FONTDICT, y=0.5)
+                self.empty_plot_ticks(axes[0, 0])
+                pdf.savefig(fig)
+                plt.close(fig)
+
+                fig = self.create_omp_score_distribution_fig(nb.basic_info, nb.omp)
+                pdf.savefig(fig)
+                plt.close(fig)
+
+                fig = self.create_omp_spot_shape_fig(nb.omp)
+                pdf.savefig(fig)
+                plt.close(fig)
         pbar.update()
         pbar.close()
 
@@ -590,3 +601,134 @@ class BuildPDF:
         time_taken = self.get_time_taken_from_page(find_spots_page)
         output += time_taken
         return output
+
+    def get_omp_text_info(self, omp_page: NotebookPage, omp_config: dict) -> str:
+        output = "OMP\n \n"
+        output += self.get_version_from_page(omp_page)
+        output += f"\nspot score threshold: {omp_config['score_threshold']}\n"
+        output += f"initial_intensity_thresh_percentile: {omp_config['initial_intensity_thresh_percentile']}\n"
+        output += f"high coefficient bias: {omp_config['high_coef_bias']}\n"
+        output += f"maximum spot shape size: {tuple(omp_config['shape_max_size'])}\n"
+        output += f"actual spot shape size: {omp_page.spot_shape.shape}\n"
+        output += f"spot shape sign threshold: {omp_config['shape_sign_thresh']}\n"
+        output += f"OMP maximum iterations: {omp_config['max_genes']}\n"
+        return output
+
+    def create_omp_score_distribution_fig(
+        self, basic_info_page: NotebookPage, omp_page: NotebookPage
+    ) -> mpl.figure.Figure:
+        fig, axes = self.create_empty_page(2, 2, gridspec_kw={"width_ratios": [21, 1], "height_ratios": [2, 1]})
+        fig.suptitle("OMP spots")
+        # Plot a bar graph of the spot count found by OMP for each z plane and tile. The colour of the bar
+        # represents the mean score of the spots in that z plane and tile
+        mean_scores = np.zeros(len(basic_info_page.use_tiles) * len(basic_info_page.use_z))
+        spot_counts = np.zeros_like(mean_scores, dtype=int)
+        bar_x = np.arange(0, mean_scores.size, dtype=float) + 0.5
+        ticks = []
+        labels = []
+        scores: np.ndarray = omp_scores.omp_scores_int_to_float(omp_page.scores)
+        tile: np.ndarray = omp_page.tile
+        local_z: np.ndarray = omp_page.local_yxz[:, 2]
+        i = 0
+        for t in basic_info_page.use_tiles:
+            for z in basic_info_page.use_z:
+                spot_counts[i] = np.logical_and(tile == t, local_z == z).sum()
+                scores_t_z = scores[np.logical_and(tile == t, local_z == z)]
+                if scores_t_z.size > 0:
+                    mean_scores[i] = scores_t_z.mean()
+                if z == basic_info_page.use_z[len(basic_info_page.use_z) // 2]:
+                    labels.append(f"Tile {t}")
+                    ticks.append(bar_x[i])
+                if z == basic_info_page.use_z[0] or z == basic_info_page.use_z[-1]:
+                    labels.append("")
+                    ticks.append(bar_x[i])
+                i += 1
+        del i
+        # Create a colour map for the bars to be coloured based on the mean spot score
+        cmap = mpl.cm.plasma
+        max_mean_score = mean_scores.max()
+        norm = mpl.colors.Normalize(vmin=0, vmax=max_mean_score)
+        fig.colorbar(
+            mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
+            cax=axes[0, 1],
+            orientation="vertical",
+            label="Mean score",
+        )
+        bar_colours = [cmap(norm(mean_scores[i])) for i in range(mean_scores.size)]
+        axes[0, 0].set_title(f"Counts")
+        axes[0, 0].bar(bar_x, spot_counts, width=1, color=bar_colours, edgecolor="black", linewidth=0.5)
+        axes[0, 0].set_xticks(ticks, labels=labels)
+        axes[0, 0].set_ylabel(f"Spot count")
+        axes[0, 0].spines["left"].set_visible(True)
+        axes[0, 0].spines["bottom"].set_visible(True)
+
+        # Create a histogram showing the distribution of OMP spot scores
+        axes[1, 0].set_title(f"Score distribution")
+        axes[1, 0].hist(scores, bins=200, color="red", edgecolor="black", linewidth=0.25)
+        axes[1, 0].set_xlabel("Spot score")
+        axes[1, 0].set_ylabel("Spot count")
+        axes[1, 0].spines["left"].set_visible(True)
+        axes[1, 0].spines["bottom"].set_visible(True)
+
+        axes[1, 1].axis("off")
+        fig.tight_layout()
+        return fig
+
+    def create_omp_spot_shape_fig(self, omp_page: NotebookPage) -> mpl.figure.Figure:
+        fig, axes = self.create_empty_page(2, 4, hide_frames=False, gridspec_kw={"width_ratios": [5, 5, 5, 1]})
+
+        cmap = mpl.cm.coolwarm
+        norm = mpl.colors.Normalize(vmin=-1, vmax=1)
+        [
+            fig.colorbar(
+                mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
+                cax=axes[row, -1],
+                orientation="vertical",
+                label="Pixel intensity",
+            )
+            for row in range(axes.shape[0])
+        ]
+        z_offsets = [-2, 0, +2]
+        mean_spot_shape = omp_page.spot_shape_float
+        if mean_spot_shape is not None:
+            mid_z = mean_spot_shape.shape[2] // 2
+            max_z = mean_spot_shape.shape[2] - 1
+            for column, z_offset in enumerate(z_offsets):
+                z = min([max([0, z_offset + mid_z]), max_z])
+                title = f"central z"
+                if z != 0:
+                    title += f" {'+' if z_offset > 0 else '-'}{int(np.abs(z_offset))}"
+                else:
+                    title = "Mean spot shape\n" + title
+                axes[0, column].set_title(title)
+                axes[0, column].imshow(mean_spot_shape[:, :, z], cmap=cmap, norm=norm, aspect="equal")
+                self.empty_plot_ticks(
+                    axes[0, column],
+                    show_top_frame=True,
+                    show_bottom_frame=True,
+                    show_left_frame=True,
+                    show_right_frame=True,
+                )
+
+        spot_shape = omp_page.spot_shape
+        mid_z = spot_shape.shape[2] // 2
+        max_z = spot_shape.shape[2] - 1
+        for column, z_offset in enumerate(z_offsets):
+            z = min([max([0, z_offset + mid_z]), max_z])
+            title = f"central z"
+            if z_offset != 0:
+                title += f" {'+' if z_offset > 0 else '-'}{int(np.abs(z_offset))}"
+            else:
+                title = "Spot shape\n" + title
+            axes[1, column].set_title(title)
+            axes[1, column].imshow(spot_shape[:, :, z], cmap=cmap, norm=norm, aspect="equal")
+            self.empty_plot_ticks(
+                axes[1, column],
+                show_top_frame=True,
+                show_bottom_frame=True,
+                show_left_frame=True,
+                show_right_frame=True,
+            )
+
+        fig.tight_layout()
+        return fig
