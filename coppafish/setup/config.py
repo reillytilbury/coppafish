@@ -145,21 +145,20 @@ _options = {
         "flip_y": "bool",
         "flip_x": "bool",
     },
-    'register':
-        {   # this parameter is for channel registration
-            'bead_radii': 'maybe_list_number',
-            # these parameters are for round registration
-            'sample_factor_yx': 'int',
-            'window_radius': 'int',
-            'smooth_sigma': 'number',
-            'smooth_thresh': 'number',
-            'flow_clip': 'maybe_list_number',
-            # these parameters are for icp
-            'neighb_dist_thresh_yx': 'number',
-            'neighb_dist_thresh_z': 'number',
-            'icp_min_spots': 'int',
-            'icp_max_iter': 'int'
-        },
+    "register": {  # this parameter is for channel registration
+        "bead_radii": "maybe_list_number",
+        # these parameters are for round registration
+        "sample_factor_yx": "int",
+        "window_radius": "int",
+        "smooth_sigma": "number",
+        "smooth_thresh": "number",
+        "flow_clip": "maybe_list_number",
+        # these parameters are for icp
+        "neighb_dist_thresh_yx": "number",
+        "neighb_dist_thresh_z": "number",
+        "icp_min_spots": "int",
+        "icp_max_iter": "int",
+    },
     "call_spots": {
         "bleed_matrix_method": "str",
         "bleed_matrix_score_thresh": "number",

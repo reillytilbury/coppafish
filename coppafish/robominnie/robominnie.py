@@ -1015,9 +1015,6 @@ class RoboMinnie:
     def run_coppafish(
         self,
         time_pipeline: bool = True,
-        include_stitch: bool = True,
-        include_omp: bool = True,
-        profile_omp: bool = False,
         save_ref_spots_data: bool = True,
     ):
         """
@@ -1039,19 +1036,14 @@ class RoboMinnie:
         self.instructions.append(utils.base.get_function_name())
         print(f"Running coppafish")
 
-        coppafish_output = self.coppafish_output
         config_filepath = self.config_filepath
         n_planes = self.n_planes
         n_tiles = self.n_tiles
 
         # Run the non-parallel pipeline code
-        nb = run.initialize_nb(config_filepath)
         if time_pipeline:
             start_time = time.time()
-        run.run_tile_indep_pipeline(nb)
-        if not include_stitch:
-            return nb
-        run.run_stitch(nb)
+        nb = run.run_pipeline(config_filepath)
         # Keep the stitch information to convert local tiles coordinates into global coordinates when comparing
         # to true spots
         self.stitch_tile_origins = nb.stitch.tile_origin
@@ -1069,24 +1061,8 @@ class RoboMinnie:
             self.ref_spots_gene_indices = nb.ref_spots.gene_no
             self.ref_spots_tile = nb.ref_spots.tile
 
-        if include_omp == False:
-            return nb
-
-        if time_pipeline:
-            start_time_omp = time.time()
-        if profile_omp:
-            import cProfile, pstats
-
-            profiler = cProfile.Profile()
-            profiler.enable()
-        run.run_omp(nb)
-        if profile_omp:
-            profiler.disable()
-            stats = pstats.Stats(profiler).sort_stats("tottime")
-            stats.dump_stats(os.path.join(coppafish_output, "cprofile"))
         if time_pipeline:
             end_time = time.time()
-            print(f"OMP run time: {round((end_time - start_time_omp)/60, 2)}mins")
             print(
                 f"Coppafish pipeline run: {round((end_time - start_time)/60, 1)}mins\n"
                 + f"{round((end_time - start_time)//(n_planes * n_tiles), 1)}s per z plane per tile."

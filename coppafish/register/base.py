@@ -390,7 +390,7 @@ def optical_flow_single(
     # compute the optical flow (in parallel)
     if n_cores is None:
         n_cores = utils.system.get_core_count()
-    print(f"Computing optical flow using {n_cores} cores")
+    logging.info(f"Computing optical flow using {n_cores} cores")
     flow_sub = joblib.Parallel(n_jobs=n_cores)(
         joblib.delayed(skimage.registration.optical_flow_ilk)(
             target_sub[n], base_sub[n], radius=window_radius, prefilter=True
@@ -420,7 +420,7 @@ def optical_flow_single(
         # save in yxz format
         np.save(loc, flow_up)
     t_end = time.time()
-    print("Optical flow computation took " + str(t_end - t_start) + " seconds")
+    logging.info("Optical flow computation took " + str(t_end - t_start) + " seconds")
 
     return flow
 
@@ -488,7 +488,7 @@ def flow_correlation(
         # save in yxz format
         np.save(loc, correlation_up)
     t_end = time.time()
-    print("Computing correlation took " + str(t_end - t_start) + " seconds")
+    logging.info("Computing correlation took " + str(t_end - t_start) + " seconds")
     return correlation, correlation_up
 
 
@@ -535,7 +535,7 @@ def interpolate_flow(
         # save in yxz format
         np.save(loc, flow)
     time_end = time.time()
-    print("Interpolating flow took " + str(time_end - time_start) + " seconds")
+    logging.info("Interpolating flow took " + str(time_end - time_start) + " seconds")
     return flow
 
 
