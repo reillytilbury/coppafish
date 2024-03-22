@@ -205,9 +205,7 @@ def run_filter(
             im_filtered = im_filtered.astype(np.float64)
             if config["deconvolve"]:
                 # Deconvolves dapi images too
-                logging.debug("Wiener deconvolve started")
                 im_filtered = filter.wiener_deconvolve(im_filtered, config["wiener_pad_shape"], wiener_filter)
-                logging.debug("Wiener deconvolve complete")
             if c == nbp_basic.dapi_channel:
                 if filter_kernel_dapi is not None:
                     im_filtered = utils.morphology.top_hat(im_filtered, filter_kernel_dapi)
