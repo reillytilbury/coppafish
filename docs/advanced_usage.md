@@ -38,13 +38,13 @@ starting condition once it has run through the pipeline. To access a notebook's 
 from coppafish import Notebook
 
 nb = Notebook("path/to/notebook.npz")
-nb._config
+config = nb.get_config()
 ```
 
-`_config` is a dictionary of dictionaries. Each key is a section/page name, each item is a dictionary containing each 
+`config` is a dictionary of dictionaries. Each key is a section/page name, each item is a dictionary containing each 
 config variable and its set value.
 
-Access the file path to the config file by:
+Access the absolute file path to the config file by:
 
 ```python
 nb._config_file

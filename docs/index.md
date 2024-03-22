@@ -85,7 +85,7 @@ If you do not wish to keep a local copy of coppafish (i.e. not interested in `gi
 later) then remove the `-e` option. The source code can then be deleted after installing.
 
 If pytorch GPU is installed, but no cuda device is found available, then coppafish will automatically revert back to 
-CPU.
+pytorch CPU.
 
 ## Updating
 
@@ -99,4 +99,5 @@ your coppafish environment.
 If you do not have the source code downloaded anymore, follow all the [install](#install) again while inside your 
 coppafish environment.
 
-You can verify your install by running `pip show coppafish` in the terminal to check the coppafish version.
+You can verify your install by running `pip show coppafish` in the coppafish environment to check you have the right 
+version.
