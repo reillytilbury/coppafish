@@ -247,8 +247,8 @@ def run_filter(
                 c,
                 suffix="_raw" if r == nbp_basic.pre_seq_round else "",
                 num_rotations=config["num_rotations"],
-                n_clip_warn=config["n_clip_warn"],
-                n_clip_error=config["n_clip_error"],
+                percent_clip_warn=config["percent_clip_warn"],
+                percent_clip_error=config["percent_clip_error"],
             )
             # zyx -> yxz
             saved_im = saved_im.transpose((1, 2, 0))

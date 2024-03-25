@@ -108,8 +108,8 @@ _options = {
         "num_rotations": "int",
         "pre_seq_blur_radius": "maybe_int",
         "scale_multiplier": "number",
-        "n_clip_warn": "int",
-        "n_clip_error": "int",
+        "percent_clip_warn": "number",
+        "percent_clip_error": "number",
     },
     "find_spots": {
         "radius_xy": "int",

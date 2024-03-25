@@ -180,8 +180,8 @@ def save_image(
     num_rotations: int = 0,
     suffix: str = "",
     apply_shift: bool = True,
-    n_clip_warn: int = 1,
-    n_clip_error: int = None,
+    percent_clip_warn: float = None,
+    percent_clip_error: float = None,
 ) -> npt.NDArray[np.uint16]:
     """
     Wrapper function to save tiles as npy files with correct shift. Moves z-axis to first axis before saving as it is
@@ -202,7 +202,7 @@ def save_image(
         suffix (str, optional): suffix to add to file name before the file extension. Default: empty.
         apply_shift (bool, optional): if true and saving a non-dapi channel, will apply the shift to the image.
         n_clip_warn (int, optional): if the number of pixels clipped off by saving is at least this number, a warning
-            is logged. Default: 1.
+            is logged. Default: never warn.
         n_clip_error (int, optional): if the number of pixels clipped off by saving is at least this number, then an
             error is raised. Default: never raise an error.
 
@@ -216,15 +216,15 @@ def save_image(
             logging.error(ValueError("3d image but channel not given."))
         if not apply_shift or (c == nbp_basic.dapi_channel):
             # If dapi is given then image should already by uint16 so no clipping
-            clipped_pixels = (image < 0).sum()
-            clipped_pixels += (image > get_pixel_max()).sum()
+            percent_clipped_pixels = (image < 0).sum()
+            percent_clipped_pixels += (image > get_pixel_max()).sum()
             image = image.astype(IMAGE_SAVE_DTYPE)
         elif apply_shift and c != nbp_basic.dapi_channel:
             # need to shift and clip image so fits into uint16 dtype.
             # clip at 1 not 0 because 0 (or -tile_pixel_value_shift)
             # will be used as an invalid value when reading in spot_colors.
-            clipped_pixels = ((image + nbp_basic.tile_pixel_value_shift) < 1).sum()
-            clipped_pixels += ((image + nbp_basic.tile_pixel_value_shift) > get_pixel_max()).sum()
+            percent_clipped_pixels = ((image + nbp_basic.tile_pixel_value_shift) < 1).sum()
+            percent_clipped_pixels += ((image + nbp_basic.tile_pixel_value_shift) > get_pixel_max()).sum()
             image = np.clip(
                 image + nbp_basic.tile_pixel_value_shift,
                 1,
@@ -232,12 +232,13 @@ def save_image(
                 np.zeros_like(image, dtype=np.uint16),
                 casting="unsafe",
             )
-        message = f"{t=}, {r=}, {c=} saved image has clipped {clipped_pixels} pixels"
-        if n_clip_error is not None and clipped_pixels >= n_clip_error:
-            logging.error(message)
-        if clipped_pixels >= n_clip_warn:
+        percent_clipped_pixels *= 100 / image.size
+        message = f"{t=}, {r=}, {c=} saved image has clipped {round(percent_clipped_pixels, 5)}% of pixels"
+        if percent_clip_warn is not None and percent_clipped_pixels >= percent_clip_warn:
             logging.warn(message)
-        if clipped_pixels >= 1:
+        if percent_clip_error is not None and percent_clipped_pixels >= percent_clip_error:
+            logging.error(message)
+        if percent_clipped_pixels >= 1:
             logging.debug(message)
         # In 3D, cannot possibly save any un-used channel hence no exception for this case.
         expected_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
