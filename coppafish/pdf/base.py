@@ -328,19 +328,17 @@ class BuildPDF:
         if nb.has_page("omp") and not os.path.isfile(omp_filepath):
             with PdfPages(omp_filepath) as pdf:
                 fig, axes = self.create_empty_page(1, 1)
-                info = self.get_omp_text_info(nb.omp, nb.get_config()["omp"])
+                info = self.get_omp_text_info(nb.omp)
                 axes[0, 0].set_title(info, fontdict=INFO_FONTDICT, y=0.5)
                 self.empty_plot_ticks(axes[0, 0])
                 pdf.savefig(fig)
-                plt.close(fig)
 
                 fig = self.create_omp_score_distribution_fig(nb.basic_info, nb.omp)
                 pdf.savefig(fig)
-                plt.close(fig)
 
                 fig = self.create_omp_spot_shape_fig(nb.omp)
                 pdf.savefig(fig)
-                plt.close(fig)
+            plt.close(fig)
         pbar.update()
         pbar.close()
 
@@ -602,16 +600,10 @@ class BuildPDF:
         output += time_taken
         return output
 
-    def get_omp_text_info(self, omp_page: NotebookPage, omp_config: dict) -> str:
+    def get_omp_text_info(self, omp_page: NotebookPage) -> str:
         output = "OMP\n \n"
         output += self.get_version_from_page(omp_page)
-        output += f"\nspot score threshold: {omp_config['score_threshold']}\n"
-        output += f"initial_intensity_thresh_percentile: {omp_config['initial_intensity_thresh_percentile']}\n"
-        output += f"high coefficient bias: {omp_config['high_coef_bias']}\n"
-        output += f"maximum spot shape size: {tuple(omp_config['shape_max_size'])}\n"
-        output += f"actual spot shape size: {omp_page.spot_shape.shape}\n"
-        output += f"spot shape sign threshold: {omp_config['shape_sign_thresh']}\n"
-        output += f"OMP maximum iterations: {omp_config['max_genes']}\n"
+        output += f"computed spot shape size: {omp_page.spot_shape.shape}\n"
         return output
 
     def create_omp_score_distribution_fig(
@@ -696,8 +688,8 @@ class BuildPDF:
             for column, z_offset in enumerate(z_offsets):
                 z = min([max([0, z_offset + mid_z]), max_z])
                 title = f"central z"
-                if z != 0:
-                    title += f" {'+' if z_offset > 0 else '-'}{int(np.abs(z_offset))}"
+                if z_offset != 0:
+                    title += f" {'+ ' if z_offset > 0 else '- '}{int(np.abs(z_offset))}"
                 else:
                     title = "Mean spot shape\n" + title
                 axes[0, column].set_title(title)
@@ -717,7 +709,7 @@ class BuildPDF:
             z = min([max([0, z_offset + mid_z]), max_z])
             title = f"central z"
             if z_offset != 0:
-                title += f" {'+' if z_offset > 0 else '-'}{int(np.abs(z_offset))}"
+                title += f" {'+ ' if z_offset > 0 else '- '}{int(np.abs(z_offset))}"
             else:
                 title = "Spot shape\n" + title
             axes[1, column].set_title(title)
