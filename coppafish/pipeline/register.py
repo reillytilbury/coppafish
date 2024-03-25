@@ -64,6 +64,8 @@ def register(
     # Initialise variable for ICP step
     neighb_dist_thresh_yx = config["neighb_dist_thresh_yx"]
     neighb_dist_thresh_z = config["neighb_dist_thresh_z"]
+    if neighb_dist_thresh_z is None:
+        neighb_dist_thresh_z = int(np.ceil(neighb_dist_thresh_yx * nbp_basic.pixel_size_xy / nbp_basic.pixel_size_z))
 
     # Load in registration data from previous runs of the software
     registration_data = preprocessing.load_reg_data(nbp_file, nbp_basic)

@@ -155,7 +155,7 @@ _options = {
         "flow_clip": "maybe_list_number",
         # these parameters are for icp
         "neighb_dist_thresh_yx": "number",
-        "neighb_dist_thresh_z": "number",
+        "neighb_dist_thresh_z": "maybe_number",
         "icp_min_spots": "int",
         "icp_max_iter": "int",
     },

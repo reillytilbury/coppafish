@@ -7,7 +7,7 @@
  * Wiener deconvolve now does not shift pixel values after filtering fix.
  * Wiener deconvolution is optimised in pytorch CPU.
  * The find spots intensity threshold multiplier "auto_thresh_multiplier" has been changed from 10 -> 17 by default.
- * ICP minimum spot distance threshold variables icp_dist_thresh_yx and icp_dist_thresh_z added.
+ * ICP minimum spot distance threshold variables neighb_dist_thresh_yx and neighb_dist_thresh_z added.
  * Sobel filtering in register is now turned off by default.
  * Scale section removed, this is now part of filter.
  * A warning is raised if the latest online coppafish version does not match the current coppafish version.
