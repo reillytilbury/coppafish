@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QPushButton, QMainWindow, QSlider, QLabel, QLineEdit
+from PyQt5.QtWidgets import QPushButton, QMainWindow, QSlider
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from coppafish.spot_colors import apply_transform
 from coppafish.utils.tiles_io import load_image
