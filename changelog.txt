@@ -31,6 +31,8 @@
  * Docs + logo update for coppafish.
  * Removed all jax code.
  * Removed obsolete "continuous_dapi" config variable in extract section.
+ * anchor_channel is default to 27, dapi_channel defaults to 0, dye_names defaults to 'ATTO425, AF488, DY520XL, AF532, 
+    AF594, AF647, AF750'
 
 
 2024/03/11 Alpha Update (v0.9.4):
