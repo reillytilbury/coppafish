@@ -36,6 +36,8 @@ nav:
   - Usage: basic_usage.md
   - Method: method.md
   - Diagnostics: diagnostics.md
+  - Advanced Usage: advanced_usage.md
+  - Troubleshoot: troubleshoot.md
   - Glossary: glossary.md
 
 # This part allows mathematics to be displayed LaTeX style, by using $...$ for in line or $$...$$ for multi-line.
@@ -44,6 +46,10 @@ markdown_extensions:
       generic: true
   # Footnote support
   - footnotes
+  # Captions and aligned images support
+  - md_in_html
+  # Re-sizeable images
+  - attr_list
 extra_javascript:
   - javascripts/config.js
   - https://polyfill.io/v3/polyfill.min.js?features=es6

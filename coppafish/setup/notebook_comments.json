@@ -205,12 +205,12 @@
         "tile_dir": [
             "eq",
             "Directory",
-            "Where tile files are saved, from both extract and filter sections of the pipeline"
+            "Where filtered image files are saved, from both extract and filter sections of the pipeline"
         ],
         "tile_unfiltered_dir": [
             "eq",
             "Directory",
-            "Where extract, unfiltered tile files are saved"
+            "Where extract, unfiltered image files are saved"
         ],
         "round": [
             "eq",
@@ -355,29 +355,6 @@
             "that the extracted images can take up the full range of `np.uint16`. The scale factor values are also stored ",
             "in a `.txt` file in case the notebook corrupts. The notebook values here are for user convenience."
         ],
-        "r_smooth": [
-            "close",
-            "Float or None",
-            "Radius of averaging filter to do smoothing of filtered image."
-        ],
-        "r1": [
-            "eq",
-            "Integer",
-            "Filtering is done with a *2D* difference of hanning filter with inner radius `r1` within which it is positive",
-            "and outer radius `r2` so annulus between `r1` and `r2` is negative.",
-            "Should be approx radius of spot.",
-            "",
-            "By default this is 0.5 micron converted to yx-pixel units which is typically 3."
-        ],
-        "r2": [
-            "eq",
-            "Integer",
-            "Filtering is done with a *2D* difference of hanning filter with inner radius `r1` within which it is positive",
-            "and outer radius `r2` so annulus between `r1` and `r2` is negative.",
-            "Units are yx-pixels and by default it will be twice r1.",
-            "",
-            "*Typical: 6*"
-        ],
         "scale": [
             "close",
             "Float",
@@ -440,11 +417,6 @@
             "String",
             "File type used to save tiles after extraction."
         ],
-        "continuous_dapi": [
-            "eq",
-            "Bool",
-            "Whether or not we have a dapi image in each round"
-        ],
         "software_version": [
             "eq",
             "String",
@@ -467,6 +439,13 @@
             "Numpy int array `[n_tiles x (n_rounds + n_extra_rounds) x n_channels]`",
             "`auto_thresh[t, r, c]` is the threshold spot intensity for tile $t$, round $r$, channel $c$",
             "used for spot detection in the `find_spots` step of the pipeline."
+        ],
+        "image_scale": [
+            "eq",
+            "Float",
+            "Every non-DAPI image is scaled by this number after filtering. It is computed using the first non-DAPI ",
+            "image in filter. The scaling helps to use more of the uint16 integer range when saving the images for ",
+            "improved pixel value precision."
         ],
         "bg_scale": [
             "tile_0",
@@ -492,18 +471,6 @@
             "pipeline.",
             "",
             "Page added to *Notebook* in *pipeline/filter_run.py*"
-        ],
-        "n_clip_pixels": [
-            "tile_0",
-            "Numpy integer array [n_tiles x (n_rounds + n_extra_rounds) x n_channels]",
-            "`n_clip_pixels[t, r, c]` is the number of pixels in the saved *npy* tile for tile $t$, round $r$, channel $c$",
-            "which had intensity exceeding max *uint16* value and so had to be clipped."
-        ],
-        "clip_extract_scale": [
-            "tile_0",
-            "Numpy float array [n_tiles x (n_rounds + n_extra_rounds) x n_channels]",
-            "`clip_extract_scale[t, r, c]` is the recommended value for extract_scale such that for tile $t$, round $r$, channel $c$",
-            "`n_clip_pixels[t, r, c]` would be 0. Only computed for images where `n_clip_pixels[t, r, c] > 0`"
         ],
         "r_dapi": [
             "eq",
@@ -534,8 +501,13 @@
         "z_info": [
             "eq",
             "Integer",
-            "z plane in *npy* file from which `auto_thresh` and `hist_counts` were calculated. By default, this is the mid ",
-            "plane."
+            "z plane in *npy* file from which `auto_thresh` and `hist_counts` were calculated. By default, this is ",
+            "the mid plane."
+        ],
+        "invalid_auto_thresh": [
+            "eq",
+            "Integer",
+            "Any `filter.auto_thresh` value set to this is invalid."
         ],
         "time_taken": [
             "add",
@@ -989,16 +961,9 @@
             "Mean of *OMP* coefficient sign in neighbourhood centered on spot.",
             "`None` if `spot_shape` not computed in this experiment."
         ],
-        "initial_pos_neighbour_thresh": [
-            "",
-            "Integer",
-            "Only spots with number of positive coefficient neighbours greater than this are saved to notebook.",
-            "",
-            "Typical = 4 in *2D* and 40 in *3D* (set to 10% of max number by default)."
-        ],
         "spot_shape": [
             "",
-            "Numpy integer array [shape_size_y x shape_size_y x shape_size_x]",
+            "Numpy integer array [shape_size_y x shape_size_x x shape_size_z]",
             "Expected sign of *OMP* coefficient in neighbourhood centered on spot.",
             "",
             "1 means expected positive coefficient.",
@@ -1013,6 +978,12 @@
             "`local_yxz[s]` are the $yxz$ coordinates of spot $s$ found on `tile[s]`, `ref_round`, `ref_channel`.",
             "To get `global_yxz`, add `nb.stitch.tile_origin[tile[s]]`."
         ],
+        "scores": [
+            "",
+            "Numpy int16 array [n_spots]",
+            "For each spot `s`, specified by position `local_yxz[s]` at tile `tile[s]` with gene read `gene_no[s]`, ",
+            "has gene read score of `scores[s]`. Each score is between 0 and `np.iinfo(np.int16).max`."
+        ],
         "tile": [
             "",
             "Numpy int16 array [n_spots]",
@@ -1020,26 +991,14 @@
         ],
         "colors": [
             "",
-            "Numpy int32 array [n_spots x n_rounds x n_channels]",
-            "`[s, r, c]` is the intensity of spot $s$ on round $r$, channel $c$.",
+            "Numpy int32 array [n_spots x len(use_rounds) x len(use_channels)]",
+            "`[s, r, c]` is the intensity of spot $s$ on round $use_rounds[r]$, channel $use_channels[c]$.",
             "It will be `-tile_pixel_value_shift` if that round/channel not used otherwise integer."
         ],
         "gene_no": [
             "",
             "Numpy int16 array [n_spots]",
             "`gene_no[s]` is the index of the gene assigned to spot $s$."
-        ],
-        "n_neighbours_pos": [
-            "",
-            "Numpy int16 array [n_spots]",
-            "Number of positive pixels around each spot in neighbourhood given by `spot_shape==1`.",
-            "Max is `sum(spot_shape==1)`."
-        ],
-        "n_neighbours_neg": [
-            "",
-            "Numpy int16 array [n_spots]",
-            "Number of negative pixels around each spot in neighbourhood given by `spot_shape==-1`.",
-            "Max is `sum(spot_shape==-1)`."
         ],
         "intensity": [
             "",

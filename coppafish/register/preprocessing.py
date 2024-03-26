@@ -40,17 +40,22 @@ def load_reg_data(nbp_file: NotebookPage, nbp_basic: NotebookPage):
             * transform (n_channels x 4 x 3) ndarray of affine transforms (zyx)
     """
     # Check if the registration data file exists
-    if os.path.isfile(os.path.join(nbp_file.output_dir, 'registration_data.pkl')):
-        with open(os.path.join(nbp_file.output_dir, 'registration_data.pkl'), 'rb') as f:
+    if os.path.isfile(os.path.join(nbp_file.output_dir, "registration_data.pkl")):
+        with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "rb") as f:
             registration_data = pickle.load(f)
     else:
-        n_tiles, n_rounds, n_channels = nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.n_extra_rounds, \
-            nbp_basic.n_channels
-        round_registration = {'flow_dir': os.path.join(nbp_file.output_dir, 'flow')}
-        channel_registration = {'transform': np.zeros((n_channels, 4, 3))}
-        registration_data = {'round_registration': round_registration,
-                             'channel_registration': channel_registration,
-                             'blur': False}
+        n_tiles, n_rounds, n_channels = (
+            nbp_basic.n_tiles,
+            nbp_basic.n_rounds + nbp_basic.n_extra_rounds,
+            nbp_basic.n_channels,
+        )
+        round_registration = {"flow_dir": os.path.join(nbp_file.output_dir, "flow")}
+        channel_registration = {"transform": np.zeros((n_channels, 4, 3))}
+        registration_data = {
+            "round_registration": round_registration,
+            "channel_registration": channel_registration,
+            "blur": False,
+        }
     return registration_data
 
 
@@ -141,7 +146,7 @@ def n_matches_to_frac_matches(n_matches: np.ndarray, spot_no: np.ndarray):
 
 def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box, x_box):
     """
-    Splits a 3D image into y_subvolumes * x_subvolumes * z_subvolumes subvolumes. z_box, y_box and x_box must be even 
+    Splits a 3D image into y_subvolumes * x_subvolumes * z_subvolumes subvolumes. z_box, y_box and x_box must be even
     numbers.
 
     Parameters
@@ -167,7 +172,8 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
         image = yxz_to_zyx(image)
 
     # Make sure that box dims are even
-    assert z_box % 2 == 0 and y_box % 2 == 0 and x_box % 2 == 0, "Box dimensions must be even numbers!"
+    assert y_box % 2 == 0 and x_box % 2 == 0, "Box dimensions must be even numbers!"
+    assert z_subvolumes == 1
     z_image, y_image, x_image = image.shape
 
     # Allow 0.5 of a box either side and then split the middle with subvols evenly spaced points, ie into subvols - 1
@@ -191,13 +197,13 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
 
     # Split the image into subvolumes and store them in the array
     for z, y, x in np.ndindex(z_subvolumes, y_subvolumes, x_subvolumes):
-        z_centre, y_centre, x_centre = z_box//2 + z * z_unit, y_box//2 + y * y_unit, x_box//2 + x * x_unit
-        z_start, z_end = z_centre - z_box//2, z_centre + z_box//2
-        y_start, y_end = y_centre - y_box//2, y_centre + y_box//2
-        x_start, x_end = x_centre - x_box//2, x_centre + x_box//2
+        z_centre, y_centre, x_centre = z_box // 2 + z * z_unit, y_box // 2 + y * y_unit, x_box // 2 + x * x_unit
+        z_start, z_end = 0, image.shape[0] + 1
+        y_start, y_end = y_centre - y_box // 2, y_centre + y_box // 2
+        x_start, x_end = x_centre - x_box // 2, x_centre + x_box // 2
 
         subvolume[z, y, x] = image[z_start:z_end, y_start:y_end, x_start:x_end]
-        position[z, y, x] = np.array([(z_start + z_end)//2, (y_start + y_end)//2, (x_start + x_end)//2])
+        position[z, y, x] = np.array([(z_start + z_end) // 2, (y_start + y_end) // 2, (x_start + x_end) // 2])
 
     # Reshape the position array
     position = np.reshape(position, (z_subvolumes * y_subvolumes * x_subvolumes, 3))
@@ -244,15 +250,15 @@ def invert_affine(A):
 
 def yxz_to_zyx_affine(A: np.ndarray, new_origin: np.ndarray = np.array([0, 0, 0])):
     """
-        Function to convert 4 x 3 matrix in y, x, z coords into a 3 x 4 matrix of z, y, x coords.
+    Function to convert 4 x 3 matrix in y, x, z coords into a 3 x 4 matrix of z, y, x coords.
 
-        Args:
-            A: Original transform in old format (4 x 3)
-            new_origin: Origin of new coordinate system in z, y, x coords
+    Args:
+        A: Original transform in old format (4 x 3)
+        new_origin: Origin of new coordinate system in z, y, x coords
 
-        Returns:
-            A_reformatted: 3 x 4 transform with associated changes
-            """
+    Returns:
+        A_reformatted: 3 x 4 transform with associated changes
+    """
     # convert A to 3 x 4
     A = A.T
 
@@ -307,7 +313,7 @@ def zyx_to_yxz_affine(A: np.ndarray, new_origin: np.ndarray = np.array([0, 0, 0]
 def custom_shift(array: np.ndarray, offset: np.ndarray, constant_values=0):
     """
     Compute array shifted by a certain offset.
-    
+
     Args:
         array: array to be shifted.
         offset: shift value (must be int).
@@ -324,12 +330,10 @@ def custom_shift(array: np.ndarray, offset: np.ndarray, constant_values=0):
     def slice1(o):
         return slice(o, None) if o >= 0 else slice(0, o)
 
-    new_array[tuple(slice1(o) for o in offset)] = (
-        array[tuple(slice1(-o) for o in offset)])
+    new_array[tuple(slice1(o) for o in offset)] = array[tuple(slice1(-o) for o in offset)]
 
     for axis, o in enumerate(offset):
-        new_array[(slice(None),) * axis +
-                  (slice(0, o) if o >= 0 else slice(o, None),)] = constant_values
+        new_array[(slice(None),) * axis + (slice(0, o) if o >= 0 else slice(o, None),)] = constant_values
 
     return new_array
 
@@ -353,16 +357,18 @@ def merge_subvols(position, subvol):
     # set min values to 0
     position -= np.min(position, axis=0)
     z_box, y_box, x_box = subvol.shape[1:]
-    centre = position + np.array([z_box//2, y_box//2, x_box//2])
+    centre = position + np.array([z_box // 2, y_box // 2, x_box // 2])
     # Get the min and max values of the position, use this to get the size of the merged image and initialise it
     max_pos = np.max(position, axis=0)
     merged = np.zeros((max_pos + subvol.shape[1:]).astype(int))
     neighbour_im = np.zeros_like(merged)
     # Loop through the subvols and add them to the merged image at the correct position.
     for i in range(position.shape[0]):
-        subvol_i_mask = np.ix_(range(position[i, 0], position[i, 0] + z_box),
-                               range(position[i, 1], position[i, 1] + y_box),
-                               range(position[i, 2], position[i, 2] + x_box))
+        subvol_i_mask = np.ix_(
+            range(position[i, 0], position[i, 0] + z_box),
+            range(position[i, 1], position[i, 1] + y_box),
+            range(position[i, 2], position[i, 2] + x_box),
+        )
         neighbour_im[subvol_i_mask] += 1
         merged[subvol_i_mask] = subvol[i]
 
@@ -387,7 +393,7 @@ def merge_subvols(position, subvol):
 
 def generate_reg_images(nb, t: int, r: int, c: int, filter: bool = False, image_value_range: Optional[Tuple] = None):
     """
-    Function to generate registration images. These are `[500 x 500 x min(10, n_planes)]` images centred in the middle 
+    Function to generate registration images. These are `[500 x 500 x min(10, n_planes)]` images centred in the middle
     of the tile and saved as uint8. They are saved as .npy files in the reg_images folder in the output directory.
 
     Args:
@@ -396,11 +402,11 @@ def generate_reg_images(nb, t: int, r: int, c: int, filter: bool = False, image_
         r (int): round index.
         c (int): channel index.
         filter (bool, optional): Apply the sobel filter. Default: false.
-        image_value_range (`tuple` of `float`, optional): tuple of min and max image pixel values to clip. Default: no 
+        image_value_range (`tuple` of `float`, optional): tuple of min and max image pixel values to clip. Default: no
             clipping.
     """
     yx_centre = nb.basic_info.tile_centre.astype(int)[:2]
-    yx_radius = np.min([250, nb.basic_info.tile_sz//2])
+    yx_radius = np.min([250, nb.basic_info.tile_sz // 2])
     if len(nb.basic_info.use_z) < 10:
         z_planes = nb.basic_info.use_z
     else:
@@ -411,10 +417,15 @@ def generate_reg_images(nb, t: int, r: int, c: int, filter: bool = False, image_
     # Get the image for the tile and channel
     im = yxz_to_zyx(
         tiles_io.load_image(
-            nb.file_names, nb.basic_info, nb.extract.file_type, t, r, c, 
+            nb.file_names,
+            nb.basic_info,
+            nb.extract.file_type,
+            t,
+            r,
+            c,
             [
-                np.arange(tile_centre[0] - yx_radius, tile_centre[0] + yx_radius), 
-                np.arange(tile_centre[1] - yx_radius, tile_centre[1] + yx_radius), 
+                np.arange(tile_centre[0] - yx_radius, tile_centre[0] + yx_radius),
+                np.arange(tile_centre[1] - yx_radius, tile_centre[1] + yx_radius),
                 np.asarray(z_planes) - np.min(nb.basic_info.use_z),
             ],
             apply_shift=False,
@@ -431,10 +442,10 @@ def generate_reg_images(nb, t: int, r: int, c: int, filter: bool = False, image_
     if np.max(im) != 0:
         im = im / np.max(im) * 255  # Scale to 0-255
     im = im.astype(np.uint8)
-    output_dir = os.path.join(nb.file_names.output_dir, 'reg_images')
+    output_dir = os.path.join(nb.file_names.output_dir, "reg_images")
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
-    np.save(os.path.join(output_dir, 't' + str(t) + 'r' + str(r) + 'c' + str(c)), im)
+    np.save(os.path.join(output_dir, "t" + str(t) + "r" + str(r) + "c" + str(c)), im)
 
 
 def window_image(image: np.ndarray) -> np.ndarray:
@@ -447,7 +458,7 @@ def window_image(image: np.ndarray) -> np.ndarray:
     Returns:
         image: windowed image.
     """
-    window_yx = skimage.filters.window('hann', image.shape[1:])
+    window_yx = skimage.filters.window("hann", image.shape[1:])
     window_z = signal.windows.tukey(image.shape[0], alpha=0.33)
     if (window_z == 0).all():
         window_z[...] = 1
@@ -491,7 +502,13 @@ def apply_flow(flow: np.ndarray, points: np.ndarray, ignore_oob: bool = True, ro
         new_points = np.round(new_points).astype(int)
     ny, nx, nz = flow.shape[1:]
     if ignore_oob:
-        oob = (new_points[:, 0] < 0) | (new_points[:, 0] >= ny) | (new_points[:, 1] < 0) | (new_points[:, 1] >= nx) | \
-              (new_points[:, 2] < 0) | (new_points[:, 2] >= nz)
+        oob = (
+            (new_points[:, 0] < 0)
+            | (new_points[:, 0] >= ny)
+            | (new_points[:, 1] < 0)
+            | (new_points[:, 1] >= nx)
+            | (new_points[:, 2] < 0)
+            | (new_points[:, 2] >= nz)
+        )
         new_points = new_points[~oob]
     return new_points

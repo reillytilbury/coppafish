@@ -7,22 +7,29 @@ from ...setup import Notebook
 from ...spot_colors.base import get_spot_colors, remove_background
 import matplotlib
 from typing import List, Optional, Tuple, Union
-plt.style.use('dark_background')
+
+plt.style.use("dark_background")
 try:
     # So matplotlib plots pop out
     # Put in try so don't get error when unit testing in continuous integration
     # which is in headless mode
-    matplotlib.use('qtagg')
+    matplotlib.use("qtagg")
 except ImportError:
     pass
 
 
 class ColorPlotBase:
-    def __init__(self, images: List, norm_factor: Optional[Union[np.ndarray, List]],
-                 subplot_row_columns: Optional[List] = None,
-                 fig_size: Optional[Tuple] = None, subplot_adjust: Optional[List] = None,
-                 cbar_pos: Optional[List] = None, slider_pos: Optional[List] = None,
-                 button_pos: Optional[List] = None):
+    def __init__(
+        self,
+        images: List,
+        norm_factor: Optional[Union[np.ndarray, List]],
+        subplot_row_columns: Optional[List] = None,
+        fig_size: Optional[Tuple] = None,
+        subplot_adjust: Optional[List] = None,
+        cbar_pos: Optional[List] = None,
+        slider_pos: Optional[List] = None,
+        button_pos: Optional[List] = None,
+    ):
         """
         This is the base class for plots with multiple subplots and with a slider to change the color axis and a button
         to change the normalisation.
@@ -79,35 +86,38 @@ class ColorPlotBase:
             if norm_factor is None:
                 self.color_norm = None
             else:
-                self.color_norm = [norm_factor, ] * self.n_images
+                self.color_norm = [
+                    norm_factor,
+                ] * self.n_images
         else:
             self.color_norm = norm_factor
         self.im_data = [val for val in images]  # put in order channels, rounds
-        self.method = 'raw' if self.color_norm is not None else 'norm'
+        self.method = "raw" if self.color_norm is not None else "norm"
         if self.color_norm is None:
-            self.caxis_info = {'norm': {}}
+            self.caxis_info = {"norm": {}}
         else:
-            self.caxis_info = {'norm': {}, 'raw': {}}
+            self.caxis_info = {"norm": {}, "raw": {}}
         for key in self.caxis_info:
-            if key == 'norm':
+            if key == "norm":
                 im_data = self.im_data
-                self.caxis_info[key]['format'] = '%.2f'
+                self.caxis_info[key]["format"] = "%.2f"
             else:
                 im_data = [self.im_data[i] * self.color_norm[i] for i in range(self.n_images)]
-                self.caxis_info[key]['format'] = '%.0f'
-            self.caxis_info[key]['min'] = np.min([im.min() for im in im_data] + [-1e-20])
-            self.caxis_info[key]['max'] = np.max([im.max() for im in im_data] + [1e-20])
-            self.caxis_info[key]['max'] = np.max([self.caxis_info[key]['max'], -self.caxis_info[key]['min']])
+                self.caxis_info[key]["format"] = "%.0f"
+            self.caxis_info[key]["min"] = np.min([im.min() for im in im_data] + [-1e-20])
+            self.caxis_info[key]["max"] = np.max([im.max() for im in im_data] + [1e-20])
+            self.caxis_info[key]["max"] = np.max([self.caxis_info[key]["max"], -self.caxis_info[key]["min"]])
             # have equal either side of zero so small negatives don't look large
-            self.caxis_info[key]['min'] = -self.caxis_info[key]['max']
-            self.caxis_info[key]['clims'] = [self.caxis_info[key]['min'], self.caxis_info[key]['max']]
+            self.caxis_info[key]["min"] = -self.caxis_info[key]["max"]
+            self.caxis_info[key]["clims"] = [self.caxis_info[key]["min"], self.caxis_info[key]["max"]]
             # cmap_norm is so cmap is white at 0.
-            self.caxis_info[key]['cmap_norm'] = \
-                matplotlib.colors.TwoSlopeNorm(vmin=self.caxis_info[key]['min'],
-                                               vcenter=0, vmax=self.caxis_info[key]['max'])
+            self.caxis_info[key]["cmap_norm"] = matplotlib.colors.TwoSlopeNorm(
+                vmin=self.caxis_info[key]["min"], vcenter=0, vmax=self.caxis_info[key]["max"]
+            )
 
-        self.fig, self.ax = plt.subplots(subplot_row_columns[0], subplot_row_columns[1], figsize=fig_size,
-                                         sharex=True, sharey=True)
+        self.fig, self.ax = plt.subplots(
+            subplot_row_columns[0], subplot_row_columns[1], figsize=fig_size, sharex=True, sharey=True
+        )
         if self.n_images == 1:
             self.ax = [self.ax]  # need it to be a list
         elif subplot_row_columns[0] > 1 and subplot_row_columns[1] > 1:
@@ -116,9 +126,10 @@ class ColorPlotBase:
         if oob_axes.size > 0:
             for i in oob_axes:
                 self.fig.delaxes(self.ax[i])  # delete excess subplots
-            self.ax = self.ax[:self.n_images]
-        self.fig.subplots_adjust(left=subplot_adjust[0], right=subplot_adjust[1], bottom=subplot_adjust[2],
-                                 top=subplot_adjust[3])
+            self.ax = self.ax[: self.n_images]
+        self.fig.subplots_adjust(
+            left=subplot_adjust[0], right=subplot_adjust[1], bottom=subplot_adjust[2], top=subplot_adjust[3]
+        )
         self.im = [None] * self.n_images
         if self.im_data[0].ndim == 3:
             # For 3D data, start by showing just the first plane
@@ -132,22 +143,26 @@ class ColorPlotBase:
             self.color_norm_3d = None
         # initialise plots with a zero array
         for i in range(self.n_images):
-            self.im[i] = self.ax[i].imshow(np.zeros(self.im_data[0].shape[:2]), cmap="seismic", aspect='auto',
-                                           norm=self.caxis_info[self.method]['cmap_norm'])
+            self.im[i] = self.ax[i].imshow(
+                np.zeros(self.im_data[0].shape[:2]),
+                cmap="seismic",
+                aspect="auto",
+                norm=self.caxis_info[self.method]["cmap_norm"],
+            )
         cbar_ax = self.fig.add_axes(cbar_pos)  # left, bottom, width, height
         self.fig.colorbar(self.im[0], cax=cbar_ax)
 
         self.slider_ax = self.fig.add_axes(self.slider_pos)
         self.color_slider = None
         if self.color_norm is not None:
-            self.norm_button_color = 'white'
-            self.norm_button_color_press = 'red'
-            if self.method == 'raw':
+            self.norm_button_color = "white"
+            self.norm_button_color_press = "red"
+            if self.method == "raw":
                 current_color = self.norm_button_color_press
             else:
                 current_color = self.norm_button_color
             self.norm_button_ax = self.fig.add_axes(button_pos)
-            self.norm_button = Button(self.norm_button_ax, 'Norm', hovercolor='0.275')
+            self.norm_button = Button(self.norm_button_ax, "Norm", hovercolor="0.275")
             self.norm_button.label.set_color(current_color)
             self.norm_button.on_clicked(self.change_norm)
 
@@ -165,7 +180,7 @@ class ColorPlotBase:
         if val[1] <= 0:
             # cannot have negative upper bound with diverging colormap
             val[1] = 1e-20
-        self.caxis_info[self.method]['clims'] = val
+        self.caxis_info[self.method]["clims"] = val
         for im in self.im:
             im.set_clim(val[0], val[1])
         self.im[-1].axes.figure.canvas.draw()
@@ -179,34 +194,33 @@ class ColorPlotBase:
         self.slider_ax.remove()
         self.slider_ax = self.fig.add_axes(self.slider_pos)
         if self.color_norm is not None:
-            self.method = 'norm' if self.method == 'raw' else 'raw'  # change to the other method
-            if self.method == 'raw':
+            self.method = "norm" if self.method == "raw" else "raw"  # change to the other method
+            if self.method == "raw":
                 # Change color of text when button pressed
                 self.norm_button.label.set_color(self.norm_button_color_press)
             else:
                 self.norm_button.label.set_color(self.norm_button_color)
         for i in range(self.n_images):
             # change image to different normalisation and change clim
-            self.im[i].set_data(self.im_data[i] * self.color_norm[i] if self.method == 'raw' else self.im_data[i])
-            self.im[i].set_norm(self.caxis_info[self.method]['cmap_norm'])
-            self.im[i].set_clim(self.caxis_info[self.method]['clims'][0],
-                                self.caxis_info[self.method]['clims'][1])
+            self.im[i].set_data(self.im_data[i] * self.color_norm[i] if self.method == "raw" else self.im_data[i])
+            self.im[i].set_norm(self.caxis_info[self.method]["cmap_norm"])
+            self.im[i].set_clim(self.caxis_info[self.method]["clims"][0], self.caxis_info[self.method]["clims"][1])
 
         self.color_slider = RangeSlider(
-            ax=self.slider_ax, 
-            label="Clim", 
-            valmin=self.caxis_info[self.method]['min'], 
-            valmax=self.caxis_info[self.method]['max'], 
-            valinit=self.caxis_info[self.method]['clims'], 
-            orientation='vertical', 
-            valfmt=self.caxis_info[self.method]['format']
+            ax=self.slider_ax,
+            label="Clim",
+            valmin=self.caxis_info[self.method]["min"],
+            valmax=self.caxis_info[self.method]["max"],
+            valinit=self.caxis_info[self.method]["clims"],
+            orientation="vertical",
+            valfmt=self.caxis_info[self.method]["format"],
         )
         self.color_slider.on_changed(self.change_clim)
         self.im[-1].axes.figure.canvas.draw()
 
 
 class view_codes(ColorPlotBase):
-    def __init__(self, nb: Notebook, spot_no: int, method: str = 'anchor', bg_removed=False, save_loc: str = None):
+    def __init__(self, nb: Notebook, spot_no: int, method: str = "anchor", bg_removed=False, save_loc: str = None):
         """
         Diagnostic to compare `spot_color` to `bled_code` of predicted gene.
 
@@ -217,26 +231,26 @@ class view_codes(ColorPlotBase):
             method: `'anchor'` or `'omp'`.
                 Which method of gene assignment used i.e. `spot_no` belongs to `ref_spots` or `omp` page of Notebook.
         """
-        if method.lower() == 'omp':
-            page_name = 'omp'
+        if method.lower() == "omp":
+            page_name = "omp"
             t = nb.omp.tile[spot_no]
-            config = nb.get_config()['thresholds']
-            spot_score = omp_spot_score(nb.omp, config['score_omp_multiplier'], spot_no)
+            config = nb.get_config()["thresholds"]
+            spot_score = omp_spot_score(nb.omp, spot_no)
+            self.spot_color = nb.omp.colors[spot_no]
         else:
-            page_name = 'ref_spots'
+            page_name = "ref_spots"
             spot_score = nb.ref_spots.score[spot_no]
             t = nb.ref_spots.tile[spot_no]
-            
+            self.spot_color = nb.ref_spots.colors[spot_no][np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)]
+
         if np.ndim(nb.call_spots.color_norm_factor) == 3:
-            color_norm = nb.call_spots.color_norm_factor[t][np.ix_(nb.basic_info.use_rounds,
-                                                                nb.basic_info.use_channels)]
+            color_norm = nb.call_spots.color_norm_factor[t][
+                np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
+            ]
         else:
-            color_norm = nb.call_spots.color_norm_factor[np.ix_(nb.basic_info.use_rounds,
-                                                                nb.basic_info.use_channels)]
-        self.spot_color = nb.__getattribute__(page_name).colors[spot_no][
-                              np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)]
+            color_norm = nb.call_spots.color_norm_factor[np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)]
         # Get spot color after background fitting
-        if method.lower() == 'omp':
+        if method.lower() == "omp":
             self.spot_color_pb = remove_background(self.spot_color[None].astype(float))[0][0] / color_norm
             self.spot_color = self.spot_color / color_norm
         else:
@@ -251,23 +265,25 @@ class view_codes(ColorPlotBase):
 
         gene_no = nb.__getattribute__(page_name).gene_no[spot_no]
         gene_name = nb.call_spots.gene_names[gene_no]
-        gene_color = nb.call_spots.bled_codes_ge[gene_no][np.ix_(nb.basic_info.use_rounds,
-                                                                 nb.basic_info.use_channels)].transpose()
+        gene_color = nb.call_spots.bled_codes_ge[gene_no][
+            np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
+        ].transpose()
         if bg_removed:
             colour = self.spot_color_pb
         else:
             colour = self.spot_color
-        super().__init__([colour, gene_color], color_norm, slider_pos=[0.85, 0.2, 0.01, 0.75],
-                         cbar_pos=[0.9, 0.2, 0.03, 0.75])
-        self.ax[0].set_title(f'Spot {spot_no}: match {str(np.around(spot_score, 2))} '
-                             f'to {gene_name}')
-        self.ax[1].set_title(f'Predicted code for Gene {gene_no}: {gene_name}')
+        super().__init__(
+            [colour, gene_color], color_norm, slider_pos=[0.85, 0.2, 0.01, 0.75], cbar_pos=[0.9, 0.2, 0.03, 0.75]
+        )
+        self.ax[0].set_title(f"Spot {spot_no}: match {str(np.around(spot_score, 2))} " f"to {gene_name}")
+        self.ax[1].set_title(f"Predicted code for Gene {gene_no}: {gene_name}")
         self.ax[0].set_yticks(ticks=np.arange(self.im_data[0].shape[0]), labels=nb.basic_info.use_channels)
         self.ax[1].set_xticks(ticks=np.arange(self.im_data[0].shape[1]))
-        self.ax[1].set_xticklabels(['{:.0f} ({:.2f})'.format(r, nb.call_spots.gene_efficiency[gene_no, r])
-                                    for r in nb.basic_info.use_rounds])
-        self.ax[1].set_xlabel('Round (Gene Efficiency)')
-        self.fig.supylabel('Color Channel')
+        self.ax[1].set_xticklabels(
+            ["{:.0f} ({:.2f})".format(r, nb.call_spots.gene_efficiency[gene_no, r]) for r in nb.basic_info.use_rounds]
+        )
+        self.ax[1].set_xlabel("Round (Gene Efficiency)")
+        self.fig.supylabel("Color Channel")
         # for each round, plot a green circle in the channel which is highest for that round
         n_channels, n_rounds = gene_color.shape
         max_channels = np.zeros((n_rounds, n_channels), dtype=bool)
@@ -289,16 +305,22 @@ class view_codes(ColorPlotBase):
                     scale = max_channel_share[r, c]
                     default_width = 0.1
                     default_height = 0.3
-                    circle = mpl.patches.Ellipse((r, c), width=scale * default_width, height=scale * default_height,
-                                                 facecolor='lime', edgecolor='none', alpha=0.5)
+                    circle = mpl.patches.Ellipse(
+                        (r, c),
+                        width=scale * default_width,
+                        height=scale * default_height,
+                        facecolor="lime",
+                        edgecolor="none",
+                        alpha=0.5,
+                    )
                     self.ax[j].add_patch(circle)
             # plot a black horizontal line above every third channel
             for c in range(n_channels):
                 if c % 3 == 0:
-                    self.ax[j].axhline(c - 0.5, color='black', lw=2)
+                    self.ax[j].axhline(c - 0.5, color="black", lw=2)
 
         self.background_button_ax = self.fig.add_axes([0.85, 0.1, 0.1, 0.05])
-        self.background_button = Button(self.background_button_ax, 'Background', hovercolor='0.275')
+        self.background_button = Button(self.background_button_ax, "Background", hovercolor="0.275")
         self.background_button.label.set_color(self.norm_button_color)
         self.background_button.on_clicked(self.change_background)
 
@@ -326,12 +348,12 @@ class view_codes(ColorPlotBase):
             self.background_button.label.set_color(self.norm_button_color)
         # Change norm method before call change_norm so overall it does not change
         if self.color_norm is not None:
-            self.method = 'norm' if self.method == 'raw' else 'raw'  # change to the other method
+            self.method = "norm" if self.method == "raw" else "raw"  # change to the other method
         self.change_norm()
 
 
 class view_spot(ColorPlotBase):
-    def __init__(self, nb: Notebook, spot_no: int, method: str = 'anchor', im_size: int = 8):
+    def __init__(self, nb: Notebook, spot_no: int, method: str = "anchor", im_size: int = 8):
         """
         Diagnostic to show intensity of each color channel / round in neighbourhood of spot.
         Will show a grid of `n_use_channels x n_use_rounds` subplots.
@@ -346,29 +368,30 @@ class view_spot(ColorPlotBase):
         Notes:
             - Requires access to `nb.file_names.tile_dir`.
         """
-        if method.lower() == 'omp':
-            config = nb.get_config()['thresholds']
-            page_name = 'omp'
+        if method.lower() == "omp":
+            config = nb.get_config()["thresholds"]
+            page_name = "omp"
             t = nb.omp.tile[spot_no]
-            spot_score = omp_spot_score(nb.omp, config['score_omp_multiplier'], spot_no)
+            spot_score = omp_spot_score(nb.omp, spot_no)
         else:
-            page_name = 'ref_spots'
+            page_name = "ref_spots"
             t = nb.ref_spots.tile[spot_no]
             spot_score = nb.ref_spots.score[spot_no]
         if np.ndim(nb.call_spots.color_norm_factor) == 3:
-            color_norm = nb.call_spots.color_norm_factor[t][np.ix_(nb.basic_info.use_rounds,
-                                                                nb.basic_info.use_channels)].T
+            color_norm = nb.call_spots.color_norm_factor[t][
+                np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
+            ].T
         else:
-            color_norm = nb.call_spots.color_norm_factor[np.ix_(nb.basic_info.use_rounds,
-                                                                nb.basic_info.use_channels)].T
+            color_norm = nb.call_spots.color_norm_factor[np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)].T
         gene_no = nb.__getattribute__(page_name).gene_no[spot_no]
         t = nb.__getattribute__(page_name).tile[spot_no]
         spot_yxz = nb.__getattribute__(page_name).local_yxz[spot_no]
 
         gene_name = nb.call_spots.gene_names[gene_no]
         gene_code = nb.call_spots.gene_codes[gene_no].copy()
-        gene_color = nb.call_spots.bled_codes_ge[gene_no][np.ix_(nb.basic_info.use_rounds,
-                                                                 nb.basic_info.use_channels)].transpose()
+        gene_color = nb.call_spots.bled_codes_ge[gene_no][
+            np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
+        ].transpose()
         gene_color_flat = gene_color.flatten()
         n_use_channels, n_use_rounds = color_norm.shape
         color_norm = [val for val in color_norm.flatten()]
@@ -378,26 +401,46 @@ class view_spot(ColorPlotBase):
         # note im_yxz[1] refers to point at max_y, min_x+1, z. So when reshape and set plot_extent, should be correct.
         # I.e. im = np.zeros(49); im[1] = 1; im = im.reshape(7,7); plt.imshow(im, extent=[-0.5, 6.5, -0.5, 6.5])
         # will show the value 1 at max_y, min_x+1.
-        im_yxz = np.array(np.meshgrid(np.arange(spot_yxz[0]-im_size[0], spot_yxz[0]+im_size[0]+1)[::-1],
-                                      np.arange(spot_yxz[1]-im_size[1], spot_yxz[1]+im_size[1]+1), spot_yxz[2]),
-                          dtype=np.int16).T.reshape(-1, 3)
-        im_diameter = [2*im_size[0]+1, 2*im_size[1]+1]
-        spot_colors = get_spot_colors(yxz_base=im_yxz, t=t, transform=nb.register.icp_correction,
-                                      bg_scale=nb.filter.bg_scale, file_type=nb.extract.file_type,
-                                      nbp_file=nb.file_names, nbp_basic=nb.basic_info)[0]
+        im_yxz = np.array(
+            np.meshgrid(
+                np.arange(spot_yxz[0] - im_size[0], spot_yxz[0] + im_size[0] + 1)[::-1],
+                np.arange(spot_yxz[1] - im_size[1], spot_yxz[1] + im_size[1] + 1),
+                spot_yxz[2],
+            ),
+            dtype=np.int16,
+        ).T.reshape(-1, 3)
+        im_diameter = [2 * im_size[0] + 1, 2 * im_size[1] + 1]
+        spot_colors = get_spot_colors(
+            yxz_base=im_yxz,
+            t=t,
+            transform=nb.register.icp_correction,
+            bg_scale=nb.filter.bg_scale,
+            file_type=nb.extract.file_type,
+            nbp_file=nb.file_names,
+            nbp_basic=nb.basic_info,
+        )[0]
         spot_colors = np.moveaxis(spot_colors, 1, 2)  # put round as the last axis to match color_norm
         spot_colors = spot_colors.reshape(im_yxz.shape[0], -1)
         # reshape
-        cr_images = [spot_colors[:, i].reshape(im_diameter[0], im_diameter[1]) / color_norm[i]
-                     for i in range(spot_colors.shape[1])]
+        cr_images = [
+            spot_colors[:, i].reshape(im_diameter[0], im_diameter[1]) / color_norm[i]
+            for i in range(spot_colors.shape[1])
+        ]
         subplot_adjust = [0.07, 0.775, 0.075, 0.92]
-        super().__init__(cr_images, color_norm, subplot_row_columns=[n_use_channels, n_use_rounds],
-                         subplot_adjust=subplot_adjust, fig_size=(13, 8))
+        super().__init__(
+            cr_images,
+            color_norm,
+            subplot_row_columns=[n_use_channels, n_use_rounds],
+            subplot_adjust=subplot_adjust,
+            fig_size=(13, 8),
+        )
         # set x, y coordinates to be those of the global coordinate system
-        plot_extent = [im_yxz[:, 1].min()-0.5+nb.stitch.tile_origin[t, 1],
-                       im_yxz[:, 1].max()+0.5+nb.stitch.tile_origin[t, 1],
-                       im_yxz[:, 0].min()-0.5+nb.stitch.tile_origin[t, 0],
-                       im_yxz[:, 0].max()+0.5+nb.stitch.tile_origin[t, 0]]
+        plot_extent = [
+            im_yxz[:, 1].min() - 0.5 + nb.stitch.tile_origin[t, 1],
+            im_yxz[:, 1].max() + 0.5 + nb.stitch.tile_origin[t, 1],
+            im_yxz[:, 0].min() - 0.5 + nb.stitch.tile_origin[t, 0],
+            im_yxz[:, 0].max() + 0.5 + nb.stitch.tile_origin[t, 0],
+        ]
         # for each round, plot a green circle in the channel which is highest for that round
         n_channels, n_rounds = gene_color.shape
         max_channels = np.zeros((n_rounds, n_channels), dtype=bool)
@@ -417,40 +460,53 @@ class view_spot(ColorPlotBase):
         for i in range(self.n_images):
             # Add cross-hair
             if max_channels[i]:
-                cross_hair_color = 'lime'  # different color if expected large intensity
-                linestyle = '--'
-                self.ax[i].tick_params(color='lime', labelcolor='lime')
+                cross_hair_color = "lime"  # different color if expected large intensity
+                linestyle = "--"
+                self.ax[i].tick_params(color="lime", labelcolor="lime")
                 for spine in self.ax[i].spines.values():
-                    spine.set_edgecolor('lime')
+                    spine.set_edgecolor("lime")
                     spine.set_linewidth(max_channel_share[i])
             else:
-                cross_hair_color = 'k'
-                linestyle = ':'
-            self.ax[i].axes.plot([spot_yxz_global[1], spot_yxz_global[1]], [plot_extent[2], plot_extent[3]],
-                                 cross_hair_color, linestyle=linestyle, lw=1)
-            self.ax[i].axes.plot([plot_extent[0], plot_extent[1]], [spot_yxz_global[0], spot_yxz_global[0]],
-                                 cross_hair_color, linestyle=linestyle, lw=1)
+                cross_hair_color = "k"
+                linestyle = ":"
+            self.ax[i].axes.plot(
+                [spot_yxz_global[1], spot_yxz_global[1]],
+                [plot_extent[2], plot_extent[3]],
+                cross_hair_color,
+                linestyle=linestyle,
+                lw=1,
+            )
+            self.ax[i].axes.plot(
+                [plot_extent[0], plot_extent[1]],
+                [spot_yxz_global[0], spot_yxz_global[0]],
+                cross_hair_color,
+                linestyle=linestyle,
+                lw=1,
+            )
             self.im[i].set_extent(plot_extent)
             self.ax[i].tick_params(labelbottom=False, labelleft=False)
             # Add axis labels to subplots of far left column or bottom row
             if i % n_use_rounds == 0:
-                self.ax[i].set_ylabel(f'{nb.basic_info.use_channels[int(i/n_use_rounds)]}')
+                self.ax[i].set_ylabel(f"{nb.basic_info.use_channels[int(i/n_use_rounds)]}")
             if i >= self.n_images - n_use_rounds:
-                r = nb.basic_info.use_rounds[i-(self.n_images - n_use_rounds)]
-                self.ax[i].set_xlabel('{:.0f} ({:.2f})'.format(r, nb.call_spots.gene_efficiency[gene_no, r]))
+                r = nb.basic_info.use_rounds[i - (self.n_images - n_use_rounds)]
+                self.ax[i].set_xlabel("{:.0f} ({:.2f})".format(r, nb.call_spots.gene_efficiency[gene_no, r]))
 
         self.ax[0].set_xticks([spot_yxz_global[1]])
         self.ax[0].set_yticks([spot_yxz_global[0]])
-        self.fig.supylabel('Color Channel', size=14)
-        self.fig.supxlabel('Round (Gene Efficiency)', size=14, x=(subplot_adjust[0] + subplot_adjust[1]) / 2)
-        plt.suptitle(f'Spot {spot_no}: match {str(np.around(spot_score, decimals=2))} '
-                     f'to {gene_name}. Code = {gene_code}', x=(subplot_adjust[0] + subplot_adjust[1]) / 2, size=16)
+        self.fig.supylabel("Color Channel", size=14)
+        self.fig.supxlabel("Round (Gene Efficiency)", size=14, x=(subplot_adjust[0] + subplot_adjust[1]) / 2)
+        plt.suptitle(
+            f"Spot {spot_no}: match {str(np.around(spot_score, decimals=2))} " f"to {gene_name}. Code = {gene_code}",
+            x=(subplot_adjust[0] + subplot_adjust[1]) / 2,
+            size=16,
+        )
         self.change_norm()
         plt.show()
 
 
 class view_intensity(ColorPlotBase):
-    def __init__(self, nb: Notebook, spot_no: int, method: str = 'anchor'):
+    def __init__(self, nb: Notebook, spot_no: int, method: str = "anchor"):
         """
         Diagnostic to show how intensity is computed from `spot_color`.
 
@@ -460,42 +516,48 @@ class view_intensity(ColorPlotBase):
             method: `'anchor'` or `'omp'`.
                 Which method of gene assignment used i.e. `spot_no` belongs to `ref_spots` or `omp` page of Notebook.
         """
-        if method.lower() == 'omp':
-            page_name = 'omp'
+        if method.lower() == "omp":
+            page_name = "omp"
             t = nb.omp.tile[spot_no]
-            config = nb.get_config()['thresholds']
+            config = nb.get_config()["thresholds"]
         else:
-            page_name = 'ref_spots'
+            page_name = "ref_spots"
             t = nb.ref_spots.tile[spot_no]
         color_norm = nb.call_spots.color_norm_factor[t][
             np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
         ].transpose()
         intensity_saved = nb.__getattribute__(page_name).intensity[spot_no]
         intensity_thresh = get_intensity_thresh(nb)
-        spot_color = nb.__getattribute__(page_name).colors[spot_no][
-                         np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)].transpose() / color_norm
+        spot_color = (
+            nb.__getattribute__(page_name)
+            .colors[spot_no][np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)]
+            .transpose()
+            / color_norm
+        )
         subplot_adjust = [0.07, 0.775, 0.1, 0.91]
         super().__init__([spot_color], color_norm, subplot_adjust=subplot_adjust)
         if intensity_saved > intensity_thresh:
-            color = 'w'
+            color = "w"
         else:
-            color = 'r'
+            color = "r"
         spot_color_symbol = r"$\mathbf{\zeta_s}$"
         intensity_symbol = r"$\chi_s$, (median of $\max_c\zeta_{s_{rc}}$ indicated in green)"
-        self.ax[0].set_title(f'Spot Color, {spot_color_symbol}, for spot {spot_no}\n'
-                             f'Intensity, {intensity_symbol} = {str(np.around(intensity_saved, 3))}', color=color)
+        self.ax[0].set_title(
+            f"Spot Color, {spot_color_symbol}, for spot {spot_no}\n"
+            f"Intensity, {intensity_symbol} = {str(np.around(intensity_saved, 3))}",
+            color=color,
+        )
         self.ax[0].set_yticks(ticks=np.arange(self.im_data[0].shape[0]), labels=nb.basic_info.use_channels)
         self.ax[0].set_xticks(ticks=np.arange(self.im_data[0].shape[1]), labels=nb.basic_info.use_rounds)
-        self.ax[0].set_xlabel('Round')
-        self.fig.supylabel('Color Channel')
+        self.ax[0].set_xlabel("Round")
+        self.fig.supylabel("Color Channel")
         # Highlight max channel in each round which contributes to intensity
         max_channels = np.argmax(self.im_data[0], axis=0)
         for r in range(len(nb.basic_info.use_rounds)):
             # can't add rectangle to multiple axes hence second for loop
-            rectangle = plt.Rectangle((r-0.5, max_channels[r]-0.5), 1, 1,
-                                      fill=False, ec='lime', linestyle=':', lw=4)
+            rectangle = plt.Rectangle(
+                (r - 0.5, max_channels[r] - 0.5), 1, 1, fill=False, ec="lime", linestyle=":", lw=4
+            )
             self.ax[0].add_patch(rectangle)
         self.change_norm()  # initialise with method = 'norm'
         plt.show()
-
-

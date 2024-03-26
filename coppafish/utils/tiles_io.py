@@ -13,16 +13,32 @@ except ImportError:
 from tqdm import tqdm
 import numpy_indexed
 import numpy.typing as npt
-from typing import Tuple, Union, Optional, List, Any
+from typing import Tuple, Union, Optional, List
 
 from ..setup import NotebookPage
-from ..register import preprocessing
 from .. import utils, extract, logging
+
+
+IMAGE_SAVE_DTYPE = np.uint16
 
 
 class OptimisedFor(Enum):
     FULL_READ_AND_WRITE = auto()
     Z_PLANE_READ = auto()
+
+
+def get_pixel_max() -> int:
+    """
+    Get the maximum pixel value that can be saved in an image.
+    """
+    return np.iinfo(IMAGE_SAVE_DTYPE).max
+
+
+def get_pixel_min() -> int:
+    """
+    Get the minimum pixel value that can be saved in an image.
+    """
+    return np.iinfo(IMAGE_SAVE_DTYPE).min
 
 
 def image_exists(file_path: str, file_type: str) -> bool:
@@ -68,6 +84,9 @@ def _save_image(
     Raises:
         ValueError: unsupported file_type or optimised_for.
     """
+    if image.dtype != IMAGE_SAVE_DTYPE:
+        raise ValueError(f"Expected image dtype {IMAGE_SAVE_DTYPE}, got {image.dtype}")
+
     if optimised_for is None:
         optimised_for = OptimisedFor.FULL_READ_AND_WRITE
     if file_type.lower() == ".npy":
@@ -161,6 +180,8 @@ def save_image(
     num_rotations: int = 0,
     suffix: str = "",
     apply_shift: bool = True,
+    percent_clip_warn: float = None,
+    percent_clip_error: float = None,
 ) -> npt.NDArray[np.uint16]:
     """
     Wrapper function to save tiles as npy files with correct shift. Moves z-axis to first axis before saving as it is
@@ -180,7 +201,10 @@ def save_image(
             Applied to the `x` and `y` axes, to 3d `image` data only. Default: `0`.
         suffix (str, optional): suffix to add to file name before the file extension. Default: empty.
         apply_shift (bool, optional): if true and saving a non-dapi channel, will apply the shift to the image.
-
+        n_clip_warn (int, optional): if the number of pixels clipped off by saving is at least this number, a warning
+            is logged. Default: never warn.
+        n_clip_error (int, optional): if the number of pixels clipped off by saving is at least this number, then an
+            error is raised. Default: never raise an error.
 
     Returns:
         `(nz x ny x nx) ndarray[uint16]`: the saved, manipulated image.
@@ -190,20 +214,32 @@ def save_image(
     if nbp_basic.is_3d:
         if c is None:
             logging.error(ValueError("3d image but channel not given."))
-        if c == nbp_basic.dapi_channel:
+        if not apply_shift or (c == nbp_basic.dapi_channel):
             # If dapi is given then image should already by uint16 so no clipping
-            image = image.astype(np.uint16)
+            percent_clipped_pixels = (image < 0).sum()
+            percent_clipped_pixels += (image > get_pixel_max()).sum()
+            image = image.astype(IMAGE_SAVE_DTYPE)
         elif apply_shift and c != nbp_basic.dapi_channel:
             # need to shift and clip image so fits into uint16 dtype.
             # clip at 1 not 0 because 0 (or -tile_pixel_value_shift)
             # will be used as an invalid value when reading in spot_colors.
+            percent_clipped_pixels = ((image + nbp_basic.tile_pixel_value_shift) < 1).sum()
+            percent_clipped_pixels += ((image + nbp_basic.tile_pixel_value_shift) > get_pixel_max()).sum()
             image = np.clip(
                 image + nbp_basic.tile_pixel_value_shift,
                 1,
-                np.iinfo(np.uint16).max,
+                get_pixel_max(),
                 np.zeros_like(image, dtype=np.uint16),
                 casting="unsafe",
             )
+        percent_clipped_pixels *= 100 / image.size
+        message = f"{t=}, {r=}, {c=} saved image has clipped {round(percent_clipped_pixels, 5)}% of pixels"
+        if percent_clip_warn is not None and percent_clipped_pixels >= percent_clip_warn:
+            logging.warn(message)
+        if percent_clip_error is not None and percent_clipped_pixels >= percent_clip_error:
+            logging.error(message)
+        if percent_clipped_pixels >= 1:
+            logging.debug(message)
         # In 3D, cannot possibly save any un-used channel hence no exception for this case.
         expected_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
         if not utils.errors.check_shape(image, expected_shape):
@@ -220,36 +256,7 @@ def save_image(
         _save_image(image, file_path, file_type, optimised_for=OptimisedFor.Z_PLANE_READ)
         return image
     else:
-        # Don't need to apply rotations here as 2D data obtained from upstairs microscope without this issue
-        if r == nbp_basic.anchor_round:
-            if nbp_basic.anchor_channel is not None:
-                # If anchor round, only shift and clip anchor channel, leave DAPI and un-used channels alone.
-                image[nbp_basic.anchor_channel] = np.clip(
-                    image[nbp_basic.anchor_channel] + nbp_basic.tile_pixel_value_shift,
-                    1,
-                    np.iinfo(np.uint16).max,
-                    image[nbp_basic.anchor_channel],
-                )
-            image = image.astype(np.uint16)
-            use_channels = [val for val in [nbp_basic.dapi_channel, nbp_basic.anchor_channel] if val is not None]
-        else:
-            image = np.clip(
-                image + nbp_basic.tile_pixel_value_shift,
-                1,
-                np.iinfo(np.uint16).max,
-                np.zeros_like(image, dtype=np.uint16),
-                casting="unsafe",
-            )
-            use_channels = nbp_basic.use_channels
-        # set un-used channels to be 0, not clipped to 1.
-        image[np.setdiff1d(np.arange(nbp_basic.n_channels), use_channels)] = 0
-        expected_shape = (nbp_basic.n_channels, nbp_basic.tile_sz, nbp_basic.tile_sz)
-        if not utils.errors.check_shape(image, expected_shape):
-            logging.error(utils.errors.ShapeError("tile to be saved", image.shape, expected_shape))
-        file_path = nbp_file.tile[t][r][c]
-        file_path = file_path[file_path.index(file_type) :] + suffix + file_type
-        _save_image(image, file_path, file_type, optimised_for=OptimisedFor.Z_PLANE_READ)
-        return image
+        logging.error(NotImplementedError("2D image saving is currently not supported"))
 
 
 def load_image(
@@ -299,6 +306,8 @@ def load_image(
     if nbp_basic.is_3d:
         file_path = nbp_file.tile[t][r][c]
         file_path = file_path[: file_path.index(file_type)] + suffix + file_type
+    else:
+        logging.error(NotImplementedError("2D image loading is currently not supported"))
     if not image_exists(file_path, file_type):
         logging.error(FileNotFoundError(f"Could not find image at {file_path} to load from"))
     if yxz is not None:
@@ -472,10 +481,8 @@ def save_stitched(
             else:
                 if nbp_basic.is_3d:
                     image_t = load_image(
-                        nbp_file, nbp_basic, nbp_extract.file_type, t, r, c, apply_shift=False
+                        nbp_file, nbp_basic, nbp_extract.file_type, t, r, c, apply_shift=True
                     ).transpose((2, 0, 1))
-                    if not (r == nbp_basic.anchor_round and c == nbp_basic.dapi_channel):
-                        image_t = preprocessing.offset_pixels_by(image_t, -nbp_basic.tile_pixel_value_shift)
                 else:
                     image_t = load_image(nbp_file, nbp_basic, nbp_extract.file_type, t, r, c, apply_shift=False)
             for z in range(z_size):

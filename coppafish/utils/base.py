@@ -1,9 +1,14 @@
+import os
 import tqdm
+import shutil
 import inspect
+import itertools
 import numpy as np
+from pathlib import PurePath
 import numpy.typing as npt
 from typing import Union, Dict, List, Optional
 
+from ..setup.notebook import Notebook
 from .. import logging
 
 
@@ -15,6 +20,179 @@ def get_function_name() -> str:
         str: function name.
     """
     return str(inspect.stack()[1][3])
+
+
+def move_output_dir(current_dir: str, new_dir: str) -> None:
+    """
+    Move all output files from `current_dir` to `new_dir`. Changes the notebook file path variables in the moved
+    notebook to match the new directory position.
+
+    Args:
+        current_dir (str): current output directory.
+        new_dir (str): new output directory.
+
+    Notes:
+        - If the new output directory is located on a mount point (like a server), if the mount is not identical for
+            other users, this would not work for them. But, other users could then move the output directory again
+            somewhere that matches their file paths.
+        - The file's are copied so that the "date modified" and other metadata is preserved.
+    """
+    assert len(os.listdir(current_dir)) > 0, f"Current directory {current_dir} is empty"
+    assert len(os.listdir(new_dir)) == 0, f"New directory {new_dir} must be empty"
+    notebook_path = os.path.join(current_dir, "notebook.npz")
+    assert os.path.isfile(notebook_path), f"Notebook at {notebook_path} not found"
+    nb = Notebook(notebook_path)
+    assert nb.has_page("basic_info"), f"Notebook at {notebook_path} does not contain basic_info page"
+    assert nb.has_page("file_names"), f"Notebook at {notebook_path} does not contain file_names page"
+    del nb
+
+    current_dir = os.path.normpath(current_dir)
+    new_dir = os.path.normpath(new_dir)
+
+    with tqdm.tqdm(desc="Copying files", ascii=True, unit="file") as pbar:
+        for name in os.listdir(current_dir):
+            path = os.path.normpath(os.path.join(current_dir, name))
+            new_path = os.path.normpath(os.path.join(new_dir, name))
+            if os.path.normpath(os.path.dirname(nb.file_names.tile_dir)) == path:
+                # Skip tile directory
+                continue
+            pbar.set_postfix({"filename": name})
+            if os.path.isfile(path):
+                shutil.copy2(path, new_path)
+            elif os.path.isdir(path):
+                shutil.copytree(path, new_path)
+            else:
+                TypeError(f"Cannot copy {path}")
+            pbar.update()
+
+    print(f"Updating new notebook")
+    new_notebook_path = os.path.join(current_dir, "notebook.npz")
+    set_notebook_output_dir(new_notebook_path, new_dir)
+
+
+def set_notebook_output_dir(notebook_path: str, new_dir: str) -> None:
+    """
+    Changes the notebook variables to use the given `output_dir`, then re-saves the notebook.
+
+    Args:
+        notebook_path (str): path to notebook.
+        new_dir (str): new output directory.
+    """
+    assert os.path.isfile(notebook_path), f"Notebook at {notebook_path} not found"
+    assert os.path.isdir(new_dir), f"{new_dir} directory not found"
+
+    nb_new = Notebook(notebook_path)
+    # Set the copied notebook variables to the right output directory.
+    nb_new.file_names.finalized = False
+    del nb_new.file_names.output_dir
+    nb_new.file_names.output_dir = new_dir
+
+    old_name = PurePath(nb_new.file_names.spot_details_info).name
+    del nb_new.file_names.spot_details_info
+    nb_new.file_names.spot_details_info = os.path.join(new_dir, old_name)
+    old_name = PurePath(nb_new.file_names.psf).name
+    del nb_new.file_names.psf
+    nb_new.file_names.psf = os.path.join(new_dir, old_name)
+
+    old_name = PurePath(nb_new.file_names.omp_spot_shape).name
+    del nb_new.file_names.omp_spot_shape
+    nb_new.file_names.omp_spot_shape = os.path.join(new_dir, old_name)
+    old_name = PurePath(nb_new.file_names.omp_spot_info).name
+    del nb_new.file_names.omp_spot_info
+    nb_new.file_names.omp_spot_info = os.path.join(new_dir, old_name)
+    old_name = PurePath(nb_new.file_names.omp_spot_coef).name
+    del nb_new.file_names.omp_spot_coef
+    nb_new.file_names.omp_spot_coef = os.path.join(new_dir, old_name)
+
+    old_name = PurePath(nb_new.file_names.big_dapi_image).name
+    del nb_new.file_names.big_dapi_image
+    nb_new.file_names.big_dapi_image = os.path.join(new_dir, old_name)
+    old_name = PurePath(nb_new.file_names.big_anchor_image).name
+    del nb_new.file_names.big_anchor_image
+    nb_new.file_names.big_anchor_image = os.path.join(new_dir, old_name)
+    nb_new.file_names.finalized = True
+    nb_new.save(notebook_path)
+
+
+def move_tile_dir(current_tile_dir: str, new_tile_dir: str, notebook_path: str) -> None:
+    """
+    Copies the tile directory and all its contents to `new_tile_dir`. The notebook at `notebook_path` is then updated
+    to use the new tile directory. The old tile directory is not deleted.
+
+    Args:
+        current_tile_dir (str): current tile directory.
+        new_tile_dir (str): new tile directory.
+        notebook_path (str): path to the notebook.
+    """
+    assert os.path.isfile(notebook_path), f"Notebook at {notebook_path} not found"
+    assert os.path.isdir(current_tile_dir), f"Current tile directory {current_tile_dir} not found"
+    assert len(os.listdir(current_tile_dir)) > 0, f"Current tile directory {current_tile_dir} is empty"
+    if not os.path.isdir(new_tile_dir):
+        logging.warn(f"{new_tile_dir} tile directory does not exist, creating it...")
+        os.mkdir(new_tile_dir)
+
+    with tqdm.tqdm(desc="Copying files", ascii=True, unit="file") as pbar:
+        for name in os.listdir(current_tile_dir):
+            pbar.set_postfix({"filename": name})
+            path = os.path.join(current_tile_dir, name)
+            new_path = os.path.join(new_tile_dir, name)
+            if os.path.isfile(new_path) or os.path.isdir(new_path):
+                logging.warn(f"Path {new_path} already exists, skipping.")
+                continue
+            if os.path.isfile(path):
+                shutil.copy2(path, new_path)
+            elif os.path.isdir(path):
+                shutil.copytree(path, new_path)
+            else:
+                raise TypeError(f"Cannot copy {path}")
+            pbar.update()
+
+    print(f"Updating notebook")
+    set_notebook_tile_dir(notebook_path, new_tile_dir)
+
+
+def set_notebook_tile_dir(notebook_path: str, new_tile_dir: str) -> None:
+    """
+    Changes the notebook variables to use the given `tile_dir`, then re-saves the notebook.
+
+    Args:
+        notebook_path (str): path to notebook.
+        new_tile_dir (str): new tile directory.
+    """
+    assert os.path.isfile(notebook_path), f"Notebook {notebook_path} not found"
+    if not os.path.isdir(new_tile_dir):
+        logging.warn(f"New tile directory {new_tile_dir} does not exist. Continuing anyway...")
+
+    new_tile_dir = os.path.normpath(new_tile_dir)
+
+    nb = Notebook(notebook_path)
+    nb.file_names.finalized = False
+
+    del nb.file_names.tile_dir
+    nb.file_names.tile_dir = os.path.join(new_tile_dir, "filter")
+    del nb.file_names.tile_unfiltered_dir
+    nb.file_names.tile_unfiltered_dir = os.path.join(new_tile_dir, "extract")
+    old_name = PurePath(nb.file_names.scale).name
+    del nb.file_names.scale
+    nb.file_names.scale = os.path.join(new_tile_dir, old_name)
+    old_tile: list = nb.file_names.tile.copy()
+    old_tile_unfiltered = nb.file_names.tile_unfiltered.copy()
+    new_tile = old_tile.copy()
+    new_tile_unfiltered = old_tile_unfiltered.copy()
+    for i, j, k in itertools.product(range(len(old_tile)), range(len(old_tile[0])), range(len(old_tile[0][0]))):
+        old_tile_ijk = os.path.normpath(old_tile[i][j][k])
+        new_tile[i][j][k] = os.path.join(nb.file_names.tile_dir, PurePath(old_tile_ijk).name)
+        old_tile_unfiltered_ijk = os.path.normpath(old_tile_unfiltered[i][j][k])
+        new_tile_unfiltered[i][j][k] = os.path.join(
+            nb.file_names.tile_unfiltered_dir, PurePath(old_tile_unfiltered_ijk).name
+        )
+    del nb.file_names.tile
+    nb.file_names.tile = new_tile
+    del nb.file_names.tile_unfiltered
+    nb.file_names.tile_unfiltered = new_tile_unfiltered
+
+    nb.file_names.finalized = True
+    nb.save(notebook_path)
 
 
 def round_any(x: Union[float, npt.NDArray], base: float, round_type: str = "round") -> Union[float, npt.NDArray]:

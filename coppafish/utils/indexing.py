@@ -1,4 +1,5 @@
 import itertools
+import numpy as np
 from typing import Tuple, Optional, Union, List, Any
 
 from ..setup import NotebookPage
@@ -19,7 +20,7 @@ def create(
 ) -> Union[List[Tuple[int, int, int]], List[Tuple[int, int]], List[Tuple[int]]]:
     """
     Create tile, round and/or channel indices to loops through. Used throughout the coppafish pipeline. The defaults
-    are set to return only sequencing rounds and channels. If something is set to be included which does not exist in 
+    are set to return only sequencing rounds and channels. If something is set to be included which does not exist in
     the notebook, e.g. a dapi channel or an anchor round, then it will not be included in the output.
 
     Args:
@@ -27,7 +28,7 @@ def create(
         include_rounds (bool, optional): include round indices. Default: True.
         include_channels (bool, optional): include channel indices. Default: True.
         include_seq_rounds (bool, optional): include sequencing rounds. Default: True.
-        include_seq_channels (bool, optional): include sequencing channels (gathered for the sequencing rounds and 
+        include_seq_channels (bool, optional): include sequencing channels (gathered for the sequencing rounds and
             presequence round, if chosen). Default: True.
         include_anchor_round (bool, optional): include anchor round. Default: False.
         include_anchor_channel (bool, optional): include the anchor channel, only for the anchor round. Default: False.
@@ -41,21 +42,23 @@ def create(
             tuples, each tuple containing a unique tile, round and/or channel index.
 
     Notes:
-        - If `include_rounds` is false, then `include_channels` must also be false since the channel indices are 
+        - If `include_rounds` is false, then `include_channels` must also be false since the channel indices are
             dependent on the round type, so this would not make sense to resolve.
     """
     if not include_rounds:
         assert not include_channels, "Unable to remove rounds and keep channels"
-    
+
     seq_rounds = nbp_basic.use_rounds.copy()
     seq_channels = nbp_basic.use_channels.copy()
     all_tiles = sorted([t for t in nbp_basic.use_tiles.copy()])
-    all_rounds = sorted([
-        r
-        for r in include_seq_rounds * seq_rounds
-        + nbp_basic.use_anchor * include_anchor_round * [nbp_basic.anchor_round]
-        + nbp_basic.use_preseq * include_preseq_round * [nbp_basic.pre_seq_round]
-    ])
+    all_rounds = sorted(
+        [
+            r
+            for r in include_seq_rounds * seq_rounds
+            + nbp_basic.use_anchor * include_anchor_round * [nbp_basic.anchor_round]
+            + nbp_basic.use_preseq * include_preseq_round * [nbp_basic.pre_seq_round]
+        ]
+    )
     all_channels = [c for c in seq_channels]
     if (include_dapi_anchor or include_dapi_preseq or include_dapi_seq) and nbp_basic.dapi_channel is not None:
         all_channels += [nbp_basic.dapi_channel]
@@ -80,14 +83,20 @@ def create(
                 if c == nbp_basic.dapi_channel and include_dapi_preseq:
                     including = True
             if including:
-                all_indices.append((t, r, c, ))
+                all_indices.append(
+                    (
+                        t,
+                        r,
+                        c,
+                    )
+                )
     output = []
     for t, r, c in all_indices:
-        new_index = (t, )
+        new_index = (t,)
         if include_rounds:
-            new_index += (r, )
+            new_index += (r,)
         if include_channels:
-            new_index += (c, )
+            new_index += (c,)
         output.append(new_index)
     # Remove any duplicate indices
     output = list(set(output))
@@ -96,7 +105,7 @@ def create(
 
 def unique(indices: List[Tuple[Any]], axis: Optional[int] = None) -> List[Tuple[Any]]:
     """
-    Returns a list of indices that have a unique value in the `axis` index of the tuple. If a value in `axis` is seen 
+    Returns a list of indices that have a unique value in the `axis` index of the tuple. If a value in `axis` is seen
     multiple times in indices, then the one that appears first is taken.
 
     Args:

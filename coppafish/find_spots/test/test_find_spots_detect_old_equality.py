@@ -26,3 +26,7 @@ def test_detect_spots_equality_old():
         assert peak_intensity_old.shape == (n_peaks,)
         assert np.allclose(peak_yxz, peak_yxz_old)
         assert np.allclose(peak_intensity, peak_intensity_old)
+
+
+if __name__ == "__main__":
+    test_detect_spots_equality_old()

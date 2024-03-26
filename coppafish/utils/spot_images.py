@@ -30,7 +30,7 @@ def get_spot_images(image: np.ndarray, spot_yxz: np.ndarray, shape: Union[np.nda
     max_image_index = np.array(image.shape)
     n_spots = spot_yxz.shape[0]
     with tqdm(total=n_spots) as pbar:
-        pbar.set_description("Loading in spot images from tiff files")
+        pbar.set_description("Loading in spot images from filter image")
         for s in range(n_spots):
             min_pos = np.clip((spot_yxz[s] - mid_index), 0, max_image_index)
             max_pos = np.clip((spot_yxz[s] + mid_index + 1), 0, max_image_index)
