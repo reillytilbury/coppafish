@@ -2,6 +2,7 @@ from typing import Optional, Union, List
 import numpy as np
 import numpy.typing as npt
 
+from ..omp.scores import omp_scores_int_to_float
 from ..setup import NotebookPage, Notebook
 from .. import logging
 
@@ -22,39 +23,32 @@ def get_spot_intensity(spot_colors: npt.NDArray[np.float_]) -> npt.NDArray[np.fl
         Logic is that we expect spots that are genes to have at least one large intensity value in each round
         so high spot intensity is more indicative of a gene.
     """
+    if (spot_colors <= -15_000).sum() > 0:
+        logging.warn(f"Found spot colors <= -15000")
     # Max over all channels, then median over all rounds
     return np.median(np.max(spot_colors, axis=2), axis=1)
 
 
 def omp_spot_score(
     nbp: NotebookPage,
-    score_multiplier: float,
     spot_no: Optional[Union[int, List, np.ndarray]] = None,
-    n_neighbours_pos: Optional[Union[np.ndarray, int]] = None,
-    n_neighbours_neg: Optional[Union[np.ndarray, int]] = None,
-) -> Union[float, np.ndarray]:
+) -> np.ndarray:
     """
     Score for omp gene assignment
 
     Args:
         nbp: OMP Notebook page
-        score_multiplier: `score = score_multiplier * n_pos_neighb + n_neg_neighb`.
-            So this influences the importance of positive coefficient neighbours vs negative.
         spot_no: Which spots to get score for. If `None`, all scores will be found.
 
     Returns:
         Score for each spot in spot_no if given, otherwise all spot scores.
     """
-    max_score = score_multiplier * np.sum(nbp.spot_shape == 1) + np.sum(nbp.spot_shape == -1)
-    if n_neighbours_pos is None:
-        n_neighbours_pos = nbp.n_neighbours_pos
-    if n_neighbours_neg is None:
-        n_neighbours_neg = nbp.n_neighbours_neg
     if spot_no is None:
-        score = (score_multiplier * n_neighbours_pos + n_neighbours_neg) / max_score
+        scores = nbp.scores
     else:
-        score = (score_multiplier * n_neighbours_pos[spot_no] + n_neighbours_neg[spot_no]) / max_score
-    return score
+        scores = nbp.scores[spot_no]
+
+    return omp_scores_int_to_float(scores)
 
 
 def get_intensity_thresh(nb: Notebook) -> float:
@@ -116,7 +110,7 @@ def quality_threshold(
 
     intensity = nb.omp.intensity if method_omp else nb.ref_spots.intensity
     if method_omp:
-        score = omp_spot_score(nb.omp, score_multiplier)
+        score = omp_spot_score(nb.omp)
     elif method_anchor:
         score = nb.ref_spots.score
     elif method_prob:

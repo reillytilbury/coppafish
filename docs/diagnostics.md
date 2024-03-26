@@ -18,9 +18,8 @@ where a new napari tab will be opened.
 ### Description
 
 The greyscale signal in the background is the DAPI (if no DAPI is included in the dataset, then the anchor image is 
-displayed instead); whiter regions indicate cells. Each gene type is given a unique shape and colour, shown in the gene 
-legend. A gene type can be toggled by left clicking on it in the gene legend, right click a gene type to show only that 
-type.
+displayed instead); whiter regions indicate cells. Each gene is given a unique shape and colour, shown in the gene 
+legend. A gene can be toggled by left clicking on it in the gene legend, right click a gene to show only that type.
 
 For help with Viewer hotkeys, press Shift + k. This includes further diagnostic plots built into the Viewer.
 
@@ -30,9 +29,36 @@ allows the user to change the minimum and maximum scores to be displayed. The "I
 allowed spot intensity to display (only affects Anchor and OMP). The "Method" is the chosen method of gene calling. 
 "Prob" is the Von-Mises probability method, "Anchor" is the anchor method (see [call spots](method.md#call-spots)), and 
 "OMP" is the Orthogonal Matching Pursuit method (see [OMP](method.md#orthogonal-matching-pursuit)). The "OMP Score 
-Multiplier" will affect how much weight a middle positive spot intensity has over the negative outer annulus part of a 
-spot intensity. We recommend a value $\ge1$, but there is no known optimal value.
+Multiplier" will affect how much weight positive coefficient has over negative coefficient parts of a spot. We 
+recommend a value $\ge1$, but there is no known optimal value.
 
 ![](images/Viewer_example.PNG "The Viewer")
 
 ## RegistrationViewer
+
+### Opening
+
+```python
+from coppafish import RegistrationViewer, Notebook
+
+nb = Notebook("path/to/notebook.npz")
+RegistrationViewer(nb, t=t)
+```
+
+where `t` is a tile index you want to view registration results for. If `t` is set to `None` (default), then the lowest 
+tile index is displayed.
+
+## PDF Diagnostics
+
+During a pipeline run, multiple .pdf files are created for different sections. These are located in the output 
+directory. They can be manually created from the notebook file by
+```python
+from coppafish import BuildPDF
+
+BuildPDF("path/to/notebook.npz")
+```
+
+specify the directory to save to by
+```python
+BuildPDF("path/to/notebook.npz", "path/to/output/directory")
+```

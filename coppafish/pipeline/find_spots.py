@@ -28,8 +28,8 @@ def find_spots(
         nbp_extract (NotebookPage): `extract` notebook page.
         nbp_filter (NotebookPage): `filter` notebook page.
         auto_thresh (`[n_tiles x n_rounds x n_channels] ndarray[float]`): `auto_thresh[t, r, c]` is the threshold for
-            the tiff file corresponding to tile `t`, round `r`, channel `c` such that all local maxima with pixel
-            values greater than this are considered spots.
+            the tile `t`, round `r`, channel `c` image such that all local maxima with pixel values greater than this
+            are considered spots.
         image_t (`(n_rounds x n_channels x nz x ny x nx) ndarray[uint16]`, optional): extracted and filtered image
             for a single tile. If given, find_spots runs on the single tile and returns its NotebookPage. Default: not
             given.
@@ -43,7 +43,7 @@ def find_spots(
     # Phase 0: Initialisation
     nbp = NotebookPage("find_spots")
     nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_git_revision_hash()
+    nbp.revision_hash = utils.system.get_software_hash()
     if nbp_basic.is_3d is False:
         # set z details to None if using 2d pipeline
         config["radius_z"] = None
@@ -89,7 +89,7 @@ def find_spots(
     with tqdm(
         total=np.sum(uncompleted),
         postfix={"tile": t, "round": r, "channel": c},
-        desc=f"Detecting spots on filtered {nbp_extract.file_type} images",
+        desc=f"Detecting spots on filtered images",
     ) as pbar:
         # Loop over uncompleted tiles, rounds and channels
         for t, r, c in np.argwhere(uncompleted):

@@ -1,10 +1,15 @@
 import os
 import shutil
 import psutil
-import subprocess
+import urllib
 import numpy as np
 from pathlib import PurePath
-from typing import Tuple
+from inputimeout import inputimeout, TimeoutOccurred
+from typing import Tuple, Union
+
+VERSION_URL = "https://github.com/reillytilbury/coppafish/raw/HEAD/coppafish/_version.py"
+# The character(s) that encapsulate the software version tag in _version.py, in this case it is quotation marks
+VERSION_ENCAPSULATE = '"'
 
 
 def get_software_version() -> str:
@@ -15,28 +20,35 @@ def get_software_version() -> str:
         str: software version.
     """
     with open(PurePath(os.path.dirname(os.path.realpath(__file__))).parent.joinpath("_version.py"), "r") as f:
-        version_tag = f.read().split('"')[1]
+        version_tag = f.read().split(VERSION_ENCAPSULATE)[1]
     return version_tag
 
 
-def get_git_revision_hash() -> str:
+def get_remote_software_version() -> str:
     """
-    Get the latest git commit full hash if possible.
+    Get coppafish's latest version in `_version.py` found online at the default branch.
 
     Returns:
-        str: commit hash. If failed to find, returns an empty string.
+        str: version tag. None if the version could not be retrieved.
     """
-    try:
-        hash = (
-            subprocess.check_output(
-                ["git", "rev-parse", "HEAD"], cwd=PurePath(os.path.dirname(os.path.realpath(__file__))).parent
-            )
-            .decode("ascii")
-            .strip()
-        )
-    except subprocess.CalledProcessError as e:
-        hash = ""
-    return hash
+    if not internet_is_active():
+        return None
+    f = urllib.request.urlopen(VERSION_URL)
+    version_contents = str(f.read())
+    index_start = version_contents.index(VERSION_ENCAPSULATE)
+    index_end = version_contents.index(VERSION_ENCAPSULATE, index_start + 1)
+    return version_contents[index_start + 1 : index_end]
+
+
+def get_software_hash() -> str:
+    """
+    Get a checksum hash from the coppafish directory (i.e. all the source code).
+
+    Returns:
+        str: hash.
+    """
+    # TODO: Re-implement
+    return ""
 
 
 def get_available_memory() -> float:
@@ -51,10 +63,10 @@ def get_available_memory() -> float:
 
 def get_core_count() -> int:
     """
-    Get the number of threads available for multiprocessing tasks on the system.
+    Get the number of CPU cores available for multiprocessing tasks on the system.
 
     Returns:
-        int: number of available threads.
+        int: number of available CPU cores.
     """
     n_threads = psutil.cpu_count(logical=True)
     if n_threads is None:
@@ -84,3 +96,37 @@ def current_terminal_size_xy(x_offset: int = 0, y_offset: int = 0) -> Tuple[int,
         int(np.clip(terminal_size[0] + x_offset, a_min=1, a_max=None)),
         int(np.clip(terminal_size[1] + y_offset, a_min=1, a_max=None)),
     )
+
+
+def internet_is_active() -> bool:
+    """
+    Check for an internet connection.
+
+    Returns:
+        bool: whether the system is connected to the internet.
+    """
+    try:
+        urllib.request.urlopen("http://www.google.com")
+        return True
+    except:
+        return False
+
+
+def input_timeout(message: str, timeout_result: Union[str, None] = None, timeout: float = 60) -> Union[str, None]:
+    """
+    Wait for a user input. If one is not given in time, return `timeout_result`.
+
+    Args:
+        message (str): input message
+        timeout_result (str, optional): returned if no result given by the user. Default: none.
+        timeout (float, optional): time in seconds to wait for user input. Default: 60.
+
+    Returns:
+        str: input result or timeout result.
+    """
+    assert timeout > 0, f"Invalid timeout: {timeout}"
+    try:
+        user_input = str(inputimeout(prompt=message, timeout=timeout))
+        return user_input
+    except TimeoutOccurred:
+        return timeout_result

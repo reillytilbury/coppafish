@@ -456,17 +456,28 @@ def get_all_coefs(
                 gene_coefs[
                     torch.asarray(continue_pixels, device=cuda)[:, None], torch.asarray(added_genes, device=cuda)
                 ] = torch.asarray(i_coefs, device=cuda)
-
-            # Clear any remaining large GPU tensors in vRAM
-            with torch.no_grad():
-                torch.cuda.empty_cache()
             pbar.update()
     logging.debug("Finding OMP coefficients complete")
 
-    gene_coefs, background_coefs = gene_coefs.type(torch.float32).to(cpu), background_coefs.type(torch.float32).to(cpu)
-    with torch.no_grad():
-        torch.cuda.empty_cache()
-    return gene_coefs, background_coefs
+    gene_coefs_cpu = gene_coefs.type(torch.float32).to(cpu)
+    background_coefs_cpu = background_coefs.type(torch.float32).to(cpu)
+    del (
+        all_codes,
+        background_coefs,
+        background_genes,
+        bled_codes,
+        gene_coefs,
+        added_genes,
+        pass_score_thresh,
+        background_variance,
+        i_added_genes,
+        inverse_var,
+        fail_score_thresh,
+        i_coefs,
+        residual_pixel_colors,
+    )
+
+    return gene_coefs_cpu, background_coefs_cpu
 
 
 def get_pixel_coefs_yxz(

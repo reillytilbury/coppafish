@@ -25,48 +25,37 @@ def offset_pixels_by(image: npt.NDArray[np.uint16], tile_pixel_value_shift: int)
     return image.astype(np.int32) + tile_pixel_value_shift
 
 
-def load_reg_data(nbp_file: NotebookPage, nbp_basic: NotebookPage, config: dict):
+def load_reg_data(nbp_file: NotebookPage, nbp_basic: NotebookPage):
     """
     Function to load in pkl file of previously obtained registration data if it exists.
     Args:
         nbp_file: File Names notebook page
         nbp_basic: Basic info notebook page
-        config: register page of config dictionary
     Returns:
         registration_data: dictionary with the following keys
         * round_registration (dict) with keys:
             * completed (list)
-            * position ( (z_subvols x y subvols x x_subvols) x 3 ) ndarray
-            * round_shift ( n_tiles x n_rounds x (z_subvols x y subvols x x_subvols) x 3 ) ndarray
-            * round_shift_corr ( n_tiles x n_rounds x (z_subvols x y subvols x x_subvols) ) ndarray
-            * round_transform_raw (n_tiles x n_rounds x 3 x 4) ndarray
-            * round_transform (n_tiles x n_rounds x 3 x 4) ndarray
+            * warp_directory (str)
         * channel_registration (dict) with keys:
-            * completed (list)
-            * channel_transform (n_tiles x n_channels x 3 x 4) ndarray
-            * channel_shift_corr ( n_tiles x n_channels x (z_subvols x y subvols x x_subvols) ) ndarray
-            * reference_round (n_tiles) ndarray
-        * initial_transform (n_tiles x n_rounds x n_channels x 3 x 4) ndarray
-
+            * transform (n_channels x 4 x 3) ndarray of affine transforms (zyx)
     """
     # Check if the registration data file exists
-    if os.path.isfile(os.path.join(nbp_file.output_dir, 'registration_data.pkl')):
-        with open(os.path.join(nbp_file.output_dir, 'registration_data.pkl'), 'rb') as f:
+    if os.path.isfile(os.path.join(nbp_file.output_dir, "registration_data.pkl")):
+        with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "rb") as f:
             registration_data = pickle.load(f)
     else:
-        n_tiles, n_rounds, n_channels = nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.n_extra_rounds, \
-            nbp_basic.n_channels
-        z_subvols, y_subvols, x_subvols = config['subvols']
-        round_registration = {'position': np.zeros((z_subvols * y_subvols * x_subvols, 3)),
-                              'shift': np.zeros((n_tiles, n_rounds, z_subvols * y_subvols * x_subvols, 3)),
-                              'shift_corr': np.zeros((n_tiles, n_rounds, z_subvols * y_subvols * x_subvols)),
-                              'transform_raw': np.zeros((n_tiles, n_rounds, 3, 4)),
-                              'transform': np.zeros((n_tiles, n_rounds, 3, 4))}
-        channel_registration = {'transform': np.zeros((n_channels, 3, 4))}
-        registration_data = {'round_registration': round_registration,
-                             'channel_registration': channel_registration,
-                             'initial_transform': np.zeros((n_tiles, n_rounds, n_channels, 4, 3)),
-                             'blur': False}
+        n_tiles, n_rounds, n_channels = (
+            nbp_basic.n_tiles,
+            nbp_basic.n_rounds + nbp_basic.n_extra_rounds,
+            nbp_basic.n_channels,
+        )
+        round_registration = {"flow_dir": os.path.join(nbp_file.output_dir, "flow")}
+        channel_registration = {"transform": np.zeros((n_channels, 4, 3))}
+        registration_data = {
+            "round_registration": round_registration,
+            "channel_registration": channel_registration,
+            "blur": False,
+        }
     return registration_data
 
 
@@ -122,6 +111,20 @@ def yxz_to_zyx(image: np.ndarray):
     return image
 
 
+def zyx_to_yxz(image: np.ndarray):
+    """
+    Function to convert image from zyx to yxz
+    Args:
+        image: zyx image
+
+    Returns:
+        image_new: yxz image
+    """
+    image = np.swapaxes(image, 0, 2)
+    image = np.swapaxes(image, 0, 1)
+    return image
+
+
 def n_matches_to_frac_matches(n_matches: np.ndarray, spot_no: np.ndarray):
     """
     Function to convert n_matches to fraction of matches
@@ -143,12 +146,12 @@ def n_matches_to_frac_matches(n_matches: np.ndarray, spot_no: np.ndarray):
 
 def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box, x_box):
     """
-    Splits a 3D image into y_subvolumes * x_subvolumes * z_subvolumes subvolumes. z_box, y_box and x_box must be even 
+    Splits a 3D image into y_subvolumes * x_subvolumes * z_subvolumes subvolumes. z_box, y_box and x_box must be even
     numbers.
 
     Parameters
     ----------
-    image : (nz x ny x nx) ndarray
+    image : (nz x ny x nx) ndarray or (ny x nx x nz) ndarray
         The 3D image to be split.
     y_subvolumes : int
         The number of subvolumes to split the image into in the y dimension.
@@ -164,8 +167,13 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
     position: ndarray
         (y_subvolumes * x_subvolumes * z_sub_volumes) x 3 The middle coord of each subtile
     """
+    # Convert image to zyx
+    if np.argmin(image.shape) == 2:
+        image = yxz_to_zyx(image)
+
     # Make sure that box dims are even
-    assert z_box % 2 == 0 and y_box % 2 == 0 and x_box % 2 == 0, "Box dimensions must be even numbers!"
+    assert y_box % 2 == 0 and x_box % 2 == 0, "Box dimensions must be even numbers!"
+    assert z_subvolumes == 1
     z_image, y_image, x_image = image.shape
 
     # Allow 0.5 of a box either side and then split the middle with subvols evenly spaced points, ie into subvols - 1
@@ -178,6 +186,9 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
     y_unit = (y_image - y_box) // (y_subvolumes - 1)
     x_unit = (x_image - x_box) // (x_subvolumes - 1)
 
+    assert (y_image - y_box) % (y_subvolumes - 1) == 0, "y_box and y_subvolumes do not match"
+    assert (x_image - x_box) % (x_subvolumes - 1) == 0, "x_box and x_subvolumes do not match"
+
     # Create an array to store the subvolumes in
     subvolume = np.zeros((z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box, x_box))
 
@@ -186,13 +197,13 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
 
     # Split the image into subvolumes and store them in the array
     for z, y, x in np.ndindex(z_subvolumes, y_subvolumes, x_subvolumes):
-        z_centre, y_centre, x_centre = z_box//2 + z * z_unit, y_box//2 + y * y_unit, x_box//2 + x * x_unit
-        z_start, z_end = z_centre - z_box//2, z_centre + z_box//2
-        y_start, y_end = y_centre - y_box//2, y_centre + y_box//2
-        x_start, x_end = x_centre - x_box//2, x_centre + x_box//2
+        z_centre, y_centre, x_centre = z_box // 2 + z * z_unit, y_box // 2 + y * y_unit, x_box // 2 + x * x_unit
+        z_start, z_end = 0, image.shape[0] + 1
+        y_start, y_end = y_centre - y_box // 2, y_centre + y_box // 2
+        x_start, x_end = x_centre - x_box // 2, x_centre + x_box // 2
 
         subvolume[z, y, x] = image[z_start:z_end, y_start:y_end, x_start:x_end]
-        position[z, y, x] = np.array([(z_start + z_end)//2, (y_start + y_end)//2, (x_start + x_end)//2])
+        position[z, y, x] = np.array([(z_start + z_end) // 2, (y_start + y_end) // 2, (x_start + x_end) // 2])
 
     # Reshape the position array
     position = np.reshape(position, (z_subvolumes * y_subvolumes * x_subvolumes, 3))
@@ -239,15 +250,15 @@ def invert_affine(A):
 
 def yxz_to_zyx_affine(A: np.ndarray, new_origin: np.ndarray = np.array([0, 0, 0])):
     """
-        Function to convert 4 x 3 matrix in y, x, z coords into a 3 x 4 matrix of z, y, x coords.
+    Function to convert 4 x 3 matrix in y, x, z coords into a 3 x 4 matrix of z, y, x coords.
 
-        Args:
-            A: Original transform in old format (4 x 3)
-            new_origin: Origin of new coordinate system in z, y, x coords
+    Args:
+        A: Original transform in old format (4 x 3)
+        new_origin: Origin of new coordinate system in z, y, x coords
 
-        Returns:
-            A_reformatted: 3 x 4 transform with associated changes
-            """
+    Returns:
+        A_reformatted: 3 x 4 transform with associated changes
+    """
     # convert A to 3 x 4
     A = A.T
 
@@ -280,18 +291,21 @@ def zyx_to_yxz_affine(A: np.ndarray, new_origin: np.ndarray = np.array([0, 0, 0]
         A_reformatted: 4 x 3 transform with associated changes
 
     """
-    # Add new origin conversion for zyx shift, need to do this before changing basis
-    A[:, 3] += (A[:3, :3] - np.eye(3)) @ new_origin
+    # convert A to 4 x 3
+    A = A.T
 
-    # Append a bottom row
-    A = np.vstack((A, np.array([0, 0, 0, 1])))
+    # Append a right column to A
+    A = np.vstack((A.T, np.array([0, 0, 0, 1]))).T
 
     # First, change basis to yxz
     C = np.eye(4)
     C[:3, :3] = np.roll(C[:3, :3], -1, axis=1)
 
-    # compute the matrix in the new basis, remove the final row and transpose to get 4 x 3
-    A = (np.linalg.inv(C) @ A @ C)[:3, :4].T
+    # compute the matrix in the new basis and remove the final column
+    A = (np.linalg.inv(C) @ A @ C)[:4, :3]
+
+    # Add new origin conversion for yxz shift, need to do this after changing basis so that the matrix is in yxz coords
+    A[3, :] += (A[:3, :3] - np.eye(3)) @ new_origin
 
     return A
 
@@ -299,7 +313,7 @@ def zyx_to_yxz_affine(A: np.ndarray, new_origin: np.ndarray = np.array([0, 0, 0]
 def custom_shift(array: np.ndarray, offset: np.ndarray, constant_values=0):
     """
     Compute array shifted by a certain offset.
-    
+
     Args:
         array: array to be shifted.
         offset: shift value (must be int).
@@ -316,12 +330,10 @@ def custom_shift(array: np.ndarray, offset: np.ndarray, constant_values=0):
     def slice1(o):
         return slice(o, None) if o >= 0 else slice(0, o)
 
-    new_array[tuple(slice1(o) for o in offset)] = (
-        array[tuple(slice1(-o) for o in offset)])
+    new_array[tuple(slice1(o) for o in offset)] = array[tuple(slice1(-o) for o in offset)]
 
     for axis, o in enumerate(offset):
-        new_array[(slice(None),) * axis +
-                  (slice(0, o) if o >= 0 else slice(o, None),)] = constant_values
+        new_array[(slice(None),) * axis + (slice(0, o) if o >= 0 else slice(o, None),)] = constant_values
 
     return new_array
 
@@ -341,25 +353,47 @@ def merge_subvols(position, subvol):
     Returns:
         merged: merged image (size will depend on amount of overlap)
     """
+    position = position.astype(int)
     # set min values to 0
     position -= np.min(position, axis=0)
     z_box, y_box, x_box = subvol.shape[1:]
+    centre = position + np.array([z_box // 2, y_box // 2, x_box // 2])
     # Get the min and max values of the position, use this to get the size of the merged image and initialise it
     max_pos = np.max(position, axis=0)
     merged = np.zeros((max_pos + subvol.shape[1:]).astype(int))
-
-    # Loop through the subvols and add them to the merged image at the correct position. If there is overlap, take the
-    # final value
+    neighbour_im = np.zeros_like(merged)
+    # Loop through the subvols and add them to the merged image at the correct position.
     for i in range(position.shape[0]):
-        merged[position[i, 0]:position[i, 0] + z_box, position[i, 1]:position[i, 1] + y_box,
-               position[i, 2]:position[i, 2] + x_box] = subvol[i]
+        subvol_i_mask = np.ix_(
+            range(position[i, 0], position[i, 0] + z_box),
+            range(position[i, 1], position[i, 1] + y_box),
+            range(position[i, 2], position[i, 2] + x_box),
+        )
+        neighbour_im[subvol_i_mask] += 1
+        merged[subvol_i_mask] = subvol[i]
+
+    # identify overlapping regions
+    overlapping_pixels = np.argwhere(neighbour_im > 1)
+    if len(overlapping_pixels) == 0:
+        return merged
+    centre_dist = np.linalg.norm(overlapping_pixels[:, None, :] - centre[None, :, :], axis=2)
+    # get the index of the closest centre
+    closest_centre = np.argmin(centre_dist, axis=1)
+    # now loop through subvols and assign overlapping pixels to the closest centre
+    for i in range(position.shape[0]):
+        subvol_i_pixel_ind = np.where(closest_centre == i)[0]
+        subvol_i_pixel_coords_global = np.array([overlapping_pixels[j] for j in subvol_i_pixel_ind])
+        subvol_i_pixel_coords_local = subvol_i_pixel_coords_global - position[i]
+        z_global, y_global, x_global = subvol_i_pixel_coords_global.T
+        z_local, y_local, x_local = subvol_i_pixel_coords_local.T
+        merged[z_global, y_global, x_global] = subvol[i, z_local, y_local, x_local]
 
     return merged
 
 
 def generate_reg_images(nb, t: int, r: int, c: int, filter: bool = False, image_value_range: Optional[Tuple] = None):
     """
-    Function to generate registration images. These are `[500 x 500 x min(10, n_planes)]` images centred in the middle 
+    Function to generate registration images. These are `[500 x 500 x min(10, n_planes)]` images centred in the middle
     of the tile and saved as uint8. They are saved as .npy files in the reg_images folder in the output directory.
 
     Args:
@@ -368,11 +402,11 @@ def generate_reg_images(nb, t: int, r: int, c: int, filter: bool = False, image_
         r (int): round index.
         c (int): channel index.
         filter (bool, optional): Apply the sobel filter. Default: false.
-        image_value_range (`tuple` of `float`, optional): tuple of min and max image pixel values to clip. Default: no 
+        image_value_range (`tuple` of `float`, optional): tuple of min and max image pixel values to clip. Default: no
             clipping.
     """
     yx_centre = nb.basic_info.tile_centre.astype(int)[:2]
-    yx_radius = np.min([250, nb.basic_info.tile_sz//2])
+    yx_radius = np.min([250, nb.basic_info.tile_sz // 2])
     if len(nb.basic_info.use_z) < 10:
         z_planes = nb.basic_info.use_z
     else:
@@ -383,10 +417,15 @@ def generate_reg_images(nb, t: int, r: int, c: int, filter: bool = False, image_
     # Get the image for the tile and channel
     im = yxz_to_zyx(
         tiles_io.load_image(
-            nb.file_names, nb.basic_info, nb.extract.file_type, t, r, c, 
+            nb.file_names,
+            nb.basic_info,
+            nb.extract.file_type,
+            t,
+            r,
+            c,
             [
-                np.arange(tile_centre[0] - yx_radius, tile_centre[0] + yx_radius), 
-                np.arange(tile_centre[1] - yx_radius, tile_centre[1] + yx_radius), 
+                np.arange(tile_centre[0] - yx_radius, tile_centre[0] + yx_radius),
+                np.arange(tile_centre[1] - yx_radius, tile_centre[1] + yx_radius),
                 np.asarray(z_planes) - np.min(nb.basic_info.use_z),
             ],
             apply_shift=False,
@@ -403,10 +442,10 @@ def generate_reg_images(nb, t: int, r: int, c: int, filter: bool = False, image_
     if np.max(im) != 0:
         im = im / np.max(im) * 255  # Scale to 0-255
     im = im.astype(np.uint8)
-    output_dir = os.path.join(nb.file_names.output_dir, 'reg_images')
+    output_dir = os.path.join(nb.file_names.output_dir, "reg_images")
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
-    np.save(os.path.join(output_dir, 't' + str(t) + 'r' + str(r) + 'c' + str(c)), im)
+    np.save(os.path.join(output_dir, "t" + str(t) + "r" + str(r) + "c" + str(c)), im)
 
 
 def window_image(image: np.ndarray) -> np.ndarray:
@@ -419,10 +458,57 @@ def window_image(image: np.ndarray) -> np.ndarray:
     Returns:
         image: windowed image.
     """
-    window_yx = skimage.filters.window('hann', image.shape[1:])
+    window_yx = skimage.filters.window("hann", image.shape[1:])
     window_z = signal.windows.tukey(image.shape[0], alpha=0.33)
     if (window_z == 0).all():
         window_z[...] = 1
     window = window_z[:, None, None] * window_yx[None, :, :]
     image = image * window
     return image
+
+
+def flow_zyx_to_yxz(flow_zyx: np.ndarray) -> np.ndarray:
+    """
+    Convert a flow from zyx to yxz.
+    Args:
+        flow_zyx: np.ndarray of shape (3, nz, ny, nx) of flows in zyx coords.
+
+    Returns:
+        flow_yxz: np.ndarray of shape (3, ny, nx, nz)
+    """
+    flow_yxz = np.moveaxis(flow_zyx, 1, -1)
+    flow_yxz = np.roll(flow_yxz, -1, axis=0)
+    return flow_yxz
+
+
+def apply_flow(flow: np.ndarray, points: np.ndarray, ignore_oob: bool = True, round_to_int: bool = True) -> np.ndarray:
+    """
+    Apply a flow to a set of points. Note that this is applying forward warping, meaning that the points are moved to
+    their location in the warp array.
+
+    Args:
+        flow (np.ndarray): flow to apply. (3 x ny x nx x nz). In our case, this flow will always be the inverse flow,
+        so we need to apply the negative of the flow to the points.
+        points: integer points to apply the warp to. (n_points x 3 in yxz coords)
+        ignore_oob: remove points that go out of bounds. Default: True.
+
+    Returns:
+        new_points: new points.
+    """
+    # have to subtract the flow from the points as we are applying the inverse warp
+    y_indices, x_indices, z_indices = points.T
+    new_points = points - flow[:, y_indices, x_indices, z_indices].T
+    if round_to_int:
+        new_points = np.round(new_points).astype(int)
+    ny, nx, nz = flow.shape[1:]
+    if ignore_oob:
+        oob = (
+            (new_points[:, 0] < 0)
+            | (new_points[:, 0] >= ny)
+            | (new_points[:, 1] < 0)
+            | (new_points[:, 1] >= nx)
+            | (new_points[:, 2] < 0)
+            | (new_points[:, 2] >= nz)
+        )
+        new_points = new_points[~oob]
+    return new_points

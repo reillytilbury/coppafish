@@ -5,11 +5,12 @@ from itertools import product
 from scipy.sparse.linalg import svds
 
 from ..setup.notebook import NotebookPage
+from ..filter import base as filter_base
 from .. import call_spots
 from .. import spot_colors
 from .. import utils
-from .. import scale
 from .. import logging
+from scipy.sparse.linalg import svds
 
 
 def call_reference_spots(
@@ -89,7 +90,7 @@ def call_reference_spots(
             nbp_ref_spots.__delattr__(var)
     nbp = NotebookPage("call_spots")
     nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_git_revision_hash()
+    nbp.revision_hash = utils.system.get_software_hash()
     logging.debug("Call ref spots started")
 
     # 0. Initialise frequently used variables
@@ -361,10 +362,17 @@ def call_reference_spots(
     # Part 1: Estimate norm_factor[t, r, c] for each tile t, round r and channel c + remove background
     for t in tqdm(nbp_basic.use_tiles, desc="Estimating norm_factors for each tile"):
         tile_colours = colours[spot_tile == t]
-        tile_bg_colours = bg_colours[spot_tile == t]
+        if nbp_basic.use_preseq:
+            tile_bg_colours = bg_colours[spot_tile == t]
+        else:
+            tile_bg_colours = np.percentile(tile_colours, 25, axis=1)
+            tile_bg_colours = np.repeat(tile_bg_colours[:, np.newaxis, :], n_rounds, axis=1)
         tile_bg_strength = np.sum(np.abs(tile_bg_colours), axis=(1, 2))
-        if np.allclose(tile_bg_strength, tile_bg_strength[0]):
-            # All pixels have the same background strength
+        if tile_bg_strength.size == 0 or np.allclose(tile_bg_strength, tile_bg_strength[0]):
+            logging.warn(
+                f"Failed to compute colour norm factor for {t=} because there was a lack of spots or uniform "
+                f"background strength. Norm factor will be set to 1."
+            )
             continue
         weak_bg = tile_bg_strength < np.percentile(tile_bg_strength, 50)
         if np.all(np.logical_not(weak_bg)):
@@ -428,7 +436,7 @@ def call_reference_spots(
             ) * np.isin(gene_no, my_genes)
             colours_trd = colours[keep, r, :]
             logging.info(
-                "Tile " + str(t) + " Round " + str(r) + "Dye" + str(d) + " has " + str(len(colours_trd)) + " spots."
+                "Tile " + str(t) + " Round " + str(r) + " Dye" + str(d) + " has " + str(len(colours_trd)) + " spots."
             )
             if len(colours_trd) == 0:
                 pseudo_bleed_matrix[t, r, :, d] = bleed_matrix[:, d]
@@ -447,6 +455,7 @@ def call_reference_spots(
     colour_norm_factor *= colour_norm_factor_update
 
     # Part 4: Estimate gene_efficiency[g, r] for each gene g and round r
+
     ge_min_spots = 10
     gene_prob_ge_thresh = max(np.percentile(gene_prob_score, 75), 0.75)
     use_ge = np.zeros(n_spots, dtype=bool)
@@ -502,21 +511,15 @@ def call_reference_spots(
     nbp.gene_efficiency = gene_efficiency
 
     # Extract abs intensity percentile
-    central_tile = scale.base.central_tile(nbp_basic.tilepos_yx, nbp_basic.use_tiles)
+    central_tile = filter_base.central_tile(nbp_basic.tilepos_yx, nbp_basic.use_tiles)
     if nbp_basic.is_3d:
         mid_z = int(nbp_basic.use_z[0] + (nbp_basic.use_z[-1] - nbp_basic.use_z[0]) // 2 - min(nbp_basic.use_z))
     else:
         mid_z = None
-    pixel_colors = spot_colors.get_spot_colors(
-        spot_colors.all_pixel_yxz(nbp_basic.tile_sz, nbp_basic.tile_sz, mid_z),
-        central_tile,
-        transform,
-        nbp_file,
-        nbp_basic,
-        nbp_extract,
-        nbp_filter,
-        return_in_bounds=True,
-    )[0]
+    pixel_colors = spot_colors.get_spot_colors(yxz_base=spot_colors.all_pixel_yxz(nbp_basic.tile_sz, nbp_basic.tile_sz, mid_z),
+                                               t=central_tile, transform=transform, bg_scale=nbp_filter.bg_scale,
+                                               file_type=nbp_extract.file_type,
+                                               nbp_file=nbp_file, nbp_basic=nbp_basic, return_in_bounds=True)[0]
     pixel_intensity = call_spots.get_spot_intensity(np.abs(pixel_colors) / colour_norm_factor[central_tile])
     nbp.abs_intensity_percentile = np.percentile(pixel_intensity, np.arange(1, 101))
     logging.debug("Call ref spots complete")

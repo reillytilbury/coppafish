@@ -36,11 +36,11 @@ def test_integration_smallest() -> Notebook:
     Returns:
         Notebook: complete coppafish Notebook.
     """
-    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "integration_dir")
+    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), ".integration_dir")
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
-    robominnie = RoboMinnie(n_planes=5, n_tile_yx=(150, 150), include_presequence=False, include_dapi=False)
+    robominnie = RoboMinnie(n_planes=4, n_tile_yx=(128, 128), include_presequence=False, include_dapi=False)
     robominnie.generate_gene_codes(4)
     robominnie.generate_pink_noise()
     robominnie.add_spots(5000)
@@ -61,14 +61,14 @@ def test_integration_small_two_tile():
     Returns:
         Notebook: complete coppafish Notebook.
     """
-    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "integration_dir")
+    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), ".integration_dir")
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
-    robominnie = RoboMinnie(n_channels=4, n_planes=5, n_tile_yx=(100, 100), n_tiles_y=2)
+    robominnie = RoboMinnie(n_channels=4, n_planes=4, n_tile_yx=(128, 128), n_tiles_y=2)
     robominnie.generate_gene_codes(4)
     robominnie.generate_pink_noise()
-    robominnie.add_spots(1500)
+    robominnie.add_spots(500)
     robominnie.save_raw_images(output_dir)
     robominnie.run_coppafish()
     get_robominnie_scores(robominnie)
@@ -83,7 +83,7 @@ def test_integration_002() -> None:
 
     Includes anchor round, DAPI image, presequence round, sequencing rounds, one tile.
     """
-    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "integration_dir")
+    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), ".integration_dir")
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
@@ -114,11 +114,11 @@ def test_integration_non_symmetric(include_stitch: bool = True, include_omp: boo
     Returns:
         Notebook: final notebook.
     """
-    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "integration_dir")
+    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), ".integration_dir")
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
-    robominnie = RoboMinnie(n_planes=4, n_tile_yx=(141, 141), n_channels=9, n_tiles_x=2)
+    robominnie = RoboMinnie(n_planes=4, n_tile_yx=(128, 128), n_channels=9, n_tiles_x=2)
     robominnie.generate_gene_codes(10)
     robominnie.generate_pink_noise()
     # Add spots to DAPI image as larger spots
@@ -140,7 +140,7 @@ def test_integration_004() -> None:
 
     Includes anchor round, DAPI image, presequence round, sequencing rounds, one tile. No DAPI channel registration.
     """
-    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "integration_dir")
+    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), ".integration_dir")
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
@@ -158,7 +158,7 @@ def test_integration_004() -> None:
 @pytest.mark.integration
 @pytest.mark.slow
 def test_bg_subtraction() -> None:
-    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "integration_dir")
+    output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), ".integration_dir")
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
@@ -190,11 +190,11 @@ def test_viewers() -> None:
         - Requires a robominnie instance to have successfully run through first.
     """
     notebook_path = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), "integration_dir/output_coppafish/notebook.npz"
+        os.path.dirname(os.path.realpath(__file__)), ".integration_dir/output_coppafish/notebook.npz"
     )
     if not os.path.isfile(notebook_path):
         return
-    gene_colours_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "integration_dir/gene_colours.csv")
+    gene_colours_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), ".integration_dir/gene_colours.csv")
     notebook = Notebook(notebook_path)
     Viewer(notebook, gene_marker_file=gene_colours_path)
     RegistrationViewer(notebook)
@@ -210,7 +210,7 @@ def test_pdf_builder() -> None:
         - Requires a robominnie instance to have run through first to retrieve the notebook file.
     """
     notebook_path = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), "integration_dir/output_coppafish/notebook.npz"
+        os.path.dirname(os.path.realpath(__file__)), ".integration_dir/output_coppafish/notebook.npz"
     )
     for file_name in os.listdir(os.path.dirname(notebook_path)):
         if file_name[-4:].lower() == ".pdf":
@@ -219,6 +219,6 @@ def test_pdf_builder() -> None:
 
 
 if __name__ == "__main__":
-    test_integration_004()
+    test_integration_small_two_tile()
     test_pdf_builder()
     test_viewers()

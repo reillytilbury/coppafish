@@ -11,7 +11,6 @@ from ...setup import Notebook
 from ..raw import get_raw_images, number_to_list, add_basic_info_no_save
 from ... import extract, utils
 from ...filter import base as filter_base
-from ...register import preprocessing
 from ...utils import tiles_io
 from ...find_spots import check_neighbour_intensity
 
@@ -28,32 +27,39 @@ def get_filtered_image(nb: Notebook, t: int, r: int, c: int) -> np.ndarray:
     if not nb.basic_info.is_3d:
         image_raw = extract.focus_stack(image_raw)
     image_raw, bad_columns = extract.strip_hack(image_raw)
-    config = nb.get_config()['scale']
-    r1 = config['r1']
-    r2 = config['r2']
+    config = nb.get_config()["scale"]
+    r1 = config["r1"]
+    r2 = config["r2"]
     if r1 is None:
-        r1 = extract.get_pixel_length(config['r1_auto_microns'], nb.basic_info.pixel_size_xy)
+        r1 = extract.get_pixel_length(config["r1_auto_microns"], nb.basic_info.pixel_size_xy)
     if r2 is None:
         r2 = r1 * 2
     filter_kernel = utils.morphology.hanning_diff(r1, r2)
     image = utils.morphology.convolve_2d(image_raw, filter_kernel)
 
     # Smooth image
-    if config['r_smooth'] is not None:
-        smooth_kernel = np.ones(tuple(np.array(config['r_smooth'], dtype=int) * 2 - 1))
+    if config["r_smooth"] is not None:
+        smooth_kernel = np.ones(tuple(np.array(config["r_smooth"], dtype=int) * 2 - 1))
         smooth_kernel = smooth_kernel / np.sum(smooth_kernel)
         image = utils.morphology.imfilter(image, smooth_kernel, oa=False)
     image[:, bad_columns] = 0
 
     # Scale image
-    scale = config['scale_norm'] / image.max()
+    scale = config["scale_norm"] / image.max()
     image = np.rint(image * scale).astype(np.int32)
     return image
 
 
 class view_find_spots:
-    def __init__(self, nb: Optional[Notebook] = None, t: int = 0, r: int = 0, c: int = 0,
-                 show_isolated: bool = False, config_file: Optional[str] = None):
+    def __init__(
+        self,
+        nb: Optional[Notebook] = None,
+        t: int = 0,
+        r: int = 0,
+        c: int = 0,
+        show_isolated: bool = False,
+        config_file: Optional[str] = None,
+    ):
         """
         This viewer shows how spots are detected in an image.
         There are sliders to vary the parameters used for spot detection so the effect of them can be seen.
@@ -90,9 +96,11 @@ class view_find_spots:
 
         if r == nb.basic_info.anchor_round:
             if c != nb.basic_info.anchor_channel:
-                raise ValueError(f'No spots are found on round {r}, channel {c} in the pipeline.\n'
-                                 f'Only spots on anchor_channel = {nb.basic_info.anchor_channel} used for the '
-                                 f'anchor round.')
+                raise ValueError(
+                    f"No spots are found on round {r}, channel {c} in the pipeline.\n"
+                    f"Only spots on anchor_channel = {nb.basic_info.anchor_channel} used for the "
+                    f"anchor round."
+                )
         if r == nb.basic_info.anchor_round and c == nb.basic_info.anchor_channel:
             if show_isolated:
                 self.show_isolated = True
@@ -100,8 +108,9 @@ class view_find_spots:
                 self.show_isolated = False
         else:
             if show_isolated:
-                warnings.warn(f'Not showing isolated spots as slow and isolated status not used for round {r},'
-                              f' channel {c}')
+                warnings.warn(
+                    f"Not showing isolated spots as slow and isolated status not used for round {r}," f" channel {c}"
+                )
             self.show_isolated = False
 
         self.is_3d = nb.basic_info.is_3d
@@ -114,54 +123,55 @@ class view_find_spots:
             self.image = get_filtered_image(nb, t, r, c)
         else:
             self.image = tiles_io.load_image(
-                nb.file_names, nb.basic_info, nb.extract.file_type, t, r, c, apply_shift=False
+                nb.file_names, nb.basic_info, nb.extract.file_type, t, r, c, apply_shift=True
             )
-            if not (r == nb.basic_info.anchor_round and c == nb.basic_info.dapi_channel):
-                self.image = preprocessing.offset_pixels_by(self.image, -nb.basic_info.tile_pixel_value_shift)
             scale = 1  # Can be any value as not actually used but needed as argument in get_filter_info
 
         # Get auto_threshold value used to detect spots
-        if nb.has_page('extract'):
+        if nb.has_page("extract"):
             self.auto_thresh = nb.filter.auto_thresh[t, r, c]
         else:
-            config = nb.get_config()['extract']
+            config = nb.get_config()["extract"]
             z_info = int(np.floor(nb.basic_info.nz / 2))
-            hist_values = np.arange(-nb.basic_info.tile_pixel_value_shift,
-                                    np.iinfo(np.uint16).max - nb.basic_info.tile_pixel_value_shift + 2, 1)
+            hist_values = np.arange(
+                -nb.basic_info.tile_pixel_value_shift,
+                tiles_io.get_pixel_max() - nb.basic_info.tile_pixel_value_shift + 2,
+                1,
+            )
             hist_bin_edges = np.concatenate((hist_values - 0.5, hist_values[-1:] + 0.5))
-            max_npy_pixel_value = np.iinfo(np.uint16).max - nb.basic_info.tile_pixel_value_shift
+            max_npy_pixel_value = tiles_io.get_pixel_max() - nb.basic_info.tile_pixel_value_shift
             self.auto_thresh = filter_base.get_filter_info(
-                self.image, config['auto_thresh_multiplier'], hist_bin_edges, max_npy_pixel_value, scale, z_info
+                self.image, config["auto_thresh_multiplier"], hist_bin_edges, max_npy_pixel_value, scale, z_info
             )[0]
 
-        config = nb.get_config()['find_spots']
-        self.r_xy = config['radius_xy']
+        config = nb.get_config()["find_spots"]
+        self.r_xy = config["radius_xy"]
         if self.is_3d:
-            self.r_z = config['radius_z']
+            self.r_z = config["radius_z"]
         else:
             self.r_z = None
-        if config['isolation_thresh'] is None:
-            config['isolation_thresh'] = self.auto_thresh * config['auto_isolation_thresh_multiplier']
-        self.isolation_thresh = config['isolation_thresh']
-        self.r_isolation_inner = config['isolation_radius_inner']
-        self.r_isolation_xy = config['isolation_radius_xy']
-        self.normal_color = np.array([1, 0, 0, 1]) # red
+        if config["isolation_thresh"] is None:
+            config["isolation_thresh"] = self.auto_thresh * config["auto_isolation_thresh_multiplier"]
+        self.isolation_thresh = config["isolation_thresh"]
+        self.r_isolation_inner = config["isolation_radius_inner"]
+        self.r_isolation_xy = config["isolation_radius_xy"]
+        self.normal_color = np.array([1, 0, 0, 1])  # red
         self.isolation_color = np.array([0, 1, 0, 1])  # green
         self.neg_neighb_color = np.array([0, 0, 1, 1])  # blue
         self.point_size = 9
         self.z_thick = 1  # show +/- 1 plane initially
         self.z_thick_list = np.arange(1, 1 + 15 * 2, 2)  # only odd z-thick make any difference
         if self.is_3d:
-            self.r_isolation_z = config['isolation_radius_z']
+            self.r_isolation_z = config["isolation_radius_z"]
         else:
             self.r_isolation_z = None
 
         self.small = 1e-6  # for computing local maxima: shouldn't matter what it is (keep below 0.01 for int image).
         # perturb image by small amount so two neighbouring pixels that did have the same value now differ slightly.
         # hence when find maxima, will only get one of the pixels not both.
-        rng = np.random.default_rng(0)   # So shift is always the same.
+        rng = np.random.default_rng(0)  # So shift is always the same.
         # rand_shift must be larger than small to detect a single spot.
-        rand_im_shift = rng.uniform(low=self.small*2, high=0.2, size=self.image.shape)
+        rand_im_shift = rng.uniform(low=self.small * 2, high=0.2, size=self.image.shape)
         self.image = self.image + rand_im_shift
 
         self.dilate = None
@@ -185,7 +195,7 @@ class view_find_spots:
         self.thresh_slider.valueChanged.connect(lambda x: self.show_thresh(x))
         # On release of slider, filtered / smoothed images updated
         self.thresh_slider.sliderReleased.connect(self.update_spots)
-        self.viewer.window.add_dock_widget(self.thresh_slider, area="left", name='Intensity Threshold')
+        self.viewer.window.add_dock_widget(self.thresh_slider, area="left", name="Intensity Threshold")
         if self.show_isolated:
             self.isolation_thresh_slider = QSlider(Qt.Orientation.Horizontal)
             self.isolation_thresh_slider.setRange(-2 * np.abs(self.isolation_thresh), 0)
@@ -203,7 +213,7 @@ class view_find_spots:
         self.r_xy_slider.valueChanged.connect(lambda x: self.show_radius_xy(x))
         # On release of slider, filtered / smoothed images updated
         self.r_xy_slider.sliderReleased.connect(self.radius_slider_func)
-        self.viewer.window.add_dock_widget(self.r_xy_slider, area="left", name='Detection Radius YX')
+        self.viewer.window.add_dock_widget(self.r_xy_slider, area="left", name="Detection Radius YX")
 
         if self.is_3d:
             self.r_z_slider = QSlider(Qt.Orientation.Horizontal)
@@ -213,17 +223,17 @@ class view_find_spots:
             self.r_z_slider.valueChanged.connect(lambda x: self.show_radius_z(x))
             # On release of slider, filtered / smoothed images updated
             self.r_z_slider.sliderReleased.connect(self.radius_slider_func)
-            self.viewer.window.add_dock_widget(self.r_z_slider, area="left", name='Detection Radius Z')
+            self.viewer.window.add_dock_widget(self.r_z_slider, area="left", name="Detection Radius Z")
 
             self.z_thick_slider = QSlider(Qt.Orientation.Horizontal)
             self.z_thick_slider.setRange(0, int((self.z_thick_list[-1] - 1) / 2))
             self.z_thick_slider.setValue(self.z_thick)
             # When dragging, status will show r_z value
             self.z_thick_slider.valueChanged.connect(lambda x: self.change_z_thick(x))
-            self.viewer.window.add_dock_widget(self.z_thick_slider, area="left", name='Z Thickness')
+            self.viewer.window.add_dock_widget(self.z_thick_slider, area="left", name="Z Thickness")
 
         if self.show_isolated:
-            self.viewer.window.add_dock_widget(self.isolation_thresh_slider, area="left", name='Isolation Threshold')
+            self.viewer.window.add_dock_widget(self.isolation_thresh_slider, area="left", name="Isolation Threshold")
         # set image as selected layer so can see intensity values in status
         self.viewer.layers.selection.active = self.viewer.layers[0]
         napari.run()
@@ -240,10 +250,10 @@ class view_find_spots:
     def update_dilate(self):
         # When radius changes, need to recompute dilation
         if self.r_z is not None:
-            se = np.ones((2*self.r_xy-1, 2*self.r_xy-1, 2*self.r_z-1), dtype=int)
+            se = np.ones((2 * self.r_xy - 1, 2 * self.r_xy - 1, 2 * self.r_z - 1), dtype=int)
             print(f"Updating dilated image with r_xy = {self.r_xy}, r_z = {self.r_z}...")
         else:
-            se = np.ones((2*self.r_xy-1, 2*self.r_xy-1), dtype=int)
+            se = np.ones((2 * self.r_xy - 1, 2 * self.r_xy - 1), dtype=int)
             print(f"Updating dilated image with r_xy = {self.r_xy}...")
         time_start = time.time()
         self.dilate = utils.morphology.dilate(self.image, se)
@@ -256,8 +266,7 @@ class view_find_spots:
         spots = np.logical_and(self.image + self.small > self.dilate, self.image > self.auto_thresh)
         peak_pos = np.where(spots)
         self.spot_zyx = np.concatenate([coord.reshape(-1, 1) for coord in peak_pos], axis=1)
-        self.no_negative_neighbour = check_neighbour_intensity(self.image, self.spot_zyx,
-                                                               thresh=0)
+        self.no_negative_neighbour = check_neighbour_intensity(self.image, self.spot_zyx, thresh=0)
         if self.is_3d:
             self.spot_zyx = self.spot_zyx[:, [2, 0, 1]]
         if len(self.viewer.layers) == 1:
@@ -265,9 +274,17 @@ class view_find_spots:
                 point_size = [self.z_thick_list[self.z_thick], self.point_size, self.point_size]
             else:
                 point_size = self.point_size
-            self.viewer.add_points(self.spot_zyx, edge_color=self.normal_color, face_color=self.normal_color,
-                                   symbol='x', opacity=0.8, edge_width=0, out_of_slice_display=True,
-                                   size=point_size, name='Spots Found')
+            self.viewer.add_points(
+                self.spot_zyx,
+                edge_color=self.normal_color,
+                face_color=self.normal_color,
+                symbol="x",
+                opacity=0.8,
+                edge_width=0,
+                out_of_slice_display=True,
+                size=point_size,
+                name="Spots Found",
+            )
         else:
             self.viewer.layers[1].data = self.spot_zyx
         self.viewer.layers[1].face_color[self.no_negative_neighbour] = self.normal_color
@@ -297,14 +314,18 @@ class view_find_spots:
         # Once done, don't need to do again if only changing isolation_thresh.
         # isolated image calculation is very slow, maybe make manual version without jax
         if self.is_3d:
-            print(f"Updating isolation image with r_isolation_inner = {self.r_isolation_inner}, "
-                  f"r_isolation_xy = {self.r_isolation_xy}, r_isolation_z = {self.r_isolation_z}...")
+            print(
+                f"Updating isolation image with r_isolation_inner = {self.r_isolation_inner}, "
+                f"r_isolation_xy = {self.r_isolation_xy}, r_isolation_z = {self.r_isolation_z}..."
+            )
         else:
-            print(f"Updating isolation image with r_isolation_inner = {self.r_isolation_inner}, "
-                  f"r_isolation_xy = {self.r_isolation_xy}...")
+            print(
+                f"Updating isolation image with r_isolation_inner = {self.r_isolation_inner}, "
+                f"r_isolation_xy = {self.r_isolation_xy}..."
+            )
         kernel = utils.strel.annulus(self.r_isolation_inner, self.r_isolation_xy, self.r_isolation_z)
         time_start = time.time()
-        self.image_isolated = utils.morphology.imfilter(self.image, kernel, 0, 'corr', oa=False) / np.sum(kernel)
+        self.image_isolated = utils.morphology.imfilter(self.image, kernel, 0, "corr", oa=False) / np.sum(kernel)
         time_end = time.time()
         print("Finished in {:.2f} seconds".format(time_end - time_start))
         if self.is_3d:
@@ -313,8 +334,10 @@ class view_find_spots:
     def update_isolated_spots(self):
         # when isolation_thresh changes, can show new spots without recomputing image_isolated.
         self.isolation_thresh = self.isolation_thresh_slider.value()
-        isolated = self.image_isolated[tuple([self.spot_zyx[:, j] for j in
-                                              range(self.image_isolated.ndim)])] < self.isolation_thresh
+        isolated = (
+            self.image_isolated[tuple([self.spot_zyx[:, j] for j in range(self.image_isolated.ndim)])]
+            < self.isolation_thresh
+        )
         self.viewer.layers[1].face_color[np.invert(isolated)] = self.normal_color
         isolated = np.logical_and(isolated, self.no_negative_neighbour)
         self.viewer.layers[1].face_color[np.invert(self.no_negative_neighbour)] = self.neg_neighb_color

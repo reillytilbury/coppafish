@@ -1,1 +1,1 @@
-from .base import warn, info, debug, error
+from .base import warn, info, debug, error, error_catch

@@ -10,18 +10,16 @@ from ..utils import tiles_io, indexing
 
 
 def run_extract(
-    config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage, nbp_scale: NotebookPage
+    config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage
 ) -> Tuple[NotebookPage, NotebookPage, Optional[np.ndarray]]:
     """
     This reads in images from the raw `nd2` files, filters them and then saves them as `config[extract][file_type]`
-    files in the tile directory. Also gets `auto_thresh` for use in turning images to point clouds and `hist_values`,
-    `hist_counts` required for normalisation between channels.
+    files in the tile directory. Also gets `hist_values` and `hist_counts` required for normalisation between channels.
 
     Args:
         config (dict): dictionary obtained from 'extract' section of config file.
         nbp_file (NotebookPage): 'file_names' notebook page.
         nbp_basic (NotebookPage): 'basic_info' notebook page.
-        nbp_scale (NotebookPage): 'scale' notebook page.
 
     Returns:
         - `NotebookPage[extract]`: page containing `auto_thresh` for use in turning images to point clouds and
@@ -39,9 +37,8 @@ def run_extract(
 
     nbp = NotebookPage("extract")
     nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_git_revision_hash()
+    nbp.revision_hash = utils.system.get_software_hash()
     nbp.file_type = config["file_type"]
-    nbp.continuous_dapi = config["continuous_dapi"]
 
     logging.debug("Extraction started")
 
@@ -51,7 +48,7 @@ def run_extract(
         pre_seq_round = None
 
     hist_counts_values_path = os.path.join(nbp_file.tile_unfiltered_dir, "hist_counts_values.npz")
-    hist_values = np.arange(np.iinfo(np.uint16).max - np.iinfo(np.uint16).min + 1)
+    hist_values = np.arange(tiles_io.get_pixel_max() - tiles_io.get_pixel_min() + 1)
     hist_counts = np.zeros(
         (hist_values.size, nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.n_extra_rounds, nbp_basic.n_channels),
         dtype=int,
@@ -114,7 +111,9 @@ def run_extract(
                     logging.warn(f"Raw image {t=}, {r=}, {c=} has a single valued plane!")
                 tiles_io._save_image(im, file_path, config["file_type"])
             # Compute the counts of each possible uint16 pixel value for the image.
-            hist_counts[:, t, r, c] = np.histogram(im, hist_values.size)[0]
+            hist_counts[:, t, r, c] = np.histogram(
+                im, hist_values.size, range=(tiles_io.get_pixel_min(), tiles_io.get_pixel_max())
+            )[0]
             np.savez_compressed(hist_counts_values_path, hist_counts, hist_values)
             del im
             pbar.update()

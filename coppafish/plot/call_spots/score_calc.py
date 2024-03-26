@@ -1,4 +1,4 @@
-from typing import Tuple, Optional
+from typing import Tuple
 import numpy as np
 from ...setup import Notebook
 from ...call_spots import dot_product_score
@@ -22,19 +22,18 @@ def background_fitting(nb: Notebook, method: str) -> Tuple[np.ndarray, np.ndarra
     """
     rc_ind = np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
     trc_ind = np.ix_(nb.ref_spots.tile, nb.basic_info.use_rounds, nb.basic_info.use_channels)
-    if method.lower() == 'omp':
-        spot_colors = np.moveaxis(np.moveaxis(nb.omp.colors, 0, -1)[rc_ind], -1, 0)
-        config = nb.get_config()['omp']
+    if method.lower() == "omp":
+        spot_colors = np.moveaxis(np.moveaxis(nb.omp.colors, 0, -1), -1, 0)
+        config = nb.get_config()["omp"]
     else:
         spot_colors = np.moveaxis(np.moveaxis(nb.ref_spots.colors, 0, -1)[rc_ind], -1, 0)
-        config = nb.get_config()['call_spots']
-    alpha = config['alpha']
-    beta = config['beta']
+        config = nb.get_config()["call_spots"]
+    alpha = config["alpha"]
+    beta = config["beta"]
     spot_colors = spot_colors / nb.call_spots.color_norm_factor[trc_ind]
-    spot_colors_pb, background_coef, background_codes = \
-        fit_background(spot_colors, 0)
+    spot_colors_pb, background_coef, background_codes = fit_background(spot_colors, 0)
     background_codes = background_codes.reshape(background_codes.shape[0], -1)
-    background_var = background_coef ** 2 @ background_codes ** 2 * alpha + beta ** 2
+    background_var = background_coef**2 @ background_codes**2 * alpha + beta**2
     return spot_colors, spot_colors_pb, background_var
 
 

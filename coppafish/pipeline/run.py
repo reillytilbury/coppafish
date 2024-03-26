@@ -11,7 +11,6 @@ from ..call_spots import base as call_spots_base
 from ..pdf.base import BuildPDF
 from .. import logging
 from . import basic_info
-from . import scale_run
 from . import extract_run
 from . import filter_run
 from . import find_spots
@@ -46,11 +45,12 @@ def run_pipeline(
         Notebook: notebook containing all information gathered during the pipeline.
     """
     nb = initialize_nb(config_file)
-    run_tile_indep_pipeline(nb)
-    run_stitch(nb)
-    run_reference_spots(nb, overwrite_ref_spots)
-    run_omp(nb)
-    BuildPDF(nb)
+    logging.error_catch(run_tile_indep_pipeline, nb)
+    logging.error_catch(run_stitch, nb)
+    logging.error_catch(run_reference_spots, nb, overwrite_ref_spots)
+    logging.error_catch(BuildPDF, nb)
+    logging.error_catch(run_omp, nb)
+    logging.error_catch(BuildPDF, nb, auto_open=True)
     return nb
 
 
@@ -63,8 +63,6 @@ def run_tile_indep_pipeline(nb: Notebook) -> None:
         run_tile_by_tile (bool, optional): run each tile on a separate notebook through 'find_spots' and 'register',
             then merge them together. Default: true if PC has >110GB of available memory. False otherwise.
     """
-    run_scale(nb)
-    BuildPDF(nb)
     run_extract(nb)
     BuildPDF(nb)
     run_filter(nb)
@@ -105,38 +103,22 @@ def initialize_nb(config_file: str) -> Notebook:
         nb += nbp_basic
     else:
         logging.warn(utils.warnings.NotebookPageWarning("basic_info"))
-    if utils.system.get_software_version() not in nb.get_unique_versions():
+    if utils.system.get_software_version() not in nb.get_all_variable_instances(nb._SOFTWARE_VERSION):
         logging.warn(
-            f"You are running on software version {utils.system.get_software_version()}, but the notebook contains "
-            + f"data from versions {nb.get_unique_versions()}.",
+            f"You are running on v{utils.system.get_software_version()}, but the notebook contains "
+            + f"data from versions {nb.get_all_variable_instances(nb._SOFTWARE_VERSION)}.",
         )
-        logging.warn("Are you sure you want to continue? (y or n) ")
-        user_input = input()
+        logging.warn("Are you sure you want to continue? (automatically continuing in 60s)")
+        user_input = utils.system.input_timeout("type y or n: ", timeout_result="y")
         if user_input.strip().lower() != "y":
             logging.info("Exiting...")
             sys.exit()
-    return nb
-
-
-def run_scale(nb: Notebook) -> None:
-    """
-    This runs the `scale` step of the pipeline to produce the scale factors to use during extraction.
-
-    `scale` page is added to the `Notebook` before saving.
-
-    Args:
-        nb (Notebook): `Notebook` containing `file_names` and `basic_info` pages.
-    """
-    if not nb.has_page("scale"):
-        config = nb.get_config()
-        nbp = scale_run.compute_scale(
-            config["scale"],
-            nb.file_names,
-            nb.basic_info,
+    online_version = utils.system.get_remote_software_version()
+    if online_version != utils.system.get_software_version():
+        logging.warn(
+            f"You are running v{utils.system.get_software_version()}. The latest online version is v{online_version}"
         )
-        nb += nbp
-    else:
-        logging.warn(utils.warnings.NotebookPageWarning("scale"))
+    return nb
 
 
 def run_extract(nb: Notebook) -> None:
@@ -156,12 +138,7 @@ def run_extract(nb: Notebook) -> None:
     """
     if not nb.has_page("extract"):
         config = nb.get_config()
-        nbp = extract_run.run_extract(
-            config["extract"],
-            nb.file_names,
-            nb.basic_info,
-            nb.scale,
-        )
+        nbp = extract_run.run_extract(config["extract"], nb.file_names, nb.basic_info)
         nb += nbp
     else:
         logging.warn(utils.warnings.NotebookPageWarning("extract"))
@@ -176,13 +153,7 @@ def run_filter(nb: Notebook) -> None:
     """
     if not nb.has_page("filter"):
         config = nb.get_config()
-        nbp, nbp_debug = filter_run.run_filter(
-            config["filter"],
-            nb.file_names,
-            nb.basic_info,
-            nb.scale,
-            nb.extract,
-        )
+        nbp, nbp_debug = filter_run.run_filter(config["filter"], nb.file_names, nb.basic_info, nb.extract)
         nb += nbp
         nb += nbp_debug
     else:
@@ -241,36 +212,36 @@ def run_stitch(nb: Notebook) -> None:
     # Two conditions below:
     # 1. Check if there is a big dapi_image
     # 2. Check if there is NOT a file in the path directory for the dapi image
-    if nb.file_names.big_dapi_image is not None and not os.path.isfile(nb.file_names.big_dapi_image):
-        # save stitched dapi
-        # Will load in from nd2 file if nb.filter_debug.r_dapi is None i.e. if no DAPI filtering performed.
-        utils.tiles_io.save_stitched(
-            nb.file_names.big_dapi_image,
-            nb.file_names,
-            nb.basic_info,
-            nb.extract,
-            nb.stitch.tile_origin,
-            nb.basic_info.anchor_round,
-            nb.basic_info.dapi_channel,
-            nb.filter_debug.r_dapi is None,
-            config["stitch"]["save_image_zero_thresh"],
-            config["filter"]["num_rotations"],
-        )
-
-    if nb.file_names.big_anchor_image is not None and not os.path.isfile(nb.file_names.big_anchor_image):
-        # save stitched reference round/channel
-        utils.tiles_io.save_stitched(
-            nb.file_names.big_anchor_image,
-            nb.file_names,
-            nb.basic_info,
-            nb.extract,
-            nb.stitch.tile_origin,
-            nb.basic_info.anchor_round,
-            nb.basic_info.anchor_channel,
-            False,
-            config["stitch"]["save_image_zero_thresh"],
-            config["filter"]["num_rotations"],
-        )
+    # if nb.file_names.big_dapi_image is not None and not os.path.isfile(nb.file_names.big_dapi_image):
+    #     # save stitched dapi
+    #     # Will load in from nd2 file if nb.filter_debug.r_dapi is None i.e. if no DAPI filtering performed.
+    #     utils.tiles_io.save_stitched(
+    #         nb.file_names.big_dapi_image,
+    #         nb.file_names,
+    #         nb.basic_info,
+    #         nb.extract,
+    #         nb.stitch.tile_origin,
+    #         nb.basic_info.anchor_round,
+    #         nb.basic_info.dapi_channel,
+    #         nb.filter_debug.r_dapi is None,
+    #         config["stitch"]["save_image_zero_thresh"],
+    #         config["filter"]["num_rotations"],
+    #     )
+    #
+    # if nb.file_names.big_anchor_image is not None and not os.path.isfile(nb.file_names.big_anchor_image):
+    #     # save stitched reference round/channel
+    #     utils.tiles_io.save_stitched(
+    #         nb.file_names.big_anchor_image,
+    #         nb.file_names,
+    #         nb.basic_info,
+    #         nb.extract,
+    #         nb.stitch.tile_origin,
+    #         nb.basic_info.anchor_round,
+    #         nb.basic_info.anchor_channel,
+    #         False,
+    #         config["stitch"]["save_image_zero_thresh"],
+    #         config["filter"]["num_rotations"],
+    #     )
 
 
 def run_register(nb: Notebook) -> None:
@@ -296,11 +267,13 @@ def run_register(nb: Notebook) -> None:
             nb.filter,
             nb.find_spots,
             config["register"],
-            np.pad(nb.basic_info.tilepos_yx, ((0, 0), (0, 1)), mode="constant", constant_values=1),
             pre_seq_blur_radius=None,
         )
         nb += nbp
         nb += nbp_debug
+    else:
+        logging.warn(utils.warnings.NotebookPageWarning("register"))
+        logging.warn(utils.warnings.NotebookPageWarning("register_debug"))
     reg_images_dir = os.path.join(nb.file_names.output_dir, "reg_images")
     if not os.path.isdir(reg_images_dir) or len(os.listdir(reg_images_dir)) == 0:
         # Save reg images
@@ -322,9 +295,6 @@ def run_register(nb: Notebook) -> None:
                     nb, t, nb.basic_info.anchor_round, round_registration_channel
                 )
             register.preprocessing.generate_reg_images(nb, t, nb.basic_info.anchor_round, nb.basic_info.anchor_channel)
-    else:
-        logging.warn(utils.warnings.NotebookPageWarning("register"))
-        logging.warn(utils.warnings.NotebookPageWarning("register_debug"))
 
 
 def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None:
@@ -358,7 +328,7 @@ def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None
             nb.extract,
             nb.filter,
             nb.stitch.tile_origin,
-            nb.register.transform,
+            nb.register.icp_correction,
         )
         nb += nbp  # save to Notebook with gene_no, score, score_diff, intensity = None.
         # These will be added in call_reference_spots
@@ -373,7 +343,7 @@ def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None
             nb.ref_spots,
             nb.extract,
             nb.filter,
-            transform=nb.register.transform,
+            transform=nb.register.icp_correction,
             overwrite_ref_spots=overwrite_ref_spots,
         )
         nb += nbp
@@ -406,7 +376,7 @@ def run_omp(nb: Notebook) -> None:
             nb.filter,
             nb.call_spots,
             nb.stitch.tile_origin,
-            nb.register.transform,
+            nb.register.icp_correction,
             tile_most_spots,
         )
         nb += nbp
@@ -418,7 +388,7 @@ def run_omp(nb: Notebook) -> None:
         # i.e. indices should match up.
         spot_info = np.load(nb.file_names.omp_spot_info)
         not_duplicate = call_spots_base.get_non_duplicate(
-            nb.stitch.tile_origin, nb.basic_info.use_tiles, nb.basic_info.tile_centre, spot_info[:, :3], spot_info[:, 6]
+            nb.stitch.tile_origin, nb.basic_info.use_tiles, nb.basic_info.tile_centre, spot_info[:, :3], spot_info[:, 5]
         )
         spot_coefs = sparse.load_npz(nb.file_names.omp_spot_coef)
         sparse.save_npz(nb.file_names.omp_spot_coef, spot_coefs[not_duplicate])

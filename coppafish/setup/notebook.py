@@ -271,6 +271,8 @@ class Notebook:
     _ADDEDMETA = "TIME_CREATED"  # Key for notebook created time
     _CONFIGMETA = "CONFIGFILE"  # Key for config string
     _NBMETA = "NOTEBOOKMETA"  # Key for metadata about the entire notebook
+    _SOFTWARE_VERSION = "software_version"  # Key for variable name given to stored software versions
+    _HASH_NAME = "revision_hash"  # Key for variable name given to stored hash
     # If these sections of config files are different, will not raise error.
     _no_compare_config_sections = ["file_names"]
 
@@ -660,8 +662,12 @@ class Notebook:
         np.savez_compressed(self._file, **d)
         # Finishing the diagnostics described above
         logging.info(f"Notebook saved: took {round(time.time() - save_start_time, 3)} seconds")
-        if len(self.get_unique_versions()) > 1:
-            logging.warn(f"Saved notebook contains more than one software version: {self.get_unique_versions()}")
+        versions = set(self.get_all_variable_instances(self._SOFTWARE_VERSION))
+        hashes = set(self.get_all_variable_instances(self._HASH_NAME))
+        if len(versions) > 1:
+            logging.warn(f"Saved notebook contains more than one software version: {versions}")
+        if len(hashes) > 1:
+            logging.warn(f"Notebook hashes have differed. The source code may have been changed")
 
     def from_file(self, fn: str) -> Tuple[List, dict, float, str]:
         """
@@ -716,20 +722,20 @@ class Notebook:
         assert created_time is not None, "Invalid file, invalid created date"
         return pages, page_times, created_time, config_str
 
-    def get_unique_versions(self) -> List[str]:
+    def get_all_variable_instances(self, variable_name: str) -> List[Any]:
         """
-        Get every unique software version contained in notebook pages.
+        Get every instance of a variable with name `variable_name` contained in all notebook pages.
 
         Returns:
-            List[str]: list of unique software versions.
+            List of Any: list of every variable instance, includes duplicates.
         """
         versions = []
         for page in self:
             try:
-                versions.append(page.software_version)
+                versions.append(page.__getattribute__(variable_name))
             except AttributeError:
                 continue
-        return list(set(versions))
+        return versions
 
 
 class NotebookPage:
