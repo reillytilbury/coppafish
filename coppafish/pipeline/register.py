@@ -185,7 +185,7 @@ def register(
                         robust=False,
                     )
                 )
-                logging.info("Tile:", t, "Round:", r, "Converged:", converged_round[t, r])
+                logging.info(f"Tile: {t}, Round: {r}, Converged: {converged_round[t, r]}")
             # don't do icp for the pre-seq round as we will not have spots in the anchor channel
             round_correction[t, -1] = np.eye(4, 3)
             # compute an affine correction to the channel transforms. This is done by finding the best affine map that
@@ -234,7 +234,7 @@ def register(
                         robust=False,
                     )
                 )
-                logging.info("Tile:", t, "Channel:", c, "Converged:", converged_channel[t, c])
+                logging.info(f"Tile: {t}, Channel: {c}, Converged: {converged_channel[t, c]}")
         # combine these corrections into the icp_correction
         use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
         for t, r, c in itertools.product(use_tiles, use_rounds, use_channels):
