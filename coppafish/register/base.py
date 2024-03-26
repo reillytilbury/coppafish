@@ -438,6 +438,7 @@ def flow_correlation(
     This is done in a vectorized manner by reshaping the images into windows and then computing the correlation
     coefficient between the base and target images within each window. For this reason the window size must be a factor
     of the image size in each dimension.
+
     Args:
         base: n_y x n_x x n_z array of the base image
         target: n_y x n_x x n_z array of the target image
@@ -448,11 +449,13 @@ def flow_correlation(
 
     Returns:
         correlation: n_y x n_x x n_z array of correlation coefficients
+        upsampled_correlation: n_up_y x n_up_x x n_up_z array of upsampled correlation coefficients. Returns none if
+            correlation is already saved at `loc`.
     """
     t_start = time.time()
     if os.path.exists(loc):
         corr = np.load(loc, mmap_mode="r")[::upsample_factor_yx, ::upsample_factor_yx]
-        return corr.astype(np.float32)
+        return corr.astype(np.float32), None
     ny, nx, nz = target.shape
     # apply the flow to the base image and compute the correlation between th shifted base and the target image
     coords = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing="ij"), dtype=np.float32)

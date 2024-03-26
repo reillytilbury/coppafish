@@ -8,8 +8,9 @@ from ..utils import tiles_io
 from .. import logging
 
 
-def apply_transform(yxz: np.ndarray, flow: np.ndarray, icp_correction: np.ndarray,
-                    tile_sz: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def apply_transform(
+    yxz: np.ndarray, flow: np.ndarray, icp_correction: np.ndarray, tile_sz: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     This transforms the coordinates yxz based on the flow and icp_correction.
     E.g. to find coordinates of spots on the same tile but on a different round and channel.
@@ -41,15 +42,24 @@ def apply_transform(yxz: np.ndarray, flow: np.ndarray, icp_correction: np.ndarra
     # apply icp correction
     yxz_transform = np.pad(yxz_transform, ((0, 0), (0, 1)), constant_values=1)
     yxz_transform = np.round(yxz_transform @ icp_correction).astype(np.int16)
-    in_range = np.logical_and((yxz_transform >= np.array([0, 0, 0])).all(axis=1),
-                              (yxz_transform < tile_sz).all(axis=1))  # set color to nan if out range
+    in_range = np.logical_and(
+        (yxz_transform >= np.array([0, 0, 0])).all(axis=1), (yxz_transform < tile_sz).all(axis=1)
+    )  # set color to nan if out range
     return yxz_transform, in_range
 
 
-def get_spot_colors(yxz_base: np.ndarray, t: np.ndarray, transform: np.ndarray, bg_scale: np.ndarray, file_type: str,
-                    nbp_file: NotebookPage, nbp_basic: NotebookPage, use_rounds: Optional[List[int]] = None,
-                    use_channels: Optional[List[int]] = None, return_in_bounds: bool = False,
-                    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+def get_spot_colors(
+    yxz_base: np.ndarray,
+    t: np.ndarray,
+    transform: np.ndarray,
+    bg_scale: np.ndarray,
+    file_type: str,
+    nbp_file: NotebookPage,
+    nbp_basic: NotebookPage,
+    use_rounds: Optional[List[int]] = None,
+    use_channels: Optional[List[int]] = None,
+    return_in_bounds: bool = False,
+) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Takes some spots found on the reference round, and computes the corresponding spot intensity
     in specified imaging rounds/channels.
@@ -105,17 +115,14 @@ def get_spot_colors(yxz_base: np.ndarray, t: np.ndarray, transform: np.ndarray, 
         tile_sz = np.asarray([nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)], dtype=np.int16)
 
     with tqdm(total=n_use_rounds * n_use_channels, disable=no_verbose) as pbar:
-        pbar.set_description(f"Reading {n_spots} spot_colors, from {file_type} files")
+        pbar.set_description(f"Reading {n_spots} spot_colors from {file_type} files")
         for i, r in enumerate(use_rounds):
-            flow_r = np.load(os.path.join(nbp_file.output_dir, 'flow', 'smooth', f't{t}_r{r}.npy'),
-                             mmap_mode='r')
+            flow_r = np.load(os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy"), mmap_mode="r")
             for j, c in enumerate(use_channels):
                 transform_rc = transform[t, r, c]
-                pbar.set_postfix({'round': r, 'channel': c})
+                pbar.set_postfix({"round": r, "channel": c})
                 if transform_rc[0, 0] == 0:
-                    raise ValueError(
-                        f"Transform for tile {t}, round {r}, channel {c} is zero:"
-                        f"\n{transform_rc}")
+                    raise ValueError(f"Transform for tile {t}, round {r}, channel {c} is zero:" f"\n{transform_rc}")
 
                 yxz_transform, in_range = apply_transform(yxz_base, flow_r, transform_rc, tile_sz)
                 yxz_transform, in_range = np.asarray(yxz_transform), np.asarray(in_range)
@@ -126,9 +133,9 @@ def get_spot_colors(yxz_base: np.ndarray, t: np.ndarray, transform: np.ndarray, 
                     continue
 
                 # Read in the shifted uint16 colors here, and remove shift later.
-                spot_colors[in_range, i, j] = tiles_io.load_image(nbp_file, nbp_basic, file_type, t, r, c,
-                                                                  yxz_transform,
-                                                                  apply_shift=False)
+                spot_colors[in_range, i, j] = tiles_io.load_image(
+                    nbp_file, nbp_basic, file_type, t, r, c, yxz_transform, apply_shift=False
+                )
                 pbar.update(1)
             del flow_r
 
