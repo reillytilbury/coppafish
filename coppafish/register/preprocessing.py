@@ -44,13 +44,18 @@ def load_reg_data(nbp_file: NotebookPage, nbp_basic: NotebookPage):
         with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "rb") as f:
             registration_data = pickle.load(f)
     else:
-        n_tiles, n_rounds, n_channels = nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.n_extra_rounds, \
-            nbp_basic.n_channels
-        round_registration = {'flow_dir': os.path.join(nbp_file.output_dir, 'flow')}
-        channel_registration = {'transform': np.zeros((n_channels, 4, 3))}
-        registration_data = {'round_registration': round_registration,
-                             'channel_registration': channel_registration,
-                             'blur': False}
+        n_tiles, n_rounds, n_channels = (
+            nbp_basic.n_tiles,
+            nbp_basic.n_rounds + nbp_basic.n_extra_rounds,
+            nbp_basic.n_channels,
+        )
+        round_registration = {"flow_dir": os.path.join(nbp_file.output_dir, "flow")}
+        channel_registration = {"transform": np.zeros((n_channels, 4, 3))}
+        registration_data = {
+            "round_registration": round_registration,
+            "channel_registration": channel_registration,
+            "blur": False,
+        }
     return registration_data
 
 
@@ -167,7 +172,7 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
         image = yxz_to_zyx(image)
 
     # Make sure that box dims are even
-    assert z_box % 2 == 0 and y_box % 2 == 0 and x_box % 2 == 0, "Box dimensions must be even numbers!"
+    assert y_box % 2 == 0 and x_box % 2 == 0, "Box dimensions must be even numbers!"
     z_image, y_image, x_image = image.shape
 
     # Allow 0.5 of a box either side and then split the middle with subvols evenly spaced points, ie into subvols - 1
@@ -192,7 +197,7 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
     # Split the image into subvolumes and store them in the array
     for z, y, x in np.ndindex(z_subvolumes, y_subvolumes, x_subvolumes):
         z_centre, y_centre, x_centre = z_box // 2 + z * z_unit, y_box // 2 + y * y_unit, x_box // 2 + x * x_unit
-        z_start, z_end = z_centre - z_box // 2, z_centre + z_box // 2
+        z_start, z_end = 0, image.shape[0] + 1
         y_start, y_end = y_centre - y_box // 2, y_centre + y_box // 2
         x_start, x_end = x_centre - x_box // 2, x_centre + x_box // 2
 
@@ -351,16 +356,18 @@ def merge_subvols(position, subvol):
     # set min values to 0
     position -= np.min(position, axis=0)
     z_box, y_box, x_box = subvol.shape[1:]
-    centre = position + np.array([z_box//2, y_box//2, x_box//2])
+    centre = position + np.array([z_box // 2, y_box // 2, x_box // 2])
     # Get the min and max values of the position, use this to get the size of the merged image and initialise it
     max_pos = np.max(position, axis=0)
     merged = np.zeros((max_pos + subvol.shape[1:]).astype(int))
     neighbour_im = np.zeros_like(merged)
     # Loop through the subvols and add them to the merged image at the correct position.
     for i in range(position.shape[0]):
-        subvol_i_mask = np.ix_(range(position[i, 0], position[i, 0] + z_box),
-                               range(position[i, 1], position[i, 1] + y_box),
-                               range(position[i, 2], position[i, 2] + x_box))
+        subvol_i_mask = np.ix_(
+            range(position[i, 0], position[i, 0] + z_box),
+            range(position[i, 1], position[i, 1] + y_box),
+            range(position[i, 2], position[i, 2] + x_box),
+        )
         neighbour_im[subvol_i_mask] += 1
         merged[subvol_i_mask] = subvol[i]
 
@@ -494,7 +501,13 @@ def apply_flow(flow: np.ndarray, points: np.ndarray, ignore_oob: bool = True, ro
         new_points = np.round(new_points).astype(int)
     ny, nx, nz = flow.shape[1:]
     if ignore_oob:
-        oob = (new_points[:, 0] < 0) | (new_points[:, 0] >= ny) | (new_points[:, 1] < 0) | (new_points[:, 1] >= nx) | \
-              (new_points[:, 2] < 0) | (new_points[:, 2] >= nz)
+        oob = (
+            (new_points[:, 0] < 0)
+            | (new_points[:, 0] >= ny)
+            | (new_points[:, 1] < 0)
+            | (new_points[:, 1] >= nx)
+            | (new_points[:, 2] < 0)
+            | (new_points[:, 2] >= nz)
+        )
         new_points = new_points[~oob]
     return new_points

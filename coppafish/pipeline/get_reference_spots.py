@@ -59,7 +59,7 @@ def get_reference_spots(
     c = nbp_basic.anchor_channel
     logging.debug("Get ref spots started")
     use_tiles, use_rounds, use_channels = (
-        nbp_basic.use_tiles.copy(),
+        np.array(nbp_basic.use_tiles.copy()),
         nbp_basic.use_rounds.copy(),
         nbp_basic.use_channels.copy(),
     )

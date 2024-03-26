@@ -464,6 +464,9 @@ def flow_correlation(
     # divide base_warped and target by their max
     base_warped = base_warped / np.max(base_warped)
     target = target / np.max(target)
+    for i in range(3):
+        while target.shape[i] % win_size[i] != 0:
+            win_size[i] += 1
     # compute number of windows in each dimension
     n_win = np.array(target.shape) // win_size
     # reshape the images into windows
