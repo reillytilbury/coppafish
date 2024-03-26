@@ -173,6 +173,7 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
 
     # Make sure that box dims are even
     assert y_box % 2 == 0 and x_box % 2 == 0, "Box dimensions must be even numbers!"
+    assert z_subvolumes == 1
     z_image, y_image, x_image = image.shape
 
     # Allow 0.5 of a box either side and then split the middle with subvols evenly spaced points, ie into subvols - 1

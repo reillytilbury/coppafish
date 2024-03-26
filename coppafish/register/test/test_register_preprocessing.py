@@ -67,12 +67,12 @@ def test_split_3d_image():
     # Setup data (10, 256, 256)
     brain = data.brain()
     # Test the function
-    z_box, y_box, x_box = 6, 64, 64
-    brain_split, pos = reg_pre.split_3d_image(brain, 2, 4, 4, z_box, y_box, x_box)
+    z_box, y_box, x_box = 10, 64, 64
+    brain_split, pos = reg_pre.split_3d_image(brain, 1, 4, 4, z_box, y_box, x_box)
     # Test that the shape is correct
-    assert brain_split.shape == (2, 4, 4, 6, 64, 64)
+    assert brain_split.shape == (1, 4, 4, 10, 64, 64)
     # Test that the values are correct
-    assert np.allclose(brain_split[0, 0, 0], brain[:6, :64, :64])
+    assert np.allclose(brain_split[0, 0, 0], brain[:, :64, :64])
     # Test that the positions are correct
     assert all(pos[0] == [z_box // 2, y_box // 2, x_box // 2])
 
