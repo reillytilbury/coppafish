@@ -31,6 +31,7 @@
     * [Viewer](https://reillytilbury.github.io/coppafish/diagnostics/#viewer)
     * [Registration viewer](https://reillytilbury.github.io/coppafish/diagnostics/#registrationviewer)
     * [PDF Diagnostics](https://reillytilbury.github.io/coppafish/diagnostics/#pdf-diagnostics)
+    * [Viewing images](https://reillytilbury.github.io/coppafish/diagnostics/#viewing-images)
 * [Advanced Usage](https://reillytilbury.github.io/coppafish/advanced_usage/)
 * [Troubleshoot](https://reillytilbury.github.io/coppafish/troubleshoot/)
 * [Glossary](https://reillytilbury.github.io/coppafish/glossary/)
