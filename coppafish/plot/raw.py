@@ -1,11 +1,12 @@
 import napari
-from ..setup import Notebook
-from ..utils import raw
-from ..pipeline.basic_info import set_basic_info
-import numpy as np
 import numbers
-from typing import Union, Optional, List, Tuple
+import numpy as np
 from tqdm import tqdm
+from typing import Union, Optional, List, Tuple
+
+from ..utils import raw
+from ..setup import Notebook
+from ..pipeline.basic_info import set_basic_info
 
 
 def add_basic_info_no_save(nb: Notebook):
@@ -17,14 +18,15 @@ def add_basic_info_no_save(nb: Notebook):
 
     """
     if not nb.has_page("basic_info"):
-        nb._no_save_pages['basic_info'] = {}  # don't save if add basic_info page
+        nb._no_save_pages["basic_info"] = {}  # don't save if add basic_info page
         config = nb.get_config()
-        nbp_basic = set_basic_info(config['file_names'], config['basic_info'])
+        nbp_basic = set_basic_info(config["file_names"], config["basic_info"])
         nb += nbp_basic
 
 
-def get_raw_images(nb: Notebook, tiles: List[int], rounds: List[int],
-                   channels: List[int], use_z: List[int]) -> np.ndarray:
+def get_raw_images(
+    nb: Notebook, tiles: List[int], rounds: List[int], channels: List[int], use_z: List[int]
+) -> np.ndarray:
     """
     This loads in raw images for the experiment corresponding to the *Notebook*.
 
@@ -60,16 +62,17 @@ def get_raw_images(nb: Notebook, tiles: List[int], rounds: List[int],
 
     raw_images = np.zeros((n_tiles, n_rounds, n_channels, ny, nx, nz), dtype=np.uint16)
     with tqdm(total=n_images) as pbar:
-        pbar.set_description(f'Loading in raw data')
+        pbar.set_description(f"Loading in raw data")
         for r in range(n_rounds):
             round_dask_array, _ = raw.load_dask(nb.file_names, nb.basic_info, r=rounds[r])
             # TODO: Can get rid of these two for loops, when round_dask_array is always a dask array.
             #  At the moment though, is not dask array when using nd2_reader (On Mac M1).
             for t in range(n_tiles):
                 for c in range(n_channels):
-                    pbar.set_postfix({'round': rounds[r], 'tile': tiles[t], 'channel': channels[c]})
-                    raw_images[t, r, c] = raw.load_image(nb.file_names, nb.basic_info, tiles[t], channels[c],
-                                                         round_dask_array, rounds[r],  use_z)
+                    pbar.set_postfix({"round": rounds[r], "tile": tiles[t], "channel": channels[c]})
+                    raw_images[t, r, c] = raw.load_image(
+                        nb.file_names, nb.basic_info, tiles[t], channels[c], round_dask_array, rounds[r], use_z
+                    )
                     pbar.update(1)
     return raw_images
 
@@ -88,9 +91,14 @@ def number_to_list(var_list: List) -> Tuple:
     return tuple(var_list)
 
 
-def view_raw(nb: Optional[Notebook] = None, tiles: Union[int, List[int]] = 0, rounds: Union[int, List[int]] = 0,
-             channels: Optional[Union[int, List[int]]] = None,
-             use_z: Optional[Union[int, List[int]]] = None, config_file: Optional[str] = None):
+def view_raw(
+    nb: Optional[Notebook] = None,
+    tiles: Union[int, List[int]] = 0,
+    rounds: Union[int, List[int]] = 0,
+    channels: Optional[Union[int, List[int]]] = None,
+    use_z: Optional[Union[int, List[int]]] = None,
+    config_file: Optional[str] = None,
+):
     """
     Function to view raw data in napari.
     There will upto 4 scrollbars for each image to change tile, round, channel and z-plane.
@@ -127,20 +135,28 @@ def view_raw(nb: Optional[Notebook] = None, tiles: Union[int, List[int]] = 0, ro
 
     raw_images = get_raw_images(nb, tiles, rounds, channels, use_z)
     viewer = napari.Viewer()
-    viewer.add_image(np.moveaxis(raw_images, -1, 3), name='Raw Images')
+    viewer.add_image(np.moveaxis(raw_images, -1, 3), name="Raw Images")
 
     @viewer.dims.events.current_step.connect
     def update_slider(event):
-        viewer.status = f'Tile: {tiles[event.value[0]]}, Round: {rounds[event.value[1]]}, ' \
-                        f'Channel: {channels[event.value[2]]}, Z: {use_z[event.value[3]]}'
+        viewer.status = (
+            f"Tile: {tiles[event.value[0]]}, Round: {rounds[event.value[1]]}, "
+            f"Channel: {channels[event.value[2]]}, Z: {use_z[event.value[3]]}"
+        )
 
-    viewer.dims.axis_labels = ['Tile', 'Round', 'Channel', 'z', 'y', 'x']
+    viewer.dims.axis_labels = ["Tile", "Round", "Channel", "z", "y", "x"]
     viewer.dims.set_point([0, 1, 2], [0, 0, 0])  # set to first tile, round and channel initially
     napari.run()
 
 
-def view_tile_layout(nb: Notebook, num_rotations: int = 0, flip_y: bool = False, flip_x: bool = False,
-                     tiles: Optional[Union[int, List[int]]] = None, anchor: bool = False):
+def view_tile_layout(
+    nb: Notebook,
+    num_rotations: int = 0,
+    flip_y: bool = False,
+    flip_x: bool = False,
+    tiles: Optional[Union[int, List[int]]] = None,
+    anchor: bool = False,
+):
     """
     Args:
         nb: Notebook containing at least basic info and file names.
@@ -155,13 +171,21 @@ def view_tile_layout(nb: Notebook, num_rotations: int = 0, flip_y: bool = False,
 
     # Check if user has dapi and has specified they want dapi
     if nb.basic_info.dapi_channel is not None and anchor is False:
-        raw_images = get_raw_images(nb, tiles=tiles,
-                                    rounds=[nb.basic_info.anchor_round], channels=[nb.basic_info.dapi_channel],
-                                    use_z=[nb.basic_info.nz // 2])[:, 0, 0, :, :, 0]
+        raw_images = get_raw_images(
+            nb,
+            tiles=tiles,
+            rounds=[nb.basic_info.anchor_round],
+            channels=[nb.basic_info.dapi_channel],
+            use_z=[nb.basic_info.nz // 2],
+        )[:, 0, 0, :, :, 0]
     else:
-        raw_images = get_raw_images(nb, tiles=tiles,
-                                    rounds=[nb.basic_info.anchor_round], channels=[nb.basic_info.anchor_channel],
-                                    use_z=[nb.basic_info.nz // 2])[:, 0, 0, :, :, 0]
+        raw_images = get_raw_images(
+            nb,
+            tiles=tiles,
+            rounds=[nb.basic_info.anchor_round],
+            channels=[nb.basic_info.anchor_channel],
+            use_z=[nb.basic_info.nz // 2],
+        )[:, 0, 0, :, :, 0]
 
     # First rotate the images. This makes num_rotations rotations in the direction taking the y axis to the x axis
     raw_images = np.rot90(raw_images, k=num_rotations, axes=(1, 2))
@@ -174,11 +198,11 @@ def view_tile_layout(nb: Notebook, num_rotations: int = 0, flip_y: bool = False,
         tilepos_yx[:, 1] = tilepos_yx[:, 1].max() - tilepos_yx[:, 1]
 
     # Now plot
-    expected_overlap = nb.get_config()['stitch']['expected_overlap']
+    expected_overlap = nb.get_config()["stitch"]["expected_overlap"]
     tile_sz = nb.basic_info.tile_sz
     yx_step = tile_sz * (1 - expected_overlap)
     viewer = napari.Viewer()
     for t in range(len(tiles)):
-        viewer.add_image(raw_images[t], name=f'Tile {tiles[t]}', translate=tilepos_yx[tiles[t]] * yx_step)
+        viewer.add_image(raw_images[t], name=f"Tile {tiles[t]}", translate=tilepos_yx[tiles[t]] * yx_step)
 
     napari.run()

@@ -38,6 +38,9 @@ def move_output_dir(current_dir: str, new_dir: str) -> None:
         - The file's are copied so that the "date modified" and other metadata is preserved.
     """
     assert len(os.listdir(current_dir)) > 0, f"Current directory {current_dir} is empty"
+    if not os.path.isdir(new_dir):
+        logging.info(f"Creating new directory {new_dir}")
+        os.mkdir(new_dir)
     assert len(os.listdir(new_dir)) == 0, f"New directory {new_dir} must be empty"
     notebook_path = os.path.join(current_dir, "notebook.npz")
     assert os.path.isfile(notebook_path), f"Notebook at {notebook_path} not found"

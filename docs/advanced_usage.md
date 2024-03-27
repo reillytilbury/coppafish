@@ -10,14 +10,14 @@ from coppafish.utils import move_output_dir
 move_output_dir("old/output_dir", "new/output_dir")
 ```
 
-where the old and new output directories must both exist as well as the notebook inside of the old output directory. If 
-the tile directory (given as `tile_dir` in the `file_names` config file) is kept inside the output directory, this will 
-not be moved (see [](#move-the-tile-directory)). If the notebook does not exist, it is safe to copy the output 
-directory manually.
+where the old output directory must exist as well as the notebook inside of the old output directory. If the tile 
+directory (given as `tile_dir` in the `file_names` config file) is kept inside the output directory, this will not be 
+moved (see [here](#move-the-tile-directory)). If the notebook does not exist, it is safe to copy the output directory 
+manually.
 
 ## Move the tile directory
 
-The extracted and filtered images can also be moved by doing:
+The extracted and filtered images can also be moved to a new tile directory by doing:
 
 ```python
 from coppafish.utils import move_tile_dir
