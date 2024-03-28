@@ -5,6 +5,7 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.transforms import ScaledTranslation
 from matplotlib.backends.backend_pdf import PdfPages
 from typing import Union, Optional, Tuple
 
@@ -773,8 +774,12 @@ class BuildPDF:
         )
         bar_colours = [cmap(norm(median_scores[i])) for i in range(n_genes)]
         ax.bar(bar_x, gene_counts, color=bar_colours, linewidth=0.9, edgecolor="black")
-        ax.set_xlim(bar_x[0] - 0.5, bar_x[1] + 0.5)
         ax.set_xticks(bar_x, labels, rotation=70, ha="right")
+        # Apply a 5pt x offset to all x tick labels, makes gene labels better aligned with ticks
+        dx, dy = 5, 0
+        offset = ScaledTranslation(dx / fig.dpi, dy / fig.dpi, fig.dpi_scale_trans)
+        for label in ax.xaxis.get_majorticklabels():
+            label.set_transform(label.get_transform() + offset)
 
         fig.tight_layout()
         return fig
