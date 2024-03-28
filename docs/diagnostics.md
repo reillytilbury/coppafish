@@ -62,6 +62,7 @@ specify the directory to save to by
 ```python
 BuildPDF("path/to/notebook.npz", "path/to/output/directory")
 ```
+if you want the PDFs to be re-created, you must delete the old ones first.
 
 ## Viewing images
 

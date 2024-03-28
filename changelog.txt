@@ -1,3 +1,8 @@
+2024/mm/dd Alpha Update (v0.10.1):
+ * New OMP gene counts figure in _omp.pdf.
+ * New easy image viewing diagnostics for the users, explained in the documentation.
+
+
 2024/03/26 Alpha Update (v0.10.0):
  * OMP scoring has been changed.
  * Optical flow added to registration.
