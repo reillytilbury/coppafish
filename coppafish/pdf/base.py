@@ -746,16 +746,13 @@ class BuildPDF:
             gene_names = [f"gene_{g}" for g in range(n_genes)]
 
         scores = omp_scores.omp_scores_int_to_float(omp_page.scores)
-        max_median = 0
-        for g in range(n_genes):
-            max_median = max([max_median, np.median(scores[omp_page.gene_no == g])])
         gene_numbers = omp_page.gene_no[scores >= score_threshold]
         unique_genes, counts = np.unique(gene_numbers, return_counts=True)
         for g, gene_name in enumerate(gene_names):
             if np.isin(g, unique_genes):
                 gene_counts.append(int(counts[unique_genes == g]))
-                scores_g = omp_page.scores[np.logical_and(omp_page.gene_no == g, scores >= score_threshold)]
-                median_scores.append(float(np.median(omp_scores.omp_scores_int_to_float(scores_g))))
+                scores_g = scores[np.logical_and(omp_page.gene_no == g, scores >= score_threshold)]
+                median_scores.append(float(np.median(scores_g)))
             else:
                 gene_counts.append(0)
                 median_scores.append(0)
@@ -767,7 +764,7 @@ class BuildPDF:
             ax.set_title(f"Gene counts")
         # Create a colour map for the bars to be coloured based on the median scores
         cmap = mpl.cm.plasma
-        norm = mpl.colors.Normalize(vmin=0, vmax=max_median)
+        norm = mpl.colors.Normalize(vmin=0, vmax=1)
         fig.colorbar(
             mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
             cax=axes[0, 1],
