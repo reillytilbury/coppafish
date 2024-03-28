@@ -338,6 +338,10 @@ class BuildPDF:
 
                 fig = self.create_omp_spot_shape_fig(nb.omp)
                 pdf.savefig(fig)
+
+                for i in range(10):
+                    fig = self.create_omp_gene_counts_fig(nb.file_names, nb.ref_spots, nb.omp, score_threshold=i * 0.1)
+                    pdf.savefig(fig)
             plt.close(fig)
         pbar.update()
         pbar.close()
@@ -613,9 +617,9 @@ class BuildPDF:
         fig.suptitle("OMP spots")
         # Plot a bar graph of the spot count found by OMP for each z plane and tile. The colour of the bar
         # represents the mean score of the spots in that z plane and tile
-        mean_scores = np.zeros(len(basic_info_page.use_tiles) * len(basic_info_page.use_z))
-        spot_counts = np.zeros_like(mean_scores, dtype=int)
-        bar_x = np.arange(0, mean_scores.size, dtype=float) + 0.5
+        median_scores = np.zeros(len(basic_info_page.use_tiles) * len(basic_info_page.use_z))
+        spot_counts = np.zeros_like(median_scores, dtype=int)
+        bar_x = np.arange(0, median_scores.size, dtype=float) + 0.5
         ticks = []
         labels = []
         scores: np.ndarray = omp_scores.omp_scores_int_to_float(omp_page.scores)
@@ -627,7 +631,7 @@ class BuildPDF:
                 spot_counts[i] = np.logical_and(tile == t, local_z == z).sum()
                 scores_t_z = scores[np.logical_and(tile == t, local_z == z)]
                 if scores_t_z.size > 0:
-                    mean_scores[i] = scores_t_z.mean()
+                    median_scores[i] = np.median(scores_t_z)
                 if z == basic_info_page.use_z[len(basic_info_page.use_z) // 2]:
                     labels.append(f"Tile {t}")
                     ticks.append(bar_x[i])
@@ -636,17 +640,17 @@ class BuildPDF:
                     ticks.append(bar_x[i])
                 i += 1
         del i
-        # Create a colour map for the bars to be coloured based on the mean spot score
+        # Create a colour map for the bars to be coloured based on the median spot score
         cmap = mpl.cm.plasma
-        max_mean_score = mean_scores.max()
-        norm = mpl.colors.Normalize(vmin=0, vmax=max_mean_score)
+        max_median_score = median_scores.max()
+        norm = mpl.colors.Normalize(vmin=0, vmax=max_median_score)
         fig.colorbar(
             mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
             cax=axes[0, 1],
             orientation="vertical",
-            label="Mean score",
+            label="Median score",
         )
-        bar_colours = [cmap(norm(mean_scores[i])) for i in range(mean_scores.size)]
+        bar_colours = [cmap(norm(median_scores[i])) for i in range(median_scores.size)]
         axes[0, 0].set_title(f"Counts")
         axes[0, 0].bar(bar_x, spot_counts, width=1, color=bar_colours, edgecolor="black", linewidth=0.5)
         axes[0, 0].set_xticks(ticks, labels=labels)
@@ -722,6 +726,58 @@ class BuildPDF:
                 show_left_frame=True,
                 show_right_frame=True,
             )
+
+        fig.tight_layout()
+        return fig
+
+    def create_omp_gene_counts_fig(
+        self, file_page: NotebookPage, ref_spots_page: NotebookPage, omp_page: NotebookPage, score_threshold: float = 0
+    ) -> mpl.figure.Figure:
+        """Creates a gene count bar chart. Each bar is coloured based on the median spot score of the gene."""
+        fig, axes = self.create_empty_page(1, 2, gridspec_kw={"width_ratios": [24, 1]})
+        ax: plt.Axes = axes[0, 0]
+        labels = []
+        gene_counts = []
+        median_scores = []
+        n_genes = ref_spots_page.gene_probs.shape[1]
+        if os.path.isfile(file_page.code_book):
+            gene_names, _ = np.genfromtxt(file_page.code_book, dtype=(str, str)).transpose()
+        else:
+            gene_names = [f"gene_{g}" for g in range(n_genes)]
+
+        scores = omp_scores.omp_scores_int_to_float(omp_page.scores)
+        max_median = 0
+        for g in range(n_genes):
+            max_median = max([max_median, np.median(scores[omp_page.gene_no == g])])
+        gene_numbers = omp_page.gene_no[scores >= score_threshold]
+        unique_genes, counts = np.unique(gene_numbers, return_counts=True)
+        for g, gene_name in enumerate(gene_names):
+            if np.isin(g, unique_genes):
+                gene_counts.append(int(counts[unique_genes == g]))
+                scores_g = omp_page.scores[np.logical_and(omp_page.gene_no == g, scores >= score_threshold)]
+                median_scores.append(float(np.median(omp_scores.omp_scores_int_to_float(scores_g))))
+            else:
+                gene_counts.append(0)
+                median_scores.append(0)
+            labels.append(gene_name)
+        bar_x = np.arange(n_genes) + 0.5
+        if score_threshold > 0:
+            ax.set_title(r"Gene counts for scores $\geq$ " + str(round(score_threshold, 3)))
+        else:
+            ax.set_title(f"Gene counts")
+        # Create a colour map for the bars to be coloured based on the median scores
+        cmap = mpl.cm.plasma
+        norm = mpl.colors.Normalize(vmin=0, vmax=max_median)
+        fig.colorbar(
+            mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
+            cax=axes[0, 1],
+            orientation="vertical",
+            label="Median score",
+        )
+        bar_colours = [cmap(norm(median_scores[i])) for i in range(n_genes)]
+        ax.bar(bar_x, gene_counts, color=bar_colours, linewidth=0.9, edgecolor="black")
+        ax.set_xlim(bar_x[0] - 0.5, bar_x[1] + 0.5)
+        ax.set_xticks(bar_x, labels, rotation=70, ha="right")
 
         fig.tight_layout()
         return fig
