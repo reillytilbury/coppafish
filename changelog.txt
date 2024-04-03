@@ -1,6 +1,7 @@
-2024/mm/dd Alpha Update (v0.10.1):
+2024/04/dd Alpha Update (v0.10.1):
  * New OMP gene counts figure in _omp.pdf.
- * New easy image viewing diagnostics for the users, explained in the documentation.
+ * New image viewing diagnostics for the users, explained in the documentation.
+ * Simplified advanced usage for moving output and tile directories.
 
 
 2024/03/26 Alpha Update (v0.10.0):
