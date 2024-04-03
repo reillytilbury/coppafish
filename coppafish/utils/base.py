@@ -218,6 +218,7 @@ def reed_solomon_codes(n_genes: int, n_rounds: int, n_channels: Optional[int] = 
     assert n_rounds > 1, "Require at least two rounds"
     assert n_channels > 1, "Require at least two channels"
     assert n_genes > 0, "Require at least one gene"
+    assert n_channels < 10, "n_channels >= 10 is not supported"
 
     verbose = n_genes > 10
     degree = 0

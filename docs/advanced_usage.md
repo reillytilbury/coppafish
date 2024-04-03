@@ -1,3 +1,18 @@
+## Generate gene codes
+
+Generate gene codes automatically by:
+
+```python
+from coppafish.utils import reed_solomon_codes
+
+codes = reed_solomon_codes(n_gene_codes, n_rounds, n_channels)
+```
+
+where `n_gene_codes` is the number of gene codes desired, `n_rounds` is the number of sequencing rounds, and 
+`n_channels` is the number of channels. An error is thrown if the number of unique gene codes desired is impossible to 
+create. Each channel is labelled 0, 1, 2, ... `codes` is a dictionary. Each gene code generated can be accessed. For 
+example, to access the first gene code: `codes["gene_0"]`.
+
 ## Move the output directory
 
 Once a coppafish pipeline is complete or partially complete, the output directory will contain various files. If you 

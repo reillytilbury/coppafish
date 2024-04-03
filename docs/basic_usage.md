@@ -75,11 +75,12 @@ gene_1 1230123
 gene_2 2301230
 gene_3 3012301
 ```
-the names (`gene_0`, `gene_1`, ...) can be changed. Do not assign any genes a constant gene code, e.g. `0000000`. For 
-more details on how the codes can be generated, see coppafish's gene code generator `reed_solomon_codes` in 
-[`coppafish/utils/base.py`](https://github.com/reillytilbury/coppafish/blob/alpha/coppafish/utils/base.py). Also, see 
-[wikipedia](https://en.wikipedia.org/wiki/Reed%E2%80%93Solomon_error_correction) for how gene code selection is 
-optimised.
+the names (`gene_0`, `gene_1`, ...) can be changed. Do not assign any genes a constant gene code, e.g. `0000000`. To 
+learn how the codes can be generated, see [advanced usage](advanced_usage.md#). For details on how the codes are 
+generated, see `reed_solomon_codes` in 
+[`coppafish/utils/base.py`](https://github.com/reillytilbury/coppafish/blob/alpha/coppafish/utils/base.py). See the 
+<a href="https://github.com/reillytilbury/coppafish/blob/alpha/coppafish/setup/settings.default.ini" target="_blank">
+Wikipedia article</a> for how gene codes are best selected.
 
 ### Configuration
 
