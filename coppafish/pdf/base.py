@@ -3,17 +3,16 @@ import textwrap
 import webbrowser
 import numpy as np
 from tqdm import tqdm
-from scipy import sparse
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.transforms import ScaledTranslation
 from matplotlib.backends.backend_pdf import PdfPages
-from typing import Union, Optional, Tuple
+from typing import Union, Optional, Tuple, List
 
 from ..omp import scores as omp_scores
 from ..setup import Notebook, NotebookPage
 from ..utils import tiles_io
-from .. import utils, logging
+from .. import logging
 
 
 # Plot settings
@@ -57,7 +56,7 @@ class BuildPDF:
         output_dir = os.path.abspath(output_dir)
         assert os.path.isdir(output_dir), f"output_dir {output_dir} is not a valid directory"
 
-        # Light theme
+        # Light default theme
         plt.style.use("default")
         self.use_channels_anchor = [
             c for c in [nb.basic_info.dapi_channel, nb.basic_info.anchor_channel] if c is not None
@@ -253,6 +252,7 @@ class BuildPDF:
                         title=f"Spot position histograms for {t=}, scores "
                         + r"$\geq$"
                         + str(DEFAULT_REF_SCORE_THRESHOLD),
+                        use_z=nb.basic_info.use_z,
                     )
                     pdf.savefig(fig)
                 # Create a page for every gene
@@ -365,6 +365,7 @@ class BuildPDF:
                         nb.omp.local_yxz[keep],
                         DEFAULT_OMP_SCORE,
                         title=f"Spot position histograms for {t=}, scores " + r"$\geq$" + str(DEFAULT_OMP_SCORE),
+                        use_z=nb.basic_info.use_z,
                     )
                     pdf.savefig(fig)
             plt.close(fig)
@@ -814,6 +815,7 @@ class BuildPDF:
         local_yxz: np.ndarray,
         score_threshold: float = 0,
         title: Optional[str] = None,
+        use_z: Optional[List[int]] = None,
     ) -> plt.Figure:
         """
         Histograms of positions x, y, and z.
@@ -833,6 +835,8 @@ class BuildPDF:
         positions = {1: "x", 0: "y", 2: "z"}
         colours = ["green", "blue", "red"]
         bins = [100, 100, local_yxz[:, 2].max() + 1]
+        if use_z is not None:
+            bins[2] = len(use_z)
         for index, position in positions.items():
             ax: plt.Axes = axes[index, 0]
             ax.set_title(position.upper())
@@ -842,6 +846,7 @@ class BuildPDF:
                 bins=bins[index],
                 edgecolor="black",
                 linewidth=0.4,
+                range=(use_z[0], use_z[-1]) if position == "z" else None,
             )
             ax.set_ylabel("Count")
         if title is None:
