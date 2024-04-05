@@ -817,7 +817,7 @@
         "gene_probs": [
             "",
             "Numpy float array [n_spots x n_genes]",
-            "Probability that spot $s$ is gene $g$."
+            "Von-Mises probability that spot $s$ is gene $g$."
         ],
         "dye_strengths": [
             "",

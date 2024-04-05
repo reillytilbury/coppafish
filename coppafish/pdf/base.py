@@ -5,8 +5,9 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.transforms import ScaledTranslation
 from matplotlib.backends.backend_pdf import PdfPages
-from typing import Union, Optional, Tuple
+from typing import Union, Optional, Tuple, List
 
 from ..omp import scores as omp_scores
 from ..setup import Notebook, NotebookPage
@@ -24,6 +25,8 @@ TINY_FONTSIZE = 4
 INFO_FONTDICT = {"fontsize": NORMAL_FONTSIZE, "verticalalignment": "center"}
 N_GENES_SHOW = 40
 GENE_PROB_THRESHOLD = 0.7
+DEFAULT_REF_SCORE_THRESHOLD = 0.3
+DEFAULT_OMP_SCORE = 0.3
 
 
 class BuildPDF:
@@ -53,7 +56,7 @@ class BuildPDF:
         output_dir = os.path.abspath(output_dir)
         assert os.path.isdir(output_dir), f"output_dir {output_dir} is not a valid directory"
 
-        # Light theme
+        # Light default theme
         plt.style.use("default")
         self.use_channels_anchor = [
             c for c in [nb.basic_info.dapi_channel, nb.basic_info.anchor_channel] if c is not None
@@ -236,10 +239,22 @@ class BuildPDF:
         pbar.set_postfix_str("Stitch")
         pbar.update()
 
-        pbar.set_postfix_str("Reference and call spots")
-        ref_spots_filepath = os.path.join(output_dir, "_ref_call_spots.pdf")
+        pbar.set_postfix_str("Call spots")
+        ref_spots_filepath = os.path.join(output_dir, "_call_spots.pdf")
         if not os.path.isfile(ref_spots_filepath) and nb.has_page("ref_spots") and nb.has_page("call_spots"):
             with PdfPages(ref_spots_filepath) as pdf:
+                for t in nb.basic_info.use_tiles:
+                    keep = nb.ref_spots.tile == t
+                    fig = self.create_positions_histograms(
+                        nb.ref_spots.score[keep],
+                        nb.ref_spots.local_yxz[keep],
+                        DEFAULT_REF_SCORE_THRESHOLD,
+                        title=f"Spot position histograms for {t=}, scores "
+                        + r"$\geq$"
+                        + str(DEFAULT_REF_SCORE_THRESHOLD),
+                        use_z=nb.basic_info.use_z,
+                    )
+                    pdf.savefig(fig)
                 # Create a page for every gene
                 gene_probs = nb.ref_spots.gene_probs
                 # bg colour was subtracted if use_preseq
@@ -341,6 +356,17 @@ class BuildPDF:
 
                 for i in range(10):
                     fig = self.create_omp_gene_counts_fig(nb.file_names, nb.ref_spots, nb.omp, score_threshold=i * 0.1)
+                    pdf.savefig(fig)
+
+                for t in nb.basic_info.use_tiles:
+                    keep = nb.omp.tile == t
+                    fig = self.create_positions_histograms(
+                        nb.omp.scores[keep],
+                        nb.omp.local_yxz[keep],
+                        DEFAULT_OMP_SCORE,
+                        title=f"Spot position histograms for {t=}, scores " + r"$\geq$" + str(DEFAULT_OMP_SCORE),
+                        use_z=nb.basic_info.use_z,
+                    )
                     pdf.savefig(fig)
             plt.close(fig)
         pbar.update()
@@ -641,8 +667,8 @@ class BuildPDF:
                 i += 1
         del i
         # Create a colour map for the bars to be coloured based on the median spot score
-        cmap = mpl.cm.plasma
         max_median_score = median_scores.max()
+        cmap = mpl.cm.plasma
         norm = mpl.colors.Normalize(vmin=0, vmax=max_median_score)
         fig.colorbar(
             mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
@@ -763,7 +789,7 @@ class BuildPDF:
         else:
             ax.set_title(f"Gene counts")
         # Create a colour map for the bars to be coloured based on the median scores
-        cmap = mpl.cm.plasma
+        cmap = mpl.cm.viridis
         norm = mpl.colors.Normalize(vmin=0, vmax=1)
         fig.colorbar(
             mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
@@ -773,8 +799,59 @@ class BuildPDF:
         )
         bar_colours = [cmap(norm(median_scores[i])) for i in range(n_genes)]
         ax.bar(bar_x, gene_counts, color=bar_colours, linewidth=0.9, edgecolor="black")
-        ax.set_xlim(bar_x[0] - 0.5, bar_x[1] + 0.5)
         ax.set_xticks(bar_x, labels, rotation=70, ha="right")
+        # Apply a 5pt x offset to all x tick labels, makes gene labels better aligned with ticks
+        dx, dy = 5, 0
+        offset = ScaledTranslation(dx / fig.dpi, dy / fig.dpi, fig.dpi_scale_trans)
+        for label in ax.xaxis.get_majorticklabels():
+            label.set_transform(label.get_transform() + offset)
 
+        fig.tight_layout()
+        return fig
+
+    def create_positions_histograms(
+        self,
+        scores: np.ndarray,
+        local_yxz: np.ndarray,
+        score_threshold: float = 0,
+        title: Optional[str] = None,
+        use_z: Optional[List[int]] = None,
+    ) -> plt.Figure:
+        """
+        Histograms of positions x, y, and z.
+
+        Args:
+            scores (`(n_spots) ndarray[float]`): scores of each position.
+            local_yxz (`(n_spots x 3) ndarray[int]`): local x, y, and z positions.
+            score_threshold (float): score threshold. Default: 0.
+            title (str, optional): plot title.
+
+        Returns:
+            figure: positions histograms plot.
+        """
+        assert scores.size == local_yxz.shape[0]
+
+        fig, axes = self.create_empty_page(3, 1, share_y=True)
+        positions = {1: "x", 0: "y", 2: "z"}
+        colours = ["green", "blue", "red"]
+        bins = [100, 100, local_yxz[:, 2].max() + 1]
+        if use_z is not None:
+            bins[2] = len(use_z)
+        for index, position in positions.items():
+            ax: plt.Axes = axes[index, 0]
+            ax.set_title(position.upper())
+            ax.hist(
+                local_yxz[scores >= score_threshold, index],
+                color=colours[index],
+                bins=bins[index],
+                edgecolor="black",
+                linewidth=0.4,
+                range=(use_z[0], use_z[-1]) if position == "z" else None,
+            )
+            ax.set_ylabel("Count")
+        if title is None:
+            fig.suptitle(r"Position histogram for scores $\geq$" + str(score_threshold))
+        else:
+            fig.suptitle(title)
         fig.tight_layout()
         return fig
