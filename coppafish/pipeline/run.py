@@ -271,30 +271,10 @@ def run_register(nb: Notebook) -> None:
         )
         nb += nbp
         nb += nbp_debug
+        register.preprocessing.generate_reg_images(nb)
     else:
         logging.warn(utils.warnings.NotebookPageWarning("register"))
         logging.warn(utils.warnings.NotebookPageWarning("register_debug"))
-    reg_images_dir = os.path.join(nb.file_names.output_dir, "reg_images")
-    if not os.path.isdir(reg_images_dir) or len(os.listdir(reg_images_dir)) == 0:
-        # Save reg images
-        round_registration_channel = nb.basic_info.dapi_channel
-        for t in nb.basic_info.use_tiles:
-            use_rounds_with_preseq = nb.basic_info.use_rounds + [nb.basic_info.pre_seq_round] * nb.basic_info.use_preseq
-            with tqdm.tqdm(total=len(use_rounds_with_preseq), desc="Saving registration images") as pbar:
-                for r in use_rounds_with_preseq:
-                    pbar.set_postfix({"tile": t, "round": r})
-                    register.preprocessing.generate_reg_images(nb, t, r, round_registration_channel)
-                    pbar.update(1)
-            with tqdm.tqdm(total=len(nb.basic_info.use_channels), desc="Saving registration images") as pbar:
-                for c in nb.basic_info.use_channels:
-                    pbar.set_postfix({"tile": t, "channel": c})
-                    register.preprocessing.generate_reg_images(nb, t, 3, c)
-                    pbar.update(1)
-            if round_registration_channel is not None:
-                register.preprocessing.generate_reg_images(
-                    nb, t, nb.basic_info.anchor_round, round_registration_channel
-                )
-            register.preprocessing.generate_reg_images(nb, t, nb.basic_info.anchor_round, nb.basic_info.anchor_channel)
 
 
 def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None:

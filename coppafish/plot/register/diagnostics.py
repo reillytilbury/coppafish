@@ -11,13 +11,11 @@ from PyQt5.QtGui import QFont
 import matplotlib.gridspec as gridspec
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from ...setup import Notebook
-from skimage.filters import window, sobel
 from coppafish.register import preprocessing
-from coppafish.register.base import huber_regression, brightness_scale, ols_regression
+from coppafish.register.base import huber_regression
 from coppafish.utils import tiles_io
 from scipy.ndimage import affine_transform
 from scipy import fft
-import itertools
 
 
 plt.style.use("dark_background")
@@ -42,7 +40,6 @@ class RegistrationViewer:
         use_rounds, use_channels = (nbp_basic.use_rounds + nbp_basic.use_preseq * [nbp_basic.pre_seq_round],
                                     nbp_basic.use_channels)
         self.r_ref, self.c_ref = nbp_basic.anchor_round, nb.basic_info.anchor_channel
-        self.round_registration_channel = nbp_basic.dapi_channel
         self.r_mid = len(use_rounds) // 2
         y_mid, x_mid = nbp_basic.tile_centre[:-1]
         z_mid = len(nbp_basic.use_z) // 2
@@ -1245,60 +1242,6 @@ def create_tiled_image(data, nbp_basic):
     return diff
 
 # 3
-# TODO: Update this so it uses icp transforms...
-# def view_channel_scales(nb: Notebook):
-#     """
-#     view scale parameters for the round outlier removals
-#     Args:
-#         nb: Notebook
-#     """
-#     nbp_basic, nbp_register_debug = nb.basic_info, nb.register_debug
-#     mid_round, anchor_channel = nbp_basic.n_rounds // 2, nbp_basic.anchor_channel
-#     use_tiles = nbp_basic.use_tiles
-#     use_channels = nbp_basic.use_channels
-#     # Extract raw scales
-#     z_scale = nbp_register_debug.channel_transform_raw[use_tiles][:, use_channels, 0, 0]
-#     y_scale = nbp_register_debug.channel_transform_raw[use_tiles][:, use_channels, 1, 1]
-#     x_scale = nbp_register_debug.channel_transform_raw[use_tiles][:, use_channels, 2, 2]
-#     n_tiles_use, n_channels_use = z_scale.shape[0], z_scale.shape[1]
-#
-#     # Plot box plots
-#     plt.subplot(3, 1, 1)
-#     plt.scatter(np.tile(np.arange(n_channels_use), n_tiles_use), np.reshape(z_scale, (n_tiles_use * n_channels_use)),
-#                 c='w', marker='x')
-#     plt.plot(np.arange(n_channels_use), 0.99 * np.ones(n_channels_use), 'c:', label='0.99 - 1.01')
-#     plt.plot(np.arange(n_channels_use), np.ones(n_channels_use), 'r:', label='1')
-#     plt.plot(np.arange(n_channels_use), 1.01 * np.ones(n_channels_use), 'c:')
-#     plt.xticks(np.arange(n_channels_use), use_channels)
-#     plt.xlabel('Channel')
-#     plt.ylabel('Z-scale')
-#     plt.legend()
-#
-#     plt.subplot(3, 1, 2)
-#     plt.scatter(x=np.tile(np.arange(n_channels_use), n_tiles_use),
-#                 y=np.reshape(y_scale, (n_tiles_use * n_channels_use)), c='w', marker='x', alpha=0.7)
-#     plt.plot(np.arange(n_channels_use), np.percentile(y_scale, 25, axis=0), 'c:', label='Inter Quartile Range')
-#     plt.plot(np.arange(n_channels_use), np.percentile(y_scale, 50, axis=0), 'r:', label='Median')
-#     plt.plot(np.arange(n_channels_use), np.percentile(y_scale, 75, axis=0), 'c:')
-#     plt.xticks(np.arange(n_channels_use), use_channels)
-#     plt.xlabel('Channel')
-#     plt.ylabel('Y-scale')
-#     plt.legend()
-#
-#     plt.subplot(3, 1, 3)
-#     plt.scatter(x=np.tile(np.arange(n_channels_use), n_tiles_use),
-#                 y=np.reshape(x_scale, (n_tiles_use * n_channels_use)), c='w', marker='x', alpha=0.7)
-#     plt.plot(np.arange(n_channels_use), np.percentile(x_scale, 25, axis=0), 'c:', label='Inter Quartile Range')
-#     plt.plot(np.arange(n_channels_use), np.percentile(x_scale, 50, axis=0), 'r:', label='Median')
-#     plt.plot(np.arange(n_channels_use), np.percentile(x_scale, 75, axis=0), 'c:')
-#     plt.xticks(np.arange(n_channels_use), use_channels)
-#     plt.xlabel('Channel')
-#     plt.ylabel('X-scale')
-#     plt.legend()
-#
-#     plt.suptitle('Distribution of scales across tiles for channel registration.')
-#     plt.show()
-# 3
 def view_icp_n_matches(nb: Notebook, t: int):
     """
     Plots simple proportion matches against iterations.
@@ -1384,262 +1327,6 @@ def view_icp_mse(nb: Notebook, t: int):
     plt.show()
 
 
-# TODO: This will need to be refactored. We will only need to compare ICP correction to identity transform
-# 3
-# def view_icp_deviations(nb: Notebook, t: int):
-#     """
-#     Plots deviations of ICP transform for a given tile t (n_rounds x n_channel x 3 x 4) affine transform against initial
-#     guess (initial_transform) which has the same shape. These trasnforms are in zyx x zyx format, with the final col
-#     referring to the shift. Our plot has rows as rounds and columns as channels, giving us len(use_rounds) rows, and
-#     len(use_channels) columns of subplots.
-#
-#     Each subplot will be a 2 3x1 images where the first im is [z_scale_icp - z_scale_svr, y_scale_icp - y_scale_svr,
-#     x_scale_icp - x_scale_svr], and second im is [z_shift_icp - z_shift_svr, y_shift_icp - y_shift_svr,
-#     s_shift_icp - x_shift_svr]. There should be a common colour bar on the right for all scale difference images and
-#     another on the right for all shift difference images.
-#
-#     Args:
-#         nb: Notebook
-#         t: tile
-#     """
-#     # Initialise frequent variables
-#     nbp_basic, nbp_register = nb.basic_info, nb.register
-#     use_tiles, use_rounds, use_channels = nbp_basic.use_tiles, nbp_basic.use_rounds, nbp_basic.use_channels
-#     initial_transform = np.zeros((len(use_rounds), len(use_channels), 3, 4))
-#     transform = np.zeros((len(use_rounds), len(use_channels), 3, 4))
-#     for r in range(len(use_rounds)):
-#         for c in range(len(use_channels)):
-#             initial_transform[r, c] = preprocessing.yxz_to_zyx_affine(
-#                 A=nbp_register.initial_transform[t, use_rounds[r], use_channels[c]])
-#             transform[r, c] = preprocessing.yxz_to_zyx_affine(A=nbp_register.transform[t, use_rounds[r], use_channels[c]])
-#
-#     # Define the axes
-#     fig, axes = plt.subplots(len(use_rounds), len(use_channels))
-#     # common axis labels
-#     fig.supxlabel('Channels')
-#     fig.supylabel('Rounds')
-#     # Set row and column labels
-#     for ax, col in zip(axes[0], use_channels):
-#         ax.set_title(col)
-#     for ax, row in zip(axes[:, 0], use_rounds):
-#         ax.set_ylabel(row, rotation=0, size='large')
-#
-#     # Define difference images
-#     scale_diff = np.zeros((len(use_rounds), len(use_channels), 3))
-#     shift_diff = np.zeros((len(use_rounds), len(use_channels), 3))
-#     for r in range(len(use_rounds)):
-#         for c in range(len(use_channels)):
-#             scale_diff[r, c] = np.diag(transform[r, c, :3, :3]) - np.diag(initial_transform[r, c, :3, :3])
-#             shift_diff[r, c] = transform[r, c, :3, 3] - initial_transform[r, c, :3, 3]
-#
-#     # Now plot scale_diff
-#     for r in range(len(use_rounds)):
-#         for c in range(len(use_channels)):
-#             ax = axes[r, c]
-#             # create 2 subplots within this subplot
-#             ax1 = ax.inset_axes([0, 0, 0.5, 1])
-#             ax2 = ax.inset_axes([0.5, 0, 0.5, 1])
-#             # plot scale_diff
-#             im1 = ax1.imshow(scale_diff[r, c].reshape(3, 1), cmap='bwr', vmin=-.1, vmax=.1)
-#             # plot shift_diff
-#             im2 = ax2.imshow(shift_diff[r, c].reshape(3, 1), cmap='bwr', vmin=-5, vmax=5)
-#             # remove ticks
-#             ax1.set_xticks([])
-#             ax1.set_yticks([])
-#             ax2.set_xticks([])
-#             ax2.set_yticks([])
-#             ax.set_xticks([])
-#             ax.set_yticks([])
-#
-#     # plot 2 colour bars, one for the shift_diff and one for the scale_diff. Both colour bars should be the same size,
-#     # and the scale_diff colour bar should be on the left of the subplots, and the shift_diff colour bar should be on
-#     # the right of the subplots.
-#     fig.subplots_adjust(right=0.7)
-#     cbar_scale_ax = fig.add_axes([0.75, 0.15, 0.025, 0.7])
-#     # Next we want to make sure the scale cbar has ticks on the left.
-#     cbar_scale_ax.yaxis.tick_left()
-#     fig.colorbar(im1, cax=cbar_scale_ax, ticks=[-.1, 0, .1], label='Scale difference')
-#     cbar_shift_ax = fig.add_axes([0.9, 0.15, 0.025, 0.7])
-#     fig.colorbar(im2, cax=cbar_shift_ax, ticks=[-5, 0, 5], label='Shift difference')
-#
-#     plt.suptitle('Deviations of ICP from SVR for tile ' + str(t) + '. \n'
-#                                                                    'Left column is zyx scale difference, '
-#                                                                    'right column is zyx shift difference.')
-
-
-# TODO: This will need to be refactored. We will need to use flow instead of affine transforms
-# def view_entire_overlay(nb: Notebook, t: int, r: int, c: int, filter=False, initial=False):
-#     """
-#     Plots the entire image for a given tile t, round r, channel c, and overlays the SVR transformed image on top of the
-#     ICP transformed image. The SVR transformed image is in red, and the ICP transformed image is in green.
-#
-#     Args:
-#         nb: Notebook
-#         t: tile
-#         r: round
-#         c: channel
-#         filter: whether to apply sobel filter to images
-#         initial: whether to use initial transform or final transform
-#     """
-#     # Initialise frequent variables
-#     anchor = preprocessing.yxz_to_zyx(tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t,
-#                                                           nb.basic_info.anchor_round, nb.basic_info.anchor_channel,
-#                                                           apply_shift=False))
-#     anchor = anchor.astype(np.int32)
-#     anchor -= nb.basic_info.tile_pixel_value_shift
-#     anchor = anchor.astype(np.float32)
-#     target = preprocessing.yxz_to_zyx(tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t, r, c,
-#                                                           apply_shift=False))
-#     target = target.astype(np.int32)
-#     target -= nb.basic_info.tile_pixel_value_shift
-#     target = target.astype(np.float32)
-#     if initial:
-#         transform = preprocessing.yxz_to_zyx_affine(nb.register.initial_transform[t, r, c])
-#     else:
-#         transform = preprocessing.yxz_to_zyx_affine(nb.register.transform[t, r, c])
-#     target_transformed = affine_transform(target, transform, order=1)
-#     # plot in napari
-#     if filter:
-#         anchor = sobel(anchor)
-#         target = sobel(target)
-#         target_transformed = sobel(target_transformed)
-#
-#     viewer = napari.Viewer()
-#     viewer.add_image(anchor, name='Tile ' + str(t) + ', round ' + str(nb.basic_info.anchor_round) + ', channel ' +
-#                                   str(nb.basic_info.anchor_channel), colormap='red', blending='additive')
-#     viewer.add_image(target_transformed, name='Tile ' + str(t) + ', round ' + str(r) + ', channel ' + str(c) +
-#                                               ' transformed', colormap='green', blending='additive')
-#     viewer.add_image(target, name='Tile ' + str(t) + ', round ' + str(r) + ', channel ' + str(c), colormap='blue',
-#                      blending='additive', opacity=0)
-#     napari.run()
-
-
-# TODO: This will need to be refactored. We will need to use flow instead of affine transforms
-# def view_background_overlay(nb: Notebook, t: int, r: int, c: int):
-#     """
-#     Overlays tile t, round r, channel c with the preseq image for the same tile, and the same channel. The preseq image
-#     is in red, and the seq image is in green. Both are registered.
-#     Args:
-#         nb: Notebook
-#         t: tile
-#         r: round
-#         c: channel
-#     """
-#
-#     if c in nb.basic_info.use_channels:
-#         transform_preseq = preprocessing.yxz_to_zyx_affine(nb.register.transform[t, nb.basic_info.pre_seq_round, c])
-#         transform_seq = preprocessing.yxz_to_zyx_affine(nb.register.transform[t, r, c])
-#     elif c == 0:
-#         transform_preseq = preprocessing.yxz_to_zyx_affine(nb.register.round_transform[t, nb.basic_info.pre_seq_round])
-#         if r == nb.basic_info.anchor_round:
-#             transform_seq = np.eye(4)
-#         else:
-#             transform_seq = preprocessing.yxz_to_zyx_affine(nb.register.round_transform[t, r])
-#     seq = preprocessing.yxz_to_zyx(tiles_io.load_image(nb.file_names,nb.basic_info, nb.extract.file_type, t, r, c, apply_shift=False))
-#     if not (r == nb.basic_info.anchor_round and c == nb.basic_info.dapi_channel):
-#         seq = preprocessing.offset_pixels_by(seq, -nb.basic_info.tile_pixel_value_shift)
-#     preseq = preprocessing.yxz_to_zyx(
-#         tiles_io.load_image(
-#             nb.file_names,nb.basic_info, nb.extract.file_type, t, nb.basic_info.pre_seq_round, c, apply_shift=False,
-#         )
-#     )
-#     if not (nb.basic_info.pre_seq_round == nb.basic_info.anchor_round and c == nb.basic_info.dapi_channel):
-#         preseq = preprocessing.offset_pixels_by(preseq, -nb.basic_info.tile_pixel_value_shift)
-#
-#     print('Starting Application of Seq Transform')
-#     seq = affine_transform(seq, transform_seq, order=1)
-#     print('Starting Application of Preseq Transform')
-#     preseq = affine_transform(preseq, transform_preseq, order=1)
-#     print('Finished Transformations')
-#
-#     viewer = napari.Viewer()
-#     viewer.add_image(seq, name='seq', colormap='green', blending='additive')
-#     viewer.add_image(preseq, name='preseq', colormap='red', blending='additive')
-#     napari.run()
-
-# TODO: This will need to be refactored as our method for computing background scale has changed
-# def view_background_brightness_correction(nb: Notebook, t: int, r: int, c: int, percentile: int = 99,
-#                                           sub_image_size: int = 500):
-#     print(f"Computing background scale for tile {t}, round {r}, channel {c}")
-#     mid_z = nb.basic_info.use_z[len(nb.basic_info.use_z) // 2]
-#     transform = nb.register.transform
-#     r_pre = nb.basic_info.pre_seq_round
-#
-#     # Load in preseq
-#     transform_pre = preprocessing.invert_affine(preprocessing.yxz_to_zyx_affine(transform[t, r_pre, c]))
-#     z_scale_pre = transform_pre[0, 0]
-#     z_shift_pre = transform_pre[0, 3]
-#     mid_z_pre = int((mid_z - z_shift_pre) / z_scale_pre)
-#     yxz = [None, None, mid_z_pre]
-#     preseq = tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r_pre, c=c, yxz=yxz)
-#     preseq = preseq.astype(np.int32)
-#     preseq = preseq - nb.basic_info.tile_pixel_value_shift
-#     preseq = preseq.astype(np.float32)
-#     # we have to load in inverse transform to use scipy.ndimage.affine_transform
-#     inv_transform_pre_yx = preprocessing.yxz_to_zyx_affine(transform[t, r_pre, c])[1:, 1:]
-#     preseq = affine_transform(preseq, inv_transform_pre_yx)
-#
-#     # load in seq
-#     transform_seq = preprocessing.invert_affine(preprocessing.yxz_to_zyx_affine(transform[t, r, c]))
-#     z_scale_seq = transform_seq[0, 0]
-#     z_shift_seq = transform_seq[0, 3]
-#     mid_z_seq = int((mid_z - z_shift_seq) / z_scale_seq)
-#     yxz = [None, None, mid_z_seq]
-#     seq = tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=c, yxz=yxz)
-#     seq = seq.astype(np.int32)
-#     seq = seq - nb.basic_info.tile_pixel_value_shift
-#     seq = seq.astype(np.float32)
-#     # we have to load in inverse transform to use scipy.ndimage.affine_transform
-#     inv_transform_seq_yx = preprocessing.yxz_to_zyx_affine(transform[t, r, c])[1:, 1:]
-#     seq = affine_transform(seq, inv_transform_seq_yx)
-#
-#     # compute bg scaling
-#     bg_scale, sub_seq, sub_preseq = brightness_scale(preseq, seq, percentile, sub_image_size)
-#     high_preseq = sub_preseq > np.percentile(sub_preseq, percentile)
-#     positive = (sub_seq > 0) * (sub_preseq > 0)
-#     mask = high_preseq * positive
-#     diff = sub_seq - bg_scale * sub_preseq
-#     ratio = sub_seq[mask] / sub_preseq[mask]
-#     estimate_scales = np.percentile(ratio, [25, 75])
-#     diff_low = sub_seq - estimate_scales[0] * sub_preseq
-#     diff_high = sub_seq - estimate_scales[1] * sub_preseq
-#
-#     # View overlay and view regression
-#     viewer = napari.Viewer()
-#     viewer.add_image(sub_seq, name='seq', colormap='green', blending='additive')
-#     viewer.add_image(sub_preseq, name='preseq', colormap='red', blending='additive')
-#     viewer.add_image(diff, name='diff', colormap='gray', blending='translucent', visible=False)
-#     viewer.add_image(diff_low, name='bg_scale = 25%', colormap='gray', blending='translucent', visible=False)
-#     viewer.add_image(diff_high, name='bg_scale = 75%', colormap='gray', blending='translucent', visible=False)
-#     viewer.add_image(mask, name='mask', colormap='blue', blending='additive', visible=False)
-#
-#     # View regression
-#     plt.subplot(1, 2, 1)
-#     bins = 25
-#     plt.hist2d(sub_preseq[mask], sub_seq[mask], bins=[np.linspace(0, np.percentile(sub_preseq[mask], 90), bins),
-#                                                       np.linspace(0, np.percentile(sub_seq[mask], 90), bins)])
-#     x = np.linspace(0, np.percentile(sub_seq[mask], 90), 100)
-#     y = bg_scale * x
-#     plt.plot(x, y, 'r')
-#     plt.plot(x, estimate_scales[0] * x, 'g')
-#     plt.plot(x, estimate_scales[1] * x, 'g')
-#     plt.xlabel('Preseq')
-#     plt.ylabel('Seq')
-#     plt.title('Regression of preseq vs seq. Scale = ' + str(np.round(bg_scale, 3)))
-#
-#     plt.subplot(1, 2, 2)
-#     plt.hist(sub_seq[mask] / sub_preseq[mask], bins=100)
-#     max_bin_val = np.max(np.histogram(sub_seq[mask] / sub_preseq[mask], bins=100)[0])
-#     plt.vlines(bg_scale, 0, max_bin_val, colors='r')
-#     plt.vlines(estimate_scales, 0, max_bin_val, colors='g')
-#     plt.xlabel('Seq / Preseq')
-#     plt.ylabel('Frequency')
-#     plt.title('Histogram of seq / preseq. Scale = ' + str(np.round(bg_scale, 3)))
-#     plt.show()
-#
-#     napari.run()
-
-
 def view_camera_correction(nb: Notebook):
     """
     Plots the camera correction for each camera against the anchor camera
@@ -1686,6 +1373,7 @@ def view_camera_correction(nb: Notebook):
         )
 
     napari.run()
+
 
 # TODO: Refactor this for icp correction instead of transform
 def view_shifts_and_scales(nb: Notebook, t: int, bg_on: bool = False):

@@ -358,9 +358,9 @@ def optical_flow_single(
     """
     if os.path.exists(loc):
         # load the flow if it exists. As it is saved in the upsampled format, we need to downsample it
-        flow = np.load(loc, mmap_mode="r")[::upsample_factor_yx, ::upsample_factor_yx]
+        flow = np.load(loc, mmap_mode="r")[:, ::upsample_factor_yx, ::upsample_factor_yx]
         flow = flow.astype(np.float32)
-        flow[:2] = flow[:2] / upsample_factor_yx
+        flow[:-1] = flow[:-1] / upsample_factor_yx
         return flow
     t_start = time.time()
     # start by ensuring images are float32
@@ -461,7 +461,7 @@ def flow_correlation(
     coords = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing="ij"), dtype=np.float32)
     base_warped = skimage.transform.warp(base, coords + flow, order=0, mode="constant", cval=0)
     del coords, base, flow
-    # divide base_warped and target by their max
+    # divide base_warped and target by their max.
     base_warped = base_warped / np.max(base_warped)
     target = target / np.max(target)
     for i in range(3):
@@ -519,7 +519,8 @@ def interpolate_flow(
     if os.path.exists(loc):
         return
     time_start = time.time()
-    mask = correlation >= np.quantile(correlation, threshold)
+    # threshold the correlation
+    mask = correlation > np.quantile(correlation, threshold)
     flow_indicator = mask.astype(np.float32)
     # smooth the flow indicator
     flow_indicator_smooth = gaussian_filter(flow_indicator, sigma, truncate=4)
