@@ -49,6 +49,7 @@ _options = {
         "is_3d": "bool",
         "ignore_first_z_plane": "bool",
         "minimum_print_severity": "int",
+        "bad_trc": "maybe_list_str",
         # From here onwards these are not compulsory to enter and will be taken from the metadata
         # Only leaving them here to have backwards compatibility as Max thinks the user should influence these
         "channel_camera": "maybe_list_int",

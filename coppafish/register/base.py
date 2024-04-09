@@ -520,7 +520,7 @@ def interpolate_flow(
         return
     time_start = time.time()
     # threshold the correlation
-    mask = correlation > np.quantile(correlation, threshold)
+    mask = correlation >= np.quantile(correlation, threshold)
     flow_indicator = mask.astype(np.float32)
     # smooth the flow indicator
     flow_indicator_smooth = gaussian_filter(flow_indicator, sigma, truncate=4)
