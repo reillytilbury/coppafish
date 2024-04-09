@@ -17,6 +17,7 @@ def create(
     include_dapi_seq: bool = False,
     include_dapi_anchor: bool = False,
     include_dapi_preseq: bool = False,
+    include_bad_trc: bool = True,
 ) -> Union[List[Tuple[int, int, int]], List[Tuple[int, int]], List[Tuple[int]]]:
     """
     Create tile, round and/or channel indices to loops through. Used throughout the coppafish pipeline. The defaults
