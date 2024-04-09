@@ -1,1329 +1,664 @@
-import os
-import nd2
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-import napari
-from qtpy.QtCore import Qt
-from superqt import QRangeSlider
-from PyQt5.QtWidgets import QPushButton, QMainWindow, QLineEdit, QLabel
-from PyQt5.QtGui import QFont
-import matplotlib.gridspec as gridspec
+from PyQt5.QtWidgets import QPushButton, QMainWindow, QSlider, QLabel, QLineEdit
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from ...setup import Notebook
-from coppafish.register import preprocessing
-from coppafish.register.base import huber_regression
-from coppafish.utils import tiles_io
+from coppafish.spot_colors import apply_transform
+from coppafish.utils.tiles_io import load_image
 from scipy.ndimage import affine_transform
-from scipy import fft
+from coppafish.find_spots import spot_yxz
+from coppafish.setup import Notebook
+from skimage.transform import warp
+from scipy.spatial import KDTree
+from superqt import QRangeSlider
+from qtpy.QtCore import Qt
+import matplotlib.pyplot as plt
+import numpy as np
+import skimage
+import napari
+import nd2
+import os
 
 
-plt.style.use("dark_background")
-
-# there are 2 main parts to the reg pipeline:
-# 1. optical flow
-# 2. icp correction
-
-
-class RegistrationViewer:
+class RegistrationViewer():
     def __init__(self, nb: Notebook, t: int = None):
         """
-        Function to overlay tile, round and channel with the anchor in napari and view the registration.
-        This function is only long because we have to convert images to zyx and the transform to zyx * zyx
-        Args:
-            nb: Notebook
-            t: common tile
-        """
-        # initialise frequently used variables, attaching those which are otherwise awkward to recalculate to self
-        nbp_file, nbp_basic = nb.file_names, nb.basic_info
-        self.nb = nb
-        use_rounds, use_channels = (nbp_basic.use_rounds + nbp_basic.use_preseq * [nbp_basic.pre_seq_round],
-                                    nbp_basic.use_channels)
-        self.r_ref, self.c_ref = nbp_basic.anchor_round, nb.basic_info.anchor_channel
-        self.r_mid = len(use_rounds) // 2
-        y_mid, x_mid = nbp_basic.tile_centre[:-1]
-        z_mid = len(nbp_basic.use_z) // 2
-        self.new_origin = np.array([y_mid - 250, x_mid - 250, z_mid - 5])
-        # Initialise file directories
-        self.target_round_image, self.target_channel_image = [], []
-        self.base_round_image, self.base_channel_image = None, None
-        self.output_dir = os.path.join(nbp_file.output_dir, 'reg_images/')
-        self.viewer = napari.Viewer()
+        Viewer for the registration of an experiment.
+        - Shows the registered images for the selected tile.
+        - Allows to adjust contrast limits for the images.
+        - Allows to switch on/off the imaging and anchor images.
+        - Allows to switch between tiles.
 
-        # Next lines will be cleaning up the napari viewer and adding the sliders and buttons
+        Developer Note: No need to add too many variables to this class. Best to keep them in the napari viewer which
+        can be accessed by self.viewer.
+        Args:
+            nb: Notebook object (should contain register and register_debug pages)
+            t: tile (if None, the first tile is selected)
+        """
+        self.nb = nb
+        if t is None:
+            t = nb.basic_info.use_tiles[0]
+        self.t = t
+        self.reg_data_dir = os.path.join(self.nb.file_names.output_dir, 'reg_images', f't{self.t}')
+        self.viewer = napari.Viewer()
+        self.add_images()
+        self.format_viewer()
+        napari.run()
+
+    def add_images(self):
+        """
+        Load images for the selected tile and add them to the viewer.
+        """
+        # get directory for the selected tile
+        self.reg_data_dir = os.path.join(self.nb.file_names.output_dir, 'reg_images', f't{self.t}')
+        # load round images
+        round_im, channel_im = {}, {}
+        for r in self.nb.basic_info.use_rounds:
+            round_im[f'r{r}'] = np.load(os.path.join(self.reg_data_dir, 'round', f'r{r}.npy'))
+        # repeat anchor image 3 times along new 0 axis
+        im_anchor = np.load(os.path.join(self.reg_data_dir, 'round', 'anchor.npy'))
+        round_im['anchor'] = np.repeat(im_anchor[None], 3, axis=0)
+        # load channel images
+        for c in self.nb.basic_info.use_channels:
+            channel_im[f'c{c}'] = np.load(os.path.join(self.reg_data_dir, 'channel', f'c{c}.npy'))
+        # repeat anchor image 3 times along new 0 axis
+        im_anchor = np.load(os.path.join(self.reg_data_dir, 'channel', 'anchor.npy'))
+        channel_im['anchor'] = np.repeat(im_anchor[None], 3, axis=0)
+
+        # clear previous images
+        self.viewer.layers.select_all()
+        self.viewer.layers.remove_selected()
+        yx_size = round_im['r0'].shape[1]
+        unit_step = yx_size * 1.1
+        # add round images
+        for i, r in enumerate(self.nb.basic_info.use_rounds):
+            offset = tuple([0, 0, i * unit_step, 0])
+            self.viewer.add_image(round_im[f'r{r}'], name=f'r{r}', blending='additive', colormap='green',
+                                  translate=offset)
+            self.viewer.add_image(round_im['anchor'], name='anchor_dapi', blending='additive', colormap='red',
+                                  translate=offset)
+        # add channel images
+        for i, c in enumerate(self.nb.basic_info.use_channels):
+            offset = tuple([0, unit_step, i * unit_step, 0])
+            self.viewer.add_image(channel_im[f'c{c}'], name=f'c{c}', blending='additive', colormap='green',
+                                  translate=offset,
+                                  contrast_limits=(30, 255))
+            self.viewer.add_image(channel_im['anchor'], name='anchor_seq', blending='additive', colormap='red',
+                                  translate=offset, contrast_limits=(10, 180))
+        # label axes
+        self.viewer.dims.axis_labels = ['method', 'y', 'x', 'z']
+        # set default order for axes as (method, z, y, x)
+        self.viewer.dims.order = (0, 3, 1, 2)
+        # Add points to attach text
+        n_methods, n_z = 3, round_im['r0'].shape[-1]
+        n_rounds = len(round_im)
+        mid_x = unit_step * (n_rounds - 1) // 2
+        points = [[i, -unit_step // 4, mid_x, z] for i in range(n_methods) for z in range(n_z)]
+        method_names = ['unregistered', 'optical flow', 'optical flow + ICP']
+        text = {'string': [f'tile: {self.t}, method: {method_names[i]}' for i in range(n_methods) for _ in range(n_z)],
+                'color': 'white', 'size': 10}
+        self.viewer.add_points(points, size=0, text=text, name='text')
+
+    def get_layer_ind(self, layer: str):
+        """
+        Get the index of the layers in the viewer.
+        Args:
+            layer: either 'round', 'round_anchor', 'channel', or 'channel_anchor' or 'imaging' or 'anchor'
+
+        Returns:
+            layer_ind: list of indices of the layers in the viewer
+        """
+        if layer == 'round':
+            layer_ind = [self.viewer.layers.index(l) for l in self.viewer.layers if l.name[0] == 'r']
+        elif layer == 'round_anchor':
+            layer_ind = [self.viewer.layers.index(l) for l in self.viewer.layers if l.name == 'anchor_dapi']
+        elif layer == 'channel':
+            layer_ind = [self.viewer.layers.index(l) for l in self.viewer.layers if l.name[0] == 'c']
+        elif layer == 'channel_anchor':
+            layer_ind = [self.viewer.layers.index(l) for l in self.viewer.layers if l.name == 'anchor_seq']
+        elif layer == 'imaging':
+            layer_ind = [self.viewer.layers.index(l) for l in self.viewer.layers if l.name[0] in ['r', 'c']]
+        elif layer == 'anchor':
+            layer_ind = [self.viewer.layers.index(l) for l in self.viewer.layers if l.name[:6] == 'anchor']
+        else:
+            raise ValueError(f'Layer {layer} is not recognized.')
+        return layer_ind
+
+    def format_viewer(self):
+        """
+        Format the viewer.
+        """
         # Make layer list invisible to remove clutter
         self.viewer.window.qt_viewer.dockLayerList.setVisible(False)
         self.viewer.window.qt_viewer.dockLayerControls.setVisible(False)
+        # add sliders to adjust contrast limits
+        self.add_contrast_lim_sliders()
+        # add buttons to switch on/off the layers
+        self.add_switch_button()
+        # add buttons to switch between tiles
+        self.add_tile_buttons()
+        # add buttons to view optical flow results
+        self.add_optical_flow_buttons()
+        # add buttons to view ICP correction and ICP iterations
+        self.add_icp_buttons()
+        # add buttons to view camera correction
+        self.add_fluorescent_bead_buttons()
 
-        # Now we will create 2 sliders. One will control all the contrast limits simultaneously, the other all anchor
-        # images simultaneously.
-        self.im_contrast_limits_slider = QRangeSlider(Qt.Orientation.Horizontal)
-        self.anchor_contrast_limits_slider = QRangeSlider(Qt.Orientation.Horizontal)
-        self.im_contrast_limits_slider.setRange(0, 256)
-        self.anchor_contrast_limits_slider.setRange(0, 256)
-        # Set default lower limit to 0 and upper limit to 255
-        self.im_contrast_limits_slider.setValue((0, 255))
-        self.anchor_contrast_limits_slider.setValue((0, 255))
+    def add_contrast_lim_sliders(self):
+        # add contrast limits sliders
+        contrast_limit_sliders = [QRangeSlider(Qt.Horizontal) for _ in range(2)]
+        labels = ['imaging', 'anchor']
+        layer_ind = [self.get_layer_ind('imaging'), self.get_layer_ind('anchor')]
+        # add these to the viewer and connect them to the appropriate functions
+        for i, slider in enumerate(contrast_limit_sliders):
+            self.viewer.window.add_dock_widget(slider, area="left", name=labels[i])
+            slider.setRange(0, 255)
+            slider.setValue((0, 255))
+            slider.valueChanged.connect(lambda value, j=i: self.update_contrast_limits(layer_ind[j], value))
 
-        # Now we run a method that sets these contrast limits using napari
-        self.viewer.window.add_dock_widget(self.im_contrast_limits_slider, area="left", name='Imaging Contrast')
-        self.viewer.window.add_dock_widget(self.anchor_contrast_limits_slider, area="left", name='Anchor Contrast')
-        # Now create events that will recognise when someone has changed slider values
-        self.anchor_contrast_limits_slider.valueChanged.connect(lambda x: self.change_anchor_layer_contrast(x[0], x[1]))
-        self.im_contrast_limits_slider.valueChanged.connect(lambda x: self.change_imaging_layer_contrast(x[0], x[1]))
+    def add_switch_button(self):
+        # add buttons to switch on/off the layers
+        switch_button = ButtonCreator(['anchor', 'imaging'], [(50, 2), (140, 2)])
+        self.viewer.window.add_dock_widget(switch_button, area="left", name='switch')
+        switch_button.buttons[0].clicked.connect(lambda: self.toggle_layers(self.get_layer_ind('anchor')))
+        switch_button.buttons[1].clicked.connect(lambda: self.toggle_layers(self.get_layer_ind('imaging')))
 
-        # Add a single button to turn off the base images and a single button to turn off the target images
-        self.switch_buttons = ButtonOnOffWindow()
-        # This allows us to link clickng to slot functions
-        self.switch_buttons.button_base.clicked.connect(self.button_base_images_clicked)
-        self.switch_buttons.button_target.clicked.connect(self.button_target_images_clicked)
-        # Add these buttons as widgets in napari viewer
-        self.viewer.window.add_dock_widget(self.switch_buttons, area="left", name="Switch", add_vertical_stretch=False)
+    def add_tile_buttons(self):
+        # add buttons to select tile to view
+        n_tiles_use = len(self.nb.basic_info.use_tiles)
+        button_loc = generate_button_positions(n_buttons=n_tiles_use, n_cols=4)
+        button_name = [f't{t}' for t in self.nb.basic_info.use_tiles]
+        button = ButtonCreator(button_name, button_loc, size=(50, 28))
+        self.viewer.window.add_dock_widget(button, area="left", name='tiles')
+        for i, b in enumerate(button.buttons):
+            b.clicked.connect(lambda _, t=self.nb.basic_info.use_tiles[i]: self.switch_tile(t))
 
-        # Add buttons to change between registration methods
-        self.method_buttons = ButtonMethodWindow("SVR")
-        # This allows us to link clickng to slot functions
-        self.method_buttons.button_icp.clicked.connect(self.button_icp_clicked)
-        self.method_buttons.button_svr.clicked.connect(self.button_svr_clicked)
-        # Add these buttons as widgets in napari viewer
-        self.viewer.window.add_dock_widget(self.method_buttons, area="left", name="Method")
+    def add_optical_flow_buttons(self):
+        # add buttons to select round to view (for optical flow overlay and optical flow vector field)
+        use_rounds = (self.nb.basic_info.use_rounds +
+                      [self.nb.basic_info.pre_seq_round] * self.nb.basic_info.use_preseq)
+        n_rounds_use = len(use_rounds)
+        button_loc = generate_button_positions(n_buttons=n_rounds_use, n_cols=4)
+        button_name = [f'r{r}' for r in use_rounds]
+        button = ButtonCreator(button_name, button_loc, size=(50, 28))
+        for i, b in enumerate(button.buttons):
+            b.clicked.connect(lambda _, r=use_rounds[i]: view_optical_flow(self.nb, self.t, r))
+        self.viewer.window.add_dock_widget(button, area="left", name='optical flow viewer')
 
-        # Add buttons to select different tiles. Involves initialising variables use_tiles and tilepos
-        tilepos_xy = np.roll(self.nb.basic_info.tilepos_yx, shift=1, axis=1)
-        # Invert y as y goes downwards in the set geometry func
-        num_rows = np.max(tilepos_xy[:, 1])
-        tilepos_xy[:, 1] = num_rows - tilepos_xy[:, 1]
-        # get use tiles
-        use_tiles = self.nb.basic_info.use_tiles
-        # If no tile provided then default to the first tile in use
-        if t is None:
-            t = use_tiles[0]
-        # Store a copy of the working tile in the RegistrationViewer
-        self.tile = t
+    def add_icp_buttons(self):
+        # add buttons to view ICP correction and ICP iterations
+        use_tiles, use_rounds, use_channels = self.nb.basic_info.use_tiles, self.nb.basic_info.use_rounds, \
+                                                self.nb.basic_info.use_channels
+        n_tiles_use, n_rounds_use, n_channels_use = len(use_tiles), len(use_rounds), len(use_channels)
+        # get all button locations
+        button_loc_1 = generate_button_positions(n_buttons=n_tiles_use, n_cols=4)
+        button_loc_2 = generate_button_positions(n_buttons=n_tiles_use, n_cols=4,
+                                                 y_offset=35 + np.max(button_loc_1[:, 1]))
+        button_loc_3 = generate_button_positions(n_buttons=n_rounds_use, n_cols=4,
+                                                 y_offset=35 + np.max(button_loc_2[:, 1]))
+        button_loc_4 = generate_button_positions(n_buttons=n_channels_use, n_cols=4,
+                                                 y_offset=35 + np.max(button_loc_3[:, 1]))
+        button_loc = np.concatenate([button_loc_1, button_loc_2, button_loc_3, button_loc_4])
+        # name all buttons (tile, tile iter, round, channel)
+        button_name = [f't{t}' for t in use_tiles] + [f't{t} iter' for t in use_tiles] + \
+                      [f'r{r}' for r in use_rounds] + [f'c{c}' for c in use_channels]
+        button = ButtonCreator(button_name, button_loc, size=(50, 28))
+        # loop through and link buttons to the appropriate functions
+        for i, b in enumerate(button.buttons):
+            if i < n_tiles_use:
+                b.clicked.connect(lambda _, t=use_tiles[i]: view_icp_correction(self.nb, t))
+            elif n_tiles_use <= i < 2 * n_tiles_use:
+                i -= n_tiles_use
+                b.clicked.connect(lambda _, t=use_tiles[i]: view_icp_iters(self.nb, t))
+            elif 2 * n_tiles_use <= i < 2 * n_tiles_use + n_rounds_use:
+                i -= 2 * n_tiles_use
+                b.clicked.connect(lambda _, r=use_rounds[i]: ICPPointCloudViewer(self.nb, self.t, r=r))
+            else:
+                i -= 2 * n_tiles_use + n_rounds_use
+                b.clicked.connect(lambda _, c=use_channels[i]: ICPPointCloudViewer(self.nb, self.t, c=c))
+        self.viewer.window.add_dock_widget(button, area="left", name='icp')
 
-        # Now create tile_buttons
-        self.tile_buttons = ButtonTileWindow(tile_pos_xy=tilepos_xy, use_tiles=use_tiles, active_button=self.tile)
-        for tile in use_tiles:
-            # Now connect the button associated with tile t to a function that activates t and deactivates all else
-            self.tile_buttons.__getattribute__(str(tile)).clicked.connect(self.create_tile_slot(tile))
-        # Add these buttons as widgets in napari viewer
-        self.viewer.window.add_dock_widget(self.tile_buttons, area="left", name="Tiles", add_vertical_stretch=False)
-
-        # We want to create a single napari widget containing buttons which for each round and channel
-
-        # Create all buttons for round registration
-        self.flow_buttons = ButtonFlowWindow(use_rounds)
-        for rnd in use_rounds:
-            # now connect this to a slot that will activate the round flow viewer
-            self.flow_buttons.__getattribute__(f'R{rnd}').clicked.connect(self.create_round_slot(rnd))
-        # Finally, add these buttons as widgets in napari viewer
-        self.viewer.window.add_dock_widget(self.flow_buttons, area="left", name='SVR Diagnostics',
-                                           add_vertical_stretch=False)
-
-        # Create a single widget containing buttons for ICP diagnostics
-        self.icp_buttons = ButtonICPWindow()
-        # Now connect buttons to functions
-        self.icp_buttons.button_mse.clicked.connect(self.button_mse_clicked)
-        self.icp_buttons.button_matches.clicked.connect(self.button_matches_clicked)
-        self.icp_buttons.button_deviations.clicked.connect(self.button_deviations_clicked)
-
-        # Finally, add these buttons as widgets in napari viewer
-        self.viewer.window.add_dock_widget(
-            self.icp_buttons, area="left", name="ICP Diagnostics", add_vertical_stretch=False
-        )
-
-        # Create a single widget containing buttons for Overlay diagnostics
-        self.overlay_buttons = ButtonOverlayWindow()
-        # Now connect button to function
-        self.overlay_buttons.button_overlay.clicked.connect(self.view_button_clicked)
-        # Add buttons as widgets in napari viewer
-        self.viewer.window.add_dock_widget(
-            self.overlay_buttons, area="left", name="Overlay Diagnostics", add_vertical_stretch=False
-        )
-
-        # Create a single widget containing buttons for BG Subtraction diagnostics if bg subtraction has been run
-        if self.nb.basic_info.use_preseq:
-            self.bg_sub_buttons = ButtonBGWindow()
-            # Now connect buttons to function
-            self.bg_sub_buttons.button_overlay.clicked.connect(self.button_bg_sub_overlay_clicked)
-            self.bg_sub_buttons.button_brightness_scale.clicked.connect(self.button_brightness_scale_clicked)
-            # Add buttons as widgets in napari viewer
-            self.viewer.window.add_dock_widget(
-                self.bg_sub_buttons, area="left", name="BG Subtraction Diagnostics", add_vertical_stretch=False
-            )
-
-        # Create a widget containing buttons for fluorescent bead diagnostics if fluorescent beads have been used
+    def add_fluorescent_bead_buttons(self):
+        # add buttons to view camera correction
+        button = ButtonCreator(['fluorescent beads'], [(60, 5)], size=(150, 28))
+        button.buttons[0].clicked.connect(lambda: view_camera_correction(self.nb))
         if self.nb.file_names.fluorescent_bead_path is not None:
-            self.bead_buttons = ButtonBeadWindow()
-            # Now connect buttons to function
-            self.bead_buttons.button_fluorescent_beads.clicked.connect(self.button_fluorescent_beads_clicked)
-            # Add buttons as widgets in napari viewer
-            self.viewer.window.add_dock_widget(
-                self.bead_buttons, area="left", name="Fluorescent Bead Diagnostics", add_vertical_stretch=False
-            )
+            self.viewer.window.add_dock_widget(button, area="left", name='camera correction')
 
-        # Get target images and anchor image
-        self.get_images()
+    # Functions to interact with the viewer
+    def update_contrast_limits(self, layer_ind: list, contrast_limits: tuple):
+        """
+        Update contrast limits for the selected layers.
+        Args:
+            layer_ind: list of indices of the layers in the viewer
+            contrast_limits: tuple of contrast limits
+        """
+        for i in layer_ind:
+            self.viewer.layers[i].contrast_limits = [contrast_limits[0], contrast_limits[1]]
 
-        # Plot images
-        self.plot_images()
+    def toggle_layers(self, layer_ind: list):
+        """
+        Toggle layers on/off.
+        Args:
+            layer_ind: list of indices of the layers in the viewer
+        """
+        for i in layer_ind:
+            self.viewer.layers[i].visible = not self.viewer.layers[i].visible
 
+    def switch_tile(self, t: int):
+        """
+        Switch to a different tile.
+        Args:
+            t: tile number
+        """
+        self.t = t
+        self.add_images()
+
+
+class ButtonCreator(QMainWindow):
+    def __init__(self, names: list, position: np.ndarray, size: tuple = (75, 28)):
+        """
+        Create buttons.
+        Args:
+            names: list of n_buttons names (str)
+            position: array of n_buttons positions (x, y) for the buttons
+            size: (width, height) of the buttons
+        """
+        super().__init__()
+        assert len(names) == len(position), 'Number of names and positions should be the same.'
+        self.buttons = []
+        for i, name in enumerate(names):
+            self.buttons.append(QPushButton(name, self))
+            self.buttons[-1].setCheckable(True)
+            self.buttons[-1].setGeometry(position[i][0], position[i][1], size[0], size[1])
+
+
+class ICPPointCloudViewer():
+    def __init__(self, nb: Notebook, t: int, r: int = None, c: int = None):
+        """
+        Visualize the point cloud registration results for the selected tile and round.
+        Args:
+            nb: Notebook object (must have register and register_debug pages and find_spots page
+            t: tile to view
+            r: round to view
+            c: channel to view
+        NOTE! If r == None, then we are in channel mode. If c == None, then we are in round mode. Both are not allowed
+        to be None.
+        """
+        assert r is not None or c is not None, 'Either r or c should be provided.'
+        assert r is None or c is None, 'Only one of r or c should be provided.'
+        self.nb = nb
+        self.t, self.r, self.c = t, r, c
+        self.z_thick = 1
+        self.anchor_round, self.anchor_channel = nb.basic_info.anchor_round, nb.basic_info.anchor_channel
+        # initialize the points (these will be: base_untransformed, base_1, base_2, target)
+        # base untransformed and target will always be the same, but base 1 and base 2 be different depending on
+        # the mode we are in.
+        # base_1: mode r: flow_r(base_untransformed), mode c: affine_r(flow_r(base_untransformed))
+        # base_2: mode r: icp_correction_r(base_1), mode c: icp_correction_c(base_1)
+        self.points, self.matching_points = [], []
+        self.score = None
+        # fill in the points, matching points, and create the density map
+        self.get_spot_data()
+        self.create_density_map()
+        # create viewer
+        self.viewer = napari.Viewer()
+        self.add_toggle_base_button()
+        self.add_z_thickness_slider()
+        self.view_data()
         napari.run()
 
-    # Button functions
+    def get_spot_data(self, dist_thresh: int = 5, down_sample_yx: int = 10):
+        # remove points that exist already
+        self.points = []
+        # Step 1: Get the points
+        # get anchor points
+        base = spot_yxz(self.nb.find_spots.spot_yxz, self.t, self.anchor_round, self.anchor_channel,
+                        self.nb.find_spots.spot_no)
 
-    # Tiles grid
-    def create_tile_slot(self, t):
-
-        def tile_button_clicked():
-            # We're going to connect each button str(t) to a function that sets checked str(t) and nothing else
-            # Also sets self.tile = t
-            use_tiles = self.nb.basic_info.use_tiles
-            for tile in use_tiles:
-                self.tile_buttons.__getattribute__(str(tile)).setChecked(tile == t)
-            self.tile = t
-            self.update_plot()
-
-        return tile_button_clicked
-
-    def button_base_images_clicked(self):
-        n_images = len(self.viewer.layers)
-        for i in range(0, n_images, 2):
-            self.viewer.layers[i].visible = self.switch_buttons.button_base.isChecked()
-
-    def button_target_images_clicked(self):
-        n_images = len(self.viewer.layers)
-        for i in range(1, n_images, 2):
-            self.viewer.layers[i].visible = self.switch_buttons.button_target.isChecked()
-
-    # Contrast
-    def change_anchor_layer_contrast(self, low, high):
-        # Change contrast of anchor image (displayed in red), these are even index layers
-        for i in range(0, len(self.viewer.layers), 2):
-            self.viewer.layers[i].contrast_limits = [low, high]
-
-    # contrast
-    def change_imaging_layer_contrast(self, low, high):
-        # Change contrast of anchor image (displayed in red), these are even index layers
-        for i in range(1, len(self.viewer.layers), 2):
-            self.viewer.layers[i].contrast_limits = [low, high]
-
-    # method
-    def button_svr_clicked(self):
-        # Only allow one button pressed
-        # Below does nothing if method is already svr and updates plot otherwise
-        if self.method_buttons.method == "SVR":
-            self.method_buttons.button_svr.setChecked(True)
-            self.method_buttons.button_icp.setChecked(False)
+        # get base 1 points
+        if self.r is None:
+            # in channel mode, take middle round (r=3) and appy the flow followed by the affine correction
+            r = 3
+            affine_round_correction = self.nb.register_debug.round_correction[self.t, 3]
         else:
-            self.method_buttons.button_svr.setChecked(True)
-            self.method_buttons.button_icp.setChecked(False)
-            self.method_buttons.method = "SVR"
-            # Because method has changed, also need to change transforms
-            # Update set of transforms
-            self.transform = self.nb.register.initial_transform
-            self.update_plot()
+            # in round mode, apply the flow only and set the round to the selected round
+            r = self.r
+            affine_round_correction = np.eye(4, 3)
+        flow = np.load(os.path.join(self.nb.register.flow_dir, "smooth", f"t{self.t}_r{r}.npy"), mmap_mode='r')
+        base_1, in_bounds = apply_transform(yxz=base, flow=flow, icp_correction=affine_round_correction,
+                                            tile_sz=self.nb.basic_info.tile_sz)
+        base_1 = base_1[in_bounds]
+        base = base[in_bounds]
 
-    # method
-    def button_icp_clicked(self):
-        # Only allow one button pressed
-        # Below does nothing if method is already icp and updates plot otherwise
-        if self.method_buttons.method == "ICP":
-            self.method_buttons.button_icp.setChecked(True)
-            self.method_buttons.button_svr.setChecked(False)
+        # get base 2 points
+        if self.r is None:
+            icp_correction = self.nb.register_debug.channel_correction[self.t, self.c]
         else:
-            self.method_buttons.button_icp.setChecked(True)
-            self.method_buttons.button_svr.setChecked(False)
-            self.method_buttons.method = "ICP"
-            # Because method has changed, also need to change transforms
-            # Update set of transforms
-            self.transform = self.nb.register.transform
-            self.update_plot()
+            icp_correction = self.nb.register_debug.round_correction[self.t, self.r]
 
-    # Flow
-    def create_round_slot(self, r):
+        base_2, in_bounds = apply_transform(yxz=base_1, flow=None, icp_correction=icp_correction,
+                                            tile_sz=self.nb.basic_info.tile_sz)
+        base_2 = base_2[in_bounds]
+        base = base[in_bounds]
 
-        def round_button_clicked():
-            use_rounds = self.nb.basic_info.use_rounds + self.nb.basic_info.use_preseq * [self.nb.basic_info.pre_seq_round]
-            for rnd in use_rounds:
-                self.flow_buttons.__getattribute__('R' + str(rnd)).setChecked(rnd == r)
-            # We don't need to update the plot, we just need to call the viewing function
-            view_round_regression_scatter(nb=self.nb, t=self.tile, r=r)
+        # get target points
+        if self.r is None:
+            r = 3
+            c = self.c
+        if self.c is None:
+            r = self.r
+            c = self.anchor_channel
+        target = spot_yxz(self.nb.find_spots.spot_yxz, self.t, r, c, self.nb.find_spots.spot_no)
+        self.points.append(base)
+        self.points.append(base_1)
+        self.points.append(base_2)
+        self.points.append(target)
 
-        return round_button_clicked
+        # convert to zyx
+        for i in range(4):
+            self.points[i] = self.points[i][:, [2, 0, 1]].astype(np.float32)
 
-    # outlier removal
-    def button_vec_field_r_clicked(self):
-        # No need to only allow one button pressed
-        self.outlier_buttons.button_vec_field_r.setChecked(True)
-        shift_vector_field(nb=self.nb, round=True)
+        # Step 2: Find overlapping points
+        # get the nearest neighbour in base_2 for each point in target
+        tree = KDTree(self.points[-2])
+        dist, nearest_ind = tree.query(self.points[-1])
+        matching_round_spots = np.where(dist < dist_thresh)[0]
+        matching_anchor_spots = nearest_ind[matching_round_spots]
 
-    # outlier removal
-    def button_vec_field_c_clicked(self):
-        # No need to only allow one button pressed
-        self.outlier_buttons.button_vec_field_c.setChecked(True)
-        shift_vector_field(nb=self.nb, round=False)
+        # Step 3: Downsample the points (this will make the density map faster and doesn't affect our precision)
+        # down-sample the points in xy
+        down_sample_factor = np.array([1, down_sample_yx, down_sample_yx])
+        self.points = [p / down_sample_factor for p in self.points]
 
-    # outlier removal
-    def button_shift_cmap_r_clicked(self):
-        # No need to only allow one button pressed
-        self.outlier_buttons.button_shift_cmap_r.setChecked(True)
-        zyx_shift_image(nb=self.nb, round=True)
+        # convert matching spots from indices to points
+        matching_anchor_spots_old = self.points[0][matching_anchor_spots]
+        matching_anchor_spots = self.points[-2][matching_anchor_spots]
+        matching_round_spots = self.points[-1][matching_round_spots]
+        self.matching_points = [matching_anchor_spots_old, matching_anchor_spots, matching_round_spots]
 
-    # outlier removal
-    def button_shift_cmap_c_clicked(self):
-        # No need to only allow one button pressed
-        self.outlier_buttons.button_shift_cmap_c.setChecked(True)
-        zyx_shift_image(nb=self.nb, round=False)
+    def create_density_map(self):
+        # get the mid point of the matching points
+        mid_point = np.round((self.matching_points[0] + self.matching_points[1]) / 2).astype(int)
+        # Create indicator function of the mid points
+        nz, ny, nx = (self.nb.basic_info.nz + 2,
+                      self.nb.basic_info.tile_sz // 10 + 1,
+                      self.nb.basic_info.tile_sz // 10 + 1)
+        score = np.zeros((nz, ny, nx), dtype=np.float32)
+        score[mid_point[:, 0], mid_point[:, 1], mid_point[:, 2]] = 1
+        self.score = skimage.filters.gaussian(score, sigma=2, truncate=3)
 
-    # outlier removal
-    def button_scale_r_clicked(self):
-        # No need to only allow one button pressed
-        self.outlier_buttons.button_scale_r.setChecked(True)
-        view_round_scales(nb=self.nb)
+    def add_z_thickness_slider(self):
+        # add slider to adjust z thickness
+        z_size_slider = QSlider(Qt.Orientation.Horizontal)
+        z_size_slider.setRange(1, self.nb.basic_info.nz)
+        z_size_slider.setValue(self.z_thick)
+        z_size_slider.valueChanged.connect(lambda x: self.adjust_z_thickness(x))
+        # add the slider to the viewer
+        self.viewer.window.add_dock_widget(z_size_slider, area="left", name='z thickness')
 
-    # outlier removal
-    def button_scale_c_clicked(self):
-        view_channel_scales(nb=self.nb)
+    def add_toggle_base_button(self):
+        # add button to toggle between base and base_1
+        button = QPushButton('Toggle Base', self.viewer.window.qt_viewer)
+        button.setGeometry(20, 5, 60, 28)
+        button.clicked.connect(self.toggle_base)
+        # add button to the viewer
+        self.viewer.window.add_dock_widget(button, area="left", name='toggle base')
 
-    # icp
-    def button_mse_clicked(self):
-        view_icp_mse(nb=self.nb, t=self.tile)
+    def adjust_z_thickness(self, val: int):
+        self.z_thick = val
+        for layer in self.viewer.layers:
+            layer.size = [val, 0.5, 0.5]
 
-    # icp
-    def button_matches_clicked(self):
-        view_icp_n_matches(nb=self.nb, t=self.tile)
+    def view_data(self):
+        # turn off default napari widgets
+        self.viewer.window.qt_viewer.dockLayerControls.setVisible(False)
+        # define the colours and symbols
+        name = ['base_unregistered', 'base_registered', 'target']
+        colours = ['white', 'white', 'red']
+        symbols = ['o', 'o', 'x']
+        visible = [False, True, True]
+        # add the points
+        for i in range(3):
+            self.viewer.add_points(self.points[i + 1], size=[self.z_thick, 0.5, 0.5], face_color=colours[i],
+                                   symbol=symbols[i], visible=visible[i], opacity=0.6, name=name[i],
+                                   out_of_slice_display=True)
+        # add line between the matching points
+        line_locs_old = []
+        line_locs = []
+        for i in range(len(self.matching_points[0])):
+            line_locs_old.append([self.matching_points[0][i], self.matching_points[2][i]])
+            line_locs.append([self.matching_points[1][i], self.matching_points[2][i]])
+        mse_old = np.mean(np.linalg.norm(self.matching_points[0] - self.matching_points[2], axis=1))
+        mse_new = np.mean(np.linalg.norm(self.matching_points[1] - self.matching_points[2], axis=1))
+        self.viewer.add_shapes(line_locs_old, shape_type='line', edge_color='cyan', edge_width=0.25,
+                               name=f'mse_old: {mse_old:.2f}', visible=False)
+        self.viewer.add_shapes(line_locs, shape_type='line', edge_color='blue', edge_width=0.25,
+                               name=f'mse_new: {mse_new:.2f}')
 
-    # icp
-    def button_deviations_clicked(self):
-        view_icp_deviations(nb=self.nb, t=self.tile)
+        # add the score image
+        self.viewer.add_image(self.score, name='score', colormap='bop orange', blending='additive', opacity=0.7)
+        self.viewer.dims.axis_labels = ['z', 'y', 'x']
 
-    #  overlay
-    def view_button_clicked(self):
-        # This function is called when the view button is clicked
-        # Need to get the tile, round, channel and filter from the GUI. Then run view_entire_overlay
-        # Get the tile, round, channel and filter from the GUI
-        t_view = int(self.overlay_buttons.textbox_tile.text())
-        r_view = int(self.overlay_buttons.textbox_round.text())
-        c_view = int(self.overlay_buttons.textbox_channel.text())
-        filter = self.overlay_buttons.button_filter.isChecked()
-        # Run view_entire_overlay.
-        try:
-            view_entire_overlay(nb=self.nb, t=t_view, r=r_view, c=c_view, filter=filter)
-        except:
-            print("Error: could not view overlay")
-        # Reset view button to unchecked and filter button to unchecked
-        self.overlay_buttons.button_overlay.setChecked(False)
-        self.overlay_buttons.button_filter.setChecked(False)
-
-    # bg subtraction
-    def button_bg_sub_overlay_clicked(self):
-        t_view = int(self.bg_sub_buttons.textbox_tile.text())
-        r_view = int(self.bg_sub_buttons.textbox_round.text())
-        c_view = int(self.bg_sub_buttons.textbox_channel.text())
-        # Run view_background_overlay.
-        try:
-            view_background_overlay(nb=self.nb, t=t_view, r=r_view, c=c_view)
-        except:
-            print("Error: could not view overlay")
-        # Reset view button to unchecked and filter button to unchecked
-        self.bg_sub_buttons.button_overlay.setChecked(False)
-
-    # bg subtraction
-    def button_brightness_scale_clicked(self):
-        t_view = int(self.bg_sub_buttons.textbox_tile.text())
-        r_view = int(self.bg_sub_buttons.textbox_round.text())
-        c_view = int(self.bg_sub_buttons.textbox_channel.text())
-        # Run view_background_overlay.
-        try:
-            view_background_brightness_correction(nb=self.nb, t=t_view, r=r_view, c=c_view)
-        except:
-            print("Error: could not view brightness scale")
-        # Reset view button to unchecked and filter button to unchecked
-        self.bg_sub_buttons.button_brightness_scale.setChecked(False)
-
-    # fluorescent beads
-    def button_fluorescent_beads_clicked(self):
-        try:
-            view_camera_correction(nb=self.nb)
-        except:
-            print("Error: could not view fluorescent beads")
-        # Reset view button to unchecked and filter button to unchecked
-        self.bead_buttons.button_fluorescent_beads.setChecked(False)
-
-    # Button functions end here
-    def update_plot(self):
-        # Updates plot if tile or method has been changed
-        # Update the images, we reload the anchor image even when it has not been changed, this should not be too slow
-        self.clear_images()
-        self.get_images()
-        self.plot_images()
-
-    def clear_images(self):
-        # Function to clear all images currently in use
-        n_images = len(self.viewer.layers)
-        for i in range(n_images):
-            # when we delete layer 0, layer 1 becomes l0 and so on
-            del self.viewer.layers[0]
-
-    def get_images(self):
-        # reset initial target image lists to empty lists
-        use_rounds = self.nb.basic_info.use_rounds + self.nb.basic_info.use_preseq * [self.nb.basic_info.pre_seq_round]
-        use_channels = self.nb.basic_info.use_channels
-        self.target_round_image, self.target_channel_image = [], []
-        t = self.tile
-        # populate target arrays
-        for r in use_rounds:
-            file = "t" + str(t) + "r" + str(r) + "c" + str(self.round_registration_channel) + ".npy"
-            affine = preprocessing.yxz_to_zyx_affine(A=self.transform[t, r, self.c_ref], new_origin=self.new_origin)
-            # Reset the spline interpolation order to 1 to speed things up
-            self.target_round_image.append(
-                affine_transform(np.load(os.path.join(self.output_dir, file)), affine, order=1)
-            )
-
-        for c in use_channels:
-            file = "t" + str(t) + "r" + str(self.r_mid) + "c" + str(c) + ".npy"
-            affine = preprocessing.yxz_to_zyx_affine(A=self.transform[t, self.r_mid, c], new_origin=self.new_origin)
-            self.target_channel_image.append(
-                affine_transform(np.load(os.path.join(self.output_dir, file)), affine, order=1)
-            )
-        # populate anchor image
-        base_file = "t" + str(t) + "r" + str(self.r_ref) + "c" + str(self.round_registration_channel) + ".npy"
-        self.base_image_dapi = np.load(os.path.join(self.output_dir, base_file))
-        base_file_anchor = "t" + str(t) + "r" + str(self.r_ref) + "c" + str(self.c_ref) + ".npy"
-        self.base_image = np.load(os.path.join(self.output_dir, base_file_anchor))
-
-    def plot_images(self):
-        use_rounds = self.nb.basic_info.use_rounds + self.nb.basic_info.use_preseq * [self.nb.basic_info.pre_seq_round]
-        use_channels = self.nb.basic_info.use_channels
-        n_rounds, n_channels = len(use_rounds), len(use_channels)
-
-        # we have 10 z planes. So we need 10 times as many labels as we have rounds and channels
-        features_base_round_reg = {
-            "r": np.ones(10 * n_rounds).astype(int) * self.r_ref,
-            "c": np.ones(10 * n_rounds).astype(int) * self.round_registration_channel,
-        }
-        features_target_round_reg = {
-            "r": np.repeat(use_rounds, 10).astype(int),
-            "c": np.ones(10 * n_rounds).astype(int) * self.round_registration_channel,
-        }
-        features_base_channel_reg = {
-            "r": np.ones(10 * n_channels).astype(int) * self.r_ref,
-            "c": np.ones(10 * n_channels).astype(int) * self.c_ref,
-        }
-        features_target_channel_reg = {
-            "r": np.ones(10 * n_channels).astype(int) * self.r_mid,
-            "c": np.repeat(use_channels, 10).astype(int),
-        }
-
-        # Define text
-        text_base = {"string": "R: {r} C: {c}", "size": 8, "color": "red"}
-        text_target = {"string": "R: {r} C: {c}", "size": 8, "color": "green"}
-
-        # Now go on to define point coords. Napari only allows us to plot text with points, so will plot points that
-        # are not visible and attach text to them
-        round_reg_points = []
-        channel_reg_points = []
-
-        for r in range(n_rounds):
-            self.viewer.add_image(
-                self.base_image_dapi, blending="additive", colormap="red", translate=[0, 0, 1_000 * r]
-            )
-            self.viewer.add_image(
-                self.target_round_image[r], blending="additive", colormap="green", translate=[0, 0, 1_000 * r]
-            )
-            # Add this to all z planes so still shows up when scrolling
-            for z in range(10):
-                round_reg_points.append([z, -50, 250 + 1_000 * r])
-
-        for c in range(n_channels):
-            self.viewer.add_image(self.base_image, blending="additive", colormap="red", translate=[0, 1_000, 1_000 * c])
-            self.viewer.add_image(
-                self.target_channel_image[c], blending="additive", colormap="green", translate=[0, 1_000, 1_000 * c]
-            )
-            for z in range(10):
-                channel_reg_points.append([z, 950, 250 + 1_000 * c])
-
-        round_reg_points, channel_reg_points = np.array(round_reg_points), np.array(channel_reg_points)
-
-        # Add text to image
-        anchor_offset = np.array([0, 100, 0])
-        self.viewer.add_points(
-            round_reg_points - anchor_offset, features=features_base_round_reg, text=text_base, size=0
-        )
-        self.viewer.add_points(round_reg_points, features=features_target_round_reg, text=text_target, size=0)
-        self.viewer.add_points(
-            channel_reg_points - anchor_offset, features=features_base_channel_reg, text=text_base, size=0
-        )
-        self.viewer.add_points(channel_reg_points, features=features_target_channel_reg, text=text_target, size=0)
+    def toggle_base(self):
+        #  toggle between (layer 0 on, layer 1 off) and (layer 0 off, layer 1 on)
+        self.viewer.layers[0].visible = not self.viewer.layers[0].visible
+        self.viewer.layers[1].visible = not self.viewer.layers[1].visible
+        # also toggle the lines
+        self.viewer.layers[-3].visible = not self.viewer.layers[-3].visible
+        self.viewer.layers[-2].visible = not self.viewer.layers[-2].visible
 
 
-class ButtonMethodWindow(QMainWindow):
-    def __init__(self, active_button: str = "SVR"):
-        super().__init__()
-        self.button_svr = QPushButton("SVR", self)
-        self.button_svr.setCheckable(True)
-        self.button_svr.setGeometry(75, 2, 50, 28)  # left, top, width, height
+def generate_button_positions(n_buttons: int, n_cols: int, x_offset: int = 5, y_offset: int = 5,
+                              x_spacing: int = 60, y_spacing: int = 35):
+        """
+        Generate positions for the buttons.
+        Args:
+            n_buttons: number of buttons
+            n_cols: number of columns
+            x_offset: x offset for the first button
+            y_offset: y offset for the first button
+            x_spacing: spacing between buttons in x
+            y_spacing: spacing between buttons in y
 
-        self.button_icp = QPushButton("ICP", self)
-        self.button_icp.setCheckable(True)
-        self.button_icp.setGeometry(140, 2, 50, 28)  # left, top, width, height
-        if active_button.lower() == "icp":
-            # Initially, show sub vol regression registration
-            self.button_icp.setChecked(True)
-            self.method = "ICP"
-        elif active_button.lower() == "svr":
-            self.button_svr.setChecked(True)
-            self.method = "SVR"
-        else:
-            raise ValueError(f"active_button should be 'SVR' or 'ICP' but {active_button} was given.")
-
-
-class ButtonOnOffWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.button_base = QPushButton("Base", self)
-        self.button_base.setCheckable(True)
-        self.button_base.setGeometry(75, 2, 50, 28)
-
-        self.button_target = QPushButton("Target", self)
-        self.button_target.setCheckable(True)
-        self.button_target.setGeometry(140, 2, 50, 28)
+        Returns:
+            button_positions: np.ndarray of shape (n_buttons, 2) with x and y positions for each button
+        """
+        x = x_offset + x_spacing * (np.arange(n_buttons) % n_cols)
+        y = y_offset + y_spacing * (np.arange(n_buttons) // n_cols)
+        button_positions = np.array([(x[i], y[i]) for i in range(n_buttons)])
+        return button_positions
 
 
-class ButtonTileWindow(QMainWindow):
-    def __init__(self, tile_pos_xy: np.ndarray, use_tiles: list, active_button: 0):
-        super().__init__()
-        # Loop through tiles, putting them in location as specified by tile pos xy
-        for t in range(len(tile_pos_xy)):
-            # Create a button for each tile
-            button = QPushButton(str(t), self)
-            # set the button to be checkable iff t in use_tiles
-            button.setCheckable(t in use_tiles)
-            button.setGeometry(tile_pos_xy[t, 0] * 70, tile_pos_xy[t, 1] * 40, 50, 28)
-            # set active button as checked
-            if active_button == t:
-                button.setChecked(True)
-                self.tile = t
-            # Set button color = grey when hovering over
-            # set colour of tiles in use to blue amd not in use to red
-            if t in use_tiles:
-                button.setStyleSheet(
-                    "QPushButton"
-                    "{"
-                    "background-color : rgb(135, 206, 250);"
-                    "}"
-                    "QPushButton::hover"
-                    "{"
-                    "background-color : lightgrey;"
-                    "}"
-                    "QPushButton::pressed"
-                    "{"
-                    "background-color : white;"
-                    "}"
-                )
-            else:
-                button.setStyleSheet(
-                    "QPushButton"
-                    "{"
-                    "background-color : rgb(240, 128, 128);"
-                    "}"
-                    "QPushButton::hover"
-                    "{"
-                    "background-color : lightgrey;"
-                    "}"
-                    "QPushButton::pressed"
-                    "{"
-                    "background-color : white;"
-                    "}"
-                )
-            # Finally add this button as an attribute to self
-            self.__setattr__(str(t), button)
-
-
-class ButtonSVRWindow(QMainWindow):
-    # This class creates a window with buttons for all SVR diagnostics
-    # This includes buttons for each round and channel regression
-    # Also includes a button to view pearson correlation coefficient in either a histogram or colormap
-    # Also includes a button to view pearson correlation coefficient spatially for either rounds or channels
-    def __init__(self, use_rounds: list, use_channels: list):
-        super().__init__()
-        # Create round regression buttons
-        for r in use_rounds:
-            # Create a button for each tile
-            button = QPushButton("R" + str(r), self)
-            # set the button to be checkable iff t in use_tiles
-            button.setCheckable(True)
-            x, y_r = r % 4, r // 4
-            button.setGeometry(x * 70, 40 + 60 * y_r, 50, 28)
-            # Finally add this button as an attribute to self
-            self.__setattr__("R" + str(r), button)
-
-        # Create 2 correlation buttons:
-        # 1 to view pearson correlation coefficient as histogram
-        # 2 to view pearson correlation coefficient as colormap
-        y = y_r + 1
-        button = QPushButton("Shift Score \n Hist", self)
-        button.setCheckable(True)
-        button.setGeometry(0, 40 + 60 * y, 120, 56)
-        self.pearson_hist = button
-        button = QPushButton("Shift Score \n c-map", self)
-        button.setCheckable(True)
-        button.setGeometry(140, 40 + 60 * y, 120, 56)
-        self.pearson_cmap = button
-
-        # Create 2 spatial correlation buttons:
-        # 1 to view pearson correlation coefficient spatially for rounds
-        # 2 to view pearson correlation coefficient spatially for channels
-        y += 1
-        button = QPushButton("Round Score \n Spatial c-map", self)
-        button.setCheckable(True)
-        button.setGeometry(0, 68 + 60 * y, 120, 56)
-        self.pearson_spatial_round = button
-
-
-class ButtonFlowWindow(QMainWindow):
-    # This class creates a window with buttons for all Flow diagnostics
-    # This includes a button for each round optical flow (including preseq if it exists)
-    def __init__(self, use_rounds: list):
-        super().__init__()
-        # Create round regression buttons
-        for r in use_rounds:
-            # Create a button for each tile
-            button = QPushButton('R' + str(r), self)
-            # set the button to be checkable iff t in use_tiles
-            button.setCheckable(True)
-            x, y_r = r % 4, r // 4
-            button.setGeometry(x * 70, 40 + 60 * y_r, 50, 28)
-            # Finally add this button as an attribute to self
-            self.__setattr__('R' + str(r), button)
-
-
-class ButtonOutlierWindow(QMainWindow):
-    # This class creates a window with buttons for all outlier removal diagnostics
-    # This includes round and channel button to view shifts for each tile as a vector field
-    # Also includes round and channel button to view shifts for each tile as a heatmap
-    # Also includes round and channel button to view boxplots of scales for each tile
-    def __init__(self):
-        super().__init__()
-        self.button_vec_field_r = QPushButton("Round Shift Vector Field", self)
-        self.button_vec_field_r.setCheckable(True)
-        self.button_vec_field_r.setGeometry(20, 40, 220, 28)
-
-        self.button_vec_field_c = QPushButton("Channel Shift Vector Field", self)
-        self.button_vec_field_c.setCheckable(True)
-        self.button_vec_field_c.setGeometry(20, 100, 220, 28)  # left, top, width, height
-
-        self.button_shift_cmap_r = QPushButton("Round Shift Colour Map", self)
-        self.button_shift_cmap_r.setCheckable(True)
-        self.button_shift_cmap_r.setGeometry(20, 160, 220, 28)
-
-        self.button_shift_cmap_c = QPushButton("Channel Shift Colour Map", self)
-        self.button_shift_cmap_c.setCheckable(True)
-        self.button_shift_cmap_c.setGeometry(20, 220, 220, 28)  # left, top, width, height
-
-        self.button_scale_r = QPushButton("Round Scales", self)
-        self.button_scale_r.setCheckable(True)
-        self.button_scale_r.setGeometry(20, 280, 100, 28)
-
-        self.button_scale_c = QPushButton("Channel Scales", self)
-        self.button_scale_c.setCheckable(True)
-        self.button_scale_c.setGeometry(140, 280, 100, 28)  # left, top, width, height
-
-
-class ButtonICPWindow(QMainWindow):
-    # This class creates a window with buttons for all ICP diagnostics
-    # One diagnostic for MSE, one for n_matches, one for icp_deciations
-    def __init__(self):
-        super().__init__()
-        self.button_mse = QPushButton("MSE", self)
-        self.button_mse.setCheckable(True)
-        self.button_mse.setGeometry(20, 40, 100, 28)
-
-        self.button_matches = QPushButton("Matches", self)
-        self.button_matches.setCheckable(True)
-        self.button_matches.setGeometry(140, 40, 100, 28)  # left, top, width, height
-
-        self.button_deviations = QPushButton("Large ICP Deviations", self)
-        self.button_deviations.setCheckable(True)
-        self.button_deviations.setGeometry(20, 100, 220, 28)
-
-
-class ButtonOverlayWindow(QMainWindow):
-    # This class creates a window with buttons for viewing overlays
-    # We want text boxes for entering the tile, round and channel. We then want a simple button for filtering and
-    # for viewing the overlay
-    def __init__(self):
-        super().__init__()
-
-        self.button_overlay = QPushButton("View", self)
-        self.button_overlay.setCheckable(True)
-        self.button_overlay.setGeometry(20, 20, 220, 28)
-
-        # Add title to each textbox
-        label_tile = QLabel(self)
-        label_tile.setText("Tile")
-        label_tile.setGeometry(20, 70, 100, 28)
-        self.textbox_tile = QLineEdit(self)
-        self.textbox_tile.setFont(QFont("Arial", 8))
-        self.textbox_tile.setText("0")
-        self.textbox_tile.setGeometry(20, 100, 100, 28)
-
-        label_round = QLabel(self)
-        label_round.setText("Round")
-        label_round.setGeometry(140, 70, 100, 28)
-        self.textbox_round = QLineEdit(self)
-        self.textbox_round.setFont(QFont("Arial", 8))
-        self.textbox_round.setText("0")
-        self.textbox_round.setGeometry(140, 100, 100, 28)
-
-        label_channel = QLabel(self)
-        label_channel.setText("Channel")
-        label_channel.setGeometry(20, 130, 100, 28)
-        self.textbox_channel = QLineEdit(self)
-        self.textbox_channel.setFont(QFont("Arial", 8))
-        self.textbox_channel.setText("18")
-        self.textbox_channel.setGeometry(20, 160, 100, 28)
-
-        self.button_filter = QPushButton("Filter", self)
-        self.button_filter.setCheckable(True)
-        self.button_filter.setGeometry(140, 160, 100, 28)
-
-
-class ButtonBGWindow(QMainWindow):
+def view_optical_flow(nb: Notebook, t: int, r: int):
     """
-    This class creates a window with buttons for viewing background images overlayed with foreground images
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.button_overlay = QPushButton("View Overlay", self)
-        self.button_overlay.setCheckable(True)
-        self.button_overlay.setGeometry(20, 20, 220, 28)
-
-        self.button_brightness_scale = QPushButton("View BG Scale", self)
-        self.button_brightness_scale.setCheckable(True)
-        self.button_brightness_scale.setGeometry(20, 70, 220, 28)
-
-        # Add title to each textbox
-        label_tile = QLabel(self)
-        label_tile.setText("Tile")
-        label_tile.setGeometry(20, 130, 100, 28)
-        self.textbox_tile = QLineEdit(self)
-        self.textbox_tile.setFont(QFont("Arial", 8))
-        self.textbox_tile.setText("0")
-        self.textbox_tile.setGeometry(20, 160, 100, 28)
-
-        label_round = QLabel(self)
-        label_round.setText("Round")
-        label_round.setGeometry(140, 130, 100, 28)
-        self.textbox_round = QLineEdit(self)
-        self.textbox_round.setFont(QFont("Arial", 8))
-        self.textbox_round.setText("0")
-        self.textbox_round.setGeometry(140, 160, 100, 28)
-
-        label_channel = QLabel(self)
-        label_channel.setText("Channel")
-        label_channel.setGeometry(20, 190, 100, 28)
-        self.textbox_channel = QLineEdit(self)
-        self.textbox_channel.setFont(QFont("Arial", 8))
-        self.textbox_channel.setText("18")
-        self.textbox_channel.setGeometry(20, 220, 100, 28)
-
-
-class ButtonBeadWindow(QMainWindow):
-    """
-    This class creates a window with buttons for viewing fluorescent bead images
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.button_fluorescent_beads = QPushButton("View Fluorescent Beads", self)
-        self.button_fluorescent_beads.setCheckable(True)
-        self.button_fluorescent_beads.setGeometry(20, 20, 220, 28)
-
-
-def set_style(button):
-    # Set button color = grey when hovering over, blue when pressed, white when not
-    button.setStyleSheet(
-        "QPushButton"
-        "{"
-        "background-color : rgb(135, 206, 250);"
-        "}"
-        "QPushButton::hover"
-        "{"
-        "background-color : lightgrey;"
-        "}"
-        "QPushButton::pressed"
-        "{"
-        "background-color : white;"
-        "}"
-    )
-    return button
-
-
-# 1
-def view_round_regression_scatter(nb: Notebook, t: int, r: int):
-    """
-    view 9 scatter plots for each data set shift vs positions
+    Visualize the optical flow results using napari.
     Args:
-        nb: Notebook
-        t: tile
-        r: round
+        nb: Notebook (containing register and register_debug pages)
+        t: tile number
+        r: round number
     """
-    # Transpose shift and position variables so coord is dimension 0, makes plotting easier
-    shift = nb.register_debug.round_shift[t, r]
-    corr = nb.register_debug.round_shift_corr[t, r]
-    position = nb.register_debug.position
-    initial_transform = nb.register_debug.round_transform_raw[t, r]
-    icp_transform = preprocessing.yxz_to_zyx_affine(A=nb.register.transform[t, r, nb.basic_info.anchor_channel])
+    # Load the data
+    base = load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=7, c=0)
+    target = load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=0)
+    ny, nx, nz = base.shape
+    coord_order = ['y', 'x', 'z']
+    coords = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing='ij'))
+    print('Base and Target images loaded.')
+    # load the warps
+    output_dir = nb.file_names.output_dir + '/flow'
+    name = ['raw', 'smooth']
+    flow = [np.load(os.path.join(output_dir, f, f't{t}_r{r}.npy')).astype(np.float32) for f in name]
+    # warp the base image using the flows
+    base_warped = [skimage.transform.warp(base, f + coords, order=0) for f in flow]
+    print('Base image warped.')
+    del coords
+    # load the correlation
+    corr = np.load(os.path.join(output_dir, 'corr', f't{t}_r{r}.npy'))
+    print('Correlation loaded.')
+    mask = corr > np.percentile(corr, 97.5)
 
-    r_thresh = nb.get_config()["register"]["pearson_r_thresh"]
-    shift = shift[corr > r_thresh].T
-    position = position[corr > r_thresh].T
+    # create viewer
+    viewer = napari.Viewer()
+    # add overlays
+    viewer.add_image(target, name='target', colormap='green', blending='additive')
+    viewer.add_image(base, name='base', colormap='red', blending='additive')
+    for i in range(len(flow)):
+        translation = [0, 1.1 * nx * (i + 1), 0]
+        viewer.add_image(target, name='target', colormap='green', blending='additive', translate=translation)
+        viewer.add_image(base_warped[i], name=name[i], colormap='red', blending='additive',
+                         translate=translation, contrast_limits=(0, 5_000))
+    # add flows as images
+    for i, j in np.ndindex(len(flow), len(coord_order)):
+        translation = [1.1 * ny * (j + 1), 1.1 * nx * (i + 1), 0]
+        viewer.add_image(flow[i][j], name=name[i] + ' : ' + coord_order[j], translate=translation,
+                         contrast_limits=[-10, 10])
+        if i == 0:
+            viewer.add_image(mask, name='mask', colormap='red', translate=translation, opacity=0.2, blending='additive')
+    # add correlation
+    for i in range(1):
+        translation = [1.1 * ny * (len(coord_order) + 1), 1.1 * nx * (i + 1), 0]
+        viewer.add_image(corr, name='correlation: ' + name[i], colormap='cyan', translate=translation)
 
-    # Make ranges, wil be useful for plotting lines
-    z_range = np.arange(np.min(position[0]), np.max(position[0]))
-    yx_range = np.arange(np.min(position[1]), np.max(position[1]))
-    coord_range = [z_range, yx_range, yx_range]
-    # Need to add a central offset to all lines plotted
-    tile_centre_zyx = np.roll(nb.basic_info.tile_centre, 1)
+    # label axes
+    viewer.dims.axis_labels = ['y', 'x', 'z']
+    # set default order for axes as (method, z, y, x)
+    viewer.dims.order = (2, 0, 1)
+    # run napari
+    napari.run()
 
-    # We want to plot the shift of each coord against the position of each coord. The gradient when the dependent var
-    # is coord i and the independent var is coord j should be the transform[i,j] - int(i==j)
-    gradient_svr = initial_transform[:3, :3] - np.eye(3)
-    gradient_icp = icp_transform[:3, :3] - np.eye(3)
-    # Now we need to compute what the intercept should be for each coord. Usually this would just be given by the final
-    # column of the transform, but we need to add a central offset to this. If the dependent var is coord i, and the
-    # independent var is coord j, then the intercept should be the transform[i,3] + central_offset[i,j]. This central
-    # offset is given by the formula: central_offset[i, j] = gradient[i, k1] * tile_centre[k1] + gradient[i, k2] *
-    # tile_centre[k2], where k1 and k2 are the coords that are not j.
-    central_offset_svr = np.zeros((3, 3))
-    central_offset_icp = np.zeros((3, 3))
-    intercpet_svr = np.zeros((3, 3))
-    intercpet_icp = np.zeros((3, 3))
-    for i in range(3):
-        for j in range(3):
-            # k1 and k2 are the coords that are not j
-            k1 = (j + 1) % 3
-            k2 = (j + 2) % 3
-            central_offset_svr[i, j] = (
-                gradient_svr[i, k1] * tile_centre_zyx[k1] + gradient_svr[i, k2] * tile_centre_zyx[k2]
-            )
-            central_offset_icp[i, j] = (
-                gradient_icp[i, k1] * tile_centre_zyx[k1] + gradient_icp[i, k2] * tile_centre_zyx[k2]
-            )
-            # Now compute the intercepts
-            intercpet_svr[i, j] = initial_transform[i, 3] + central_offset_svr[i, j]
-            intercpet_icp[i, j] = icp_transform[i, 3] + central_offset_icp[i, j]
 
-    # Define the axes
-    fig, axes = plt.subplots(3, 3)
-    coord = ["Z", "Y", "X"]
-    # Now plot n_matches
-    for i in range(3):
-        for j in range(3):
-            ax = axes[i, j]
-            ax.scatter(x=position[j], y=shift[i], alpha=0.3)
-            ax.plot(coord_range[j], gradient_svr[i, j] * coord_range[j] + intercpet_svr[i, j], label="SVR")
-            ax.plot(coord_range[j], gradient_icp[i, j] * coord_range[j] + intercpet_icp[i, j], label="ICP")
-            ax.legend()
-    # Label subplot rows and columns with coord names
-    for ax, col in zip(axes[0], coord):
-        ax.set_title(col)
-    for ax, row in zip(axes[:, 0], coord):
-        ax.set_ylabel(row, rotation=90, size="large")
-    # common axis labels
-    fig.supxlabel("Position")
-    fig.supylabel("Shift")
-    # Add title
-    round_registration_channel = nb.get_config()["register"]["round_registration_channel"]
-    if round_registration_channel is None:
-        round_registration_channel = nb.basic_info.anchor_channel
-    plt.suptitle(
-        "Round regression for Tile " + str(t) + ", Round " + str(r) + "Channel " + str(round_registration_channel)
-    )
+# def view_flow_vector_field(nb: Notebook, t: int, r: int):
+#     """
+#     Visualize the optical flow results using napari.
+#     Args:
+#         nb: Notebook (containing register and register_debug pages)
+#         t: tile number
+#         r: round number
+#     """
+#     # load the flow
+#     output_dir = nb.file_names.output_dir + '/flow'
+#     flow = np.load(os.path.join(output_dir, 'smooth', f't{t}_r{r}.npy'), mmap_mode='r')[:, ::100, ::100, ::5]
+#     flow = flow.astype(np.float32)
+#     ny, nx, nz = flow.shape[1:]
+#     start_points = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing='ij'))
+#     flow = np.moveaxis(flow, 0, -1)
+#     flow = flow.reshape(ny * nx * nz, 3)
+#     start_points = np.moveaxis(start_points, 0, -1)
+#     start_points = start_points.reshape(ny * nx * nz, 3)
+#     vectors = np.array([start_points, flow])
+#     vectors = np.moveaxis(vectors, 0, 1)
+#     print('Flow loaded.')
+#     # create colourmap for the flow
+#     cmap = napari.utils.Colormap([[0, 0, 1, 0], [1, 0, 0, 1]], name='blue_red', interpolation='linear')
+#     flow_max = np.max(np.linalg.norm(flow, axis=-1))
+#
+#     # create viewer
+#     viewer = napari.Viewer()
+#     viewer.add_vectors(vectors, name='flow', edge_width=0.4, length=0.6,
+#                        properties={'magnitude': np.linalg.norm(flow, axis=-1)},
+#                        edge_colormap=cmap, edge_contrast_limits=[0, flow_max])
+#     viewer.dims.axis_labels = ['y', 'x', 'z']
+#     viewer.dims.order = (2, 0, 1)
+#     napari.run()
+
+
+def view_icp_correction(nb: Notebook, t: int):
+    """
+    Visualize the ICP correction results in 6 subplots: (scale corrections in y, x, z), (shift corrections in y, x, z)
+    Args:
+        nb: Notebook object (must have register and register debug pages)
+        t: tile to view
+
+    """
+    use_rounds = nb.basic_info.use_rounds
+    use_channels = nb.basic_info.use_channels
+    transform = nb.register.icp_correction[t][np.ix_(use_rounds, use_channels)]
+    scale, shift = np.zeros((len(use_rounds), len(use_channels), 3)), np.zeros((len(use_rounds), len(use_channels), 3))
+    # populate scales and shifts
+    for r, c in np.ndindex(len(use_rounds), len(use_channels)):
+        transform_rc = transform[r, c]
+        scale[r, c] = transform_rc[:3, :3].diagonal()
+        shift[r, c] = transform_rc[3]
+
+    # create plots
+    fig, ax = plt.subplots(2, 3, figsize=(15, 10))
+    coord_label = ["Y", "X", "Z"]
+    plot_label = ["Scale", "Shift"]
+    image = [scale, shift]
+
+    for i, j in np.ndindex(2, 3):
+        # plot the image
+        ax[i, j].imshow(image[i][:, :, j].T)
+        ax[i, j].set_xticks(np.arange(len(use_rounds)))
+        ax[i, j].set_xticklabels(use_rounds)
+        ax[i, j].set_yticks(np.arange(len(use_channels)))
+        ax[i, j].set_yticklabels(use_channels)
+        ax[i, j].set_title(plot_label[i] + " in " + coord_label[j])
+        # for each subplot, assign a colour bar
+        divider = make_axes_locatable(ax[i, j])
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        fig.colorbar(ax[i, j].get_images()[0], cax=cax)
+
+        if j == 0:
+            ax[i, j].set_ylabel("Channel")
+        if i == 1:
+            ax[i, j].set_xlabel("Round")
+    plt.suptitle("Shifts and scales for tile " + str(t))
     plt.show()
 
 
-# 1
-def view_pearson_hists(nb, t, num_bins=30):
+def view_icp_iters(nb: Notebook, t: int):
     """
-    function to view histogram of correlation coefficients for all subvol shifts of all round/channels.
+    Visualize the ICP iterations for the selected tile.
+    Will show 4 rows and several columns of plots. Each row will show the following:
+    - 1: MSE vs iteration for round corrections
+    - 2: MSE vs iteration for channel corrections
+    - 3: Frac_match vs iteration for round corrections
+    - 4: Frac_match vs iteration for channel corrections
     Args:
-        nb: Notebook
-        t: int tile under consideration
-        num_bins: int number of bins in the histogram
+        nb: Notebook object (must have register and register debug pages)
+        t: tile to view
     """
-    nbp_basic, nbp_register_debug = nb.basic_info, nb.register_debug
-    thresh = nb.get_config()["register"]["pearson_r_thresh"]
-    round_corr = nbp_register_debug.round_shift_corr[t]
-    n_rounds = nbp_basic.n_rounds
-    cols = n_rounds
-
-    for r in range(n_rounds):
-        plt.subplot(1, cols, r + 1)
-        counts, _ = np.histogram(round_corr[r], np.linspace(0, 1, num_bins))
-        plt.hist(round_corr[r], bins=np.linspace(0, 1, num_bins))
-        plt.vlines(x=thresh, ymin=0, ymax=np.max(counts), colors="r")
-        # change fontsize from default 10 to 7
-        plt.title(
-            "r = "
-            + str(r)
-            + "\n Pass = "
-            + str(round(100 * sum(round_corr[r] > thresh) / round_corr.shape[1], 2))
-            + "%",
-            fontsize=7,
-        )
-        # remove x ticks and y ticks
-        plt.xticks([])
-        plt.yticks([])
-
-    plt.suptitle("Similarity Score Distributions for all Sub-Volume Shifts")
-    plt.show()
-
-
-# 1
-def view_pearson_colourmap(nb, t):
-    """
-    function to view colourmap of correlation coefficients for all subvol shifts for all channels and rounds.
-
-    Args:
-        nb: Notebook
-        t: int tile under consideration
-    """
-    # initialise frequently used variables
-    nbp_basic, nbp_register_debug = nb.basic_info, nb.register_debug
-    round_corr = nbp_register_debug.round_shift_corr[t]
-
-    # Replace 0 with nans so they get plotted as black
-    round_corr[round_corr == 0] = np.nan
-    # plot round correlation
-    fig, ax = plt.subplots(1, 1)
-    # ax1 refers to round shifts
-    im = ax.imshow(round_corr, vmin=0, vmax=1, aspect="auto", interpolation="none")
-    ax.set_xlabel("Sub-volume index")
-    ax.set_ylabel("Round")
-    ax.set_title("Round sub-volume shift scores")
-
-    # Add common colour bar. Also give it the label 'Pearson correlation coefficient'
-    fig.subplots_adjust(right=0.8)
-    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-    fig.colorbar(im, cax=cbar_ax, label="Correlation coefficient")
-
-    plt.suptitle("Similarity score distributions for all sub-volume shifts")
-
-
-# 1
-def view_pearson_colourmap_spatial(nb: Notebook, t: int):
-    """
-    function to view colourmap of correlation coefficients along with spatial info for either all round shifts of a tile
-    or all channel shifts of a tile.
-
-    Args:
-        nb: Notebook
-        round: True if round, false if channel
-        t: tile under consideration
-    """
-
-    # initialise frequently used variables
-    config = nb.get_config()["register"]
-    use = nb.basic_info.use_rounds
-    corr = nb.register_debug.round_shift_corr[t, use]
-    mode = "Round"
-
-    # Set 0 correlations to nan, so they are plotted as black
-    corr[corr == 0] = np.nan
-    z_subvols, y_subvols, x_subvols = config["subvols"]
-    n_rc = corr.shape[0]
-
-    fig, axes = plt.subplots(nrows=z_subvols, ncols=n_rc)
-    if axes.ndim == 1:
-        axes = axes[None]
-    # Now plot each image
-    for elem in range(n_rc):
-        for z in range(z_subvols):
-            ax = axes[z, elem]
-            ax.set_xticks([])
-            ax.set_yticks([])
-            im = ax.imshow(
-                np.reshape(
-                    corr[elem, z * y_subvols * x_subvols : (z + 1) * x_subvols * y_subvols], (y_subvols, x_subvols)
-                ),
-                vmin=0,
-                vmax=1,
-            )
-    # common axis labels
-    fig.supxlabel(mode)
-    fig.supylabel("Z-Subvolume")
-    # Set row and column labels
-    for ax, col in zip(axes[0], use):
-        ax.set_title(col, size="large")
-    for ax, row in zip(axes[:, 0], np.arange(z_subvols)):
-        ax.set_ylabel(row, rotation=0, size="large", x=-0.1)
-    # add colour bar
-    fig.subplots_adjust(right=0.8)
-    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-    fig.colorbar(im, cax=cbar_ax, label="Correlation coefficient")
-
-    plt.suptitle(mode + " shift similarity scores for tile " + str(t) + " plotted spatially")
-
-
-# 2
-def shift_vector_field(nb: Notebook):
-    """
-    Function to plot vector fields of predicted shifts vs shifts to see if we classify a shift as an outlier.
-    Args:
-        nb: Notebook
-    """
-    nbp_basic, nbp_register_debug = nb.basic_info, nb.register_debug
-    residual_thresh = nb.get_config()["register"]["residual_thresh"]
-    use_tiles = nbp_basic.use_tiles
-    shift = nbp_register_debug.round_transform_raw[use_tiles, :, :, 3]
-    # record number of rounds, tiles and initialise predicted shift
-    n_tiles, n_rounds = shift.shape[0], nbp_basic.n_rounds
-    tilepos_yx = nbp_basic.tilepos_yx[use_tiles]
-    tilepos_yx_padded = np.vstack((tilepos_yx.T, np.ones(n_tiles))).T
-    predicted_shift = np.zeros_like(shift)
-    # When we are scaling the vector field, it will be useful to store the following
-    n_vectors_x = tilepos_yx[:, 1].max() - tilepos_yx[:, 1].min() + 1
-    shift_norm = np.linalg.norm(shift, axis=2)
-
-    fig, axes = plt.subplots(nrows=3, ncols=n_rounds)
-    for r in range(n_rounds):
-        # generate predicted shift for this round
-        lb, ub = np.percentile(shift_norm[:, r], [10, 90])
-        valid = (shift_norm[:, r] > lb) * (shift_norm[:, r] < ub)
-        # Carry out regression, first predicitng yx shift, then z shift
-        transform_yx = np.linalg.lstsq(tilepos_yx_padded[valid], shift[valid, r, 1:], rcond=None)[0]
-        predicted_shift[:, r, 1:] = tilepos_yx_padded @ transform_yx
-        transform_z = np.linalg.lstsq(tilepos_yx_padded[valid], shift[valid, r, 0][:, None], rcond=None)[0]
-        predicted_shift[:, r, 0] = (tilepos_yx_padded @ transform_z)[:, 0]
-        # Defining this scale will mean that the length of the largest vector will be equal to 1/n_vectors_x of the
-        # width of the plot
-        scale = n_vectors_x * np.sqrt(np.sum(predicted_shift[:, r, 1:] ** 2, axis=1))
-
-        # plot the predicted yx shift vs actual yx shift in row 0
-        ax = axes[0, r]
-        # Make sure the vector field is properly scaled
-        ax.quiver(
-            tilepos_yx[:, 1],
-            tilepos_yx[:, 0],
-            predicted_shift[:, r, 2],
-            predicted_shift[:, r, 1],
-            color="b",
-            scale=scale,
-            scale_units="width",
-            width=0.05,
-            alpha=0.5,
-        )
-        ax.quiver(
-            tilepos_yx[:, 1],
-            tilepos_yx[:, 0],
-            shift[:, r, 2],
-            shift[:, r, 1],
-            color="r",
-            scale=scale,
-            scale_units="width",
-            width=0.05,
-            alpha=0.5,
-        )
-        # We want to set the xlims and ylims to include a bit of padding so we can see the vectors
-        ax.set_xlim(tilepos_yx[:, 1].min() - 1, tilepos_yx[:, 1].max() + 1)
-        ax.set_ylim(tilepos_yx[:, 0].min() - 1, tilepos_yx[:, 0].max() + 1)
-        ax.set_xticks([])
-        ax.set_yticks([])
-
-        # plot the predicted z shift vs actual z shift in row 1
-        ax = axes[1, r]
-        # we only want 1 label so make this for r = 0
-        if r == 0:
-            ax.quiver(
-                tilepos_yx[:, 1],
-                tilepos_yx[:, 0],
-                0,
-                predicted_shift[:, r, 0],
-                color="b",
-                scale=scale,
-                scale_units="width",
-                width=0.05,
-                alpha=0.5,
-                label="Predicted",
-            )
-            ax.quiver(
-                tilepos_yx[:, 1],
-                tilepos_yx[:, 0],
-                0,
-                shift[:, r, 2],
-                color="r",
-                scale=scale,
-                scale_units="width",
-                width=0.05,
-                alpha=0.5,
-                label="Actual",
-            )
+    # get the data
+    use_rounds = nb.basic_info.use_rounds
+    use_channels = nb.basic_info.use_channels
+    n_rounds, n_channels = len(use_rounds), len(use_channels)
+    anchor_channel = nb.basic_info.anchor_channel
+    spot_no = nb.find_spots.spot_no[t]
+    mse = [nb.register_debug.mse_round[t, use_rounds], nb.register_debug.mse_channel[t, use_channels]]
+    n_matches = [nb.register_debug.n_matches_round[t, use_rounds], nb.register_debug.n_matches_channel[t, use_channels]]
+    frac_matches = n_matches.copy()
+    for i, r in enumerate(use_rounds):
+        # calculate the fraction of matches
+        frac_matches[0][i] = n_matches[0][i] / spot_no[r, anchor_channel]
+    for i, c in enumerate(use_channels):
+        # calculate the fraction of matches
+        if nb.basic_info.use_preseq:
+            total_spots = np.sum(spot_no[use_rounds[:-1], c])
         else:
-            ax.quiver(
-                tilepos_yx[:, 1],
-                tilepos_yx[:, 0],
-                0,
-                predicted_shift[:, r, 0],
-                color="b",
-                scale=scale,
-                scale_units="width",
-                width=0.05,
-                alpha=0.5,
-            )
-            ax.quiver(
-                tilepos_yx[:, 1],
-                tilepos_yx[:, 0],
-                0,
-                shift[:, r, 2],
-                color="r",
-                scale=scale,
-                scale_units="width",
-                width=0.05,
-                alpha=0.5,
-            )
-        # We want to set the xlims and ylims to include a bit of padding so we can see the vectors
-        ax.set_xlim(tilepos_yx[:, 1].min() - 1, tilepos_yx[:, 1].max() + 1)
-        ax.set_ylim(tilepos_yx[:, 0].min() - 1, tilepos_yx[:, 0].max() + 1)
-        ax.set_xticks([])
-        ax.set_yticks([])
+            total_spots = np.sum(spot_no[use_rounds, c])
+        frac_matches[1][i] = n_matches[1][i] / total_spots
+    # create plots
+    n_cols = max(n_rounds, n_channels)
+    fig, ax = plt.subplots(4, n_cols, figsize=(4 * n_cols, 10))
 
-        # Plot image of norms of residuals at each tile in row 3
-        ax = axes[2, r]
-        diff = create_tiled_image(data=np.linalg.norm(predicted_shift[:, r] - shift[:, r], axis=1), nbp_basic=nbp_basic)
-        outlier = np.argwhere(diff > residual_thresh)
-        n_outliers = outlier.shape[0]
-        im = ax.imshow(diff, vmin=0, vmax=10)
-        # Now we want to outline the outlier pixels with a dotted red rectangle
-        for i in range(n_outliers):
-            rect = patches.Rectangle(
-                (outlier[i, 1] - 0.5, outlier[i, 0] - 0.5),
-                1,
-                1,
-                linewidth=1,
-                edgecolor="r",
-                facecolor="none",
-                linestyle="--",
-            )
-            ax.add_patch(rect)
-        ax.set_xticks([])
-        ax.set_yticks([])
-
-    # Set row and column labels
-    for ax, col in zip(axes[0], nbp_basic.use_rounds):
-        ax.set_title(col)
-    for ax, row in zip(axes[:, 0], ["XY-shifts", "Z-shifts", "Residuals"]):
-        ax.set_ylabel(row, rotation=90, size="large")
-    # Add row and column labels
-    fig.supxlabel("Round")
-    fig.supylabel("Diagnostic")
-    # Add global colour bar and legend
-    lines_labels = [ax.get_legend_handles_labels() for ax in fig.axes]
-    lines, labels = [sum(lol, []) for lol in zip(*lines_labels)]
-    fig.legend(lines, labels)
-    fig.subplots_adjust(right=0.8)
-    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-    fig.colorbar(im, cax=cbar_ax, label="Residual Norm")
-    # Add title
-    fig.suptitle("Diagnostic plots for round shift outlier removal", size="x-large")
-
-
-# 2
-def zyx_shift_image(nb: Notebook, round: bool = True):
-    """
-    Function to plot overlaid images of predicted shifts vs shifts to see if we classify a shift as an outlier.
-    Args:
-        nb: Notebook
-        round: Boolean indicating whether we are looking at round outlier removal, True if r, False if c
-    """
-    nbp_basic, nbp_register, nbp_register_debug = nb.basic_info, nb.register, nb.register_debug
-    use_tiles = nbp_basic.use_tiles
-
-    # Load in shift
-    if round:
-        mode = "Round"
-        use = nbp_basic.use_rounds
-        shift_raw = nbp_register_debug.round_transform_raw[use_tiles, :, :, 3]
-        shift = nbp_register.round_transform[use_tiles, :, :, 3]
-    else:
-        mode = "Channel"
-        use = nbp_basic.use_channels
-        shift_raw = nbp_register_debug.channel_transform_raw[use_tiles, :, :, 3]
-        shift = nbp_register.channel_transform[use_tiles, :, :, 3]
-
-    coord_label = ["Z", "Y", "X"]
-    n_t, n_rc = shift.shape[0], shift.shape[1]
-    fig, axes = plt.subplots(nrows=3, ncols=n_rc)
-    # common axis labels
-    fig.supxlabel(mode)
-    fig.supylabel("Coordinate (Z, Y, X)")
-
-    # Set row and column labels
-    for ax, col in zip(axes[0], use):
-        ax.set_title(col)
-    for ax, row in zip(axes[:, 0], coord_label):
-        ax.set_ylabel(row, rotation=0, size="large")
-
-    # Now we will plot 3 rows of subplots and n_rc columns of subplots. Each subplot will be made up of 2 further subplots
-    # The Left subplot will be the raw shift and the right will be the regularised shift
-    # We will also outline pixels in these images that are different between raw and regularised with a dotted red rectangle
-    for elem in range(n_rc):
-        for coord in range(3):
-            ax = axes[coord, elem]
-            # remove the ticks
-            ax.set_xticks([])
-            ax.set_yticks([])
-            # Create 2 subplots within each subplot
-            gs = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=ax, wspace=0.1)
-            ax1 = plt.subplot(gs[0])
-            ax2 = plt.subplot(gs[1])
-            # Plot the raw shift in the left subplot
-            im = ax1.imshow(create_tiled_image(shift_raw[:, elem, coord], nbp_basic))
-            # Plot the regularised shift in the right subplot
-            im = ax2.imshow(create_tiled_image(shift[:, elem, coord], nbp_basic))
-            # Now we want to outline the pixels that are different between raw and regularised with a dotted red rectangle
-            diff = np.abs(shift_raw[:, elem, coord] - shift[:, elem, coord])
-            outlier = np.argwhere(diff > 0.1)
-            n_outliers = outlier.shape[0]
-            for i in range(n_outliers):
-                rect = patches.Rectangle(
-                    (outlier[i, 1] - 0.5, outlier[i, 0] - 0.5),
-                    1,
-                    1,
-                    linewidth=1,
-                    edgecolor="r",
-                    facecolor="none",
-                    linestyle="--",
-                )
-                # Add the rectangle to both subplots
-                ax1.add_patch(rect)
-                ax2.add_patch(rect)
-                # Remove ticks and labels from the left subplot
-                ax1.set_xticks([])
-                ax1.set_yticks([])
-                # Remove ticks and labels from the right subplot
-                ax2.set_xticks([])
-                ax2.set_yticks([])
-
-    fig.canvas.draw()
-    plt.show()
-    # Add a title
-    fig.suptitle("Diagnostic plots for {} shift outlier removal".format(mode), size="x-large")
-    # add a global colour bar
-    fig.subplots_adjust(right=0.8)
-    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-    fig.colorbar(im, cax=cbar_ax)
-
-
-# 2
-def create_tiled_image(data, nbp_basic):
-    """
-    generate image of 1d tile data along with tile positions
-    Args:
-        data: n_tiles_use x 1 list of residuals
-        nbp_basic: basic info notebook page
-    """
-    # Initialise frequently used variables
-    use_tiles = nbp_basic.use_tiles
-    tilepos_yx = nbp_basic.tilepos_yx[nbp_basic.use_tiles]
-    n_rows = np.max(tilepos_yx[:, 0]) - np.min(tilepos_yx[:, 0]) + 1
-    n_cols = np.max(tilepos_yx[:, 1]) - np.min(tilepos_yx[:, 1]) + 1
-    tilepos_yx = tilepos_yx - np.min(tilepos_yx, axis=0)
-    diff = np.zeros((n_rows, n_cols))
-
-    for t in range(len(use_tiles)):
-        diff[tilepos_yx[t, 0], tilepos_yx[t, 1]] = data[t]
-
-    diff[diff == 0] = np.nan
-
-    return diff
-
-# 3
-def view_icp_n_matches(nb: Notebook, t: int):
-    """
-    Plots simple proportion matches against iterations.
-    Args:
-        nb: Notebook
-        t: tile
-    """
-    nbp_basic, nbp_register_debug, nbp_find_spots = nb.basic_info, nb.register_debug, nb.find_spots
-    use_tiles, use_rounds, use_channels = nbp_basic.use_tiles, nbp_basic.use_rounds, nbp_basic.use_channels
-    n_matches = nbp_register_debug.n_matches[t, use_rounds][:, use_channels]
-    # delete column 1 from n_matches as it is incorrect
-    n_matches = np.delete(n_matches, 1, axis=2)
-    frac_matches = preprocessing.n_matches_to_frac_matches(
-        n_matches=n_matches, spot_no=nbp_find_spots.spot_no[t, use_rounds][:, use_channels]
-    )
-    n_iters = n_matches.shape[2]
-
-    # Define the axes
-    fig, axes = plt.subplots(len(use_rounds), len(use_channels))
-    # common axis labels
-    fig.supxlabel("Channels")
-    fig.supylabel("Rounds")
-    # Set row and column labels
-    for ax, col in zip(axes[0], use_channels):
-        ax.set_title(col)
-    for ax, row in zip(axes[:, 0], use_rounds):
-        ax.set_ylabel(row, rotation=0, size="large")
-
-    # Now plot n_matches
-    for r in range(len(use_rounds)):
-        for c in range(len(use_channels)):
-            ax = axes[r, c]
-            ax.plot(np.arange(n_iters), frac_matches[r, c])
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_ylim([0, 1])
-            ax.set_xlim([0, n_iters // 2])
-
-    plt.suptitle("Fraction of matches against iterations for tile " + str(t) + ". \n " "Note that y-axis is [0,1]")
-    plt.show()
-
-
-# 3
-def view_icp_mse(nb: Notebook, t: int):
-    """
-    Plots simple MSE grid against iterations
-    Args:
-        nb: Notebook
-        t: tile
-    """
-    nbp_basic, nbp_register_debug = nb.basic_info, nb.register_debug
-    use_tiles, use_rounds, use_channels = nbp_basic.use_tiles, nbp_basic.use_rounds, nbp_basic.use_channels
-    mse = nbp_register_debug.mse[t, use_rounds][:, use_channels]
-    # delete column 1 from mse as it is incorrect
-    mse = np.delete(mse, 1, axis=2)
-    n_iters = mse.shape[2]
-
-    # Define the axes
-    fig, axes = plt.subplots(len(use_rounds), len(use_channels))
-    # common axis labels
-    fig.supxlabel("Channels")
-    fig.supylabel("Rounds")
-    # Set row and column labels
-    for ax, col in zip(axes[0], use_channels):
-        ax.set_title(col)
-    for ax, row in zip(axes[:, 0], use_rounds):
-        ax.set_ylabel(row, rotation=0, size="large")
-
-    # Now plot mse
-    for r in range(len(use_rounds)):
-        for c in range(len(use_channels)):
-            ax = axes[r, c]
-            ax.plot(np.arange(n_iters), mse[r, c])
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_xlim([0, n_iters // 2])
-            ax.set_ylim([0, np.max(mse)])
-
-    plt.suptitle(
-        "MSE against iteration for tile " + str(t) + " for all rounds and channels. \n"
-        "Note that the y-axis is the same for all plots."
-    )
+    data = mse + frac_matches
+    labels = ['MSE Round', 'MSE Channel', 'Frac Match Round', 'Frac Match Channel']
+    indices = [use_rounds, use_channels, use_rounds, use_channels]
+    y_max = [np.max(data[0]), np.max(data[1]), 1, 1]
+    for i in range(4):
+        n_cols_current = len(data[i])
+        for j in range(n_cols_current):
+            ax[i, j].plot(data[i][j])
+            ax[i, j].set_xticks([])
+            ax[i, j].set_yticks([])
+            ax[i, j].set_xlim([0, len(data[i][j])//2])
+            ax[i, j].set_ylim([0, y_max[i]])
+            ax[i, j].set_title(indices[i][j])
+        for j in range(n_cols_current, n_cols):
+            ax[i, j].axis('off')
+        ax[i, 0].set_ylabel(labels[i])
+        ax[i, 0].set_yticks([0, y_max[i]])
+        ax[i, 0].set_yticklabels([0, round(y_max[i], 2)])
+    plt.suptitle("ICP iterations for tile " + str(t))
     plt.show()
 
 
@@ -1347,7 +682,14 @@ def view_camera_correction(nb: Notebook):
     cam_channels = [0, 9, 18, 23]
     if len(fluorescent_beads) == 28:
         fluorescent_beads = fluorescent_beads[cam_channels]
-    transform = nb.register.channel_transform[cam_channels][:, 1:, 1:]
+    transform = nb.register_debug.channel_transform_initial[cam_channels]
+    linear_transform = transform[:, :2, :2]
+    shift = transform[:, 3, :2]
+    # put these together to form the full transform
+    transform = np.zeros((4, 3, 3))
+    transform[:, :2, :2] = linear_transform
+    transform[:, :2, 2] = shift
+    transform[:, 2, 2] = 1
 
     # Apply the transform to the fluorescent bead images
     fluorescent_beads_transformed = np.zeros(fluorescent_beads.shape)
@@ -1375,328 +717,62 @@ def view_camera_correction(nb: Notebook):
     napari.run()
 
 
-# TODO: Refactor this for icp correction instead of transform
-def view_shifts_and_scales(nb: Notebook, t: int, bg_on: bool = False):
+def view_bg_scale(nb: Notebook, t: int, r: int, c: int):
     """
-    Plots the shifts and scales for tile t for each round and channel
+    Visualize the background scaling for the selected tile, round, and channel.
     Args:
-        nb: Notebook
-        t: tile
-        bg_on: boolean indicating whether to plot shifts and scales for preseq registration
+        nb: Notebook object (must have register and register_debug pages)
+        t: tile to view
+        r: round to view
+        c: channel to view
     """
-    use_rounds = [nb.basic_info.anchor_round + 1] * nb.basic_info.use_preseq * bg_on + nb.basic_info.use_rounds
-    use_channels = nb.basic_info.use_channels
-    transform_yxz = nb.register.transform[t][np.ix_(use_rounds, use_channels)]
-    transform_zyx = np.zeros((len(use_rounds), len(use_channels), 3, 4))
-    for r in range(len(use_rounds)):
-        for c in range(len(use_channels)):
-            transform_zyx[r, c] = preprocessing.yxz_to_zyx_affine(transform_yxz[r, c])
-    scale = np.zeros((len(use_rounds), len(use_channels), 3))
-    shift = np.zeros((len(use_rounds), len(use_channels), 3))
-    # populate scale and shift
-    for r in range(len(use_rounds)):
-        for c in range(len(use_channels)):
-            scale[r, c] = np.diag(transform_zyx[r, c, :3, :3])
-            shift[r, c] = transform_zyx[r, c, :3, 3]
+    assert nb.basic_info.use_preseq, "Background scaling is only available for pre-seq data."
+    # get the data
+    mid_z = len(nb.basic_info.use_z) // 2
+    z_rad = 8
+    z_range = np.arange(mid_z - z_rad, mid_z + z_rad + 1)
+    r_pre = nb.basic_info.pre_seq_round
+    bg_scale = nb.filter.bg_scale[t, r, c]
+    # get the images
+    base = load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=c,
+                      yxz=[None, None, z_range]).astype(np.float32)
+    pre = load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r_pre, c=c,
+                     yxz=[None, None, z_range]).astype(np.float32)
+    affine_tr = nb.register.icp_correction[t, r, c].T
+    affine_t_pre = nb.register.icp_correction[t, r_pre, c].T
+    # change the shift as we are only looking at a subset of the z
+    affine_tr[:, 3] += (affine_tr[:3, :3] - np.eye(3)) @ np.array([0, 0, mid_z - z_rad])
+    affine_t_pre[:, 3] += (affine_t_pre[:3, :3] - np.eye(3)) @ np.array([0, 0, mid_z - z_rad])
+    base = affine_transform(base, affine_tr, order=0)
+    pre = affine_transform(pre, affine_t_pre, order=0)
+    print("Images loaded and affine corrected.")
+    flow_t_pre = np.load(os.path.join(nb.register.flow_dir, "smooth", f"t{t}_r{r_pre}.npy"), mmap_mode='r')[..., z_range]
+    flow_t_pre = flow_t_pre.astype(np.float32)
+    flow_t_r = np.load(os.path.join(nb.register.flow_dir, "smooth", f"t{t}_r{r}.npy"))[..., z_range]
+    flow_t_r = flow_t_r.astype(np.float32)
+    coords = np.array(np.meshgrid(range(base.shape[0]), range(base.shape[1]), range(base.shape[2]), indexing='ij'))
+    print("Flows loaded.")
+    warp_tr = coords - flow_t_r
+    warp_t_pre = coords - flow_t_pre
+    base = warp(base, warp_tr, order=0)[..., z_rad]
+    pre = warp(pre, warp_t_pre, order=0)[..., z_rad]
+    print("Images warped.")
+    # blur base
+    base = skimage.filters.gaussian(base, sigma=3)
+    bright = pre > np.percentile(pre, 99)
+    base_values = base[bright]
+    pre_values = pre[bright]
 
     # create plots
-    fig, ax = plt.subplots(2, 3, figsize=(15, 10))
-    coord_label = ["Z", "Y", "X"]
-    plot_label = ["Scale", "Shift"]
-    image = [scale, shift]
+    viewer = napari.Viewer()
+    viewer.add_image(base, name=f't{t}_r{r}_c{c}', colormap="red", blending="additive")
+    viewer.add_image(pre, name=f't{t}_r{r_pre}_c{c}', colormap="green", blending="additive")
+    viewer.add_image(bright, name="bright", colormap="blue", blending="additive")
 
-    for i in range(2):
-        for j in range(3):
-            # plot the image
-            ax[i, j].imshow(image[i][:, :, j].T)
-            ax[i, j].set_xticks(np.arange(len(use_rounds)))
-            ax[i, j].set_xticklabels(use_rounds)
-            ax[i, j].set_yticks(np.arange(len(use_channels)))
-            ax[i, j].set_yticklabels(use_channels)
-            ax[i, j].set_title(plot_label[i] + " in " + coord_label[j])
-            # for each subplot, assign a colour bar
-            divider = make_axes_locatable(ax[i, j])
-            cax = divider.append_axes("right", size="5%", pad=0.05)
-            fig.colorbar(ax[i, j].get_images()[0], cax=cax)
-
-            if j == 0:
-                ax[i, j].set_ylabel("Channel")
-            if i == 1:
-                ax[i, j].set_xlabel("Round")
-    plt.suptitle("Shifts and scales for tile " + str(t))
+    # add the background scaling
+    plt.scatter(x=pre_values, y=base_values, s=1, alpha=0.1)
+    plt.plot(pre_values, bg_scale * pre_values, color="red", linestyle="--")
+    plt.xlabel("pre values")
+    plt.ylabel("base values")
+    plt.title(f"Background scaling for t{t}, r{r}, c{c}")
     plt.show()
-
-
-class ViewSubvolReg:
-    def __init__(self, nb: Notebook, t: int = None, r: int = None):
-        """
-        Class to view the subvolume registration for a given tile, round, channel.
-        Args:
-            nb: Notebook
-            t: tile
-            r: round
-        """
-        self.nb, self.t, self.r = nb, t, r
-        if self.t is None:
-            self.t = nb.basic_info.use_tiles[0]
-        if self.r is None:
-            self.r = nb.basic_info.use_rounds[0]
-        # load in shifts
-        self.shift = nb.register_debug.round_shift[self.t, self.r]
-        self.shift_corr = nb.register_debug.round_shift_corr[self.t, self.r]
-        self.position = nb.register_debug.position
-        shift_prediction_matrix = huber_regression(self.shift, self.position)
-        self.predicted_shift = np.pad(self.position, ((0, 0), (0, 1)), constant_values=1) @ shift_prediction_matrix.T
-        self.shift_residual = np.linalg.norm(self.shift - self.predicted_shift, axis=-1)
-        # load in subvolumes
-        self.subvol_base, self.subvol_target = None, None
-        self.subvol_z, self.subvol_y, self.subvol_x = None, None, None
-        self.box_z, self.box_y, self.box_x = None, None, None
-        self.load_subvols()
-        # reshape shifts
-        self.shift = self.shift.reshape((self.subvol_z, self.subvol_y, self.subvol_x, 3))
-        self.shift_corr = self.shift_corr.reshape((self.subvol_z, self.subvol_y, self.subvol_x))
-        self.position = self.position.reshape((self.subvol_z, self.subvol_y, self.subvol_x, 3)).astype(int)
-        self.predicted_shift = self.predicted_shift.reshape((self.subvol_z, self.subvol_y, self.subvol_x, 3))
-        self.shift_residual = self.shift_residual.reshape((self.subvol_z, self.subvol_y, self.subvol_x))
-        self.transform = nb.register_debug.round_transform_raw[self.t, self.r]
-        # create viewer
-        self.viewer = napari.Viewer()
-        napari.run()
-
-    def load_subvols(self):
-        """
-        Load in subvolumes for the given tile and round
-        """
-        # load in images
-        config = self.nb.get_config()['register']
-        round_registration_channel = 0
-        anchor_image = preprocessing.yxz_to_zyx(tiles_io.load_image(self.nb.file_names, self.nb.basic_info, self.nb.extract.file_type,
-                                                      self.t, self.nb.basic_info.anchor_round,
-                                                      round_registration_channel, apply_shift=False))
-        round_image = preprocessing.yxz_to_zyx(tiles_io.load_image(self.nb.file_names, self.nb.basic_info, self.nb.extract.file_type,
-                                                     self.t, self.r, round_registration_channel, apply_shift=False))
-
-        # split images into subvolumes
-        z_subvols, y_subvols, x_subvols = config["subvols"]
-        z_box, y_box, x_box = config["box_size"]
-        subvol_base, _ = preprocessing.split_3d_image(
-            image=anchor_image,
-            z_subvolumes=z_subvols,
-            y_subvolumes=y_subvols,
-            x_subvolumes=x_subvols,
-            z_box=z_box,
-            y_box=y_box,
-            x_box=x_box,
-        )
-        subvol_target, _ = preprocessing.split_3d_image(
-            image=round_image,
-            z_subvolumes=z_subvols,
-            y_subvolumes=y_subvols,
-            x_subvolumes=x_subvols,
-            z_box=z_box,
-            y_box=y_box,
-            x_box=x_box,
-        )
-        self.subvol_z, self.subvol_y, self.subvol_x = int(z_subvols), int(y_subvols), int(x_subvols)
-        self.box_z, self.box_y, self.box_x = int(z_box), int(y_box), int(x_box)
-        self.subvol_base, self.subvol_target = subvol_base, subvol_target
-
-    def view_subvol_cross_corr(self, z: int = 0, y: int = 0, x: int = 0, grid_view: bool = False):
-        """
-        View the cross correlation for a single subvolume for the given tile and round
-        Args:
-            z: z index of subvolume
-            y: y index of subvolume
-            x: x index of subvolume
-            grid_view: whether to view the images in a 2D grid, or as a 3D stack
-        """
-        # check if there are any layers in the viewer, if so, remove them
-        if len(self.viewer.layers) > 0:
-            for i in range(len(self.viewer.layers)):
-                self.viewer.layers.pop()
-        z_start, z_end = int(max(0, z - 1)), int(min(self.subvol_z, z + 1) + 1)
-        merged_subvol_target = preprocessing.merge_subvols(
-            position=self.position[z_start:z_end, y, x].copy(), subvol=self.subvol_target[z_start:z_end, y, x]
-        )
-        merged_subvol_target_windowed = preprocessing.window_image(merged_subvol_target)
-        merged_subvol_base = np.zeros_like(merged_subvol_target)
-        merged_subvol_base_windowed = np.zeros_like(merged_subvol_target)
-        merged_subvol_min_z = self.position[z_start, y, x][0]
-        current_box_min_z = self.position[z, y, x][0]
-        merged_subvol_start_z = current_box_min_z - merged_subvol_min_z
-        merged_subvol_base[merged_subvol_start_z : merged_subvol_start_z + self.box_z] = self.subvol_base[z, y, x]
-        merged_subvol_base_windowed[merged_subvol_start_z : merged_subvol_start_z + self.box_z] = (
-            preprocessing.window_image(self.subvol_base[z, y, x])
-        )
-
-        # compute cross correlation
-        im_centre = np.array(merged_subvol_base_windowed.shape) // 2
-        f_hat = fft.fftn(merged_subvol_base_windowed)
-        g_hat = fft.fftn(merged_subvol_target_windowed)
-        phase_cross = f_hat * np.conj(g_hat) / (np.abs(f_hat) * np.abs(g_hat))
-        phase_cross_ifft = fft.fftshift(np.abs(fft.ifftn(phase_cross)))
-        phase_cross_shift = -(np.unravel_index(np.argmax(phase_cross_ifft), phase_cross_ifft.shape) - im_centre)
-
-        # add images
-        y_size, x_size = merged_subvol_base.shape[1:]
-        if not grid_view:
-            self.viewer.add_image(phase_cross_ifft, name=f"Phase cross correlation. z = {z}, y = {y}, x = {x}")
-            self.viewer.add_points(
-                [-phase_cross_shift + im_centre],
-                name="Phase cross correlation shift",
-                size=5,
-                face_color="blue",
-                symbol="cross",
-            )
-            # add overlays below this
-            translation_offset = np.array([0, 1.1 * y_size, 0])
-            self.viewer.add_image(
-                merged_subvol_target,
-                name=f"Target. z = {z}, y = {y}, x = {x}",
-                colormap="green",
-                blending="additive",
-                translate=translation_offset,
-            )
-            self.viewer.add_image(
-                merged_subvol_base,
-                name=f"Base. Shift = {phase_cross_shift}",
-                colormap="red",
-                blending="additive",
-                translate=translation_offset + phase_cross_shift,
-            )
-            # add predicted shift
-            translation_offset = np.array([0, 1.1 * y_size, 1.1 * x_size])
-            self.viewer.add_image(
-                merged_subvol_target,
-                name=f"Target. z = {z}, y = {y}, x = {x}",
-                colormap="green",
-                blending="additive",
-                translate=translation_offset,
-            )
-            self.viewer.add_image(
-                merged_subvol_base,
-                name=f"Base. Predicted Shift = " f"{np.rint(self.predicted_shift[z, y, x])}",
-                colormap="red",
-                blending="additive",
-                translate=translation_offset + self.predicted_shift[z, y, x],
-            )
-        else:
-            # generate transformed image
-            new_origin = np.array([merged_subvol_min_z, self.position[z, y, x, 1], self.position[z, y, x, 2]])
-            transform = (self.transform).copy()
-            # need to adjust shift as we are changing the origin
-            transform[:, 3] += (transform[:3, :3] - np.eye(3)) @ new_origin
-            transform = preprocessing.invert_affine(transform)
-            merged_subvol_base_transformed = affine_transform(merged_subvol_base, transform, order=0)
-
-            # initialise grid
-            phase_cross_shift_yx = phase_cross_shift[1:]
-            predicted_shift_yx = self.predicted_shift[z, y, x, 1:]
-            nz = merged_subvol_target.shape[0]
-            features_z = {"z": np.arange(nz)}
-            text_z = {"string": "Z: {z}", "size": 8, "color": "white"}
-            for i in range(nz):
-                # 1. Plot cross correlation
-                translation_offset = np.array([0, 1.1 * x_size * i])
-                self.viewer.add_image(
-                    phase_cross_ifft[i],
-                    name=f"Phase cross correlation. z = {z}, y = {y}, x = {x}",
-                    translate=translation_offset,
-                )
-                # 2. Plot base and target, with base shifted by phase_cross_shift
-                translation_offset = np.array([1.1 * y_size, 1.1 * x_size * i])
-                self.viewer.add_image(
-                    merged_subvol_target[i],
-                    name=f"Target. z = {z}, y = {y}, x = {x}",
-                    colormap="green",
-                    blending="additive",
-                    translate=translation_offset,
-                )
-                base_i = (i - np.rint(self.shift[z, y, x, 0])).astype(int)
-                if (base_i >= 0) and (base_i < nz):
-                    self.viewer.add_image(
-                        merged_subvol_base[base_i],
-                        name=f"Base. Shift = {phase_cross_shift}",
-                        colormap="red",
-                        blending="additive",
-                        translate=translation_offset + phase_cross_shift_yx,
-                    )
-                # 3. Plot base and target, with base shifted by predicted_shift
-                translation_offset = np.array([2.2 * y_size, 1.1 * x_size * i])
-                self.viewer.add_image(
-                    merged_subvol_target[i],
-                    name=f"Target. z = {z}, y = {y}, x = {x}",
-                    colormap="green",
-                    blending="additive",
-                    translate=translation_offset,
-                )
-                base_i = (i - np.rint(self.predicted_shift[z, y, x, 0])).astype(int)
-                if (base_i >= 0) and (base_i < nz):
-                    self.viewer.add_image(
-                        merged_subvol_base[base_i],
-                        name=f"Base. Predicted Shift = " f"{np.rint(self.predicted_shift[z, y, x])}",
-                        colormap="red",
-                        blending="additive",
-                        translate=translation_offset + predicted_shift_yx,
-                    )
-                # 4. Plot affine transformed image
-                translation_offset = np.array([3.3 * y_size, 1.1 * x_size * i])
-                self.viewer.add_image(
-                    merged_subvol_target[i],
-                    name=f"Target. z = {z}, y = {y}, x = {x}",
-                    colormap="green",
-                    blending="additive",
-                    translate=translation_offset,
-                )
-                self.viewer.add_image(
-                    merged_subvol_base_transformed[i],
-                    name=f"Base. Affine transformed",
-                    colormap="red",
-                    blending="additive",
-                    translate=translation_offset,
-                )
-
-            # plot z plane numbers above each z plane
-            z_label_coords = [np.array([-20, 1.1 * x_size * i + x_size // 2]) for i in range(nz)]
-            self.viewer.add_points(z_label_coords, features=features_z, text=text_z, size=0)
-            self.viewer.window.qt_viewer.dockLayerControls.setVisible(False)
-            self.viewer.window.qt_viewer.dockLayerList.setVisible(False)
-
-        self.viewer.window.qt_viewer.dockLayerControls.setVisible(False)
-
-        napari.run()
-
-
-class ButtonSubvolWindow(QMainWindow):
-    def __init__(self, nz: int, ny: int, nx: int, active_button: list = [0, 0, 0]):
-        super().__init__()
-        # Loop through subvolumes and create a button for each
-        for z, y, x in np.ndindex(nz, ny, nx):
-            # Create a button for each subvol
-            button = QPushButton(str([z, y, x]), self)
-            # set the button to be checkable iff t in use_tiles
-            button.setCheckable(True)
-            button.setGeometry(500 * z + y * 70, x * 40, 50, 28)
-            # set active button as checked
-            if active_button == [z, y, x]:
-                button.setChecked(True)
-                self.subvol = [z, y, x]
-            # Set button color = grey when hovering over
-            # set colour of tiles in use to blue amd not in use to red
-            button.setStyleSheet(
-                "QPushButton"
-                "{"
-                "background-color : rgb(135, 206, 250);"
-                "}"
-                "QPushButton::hover"
-                "{"
-                "background-color : lightgrey;"
-                "}"
-                "QPushButton::pressed"
-                "{"
-                "background-color : white;"
-                "}"
-            )
-            # Finally add this button as an attribute to self
-            self.__setattr__(str([z, y, x]), button)
