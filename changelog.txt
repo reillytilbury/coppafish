@@ -1,4 +1,6 @@
 2024/04/dd Alpha Update (v0.10.1):
+ * User documentation updates.
+ * Filter image scaling is reduced to further avoid clipping.
  * New OMP gene counts figure in _omp.pdf.
  * New spot position histograms in _call_spots.pdf and _omp.pdf.
  * New image viewing diagnostics for the users, explained in the documentation.
