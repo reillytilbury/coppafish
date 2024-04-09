@@ -150,7 +150,7 @@ _options = {
         # these parameters are for round registration
         "sample_factor_yx": "int",
         "window_radius": "int",
-        "smooth_sigma": "number",
+        "smooth_sigma": "list_number",
         "smooth_thresh": "number",
         "flow_clip": "maybe_list_number",
         # these parameters are for icp

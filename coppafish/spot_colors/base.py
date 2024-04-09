@@ -34,13 +34,14 @@ def apply_transform(
         - ```in_range``` - ```bool [n_spots]```.
             Whether spot s was in the bounds of the tile when transformed to round `r`, channel `c`.
     """
-    # load in shifts for each pixel
-    y_indices, x_indices, z_indices = yxz.T
-    # apply shifts to each pixel
-    yxz_shifts = (-flow[:, y_indices, x_indices, z_indices].T).astype(np.float32)
-    yxz_transform = np.asarray(yxz + yxz_shifts)
+    if flow is not None:
+        # load in shifts for each pixel
+        y_indices, x_indices, z_indices = yxz.T
+        # apply shifts to each pixel
+        yxz_shifts = (-flow[:, y_indices, x_indices, z_indices].T).astype(np.float32)
+        yxz = np.asarray(yxz + yxz_shifts)
     # apply icp correction
-    yxz_transform = np.pad(yxz_transform, ((0, 0), (0, 1)), constant_values=1)
+    yxz_transform = np.pad(yxz, ((0, 0), (0, 1)), constant_values=1)
     yxz_transform = np.round(yxz_transform @ icp_correction).astype(np.int16)
     in_range = np.logical_and(
         (yxz_transform >= np.array([0, 0, 0])).all(axis=1), (yxz_transform < tile_sz).all(axis=1)
