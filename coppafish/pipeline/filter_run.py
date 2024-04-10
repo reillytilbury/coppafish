@@ -150,6 +150,7 @@ def run_filter(
         include_dapi_seq=True,
         include_dapi_anchor=True,
         include_dapi_preseq=True,
+        include_bad_trc=False,
     )
     with tqdm(total=len(indices), desc=f"Filtering extracted {nbp_extract.file_type} files") as pbar:
         for t, r, c in indices:
@@ -259,6 +260,24 @@ def run_filter(
             np.savez_compressed(hist_counts_values_path, hist_counts, hist_values)
             del saved_im
             pbar.update()
+        for t, r, c in nbp_basic.bad_trc:
+            # in case of bad trc, save a blank image
+            im_filtered = np.zeros((nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)), dtype=np.int32)
+            saved_im = tiles_io.save_image(
+                nbp_file,
+                nbp_basic,
+                file_type,
+                im_filtered,
+                t,
+                r,
+                c,
+                suffix="_raw",
+                num_rotations=config["num_rotations"],
+                percent_clip_warn=config["percent_clip_warn"],
+                percent_clip_error=config["percent_clip_error"],
+            )
+            del im_filtered, saved_im
+
     nbp.auto_thresh = auto_thresh
     nbp.image_scale = scale
     # Add a variable for bg_scale (actually computed in register)

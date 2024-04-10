@@ -8,7 +8,14 @@
  * New image viewing diagnostics for the users, explained in the documentation.
  * Simplified advanced usage for moving output and tile directories.
  * _ref_call_spots.pdf now called _call_spots.pdf.
-
+ * New ICP Viewer for point clouds
+ * New optical flow viewer
+ * improvements in reading old reg results
+ * streamlined generation of reg images, meaning transforms no longer need to be applied when viewer is shown
+ * Whole registration viewer has been refactored and improved making it easier to compare between different methods
+    of registration
+ * Support for removing a bad tile round channel from any analysis - this includes new nbp basic variable and config
+    variable to remove a bad tile round channel
 
 2024/03/26 Alpha Update (v0.10.0):
  * OMP scoring has been changed.
