@@ -13,7 +13,17 @@ nb = Notebook("path/to/notebook.npz")
 Viewer(nb)
 ```
 
-where a new napari tab will be opened.
+where a new napari tab will be opened. You can specify a how genes are marked using a .csv file, then the Viewer can be 
+opened by
+
+```python
+from coppafish import Notebook, Viewer
+nb = Notebook("path/to/notebook.npz")
+Viewer(nb, gene_marker_file="path/to/custom/gene_marker_file.csv")
+```
+
+see <a href="https://github.com/reillytilbury/coppafish/raw/HEAD/coppafish/plot/results_viewer/gene_color.csv" target="_blank">
+here</a> for the default .csv file for gene markers.
 
 ### Description
 
