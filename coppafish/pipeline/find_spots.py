@@ -79,7 +79,8 @@ def find_spots(
         dtype=bool,
     )
     for t, r, c in indexing.create(
-        nbp_basic, include_preseq_round=True, include_anchor_round=True, include_anchor_channel=True
+        nbp_basic, include_preseq_round=True, include_anchor_round=True, include_anchor_channel=True,
+        include_bad_trc=False
     ):
         use_indices[t, r, c] = True
 

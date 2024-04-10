@@ -31,6 +31,26 @@ except ModuleNotFoundError:
 
 from .. import logging
 
+def convert_tuple_to_list(x: str) -> list:
+    """
+    Convert a string representation of a list of tuples to a list of lists.
+
+    Args:
+        x (str): string representation of a list of tuples
+
+    Returns:
+        list: list of lists
+    """
+    y = []
+    while x:
+        left_idx = x.find("(")
+        right_idx = x.find(")")
+        string = x[left_idx + 1:right_idx]
+        y.append(string)
+        x = x[right_idx + 1:]
+    return y
+
+
 # List of options and their type.  If you change this, update the
 # config.default.ini file too.  Make sure the type is valid.
 _options = {
@@ -49,7 +69,7 @@ _options = {
         "is_3d": "bool",
         "ignore_first_z_plane": "bool",
         "minimum_print_severity": "int",
-        "bad_trc": "maybe_list_str",
+        "bad_trc": "maybe_list_tuple_int",
         # From here onwards these are not compulsory to enter and will be taken from the metadata
         # Only leaving them here to have backwards compatibility as Max thinks the user should influence these
         "channel_camera": "maybe_list_int",
@@ -245,6 +265,8 @@ _option_type_checkers = {
     "maybe_str": lambda x: x.strip() == "" or _option_type_checkers["str"](x),
     "maybe_list_str": lambda x: x.strip() == "" or _option_type_checkers["list_str"](x),
     "maybe_file": lambda x: x.strip() == "" or _option_type_checkers["file"](x),
+    "maybe_list_tuple_int": lambda x: x.strip() == "" or all([_option_type_checkers["list_int"](y) for y in
+                                                              convert_tuple_to_list(x)]),
 }
 _option_formatters = {
     "int": lambda x: int(x),
@@ -264,6 +286,8 @@ _option_formatters = {
     "maybe_str": lambda x: None if x == "" else _option_formatters["str"](x),
     "maybe_list_str": lambda x: None if x == "" else _option_formatters["list_str"](x),
     "maybe_file": lambda x: None if x == "" else _option_formatters["file"](x),
+    "maybe_list_tuple_int": lambda x: None if x == "" else [tuple(_option_formatters["list_int"](y)) for y in
+                                                            convert_tuple_to_list(x)],
 }
 
 
