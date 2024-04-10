@@ -1,4 +1,4 @@
-import time
+import os
 import tqdm
 import torch
 import scipy
@@ -523,6 +523,9 @@ def get_pixel_coefs_yxz(
             found.
         - (`[n_pixels x n_genes]`): `pixel_coefs_t` contains the gene coefficients for each pixel.
     """
+    # Turn off memory fragmentation on GPU. This stops pytorch from crashing because of large memory allocations.
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
     pixel_yxz_t = np.zeros((0, 3), dtype=np.int16)
     pixel_coefs_t = scipy.sparse.csr_matrix(np.zeros((0, n_genes), dtype=np.float32))
 
