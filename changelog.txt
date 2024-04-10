@@ -16,6 +16,8 @@
     of registration
  * Support for removing a bad tile round channel from any analysis - this includes new nbp basic variable and config
     variable to remove a bad tile round channel
+ * integrated bad_trc into new indexing method so that it is easier to remove a bad tile round channel from
+    each part of the pipeline where we don't want bad trcs
 
 2024/03/26 Alpha Update (v0.10.0):
  * OMP scoring has been changed.
