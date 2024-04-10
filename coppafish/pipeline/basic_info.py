@@ -345,11 +345,14 @@ def set_basic_info_new(config: dict) -> NotebookPage:
         )
 
     # Stage 2: Read in page contents from config that cannot be computed from metadata.
-    # the metadata. First 13 keys in the basic info page are only variables that the user can influence
+    # the metadata. First few keys in the basic info page are only variables that the user can influence
     for key, value in list(config_basic.items())[:13]:
         nbp.__setattr__(key=key, value=value)
+    if nbp.bad_trc is None:
+        del nbp.bad_trc
+        nbp.bad_trc = list()
 
-    # Only 3 of these can NOT be left empty
+    # some of these can NOT be left empty
     if nbp.dye_names is None or nbp.tile_pixel_value_shift is None or nbp.use_anchor is None:
         logging.error(
             ValueError(
