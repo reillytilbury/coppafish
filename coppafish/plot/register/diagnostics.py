@@ -3,6 +3,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from coppafish.spot_colors import apply_transform
 from coppafish.utils.tiles_io import load_image
 from scipy.ndimage import affine_transform
+from coppafish.register import preprocessing
 from coppafish.find_spots import spot_yxz
 from coppafish.setup import Notebook
 from skimage.transform import warp
@@ -776,3 +777,73 @@ def view_bg_scale(nb: Notebook, t: int, r: int, c: int):
     plt.ylabel("base values")
     plt.title(f"Background scaling for t{t}, r{r}, c{c}")
     plt.show()
+
+
+def view_overlay(nb: Notebook, t: int = None, rc1: tuple = None, rc2: tuple = None, use_z: np.ndarray = None):
+    """
+    Visualize the overlay of two images, both in the anchor frame of reference.
+    Args:
+        nb: Notebook object (must have register and register_debug pages)
+        t: common tile
+        rc1: (round, channel) for the first image
+        rc2: (round, channel) for the second image
+        use_z: list of z planes to load
+    """
+    assert rc1 is not None and rc2 is not None, "Please provide two (round, channel) pairs."
+    if use_z is None:
+        use_z = [z - 1 for z in nb.basic_info.use_z]
+    new_origin = np.array([0, 0, use_z[0]])
+    im = []
+    # load the images
+    for rc in [rc1, rc2]:
+        r, c = rc
+        suffix = "_raw" if r == nb.basic_info.pre_seq_round else ""
+        im.append(load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=c,
+                             yxz=[None, None, use_z], suffix=suffix).astype(np.float32))
+    print('Images loaded.')
+
+    ny, nx, nz = im[0].shape
+    # apply the flow correction to both images
+    for i, rc in enumerate([rc1, rc2]):
+        r, c = rc
+        # there is no flow correction for the anchor round, so skip
+        if r == nb.basic_info.anchor_round:
+            continue
+        # load the flow
+        flow = np.load(os.path.join(nb.register.flow_dir, "smooth", f"t{t}_r{r}.npy"), mmap_mode='r')[..., use_z]
+        flow = flow.astype(np.float32)
+        coords = np.meshgrid(range(ny), range(nx), range(nz), indexing='ij')
+        # I think this should be a minus sign, as we are going from current round to anchor
+        im[i] = warp(im[i], coords - flow, order=1)
+    del coords, flow
+    print('Images flow corrected.')
+
+    # apply the affine correction (inverse) to both images
+    for i, rc in enumerate([rc1, rc2]):
+        r, c = rc
+        # there is no affine transform for the anchor round
+        if r == nb.basic_info.anchor_round:
+            continue
+        affine = nb.register.icp_correction[t, r, c]
+        # there is no affine transform computed on the spots for the dapi channel (as there are no spots) but there is
+        # an affine transform computed to correct the flow. Apply that if we are on the dapi images
+        if c == nb.basic_info.dapi_channel:
+            affine = nb.register_debug.round_correction[t, r]
+        affine = preprocessing.adjust_affine(affine, new_origin)
+        im[i] = affine_transform(im[i], affine, order=1, mode='constant', cval=0)
+    print('Images affine corrected.')
+
+    # create viewer
+    viewer = napari.Viewer()
+    colours = ["red", "green"]
+    for i, rc in enumerate([rc1, rc2]):
+        r, c = rc
+        viewer.add_image(im[i], name=f't{t}_r{r}_c{c}', colormap=colours[i], blending="additive")
+    viewer.dims.axis_labels = ['y', 'x', 'z']
+    viewer.dims.order = (2, 0, 1)
+    napari.run()
+
+
+nb_file = '/home/reilly/local_datasets/dante_bad_trc_test/notebook.npz'
+nb = Notebook(nb_file)
+view_overlay(nb, t=4, rc1=(0, 14), rc2=(3, 14), use_z=np.arange(25, 35))

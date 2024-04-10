@@ -358,6 +358,7 @@ def call_reference_spots(
     colour_norm_factor = np.ones((n_tiles, n_rounds, n_channels_use))
     gene_efficiency = np.ones((n_genes, n_rounds))
     pseudo_bleed_matrix = np.zeros((n_tiles, n_rounds, initial_bleed_matrix.shape[0], initial_bleed_matrix.shape[1]))
+    bad_trc = [tuple(trc) for trc in nbp_basic.bad_trc]
 
     # Part 1: Estimate norm_factor[t, r, c] for each tile t, round r and channel c + remove background
     for t in tqdm(nbp_basic.use_tiles, desc="Estimating norm_factors for each tile"):
@@ -378,13 +379,15 @@ def call_reference_spots(
         if np.all(np.logical_not(weak_bg)):
             continue
         tile_colours = tile_colours[weak_bg]
-        # normalise pixel colours by round and channel on this tile
-        colour_norm_factor[t] = np.percentile(abs(tile_colours), 95, axis=0)
+        # normalise pixel colours by round and channel on this tile (+ a small constant to avoid division by zero)
+        colour_norm_factor[t] = np.percentile(abs(tile_colours), 95, axis=0) + 1
         colours[spot_tile == t] /= colour_norm_factor[t]
     # Remove background
     bg_codes = np.zeros((n_spots, n_rounds, n_channels_use))
     bg = np.percentile(colours, 25, axis=1)
-    for r, c in product(range(n_rounds), range(n_channels_use)):
+    for t, r, c in product(nbp_basic.use_tiles, range(n_rounds), range(n_channels_use)):
+        if (t, r, c) in bad_trc:
+            continue
         bg_codes[:, r, c] = bg[:, c]
     colours -= bg_codes
 
@@ -394,9 +397,21 @@ def call_reference_spots(
     bled_codes = call_spots.get_bled_codes(
         gene_codes=gene_codes, bleed_matrix=bleed_matrix, gene_efficiency=gene_efficiency
     )
-    gene_prob = call_spots.gene_prob_score(spot_colours=colours, bled_codes=bled_codes)
-    gene_no = np.argmax(gene_prob, axis=1)
-    gene_prob_score = np.max(gene_prob, axis=1)
+    # loop through tiles and append gene probs. This is done so probs can be calculated with respect to all
+    # possible rounds within a tile.
+    gene_prob = np.zeros((n_spots, n_genes))
+    gene_no = np.zeros(n_spots, dtype=int)
+    gene_prob_score = np.zeros(n_spots)
+    bad_tr = [(t, r) for t, r, c in bad_trc]
+    for t in tqdm(nbp_basic.use_tiles, desc="Estimating gene probabilities"):
+        tile_t_spots = spot_tile == t
+        bad_r = [r for r in range(n_rounds) if (t, r) in bad_tr]
+        good_r = [r for r in range(n_rounds) if r not in bad_r]
+        tile_colours = colours[tile_t_spots][:, good_r, :]
+        bled_codes_tile = bled_codes[:, good_r, :]
+        gene_prob[tile_t_spots] = call_spots.gene_prob_score(spot_colours=tile_colours, bled_codes=bled_codes_tile)
+        gene_no[tile_t_spots] = np.argmax(gene_prob[tile_t_spots], axis=1)
+        gene_prob_score[tile_t_spots] = np.max(gene_prob[tile_t_spots], axis=1)
 
     # Part 3: Update our colour norm factor and bleed matrix. To do this, we will sample dyes from each tile and round
     # - generating a new un-normalised bleed matrix for each tile and round. We will then use least squares to find the
@@ -407,13 +422,15 @@ def call_reference_spots(
     bg_percentile = 50
     bg_strength = np.linalg.norm(bg_codes, axis=(1, 2))
     # first, estimate bleed matrix
+    bad_t = [t for t, r, c in nbp_basic.bad_trc]
+    good_t = [t for t in nbp_basic.use_tiles if t not in bad_t]
     for d in tqdm(range(n_dyes), desc="Estimating bleed matrix"):
-        colours_d = np.zeros((0, n_channels_use))
         for r in range(n_rounds):
             my_genes = [g for g in range(n_genes) if gene_codes[g, r] == d]
-            keep = (
-                (gene_prob_score > gene_prob_bleed_thresh) * (bg_strength < np.percentile(bg_strength, bg_percentile))
-            ) * np.isin(gene_no, my_genes)
+            keep = ((gene_prob_score > gene_prob_bleed_thresh)
+                    * (bg_strength < np.percentile(bg_strength, bg_percentile))
+                    * np.isin(spot_tile, good_t)
+                    * np.isin(gene_no, my_genes))
             colours_d = colours[keep, r, :]
             is_positive = np.sum(colours_d, axis=1) > 0
             colours_d = colours_d[is_positive]
@@ -429,11 +446,14 @@ def call_reference_spots(
     for t, r in product(nbp_basic.use_tiles, range(n_rounds)):
         for d in range(n_dyes):
             my_genes = [g for g in range(n_genes) if gene_codes[g, r] == d]
-            keep = (
-                (spot_tile == t)
-                * (gene_prob_score > gene_prob_bleed_thresh)
-                * (bg_strength < np.percentile(bg_strength, bg_percentile))
-            ) * np.isin(gene_no, my_genes)
+            # Skip if no spots or if this tile and round are bad
+            if [t, r] in bad_tr:
+                pseudo_bleed_matrix[t, r, :, d] = bleed_matrix[:, d]
+                continue
+            keep = ((spot_tile == t)
+                    * (gene_prob_score > gene_prob_bleed_thresh)
+                    * (bg_strength < np.percentile(bg_strength, bg_percentile))
+                    * np.isin(gene_no, my_genes))
             colours_trd = colours[keep, r, :]
             logging.info(
                 "Tile " + str(t) + " Round " + str(r) + " Dye" + str(d) + " has " + str(len(colours_trd)) + " spots."
@@ -460,7 +480,7 @@ def call_reference_spots(
     gene_prob_ge_thresh = max(np.percentile(gene_prob_score, 75), 0.75)
     use_ge = np.zeros(n_spots, dtype=bool)
     for g in tqdm(range(n_genes), desc="Estimating gene efficiencies"):
-        keep = (gene_no == g) * (gene_prob_score > gene_prob_ge_thresh)
+        keep = (gene_no == g) * (gene_prob_score > gene_prob_ge_thresh) * np.isin(spot_tile, good_t)
         gene_g_colours = colours[keep]
         # Skip gene if not enough spots.
         if len(gene_g_colours) < ge_min_spots:

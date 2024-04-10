@@ -18,6 +18,8 @@
     variable to remove a bad tile round channel
  * integrated bad_trc into new indexing method so that it is easier to remove a bad tile round channel from
     each part of the pipeline where we don't want bad trcs
+ * Bad trc are now dealt with in call spots. For a given tile, if round r is bad, gene probs are computed from the
+    remaining rounds. Gene efficiencies are computed only from spots living on tiles with no bad rounds.
 
 2024/03/26 Alpha Update (v0.10.0):
  * OMP scoring has been changed.
