@@ -3,6 +3,7 @@
  * Filter image scaling is reduced to further avoid clipping.
  * New OMP gene counts figure in _omp.pdf.
  * Pillow buffer overflow vulnerability fixed.
+ * HTTP request sometimes failing to GitHub bug catched.
  * New spot position histograms in _call_spots.pdf and _omp.pdf.
  * New image viewing diagnostics for the users, explained in the documentation.
  * Simplified advanced usage for moving output and tile directories.
