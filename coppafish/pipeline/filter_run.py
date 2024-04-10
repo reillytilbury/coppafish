@@ -271,7 +271,6 @@ def run_filter(
                 t,
                 r,
                 c,
-                suffix="_raw",
                 num_rotations=config["num_rotations"],
                 percent_clip_warn=config["percent_clip_warn"],
                 percent_clip_error=config["percent_clip_error"],

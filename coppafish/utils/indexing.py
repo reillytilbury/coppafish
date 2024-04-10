@@ -103,7 +103,7 @@ def create(
     # Remove any duplicate indices
     output = sorted(list(set(output)))
     if not include_bad_trc:
-        bad_trc = nbp_basic.bad_trc
+        bad_trc = [tuple(trc) for trc in nbp_basic.bad_trc]
         output = [index for index in output if index not in bad_trc]
     return output
 
