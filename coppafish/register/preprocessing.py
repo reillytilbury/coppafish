@@ -442,7 +442,7 @@ def generate_reg_images(nb: Notebook):
         file_name = os.path.join(reg_images_dir, f't{t}', sub_dir, 'anchor.npy')
         save_reg_image(im=im, file_path=file_name)
 
-    # get the round images, apply optical flow, apply icp, concatenate and save
+    # get the round images, apply optical flow, apply icp + optical flow, concatenate and save
     for t, r in tqdm(product(use_tiles, use_rounds), desc='Round Images', total=len(use_tiles) * len(use_rounds)):
         im = tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t, r, dapi_channel,
                                  yxz=[np.arange(tile_centre[0] - yx_radius, tile_centre[0] + yx_radius),
@@ -455,7 +455,8 @@ def generate_reg_images(nb: Notebook):
 
         # apply icp
         icp_correction = adjust_affine(affine=nb.register.icp_correction[t, r, anchor_channel], new_origin=new_origin)
-        im_flow_icp = affine_transform(im_flow, icp_correction, order=1, mode='constant', cval=0)
+        im_icp = affine_transform(im, icp_correction, order=1, mode='constant', cval=0)
+        im_flow_icp = warp(im_icp.astype(np.float32), coords + flow, order=1, mode='constant', cval=0)
         im_concat = np.concatenate([im[None], im_flow[None], im_flow_icp[None]], axis=0)
         file_name = os.path.join(reg_images_dir, f't{t}', 'round', f'r{r}.npy')
         save_reg_image(im=im_concat, file_path=file_name)
@@ -466,19 +467,20 @@ def generate_reg_images(nb: Notebook):
         im = tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t, r_mid, c,
                                  yxz=[np.arange(tile_centre[0] - yx_radius, tile_centre[0] + yx_radius),
                                       np.arange(tile_centre[1] - yx_radius, tile_centre[1] + yx_radius), z_planes])
+        # apply channel correction
+        channel_transform = adjust_affine(affine=nb.register_debug.channel_transform_initial[c],
+                                          new_origin=new_origin)
+        im_channel_corrected = affine_transform(im, channel_transform, order=1, mode='constant', cval=0)
         flow = np.load(os.path.join(nb.register.flow_dir, 'smooth', f't{t}_r{r_mid}.npy'), mmap_mode='r')
         flow = flow[flow_indices]
         # invert the flow as we are going from round r to anchor round
         flow = -(flow.astype(np.float32))
-        im_flow = warp(im.astype(np.float32), coords + flow, order=1, mode='constant', cval=0, preserve_range=True)
-        # apply channel correction
-        channel_transform = adjust_affine(affine=nb.register_debug.channel_transform_initial[c],
-                                          new_origin=new_origin)
-        im_flow_adjusted = affine_transform(im_flow, channel_transform, order=1, mode='constant', cval=0)
-
+        im_flow_adjusted = warp(im_channel_corrected.astype(np.float32), coords + flow, order=1, mode='constant',
+                                cval=0, preserve_range=True)
         # apply icp
         icp_correction = adjust_affine(affine=nb.register.icp_correction[t, r_mid, c], new_origin=new_origin)
-        im_flow_icp = affine_transform(im_flow, icp_correction, order=1, mode='constant', cval=0)
+        im_icp = affine_transform(im.astype(np.float32), icp_correction, order=1, mode='constant', cval=0)
+        im_flow_icp = warp(im_icp.astype(np.float32), coords + flow, order=1, mode='constant', cval=0)
         im_concat = np.concatenate([im[None], im_flow_adjusted[None], im_flow_icp[None]], axis=0)
         file_name = os.path.join(reg_images_dir, f't{t}', 'channel', f'c{c}.npy')
         save_reg_image(im=im_concat, file_path=file_name)
