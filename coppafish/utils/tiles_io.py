@@ -1,9 +1,8 @@
 import os
 import zarr
+import enum
 import numbers
-import itertools
 import numpy as np
-from enum import Enum, auto
 from numcodecs import blosc, Blosc
 
 try:
@@ -22,9 +21,9 @@ from .. import utils, extract, logging
 IMAGE_SAVE_DTYPE = np.uint16
 
 
-class OptimisedFor(Enum):
-    FULL_READ_AND_WRITE = auto()
-    Z_PLANE_READ = auto()
+class OptimisedFor(enum.Enum):
+    FULL_READ_AND_WRITE = enum.auto()
+    Z_PLANE_READ = enum.auto()
 
 
 def get_pixel_max() -> int:
