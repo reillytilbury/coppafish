@@ -10,6 +10,7 @@ from skimage.transform import warp
 from scipy.spatial import KDTree
 from superqt import QRangeSlider
 from qtpy.QtCore import Qt
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 import numpy as np
 import skimage
@@ -779,65 +780,60 @@ def view_bg_scale(nb: Notebook, t: int, r: int, c: int):
     plt.show()
 
 
-def view_overlay(nb: Notebook, t: int = None, rc1: tuple = None, rc2: tuple = None, use_z: np.ndarray = None):
+def view_overlay(nb: Notebook, t: int = None, rc: list = None, use_z: np.ndarray = None):
     """
     Visualize the overlay of two images, both in the anchor frame of reference.
     Args:
         nb: Notebook object (must have register and register_debug pages)
         t: common tile
-        rc1: (round, channel) for the first image
-        rc2: (round, channel) for the second image
+        rc: list of length n_images where rc[i] = (r, c) for the i-th image
         use_z: list of z planes to load
     """
-    assert rc1 is not None and rc2 is not None, "Please provide two (round, channel) pairs."
+    assert len(rc) > 0, "At least one round and channel should be provided."
     if use_z is None:
         use_z = [z - 1 for z in nb.basic_info.use_z]
     new_origin = np.array([0, 0, use_z[0]])
     im = []
-    # load the images
-    for rc in [rc1, rc2]:
-        r, c = rc
-        suffix = "_raw" if r == nb.basic_info.pre_seq_round else ""
-        im.append(load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=c,
-                             yxz=[None, None, use_z], suffix=suffix).astype(np.float32))
-    print('Images loaded.')
 
-    # apply the affine correction (inverse) to both images
-    for i, rc in enumerate([rc1, rc2]):
-        r, c = rc
-        # there is no affine transform for the anchor round
+    # load, affine correct, and flow correct the images
+    for i, rc_pair in tqdm(enumerate(rc), total=len(rc), desc="Loading images"):
+        # LOAD IMAGE
+        r, c = rc_pair
+        suffix = "_raw" if r == nb.basic_info.pre_seq_round else ""
+        im_current_rc = load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=c,
+                                   yxz=[None, None, use_z], suffix=suffix).astype(np.float32)
+
+        # AFFINE CORRECTION
         if r == nb.basic_info.anchor_round:
+            im.append(im_current_rc)
             continue
-        # there is no affine transform computed on the spots for the dapi channel (as there are no spots) but there is
-        # an affine transform computed to correct the flow. Apply that if we are on the dapi images
         if c == nb.basic_info.dapi_channel:
-            affine = nb.register_debug.round_correction[t, r]
+            affine = nb.register.icp_correction[t, r, nb.basic_info.anchor_channel]
         else:
             affine = nb.register.icp_correction[t, r, c]
         affine = preprocessing.adjust_affine(affine, new_origin)
-        im[i] = affine_transform(im[i], affine, order=1, mode='constant', cval=0)
-    print('Images affine corrected.')
+        im_current_rc = affine_transform(im_current_rc, affine, order=1, mode='constant', cval=0)
 
-    ny, nx, nz = im[0].shape
-    # apply the flow correction to both images
-    for i, rc in enumerate([rc1, rc2]):
-        r, c = rc
+        # FLOW CORRECTION
+        ny, nx, nz = im_current_rc.shape
+        coords = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing='ij'))
         # there is no flow correction for the anchor round, so skip
         if r == nb.basic_info.anchor_round:
+            im.append(im_current_rc)
             continue
         # load the flow, invert and apply
         flow = np.load(os.path.join(nb.register.flow_dir, "smooth", f"t{t}_r{r}.npy"), mmap_mode='r')[..., use_z]
-        flow = -flow.astype(np.float32)
-        coords = np.meshgrid(range(ny), range(nx), range(nz), indexing='ij')
-        im[i] = warp(im[i], coords + flow, order=1)
-    del coords, flow
-    print('Images flow corrected.')
+        flow = -(flow.astype(np.float32))
+        im_current_rc = warp(im_current_rc, coords + flow, order=1)
+        im.append(im_current_rc)
+    # remove variables
+    del coords, flow, im_current_rc
 
     # create viewer
     viewer = napari.Viewer()
-    colours = ["red", "green"]
-    for i, rc in enumerate([rc1, rc2]):
-        r, c = rc
+    colours = ["red", "green", "blue", "yellow"]
+    for i, rc_pair in enumerate(rc):
+        r, c = rc_pair
         viewer.add_image(im[i], name=f't{t}_r{r}_c{c}', colormap=colours[i], blending="additive")
     viewer.dims.axis_labels = ['y', 'x', 'z']
     viewer.dims.order = (2, 0, 1)
@@ -846,4 +842,4 @@ def view_overlay(nb: Notebook, t: int = None, rc1: tuple = None, rc2: tuple = No
 
 nb_file = '/home/reilly/local_datasets/dante_bad_trc_test/notebook.npz'
 nb = Notebook(nb_file)
-view_overlay(nb, t=4, rc1=(7, 27), rc2=(3, 18), use_z=np.arange(20, 30))
+view_overlay(nb, t=4, rc=[(7, 27), (3, 18)], use_z=np.arange(10, 20))
