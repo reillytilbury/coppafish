@@ -8,16 +8,17 @@
  * New image viewing diagnostics for the users, explained in the documentation.
  * Simplified advanced usage for moving output and tile directories.
  * _ref_call_spots.pdf now called _call_spots.pdf.
- * New ICP Viewer for point clouds
- * New optical flow viewer
+ * New ICP Viewer for point clouds.
+ * New optical flow viewer.
+ * OMP checkpoint bug fixed.
  * improvements in reading old reg results
  * streamlined generation of reg images, meaning transforms no longer need to be applied when viewer is shown
  * Whole registration viewer has been refactored and improved making it easier to compare between different methods
-    of registration
+    of registration.
  * Support for removing a bad tile round channel from any analysis - this includes new nbp basic variable and config
-    variable to remove a bad tile round channel
+    variable to remove a bad tile round channel.
  * integrated bad_trc into new indexing method so that it is easier to remove a bad tile round channel from
-    each part of the pipeline where we don't want bad trcs
+    each part of the pipeline where we don't want bad trcs.
  * Bad trc are now dealt with in call spots. For a given tile, if round r is bad, gene probs are computed from the
     remaining rounds. Gene efficiencies are computed only from spots living on tiles with no bad rounds.
 
