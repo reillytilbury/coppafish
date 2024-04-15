@@ -135,105 +135,104 @@ def register(
 
     # Part 3: ICP
     logging.info("Running Iterative Closest Point (ICP)")
-    if "icp" not in registration_data.keys():
-        # Initialise variables for ICP step
-        ny, nx, nz = nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)
-        use_rounds = nbp_basic.use_rounds
-        n_rounds += nbp_basic.use_preseq + nbp_basic.use_anchor
-        c_ref = nbp_basic.anchor_channel
-        icp_correction = np.zeros((n_tiles, n_rounds, n_channels, 4, 3))
-        round_correction = np.zeros((n_tiles, n_rounds, 4, 3))
-        channel_correction = np.zeros((n_tiles, n_channels, 4, 3))
-        # Initialise variables for ICP step
-        # 1. round icp stats
-        n_matches_round = np.zeros((n_tiles, n_rounds, config["icp_max_iter"]))
-        mse_round = np.zeros((n_tiles, n_rounds, config["icp_max_iter"]))
-        converged_round = np.zeros((n_tiles, n_rounds), dtype=bool)
-        # 2. channel icp stats
-        n_matches_channel = np.zeros((n_tiles, n_channels, config["icp_max_iter"]))
-        mse_channel = np.zeros((n_tiles, n_channels, config["icp_max_iter"]))
-        converged_channel = np.zeros((n_tiles, n_channels), dtype=bool)
-        for t in tqdm(use_tiles, desc="ICP on all tiles", total=len(use_tiles)):
-            ref_spots_tr_ref = find_spots.spot_yxz(
-                nbp_find_spots.spot_yxz, t, nbp_basic.anchor_round, nbp_basic.anchor_channel, nbp_find_spots.spot_no
+    # Initialise variables for ICP step
+    ny, nx, nz = nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)
+    use_rounds = nbp_basic.use_rounds
+    n_rounds += nbp_basic.use_preseq + nbp_basic.use_anchor
+    c_ref = nbp_basic.anchor_channel
+    icp_correction = np.zeros((n_tiles, n_rounds, n_channels, 4, 3))
+    round_correction = np.zeros((n_tiles, n_rounds, 4, 3))
+    channel_correction = np.zeros((n_tiles, n_channels, 4, 3))
+    # Initialise variables for ICP step
+    # 1. round icp stats
+    n_matches_round = np.zeros((n_tiles, n_rounds, config["icp_max_iter"]))
+    mse_round = np.zeros((n_tiles, n_rounds, config["icp_max_iter"]))
+    converged_round = np.zeros((n_tiles, n_rounds), dtype=bool)
+    # 2. channel icp stats
+    n_matches_channel = np.zeros((n_tiles, n_channels, config["icp_max_iter"]))
+    mse_channel = np.zeros((n_tiles, n_channels, config["icp_max_iter"]))
+    converged_channel = np.zeros((n_tiles, n_channels), dtype=bool)
+    for t in tqdm(use_tiles, desc="ICP on all tiles", total=len(use_tiles)):
+        ref_spots_tr_ref = find_spots.spot_yxz(
+            nbp_find_spots.spot_yxz, t, nbp_basic.anchor_round, nbp_basic.anchor_channel, nbp_find_spots.spot_no
+        )
+        # compute an affine correction to the round transforms. This is done by finding the best affine map that
+        # takes the anchor round (post application of optical flow) to the other rounds.
+        for r in use_rounds:
+            # check if there are enough spots to run ICP
+            if nbp_find_spots.spot_no[t, r, c_ref] < config["icp_min_spots"]:
+                logging.info(f"Tile {t}, round {r}, channel {c_ref} has too few spots to run ICP.")
+                round_correction[t, r][:3, :3] = np.eye(3)
+                continue
+            # load in flow
+            flow_loc = os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy")
+            flow_tr = np.load(flow_loc, mmap_mode="r")
+            # load in spots
+            ref_spots_tr = find_spots.spot_yxz(nbp_find_spots.spot_yxz, t, r, c_ref, nbp_find_spots.spot_no)
+            # put ref_spots from round r frame into the anchor frame. This is done by applying the inverse of the
+            # flow to the ref_spots
+            ref_spots_tr = preprocessing.apply_flow(flow=-flow_tr, points=ref_spots_tr, round_to_int=False)
+            round_correction[t, r], n_matches_round[t, r], mse_round[t, r], converged_round[t, r] = (
+                register_base.icp(
+                    yxz_base=ref_spots_tr_ref,
+                    yxz_target=ref_spots_tr,
+                    dist_thresh_yx=neighb_dist_thresh_yx,
+                    dist_thresh_z=neighb_dist_thresh_z,
+                    start_transform=np.eye(4, 3),
+                    n_iters=config["icp_max_iter"],
+                    robust=False,
+                )
             )
-            # compute an affine correction to the round transforms. This is done by finding the best affine map that
-            # takes the anchor round (post application of optical flow) to the other rounds.
+            logging.info(f"Tile: {t}, Round: {r}, Converged: {converged_round[t, r]}")
+        # don't do icp for the pre-seq round as we will not have spots in the anchor channel
+        round_correction[t, -1] = np.eye(4, 3)
+        # compute an affine correction to the channel transforms. This is done by finding the best affine map that
+        # takes the anchor channel (post application of optical flow and round correction) to the other channels.
+        for c in use_channels:
+            im_spots_tc = np.zeros((0, 3))
             for r in use_rounds:
-                # check if there are enough spots to run ICP
-                if nbp_find_spots.spot_no[t, r, c_ref] < config["icp_min_spots"]:
-                    logging.info(f"Tile {t}, round {r}, channel {c_ref} has too few spots to run ICP.")
-                    round_correction[t, r][:3, :3] = np.eye(3)
-                    continue
-                # load in flow
+                im_spots_trc = find_spots.spot_yxz(nbp_find_spots.spot_yxz, t, r, c, nbp_find_spots.spot_no)
+                # pad the spots with 1s to make them n_points x 4
+                im_spots_trc = np.pad(im_spots_trc, ((0, 0), (0, 1)), constant_values=1)
+                # put the spots from round r frame into the anchor frame. this is done in 2 steps:
+                # 1. apply the inverse of the round correction to the spots
+                round_correction_matrix = np.linalg.inv(
+                    np.hstack((round_correction[t, r], np.array([0, 0, 0, 1])[:, None]))
+                )[:, :3]
+                im_spots_trc = np.round(im_spots_trc @ round_correction_matrix).astype(int)
+                # filter out spots that are out of bounds
+                oob = (
+                    (im_spots_trc[:, 0] < 0)
+                    | (im_spots_trc[:, 0] >= ny)
+                    | (im_spots_trc[:, 1] < 0)
+                    | (im_spots_trc[:, 1] >= nx)
+                    | (im_spots_trc[:, 2] < 0)
+                    | (im_spots_trc[:, 2] >= nz)
+                )
+                im_spots_trc = im_spots_trc[~oob]
+                # 2. apply the inverse of the flow to the spots
                 flow_loc = os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy")
                 flow_tr = np.load(flow_loc, mmap_mode="r")
-                # load in spots
-                ref_spots_tr = find_spots.spot_yxz(nbp_find_spots.spot_yxz, t, r, c_ref, nbp_find_spots.spot_no)
-                # put ref_spots from round r frame into the anchor frame. This is done by applying the inverse of the
-                # flow to the ref_spots
-                ref_spots_tr = preprocessing.apply_flow(flow=-flow_tr, points=ref_spots_tr, round_to_int=False)
-                round_correction[t, r], n_matches_round[t, r], mse_round[t, r], converged_round[t, r] = (
-                    register_base.icp(
-                        yxz_base=ref_spots_tr_ref,
-                        yxz_target=ref_spots_tr,
-                        dist_thresh_yx=neighb_dist_thresh_yx,
-                        dist_thresh_z=neighb_dist_thresh_z,
-                        start_transform=np.eye(4, 3),
-                        n_iters=config["icp_max_iter"],
-                        robust=False,
-                    )
+                im_spots_trc = preprocessing.apply_flow(flow=-flow_tr, points=im_spots_trc, round_to_int=False)
+                im_spots_tc = np.vstack((im_spots_tc, im_spots_trc))
+            # check if there are enough spots to run ICP
+            if im_spots_tc.shape[0] < config["icp_min_spots"]:
+                logging.info(f"Tile {t}, channel {c} has too few spots to run ICP.")
+                channel_correction[t, c][:3, :3] = np.eye(3)
+                continue
+            # run ICP
+            channel_correction[t, c], n_matches_channel[t, c], mse_channel[t, c], converged_channel[t, c] = (
+                register_base.icp(
+                    yxz_base=ref_spots_tr_ref,
+                    yxz_target=im_spots_tc,
+                    dist_thresh_yx=neighb_dist_thresh_yx,
+                    dist_thresh_z=neighb_dist_thresh_yx,
+                    start_transform=registration_data["channel_registration"]["transform"][c],
+                    n_iters=config["icp_max_iter"],
+                    robust=False,
                 )
-                logging.info(f"Tile: {t}, Round: {r}, Converged: {converged_round[t, r]}")
-            # don't do icp for the pre-seq round as we will not have spots in the anchor channel
-            round_correction[t, -1] = np.eye(4, 3)
-            # compute an affine correction to the channel transforms. This is done by finding the best affine map that
-            # takes the anchor channel (post application of optical flow and round correction) to the other channels.
-            for c in use_channels:
-                im_spots_tc = np.zeros((0, 3))
-                for r in use_rounds:
-                    im_spots_trc = find_spots.spot_yxz(nbp_find_spots.spot_yxz, t, r, c, nbp_find_spots.spot_no)
-                    # pad the spots with 1s to make them n_points x 4
-                    im_spots_trc = np.pad(im_spots_trc, ((0, 0), (0, 1)), constant_values=1)
-                    # put the spots from round r frame into the anchor frame. this is done in 2 steps:
-                    # 1. apply the inverse of the round correction to the spots
-                    round_correction_matrix = np.linalg.inv(
-                        np.hstack((round_correction[t, r], np.array([0, 0, 0, 1])[:, None]))
-                    )[:, :3]
-                    im_spots_trc = np.round(im_spots_trc @ round_correction_matrix).astype(int)
-                    # filter out spots that are out of bounds
-                    oob = (
-                        (im_spots_trc[:, 0] < 0)
-                        | (im_spots_trc[:, 0] >= ny)
-                        | (im_spots_trc[:, 1] < 0)
-                        | (im_spots_trc[:, 1] >= nx)
-                        | (im_spots_trc[:, 2] < 0)
-                        | (im_spots_trc[:, 2] >= nz)
-                    )
-                    im_spots_trc = im_spots_trc[~oob]
-                    # 2. apply the inverse of the flow to the spots
-                    flow_loc = os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy")
-                    flow_tr = np.load(flow_loc, mmap_mode="r")
-                    im_spots_trc = preprocessing.apply_flow(flow=-flow_tr, points=im_spots_trc, round_to_int=False)
-                    im_spots_tc = np.vstack((im_spots_tc, im_spots_trc))
-                # check if there are enough spots to run ICP
-                if im_spots_tc.shape[0] < config["icp_min_spots"]:
-                    logging.info(f"Tile {t}, channel {c} has too few spots to run ICP.")
-                    channel_correction[t, c][:3, :3] = np.eye(3)
-                    continue
-                # run ICP
-                channel_correction[t, c], n_matches_channel[t, c], mse_channel[t, c], converged_channel[t, c] = (
-                    register_base.icp(
-                        yxz_base=ref_spots_tr_ref,
-                        yxz_target=im_spots_tc,
-                        dist_thresh_yx=neighb_dist_thresh_yx,
-                        dist_thresh_z=neighb_dist_thresh_z,
-                        start_transform=registration_data["channel_registration"]["transform"][c],
-                        n_iters=config["icp_max_iter"],
-                        robust=False,
-                    )
-                )
-                logging.info(f"Tile: {t}, Channel: {c}, Converged: {converged_channel[t, c]}")
+            )
+            logging.info(f"Tile: {t}, Channel: {c}, Converged: {converged_channel[t, c]}")
         # combine these corrections into the icp_correction
         use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
         for t, r, c in itertools.product(use_tiles, use_rounds, use_channels):
@@ -252,9 +251,6 @@ def register(
             "mse_channel": mse_channel,
             "converged_channel": converged_channel,
         }
-        # Save registration data externally
-        with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
-            pickle.dump(registration_data, f)
 
     # Now add the registration data to the notebook pages (nbp and nbp_debug)
     nbp.flow_dir = os.path.join(nbp_file.output_dir, "flow")
