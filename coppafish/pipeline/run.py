@@ -1,6 +1,5 @@
 import os
 import sys
-import tqdm
 import numpy as np
 from scipy import sparse
 

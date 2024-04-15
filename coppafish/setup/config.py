@@ -31,6 +31,7 @@ except ModuleNotFoundError:
 
 from .. import logging
 
+
 def convert_tuple_to_list(x: str) -> list:
     """
     Convert a string representation of a list of tuples to a list of lists.
@@ -45,9 +46,9 @@ def convert_tuple_to_list(x: str) -> list:
     while x:
         left_idx = x.find("(")
         right_idx = x.find(")")
-        string = x[left_idx + 1:right_idx]
+        string = x[left_idx + 1 : right_idx]
         y.append(string)
-        x = x[right_idx + 1:]
+        x = x[right_idx + 1 :]
     return y
 
 
@@ -265,8 +266,8 @@ _option_type_checkers = {
     "maybe_str": lambda x: x.strip() == "" or _option_type_checkers["str"](x),
     "maybe_list_str": lambda x: x.strip() == "" or _option_type_checkers["list_str"](x),
     "maybe_file": lambda x: x.strip() == "" or _option_type_checkers["file"](x),
-    "maybe_list_tuple_int": lambda x: x.strip() == "" or all([_option_type_checkers["list_int"](y) for y in
-                                                              convert_tuple_to_list(x)]),
+    "maybe_list_tuple_int": lambda x: x.strip() == ""
+    or all([_option_type_checkers["list_int"](y) for y in convert_tuple_to_list(x)]),
 }
 _option_formatters = {
     "int": lambda x: int(x),
@@ -286,8 +287,9 @@ _option_formatters = {
     "maybe_str": lambda x: None if x == "" else _option_formatters["str"](x),
     "maybe_list_str": lambda x: None if x == "" else _option_formatters["list_str"](x),
     "maybe_file": lambda x: None if x == "" else _option_formatters["file"](x),
-    "maybe_list_tuple_int": lambda x: None if x == "" else [tuple(_option_formatters["list_int"](y)) for y in
-                                                            convert_tuple_to_list(x)],
+    "maybe_list_tuple_int": lambda x: (
+        None if x == "" else [tuple(_option_formatters["list_int"](y)) for y in convert_tuple_to_list(x)]
+    ),
 }
 
 

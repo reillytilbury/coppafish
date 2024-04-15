@@ -113,6 +113,7 @@ def set_file_names(nb, nbp):
     config["omp_spot_shape"] = config["omp_spot_shape"].replace(".npy", "")
     omp_spot_shape_file = os.path.join(config["output_dir"], config["omp_spot_shape"] + ".npy")
     nbp.omp_spot_shape = omp_spot_shape_file
+    nbp.omp_spot_shape_float = os.path.join(config["output_dir"], "omp_spot_shape_float.npy")
 
     # Add files to save omp results after each tile as security if hit any bugs
     config["omp_spot_info"] = config["omp_spot_info"].replace(".npy", "")

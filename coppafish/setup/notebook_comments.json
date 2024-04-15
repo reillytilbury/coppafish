@@ -282,6 +282,11 @@
             "*npy* file indicating average spot shape in *OMP* coefficient sign images.",
             "Saved image is *int8 npy* with only values being -1, 0, 1."
         ],
+        "omp_spot_shape_float": [
+            "eq",
+            "File",
+            "*npy* file storing nb.omp.spot_shape_float"
+        ],
         "omp_spot_info": [
             "eq",
             "File",
