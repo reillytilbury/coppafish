@@ -5,7 +5,7 @@ try:
 except ModuleNotFoundError:
     import importlib.resources as importlib_resources
 
-from .. import logging
+from .. import log
 from .tile_details import get_tile_file_names
 
 
@@ -61,7 +61,7 @@ def set_file_names(nb, nbp):
     else:
         if config["round"] is None:
             if config["anchor"] is None:
-                logging.error(ValueError(f"Neither imaging rounds nor anchor_round provided"))
+                log.error(ValueError(f"Neither imaging rounds nor anchor_round provided"))
             config["round"] = []  # Sometimes the case where just want to run the anchor round.
         config["round"] = [r.replace(config["raw_extension"], "") for r in config["round"]]
 
@@ -161,7 +161,7 @@ def set_file_names(nb, nbp):
                 jobs=True,
             )
         else:
-            logging.error(ValueError("JOBs file format is only compatible with 3D"))
+            log.error(ValueError("JOBs file format is only compatible with 3D"))
     else:
         if nb.basic_info.is_3d:
             tile_names, tile_names_unfiltered = get_tile_file_names(

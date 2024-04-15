@@ -6,7 +6,7 @@ from tqdm import tqdm
 from typing import List, Optional, Tuple, Union
 
 from .errors import OutOfBoundsError
-from .. import logging
+from .. import log
 from ..utils import nd2
 from ..setup import NotebookPage
 
@@ -31,7 +31,7 @@ def get_tile_indices(folder: str) -> List:
     file_names.sort()  # put in ascending order
     tiles = [int(s) for file_name in file_names for s in re.split(regex_pattern, file_name) if s.isdigit()]
     if len(tiles) != len(file_names):
-        logging.warn(
+        log.warn(
             f"Number of files in {folder} is {len(file_names)} but found {len(tiles)} numbers.\n"
             f"So some files have no numbers / multiple numbers in their name."
         )
@@ -56,34 +56,34 @@ def metadata_sanity_check(metadata: dict, round_folder_path: str) -> List:
     """
     tiles = get_tile_indices(round_folder_path)
     if max(tiles) >= metadata["sizes"]["t"]:
-        logging.error(OutOfBoundsError("tiles", max(tiles), 0, metadata["sizes"]["t"] - 1))
+        log.error(OutOfBoundsError("tiles", max(tiles), 0, metadata["sizes"]["t"] - 1))
     file_names = os.listdir(round_folder_path)
     raw_data_0_path = os.path.join(round_folder_path, file_names[0])
     raw_data_0 = np.load(raw_data_0_path, mmap_mode="r")  # mmap as don't need actual data
     _, n_channels, n_y, n_x, n_z = raw_data_0.shape
     if n_channels != metadata["sizes"]["c"]:
-        logging.error(
+        log.error(
             ValueError(
                 f"Number of channels in the metadata is {metadata['sizes']['c']} "
                 f"but the file\n{raw_data_0_path}\ncontains {n_channels} channels."
             )
         )
     if n_y != metadata["sizes"]["y"]:
-        logging.error(
+        log.error(
             ValueError(
                 f"y_dimension in the metadata is {metadata['sizes']['y']} "
                 f"but the file\n{raw_data_0_path}\nhas y_dimension = {n_y}."
             )
         )
     if n_x != metadata["sizes"]["x"]:
-        logging.error(
+        log.error(
             ValueError(
                 f"x_dimension in the metadata is {metadata['sizes']['x']} "
                 f"but the file\n{raw_data_0_path}\nhas x_dimension = {n_x}."
             )
         )
     if n_z != metadata["sizes"]["z"]:
-        logging.error(
+        log.error(
             ValueError(
                 f"z_dimension in the metadata is {metadata['sizes']['z']} "
                 f"but the file\n{raw_data_0_path}\nhas z_dimension = {n_z}."
@@ -124,7 +124,7 @@ def load_dask(nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int) -> Tuple[
     n_lasers, n_cams = max(1, len(np.unique(channel_laser))), max(1, len(np.unique(channel_cam)))
 
     if not np.isin(nbp_file.raw_extension, [".nd2", ".npy", "jobs"]):
-        logging.error(
+        log.error(
             ValueError(f"nbp_file.raw_extension must be '.nd2', '.npy' or 'jobs' but it is {nbp_file.raw_extension}.")
         )
 
@@ -241,7 +241,7 @@ def load_image(
         numpy array [n_y x n_x x len(use_z)].
     """
     if not np.isin(nbp_file.raw_extension, [".nd2", ".npy", "jobs"]):
-        logging.error(
+        log.error(
             ValueError(f"nbp_file.raw_extension must be '.nd2', '.npy' or 'jobs' but it is {nbp_file.raw_extension}.")
         )
 

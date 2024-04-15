@@ -12,7 +12,7 @@ from typing import Union, Optional, Tuple, List
 from ..omp import scores as omp_scores
 from ..setup import Notebook, NotebookPage
 from ..utils import tiles_io
-from .. import logging
+from .. import log
 
 
 # Plot settings
@@ -45,7 +45,7 @@ class BuildPDF:
             output_dir (str, optional): directory to save pdfs. Default: `nb.basic_info.file_names/diagnostics.pdf`.
             auto_open (bool, optional): open the PDF in a web browser after creation. Default: true.
         """
-        logging.debug("Creating diagnostic PDF started")
+        log.debug("Creating diagnostic PDF started")
         pbar = tqdm(desc="Creating Diagnostic PDFs", total=9, unit="section")
         pbar.set_postfix_str("Loading notebook")
         if isinstance(nb, str):
@@ -372,7 +372,7 @@ class BuildPDF:
         pbar.update()
         pbar.close()
 
-        logging.debug("Creating diagnostic PDF complete")
+        log.debug("Creating diagnostic PDF complete")
         if auto_open:
             webbrowser.open_new_tab(rf"{output_dir}")
 
@@ -580,7 +580,7 @@ class BuildPDF:
                                 continue
                             hist_x[k] = np.log2(count)
                     if np.sum(hist_x) <= 0:
-                        logging.warn(f"The {section_name.lower()} image for {t=}, {r=}, {c=} looks to be all zeroes!")
+                        log.warn(f"The {section_name.lower()} image for {t=}, {r=}, {c=} looks to be all zeroes!")
                         continue
                     ax.bar(x=hist_loc, height=hist_x, color="red", width=bin_size)
                     ax.set_xlim(pixel_min, pixel_max)

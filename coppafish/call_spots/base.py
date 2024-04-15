@@ -2,7 +2,7 @@ from scipy.spatial import KDTree
 import numpy as np
 from typing import List, Tuple
 
-from .. import utils, logging
+from .. import utils, log
 
 
 def get_non_duplicate(
@@ -40,7 +40,7 @@ def get_non_duplicate(
     tree_tiles = KDTree(tile_centres[:, :2])
     if np.isnan(tile_origin[np.unique(spot_tile)]).any():
         nan_tiles = np.unique(spot_tile)[np.unique(np.where(np.isnan(tile_origin[np.unique(spot_tile)]))[0])]
-        logging.error(
+        log.error(
             ValueError(
                 f"tile_origin for tiles\n{nan_tiles}\ncontains nan values but some spot_tile "
                 f"also contains these tiles. Maybe remove these from use_tiles to continue.\n"
@@ -77,10 +77,10 @@ def get_bled_codes(gene_codes: np.ndarray, bleed_matrix: np.ndarray, gene_effici
     n_genes, n_rounds = gene_codes.shape[0], gene_codes.shape[1]
     n_channels, n_dyes = bleed_matrix.shape
     if not utils.errors.check_shape(gene_codes, [n_genes, n_rounds]):
-        logging.error(utils.errors.ShapeError("gene_codes", gene_codes.shape, (n_genes, n_rounds)))
+        log.error(utils.errors.ShapeError("gene_codes", gene_codes.shape, (n_genes, n_rounds)))
     if gene_codes.max() >= n_dyes:
         ind_1, ind_2 = np.where(gene_codes == gene_codes.max())
-        logging.error(
+        log.error(
             ValueError(
                 f"gene_code for gene {ind_1[0]}, round {ind_2[0]} has a dye with index {gene_codes.max()}"
                 f" but there are only {n_dyes} dyes."
@@ -88,7 +88,7 @@ def get_bled_codes(gene_codes: np.ndarray, bleed_matrix: np.ndarray, gene_effici
         )
     if gene_codes.min() < 0:
         ind_1, ind_2 = np.where(gene_codes == gene_codes.min())
-        logging.error(ValueError(
+        log.error(ValueError(
             f"gene_code for gene {ind_1[0]}, round {ind_2[0]} has a dye with a negative index:" f" {gene_codes.min()}"
         ))
 

@@ -4,7 +4,7 @@ import numpy.typing as npt
 from typing import Union, Optional, Dict, List, Tuple
 
 from ..setup.notebook import NotebookPage
-from .. import logging
+from .. import log
 
 
 class OutOfBoundsError(Exception):
@@ -148,29 +148,29 @@ def check_color_nan(colors: np.ndarray, nbp_basic: NotebookPage) -> None:
         use_rounds = np.arange(n_rounds)
         use_channels = np.arange(n_channels)
     else:
-        logging.error(ColorInvalidError(colors, nbp_basic, invalid_value))
+        log.error(ColorInvalidError(colors, nbp_basic, invalid_value))
 
     ignore_rounds = np.setdiff1d(np.arange(n_rounds), use_rounds)
     for r in ignore_rounds:
         unique_vals = np.unique(colors[:, r, :])
         for val in unique_vals:
             if np.isnan(invalid_value) and not np.isnan(val):
-                logging.error(ColorInvalidError(colors, nbp_basic, invalid_value, round_no=r))
+                log.error(ColorInvalidError(colors, nbp_basic, invalid_value, round_no=r))
             if not np.isnan(invalid_value) and not invalid_value in unique_vals:
-                logging.error(ColorInvalidError(colors, nbp_basic, invalid_value, round_no=r))
+                log.error(ColorInvalidError(colors, nbp_basic, invalid_value, round_no=r))
             if not np.isnan(invalid_value) and not np.array_equal(val, invalid_value, equal_nan=True):
-                logging.error(ColorInvalidError(colors, nbp_basic, invalid_value, round_no=r))
+                log.error(ColorInvalidError(colors, nbp_basic, invalid_value, round_no=r))
 
     ignore_channels = np.setdiff1d(np.arange(n_channels), use_channels)
     for c in ignore_channels:
         unique_vals = np.unique(colors[:, :, c])
         for val in unique_vals:
             if np.isnan(invalid_value) and not np.isnan(val):
-                logging.error(ColorInvalidError(colors, nbp_basic, invalid_value, channel_no=c))
+                log.error(ColorInvalidError(colors, nbp_basic, invalid_value, channel_no=c))
             if not np.isnan(invalid_value) and not invalid_value in unique_vals:
-                logging.error(ColorInvalidError(colors, nbp_basic, invalid_value, channel_no=c))
+                log.error(ColorInvalidError(colors, nbp_basic, invalid_value, channel_no=c))
             if not np.isnan(invalid_value) and not np.array_equal(val, invalid_value, equal_nan=True):
-                logging.error(ColorInvalidError(colors, nbp_basic, invalid_value, channel_no=c))
+                log.error(ColorInvalidError(colors, nbp_basic, invalid_value, channel_no=c))
 
     # see if any spots contain invalid_values.
     use_colors = colors[np.ix_(np.arange(n_spots), use_rounds, use_channels)]
@@ -180,12 +180,12 @@ def check_color_nan(colors: np.ndarray, nbp_basic: NotebookPage) -> None:
         nan_codes = np.where(use_colors == invalid_value)
     n_nan_spots = nan_codes[0].size
     if n_nan_spots > 0:
-        logging.info(f"{n_nan_spots=}")
+        log.info(f"{n_nan_spots=}")
         s = nan_codes[0][0]
         # round, channel number in spot_colors different from in use_spot_colors.
         r = np.arange(n_rounds)[nan_codes[1][0]]
         c = np.arange(n_channels)[nan_codes[2][0]]
-        logging.error(ColorInvalidError(colors, nbp_basic, invalid_value, round_no=r, channel_no=c, code_no=s))
+        log.error(ColorInvalidError(colors, nbp_basic, invalid_value, round_no=r, channel_no=c, code_no=s))
 
 
 class ColorInvalidError(Exception):

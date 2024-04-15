@@ -2,7 +2,7 @@ import scipy
 import numpy as np
 import numpy.typing as npt
 
-from .. import logging
+from .. import log
 
 
 # TODO: Optimise this function with pytorch
@@ -49,9 +49,9 @@ def score_coefficient_image(
     message = f"OMP gene scores are being computed with {n_shifts} local coefficients for each spot."
     if n_shifts < 25:
         message += f" Consider reducing the shape_sign_thresh in OMP config"
-        logging.warn(message)
+        log.warn(message)
     else:
-        logging.debug(message)
+        log.debug(message)
 
     # Step 2: Apply the non-linear function x / (x + high_coef_bias) to every positive coefficient element-wise, where
     # x is the coefficient. All negative coefficients are set to zero.

@@ -5,7 +5,7 @@ import numpy.typing as npt
 from typing import Tuple, List, Union, Any
 
 from . import base
-from .. import utils, call_spots, logging
+from .. import utils, call_spots, log
 from ..call_spots import dot_product
 from ..setup import NotebookPage
 
@@ -339,7 +339,7 @@ def get_all_coefs(
     check_spot = rng.randint(n_pixels)
     # diff_to_int = np.round(pixel_colors[check_spot]).astype(int) - pixel_colors[check_spot]
     # if np.abs(diff_to_int).max() == 0:
-    #     logging.error(
+    #     log.error(
     #         ValueError(
     #             f"pixel_coefs should be found using normalised pixel_colors."
     #             f"\nBut for pixel {check_spot}, pixel_colors given are integers indicating they are "
@@ -349,7 +349,7 @@ def get_all_coefs(
 
     n_genes, n_rounds, n_channels = bled_codes.shape
     if not utils.errors.check_shape(pixel_colors, [n_pixels, n_rounds, n_channels]):
-        logging.error(utils.errors.ShapeError("pixel_colors", pixel_colors.shape, (n_pixels, n_rounds, n_channels)))
+        log.error(utils.errors.ShapeError("pixel_colors", pixel_colors.shape, (n_pixels, n_rounds, n_channels)))
     no_verbose = n_pixels < 1000  # show progress bar with more than 1000 pixels.
 
     # Fit background and override initial pixel_colors
@@ -372,7 +372,7 @@ def get_all_coefs(
     pixel_colors = pixel_colors.reshape((n_pixels, -1))
 
     continue_pixels = np.arange(n_pixels)
-    logging.debug("Finding OMP coefficients started")
+    log.debug("Finding OMP coefficients started")
     with tqdm(total=max_genes, disable=no_verbose) as pbar:
         pbar.set_description("Finding OMP coefficients for each pixel")
         for i in range(max_genes):
@@ -432,7 +432,7 @@ def get_all_coefs(
 
             pbar.update(1)
     pbar.close()
-    logging.debug("Finding OMP coefficients complete")
+    log.debug("Finding OMP coefficients complete")
 
     return gene_coefs.astype(np.float32), np.asarray(background_coefs, dtype=np.float32)
 
@@ -485,7 +485,7 @@ def get_pixel_coefs_yxz(
 
     z_chunks = len(use_z) // z_chunk_size + 1
     for z_chunk in range(z_chunks):
-        logging.info(f"z_chunk {z_chunk + 1}/{z_chunks}")
+        log.info(f"z_chunk {z_chunk + 1}/{z_chunks}")
         # While iterating through tiles, only save info for rounds/channels using
         # - add all rounds/channels back in later. This returns colors in use_rounds/channels only and no invalid.
         pixel_yxz_tz, pixel_colors_tz = base.get_pixel_colours(

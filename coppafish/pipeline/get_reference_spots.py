@@ -2,7 +2,7 @@ import numpy as np
 from ..spot_colors import base as spot_colors_base
 from ..call_spots import base as call_spots_base
 from .. import find_spots as fs
-from .. import utils, logging
+from .. import utils, log
 from ..setup.notebook import NotebookPage
 
 
@@ -57,7 +57,7 @@ def get_reference_spots(
     # fixed as the value of the reference round and reference channel
     r = nbp_basic.anchor_round
     c = nbp_basic.anchor_channel
-    logging.debug("Get ref spots started")
+    log.debug("Get ref spots started")
     use_tiles, use_rounds, use_channels = (
         np.array(nbp_basic.use_tiles.copy()),
         nbp_basic.use_rounds.copy(),
@@ -102,12 +102,12 @@ def get_reference_spots(
     isolated = np.zeros(0, dtype=bool)
     tile = np.zeros(0, dtype=np.int16)
     transform = np.asarray(icp_correction)
-    logging.info("Reading in spot_colors for ref_round spots")
+    log.info("Reading in spot_colors for ref_round spots")
     for t in nbp_basic.use_tiles:
         in_tile = nd_local_tile == t
         if np.sum(in_tile) == 0:
             continue
-        logging.info(f"Tile {np.where(use_tiles==t)[0][0]+1}/{n_use_tiles}")
+        log.info(f"Tile {np.where(use_tiles==t)[0][0]+1}/{n_use_tiles}")
         colour_tuple = spot_colors_base.get_spot_colors(
             yxz_base=nd_local_yxz[in_tile],
             t=t,
@@ -146,6 +146,6 @@ def get_reference_spots(
     nbp.background_strength = None
     nbp.gene_probs = None
     nbp.dye_strengths = None
-    logging.debug("Get ref spots complete")
+    log.debug("Get ref spots complete")
 
     return nbp

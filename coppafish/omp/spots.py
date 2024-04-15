@@ -6,7 +6,7 @@ from typing import Union, List, Tuple, Optional
 
 from .scores import score_coefficient_image, omp_scores_float_to_int
 from .. import utils
-from .. import logging
+from .. import log
 from ..utils.spot_images import get_average_spot_image, get_spot_images
 from ..find_spots import detect_spots, get_isolated_points
 
@@ -49,13 +49,13 @@ def count_spot_neighbours(
     # Check kernel contains right values.
     kernel_vals = np.unique(kernel)
     if not np.isin(kernel_vals, [-1, 0, 1]).all():
-        logging.error(ValueError("filter contains values other than -1, 0 or 1."))
+        log.error(ValueError("filter contains values other than -1, 0 or 1."))
 
     # Check that all spot positions are in the image bounds
     max_yxz = np.asarray(image.shape) - 1
     spot_yxz_out_of_bounds = spot_yxz[np.logical_or((spot_yxz < 0).any(1), (spot_yxz > max_yxz[None]).any(1))]
     if spot_yxz_out_of_bounds.size > 0:
-        logging.error(utils.errors.OutOfBoundsError("spot_yxz", spot_yxz_out_of_bounds[0], [0] * image.ndim, max_yxz))
+        log.error(utils.errors.OutOfBoundsError("spot_yxz", spot_yxz_out_of_bounds[0], [0] * image.ndim, max_yxz))
 
     n_spots = spot_yxz.shape[0]
     zero_counts = np.asarray([0] * n_spots, dtype=int)
@@ -71,7 +71,7 @@ def count_spot_neighbours(
         # Return positive counts
         return utils.morphology.imfilter_coords(image > 0, kernel > 0, spot_yxz).astype(int), zero_counts
     else:
-        logging.error(ValueError("filter contains only 0."))
+        log.error(ValueError("filter contains only 0."))
 
 
 def cropped_coef_image(
@@ -173,10 +173,10 @@ def spot_neighbourhood(
     # TODO: Maybe provide pixel_coef_sign instead of pixel_coef as less memory or use csr_matrix.
     n_pixels, n_genes = pixel_coefs.shape
     if not utils.errors.check_shape(pixel_yxz, [n_pixels, 3]):
-        logging.error(utils.errors.ShapeError("pixel_yxz", pixel_yxz.shape, (n_pixels, 3)))
+        log.error(utils.errors.ShapeError("pixel_yxz", pixel_yxz.shape, (n_pixels, 3)))
     n_spots = spot_gene_no.shape[0]
     if not utils.errors.check_shape(spot_yxz, [n_spots, 3]):
-        logging.error(utils.errors.ShapeError("spot_yxz", spot_yxz.shape, (n_spots, 3)))
+        log.error(utils.errors.ShapeError("spot_yxz", spot_yxz.shape, (n_spots, 3)))
 
     n_z = pixel_yxz.max(axis=0)[2] + 1
 
@@ -234,7 +234,7 @@ def spot_neighbourhood(
                 spots_used[use] = True
 
     if not spots_used.any():
-        logging.error(ValueError("No spots found to make average spot image from."))
+        log.error(ValueError("No spots found to make average spot image from."))
     # Compute average spot image from all isolated spots
     isolated = get_isolated_points(spot_yxz[spots_used] * [1, 1, z_scale], isolation_dist)
     # get_average below ignores the nan values.
@@ -256,12 +256,12 @@ def spot_neighbourhood(
     av_spot_image = av_spot_image[~np.all(av_spot_image == 0, axis=(1, 2)), :, :]
 
     if np.sum(av_spot_image == 1) == 0:
-        logging.warn(
+        log.warn(
             f"In av_spot_image, no pixels have a value of 1.\n"
             f"Maybe mean_sign_thresh = {mean_sign_thresh} is too high."
         )
     if np.sum(av_spot_image == 0) == 0:
-        logging.warn(
+        log.warn(
             f"In av_spot_image, no pixels have a value of 0.\n"
             f"Maybe mean_sign_thresh = {mean_sign_thresh} is too low."
         )
@@ -327,13 +327,13 @@ def get_spots(
     """
     n_pixels, n_genes = pixel_coefs.shape
     if not utils.errors.check_shape(pixel_yxz, [n_pixels, 3]):
-        logging.error(utils.errors.ShapeError("pixel_yxz", pixel_yxz.shape, (n_pixels, 3)))
+        log.error(utils.errors.ShapeError("pixel_yxz", pixel_yxz.shape, (n_pixels, 3)))
 
     if spot_shape is None or spot_shape_float is None:
         spot_info = np.zeros((0, 4), dtype=int)
     else:
         if np.sum(spot_shape == 1) == 0:
-            logging.error(
+            log.error(
                 ValueError(
                     f"spot_shape contains no pixels with a value of 1 which indicates the "
                     f"neighbourhood about a spot where we expect a positive coefficient."
@@ -349,7 +349,7 @@ def get_spots(
         spot_coefs_check = pixel_coefs[pixel_index, spot_yxzg[spots_to_check, 3]]
         if spot_coefs_check.min() <= coef_thresh:
             bad_spot = spots_to_check[spot_coefs_check.argmin()]
-            logging.error(
+            log.error(
                 ValueError(
                     f"spot_yxzg provided but gene {spot_yxzg[bad_spot, 3]} coefficient for spot {bad_spot}\n"
                     f"at yxz = {spot_yxzg[bad_spot, :3]} is {spot_coefs_check.min()} \n"
@@ -360,7 +360,7 @@ def get_spots(
     for g in tqdm.trange(
         n_genes, desc=f"Finding{' and scoring' * (spot_shape is not None)} OMP spots for all genes", unit="gene"
     ):
-        logging.debug(f"Finding and scoring spots {g=} started")
+        log.debug(f"Finding and scoring spots {g=} started")
         # shift nzg_pixel_yxz so min is 0 in each axis so smaller image can be formed.
         # Note size of image will be different for each gene.
         coef_image, coord_shift = cropped_coef_image(pixel_yxz, pixel_coefs[:, g])
@@ -386,9 +386,9 @@ def get_spots(
             spot_scores = coef_image_scores[..., 0][tuple(spot_yxz.T)].copy()
             del coef_image_scores
             keep = spot_scores > spot_score_thresh
-            logging.debug(f"For gene {g}, keeping {keep.sum()} out of {keep.size} spots")
+            log.debug(f"For gene {g}, keeping {keep.sum()} out of {keep.size} spots")
             if keep.sum() == 0:
-                logging.warn(f"Out of {keep.size} spots, gene {g} had no kept spots due to scores <{spot_score_thresh}")
+                log.warn(f"Out of {keep.size} spots, gene {g} had no kept spots due to scores <{spot_score_thresh}")
                 continue
             spot_scores = omp_scores_float_to_int(spot_scores)
             spot_info_g = np.zeros((keep.sum(), 5), dtype=int)
@@ -402,7 +402,7 @@ def get_spots(
         spot_info_g[:, 3] = g
         spot_info = np.append(spot_info, spot_info_g, axis=0)
         del spot_info_g, keep
-        logging.debug(f"Finding and scoring spots {g=} complete")
+        log.debug(f"Finding and scoring spots {g=} complete")
 
     if spot_shape is None:
         return spot_info[:, :3], spot_info[:, 3]
