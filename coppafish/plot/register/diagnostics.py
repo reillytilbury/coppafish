@@ -848,43 +848,42 @@ def view_overlay(nb: Notebook, t: int = None, rc: list = None, use_z: np.ndarray
     assert len(rc) > 0, "At least one round and channel should be provided."
     if use_z is None:
         use_z = [z - 1 for z in nb.basic_info.use_z]
-    new_origin = np.array([0, 0, use_z[0]])
-    im = []
+
+    new_origin = np.array([0, 0, use_z[0]]).astype(np.float32)
+    flow_indices = np.ix_(np.arange(3), np.arange(nb.basic_info.tile_sz), np.arange(nb.basic_info.tile_sz), use_z)
+    coords = np.array(np.meshgrid(range(nb.basic_info.tile_sz), range(nb.basic_info.tile_sz), range(len(use_z)),
+                                  indexing='ij'))
+    n_im = len(rc)
+    im = np.zeros((n_im, nb.basic_info.tile_sz, nb.basic_info.tile_sz, len(use_z)), dtype=np.float32)
 
     # load, affine correct, and flow correct the images
     for i, rc_pair in tqdm(enumerate(rc), total=len(rc), desc="Loading images"):
         # LOAD IMAGE
         r, c = rc_pair
         suffix = "_raw" if r == nb.basic_info.pre_seq_round else ""
-        im_current_rc = load_image(
-            nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=c, yxz=[None, None, use_z], suffix=suffix
-        ).astype(np.float32)
+        im[i] = load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=c,
+                           yxz=[None, None, use_z], suffix=suffix)
 
         # AFFINE CORRECTION
         if r == nb.basic_info.anchor_round:
-            im.append(im_current_rc)
             continue
         if c == nb.basic_info.dapi_channel:
-            affine = nb.register.icp_correction[t, r, nb.basic_info.anchor_channel]
+            icp_correction = nb.register.icp_correction[t, r, nb.basic_info.anchor_channel]
         else:
-            affine = nb.register.icp_correction[t, r, c]
-        affine = preprocessing.adjust_affine(affine, new_origin)
-        im_current_rc = affine_transform(im_current_rc, affine, order=1, mode="constant", cval=0)
+
+            icp_correction = nb.register.icp_correction[t, r, c]
+        icp_correction = preprocessing.adjust_affine(affine=icp_correction, new_origin=new_origin)
+        im[i] = affine_transform(im[i].astype(np.float32), icp_correction, order=1, mode='constant', cval=0)
 
         # FLOW CORRECTION
-        ny, nx, nz = im_current_rc.shape
-        coords = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing="ij"))
-        # there is no flow correction for the anchor round, so skip
-        if r == nb.basic_info.anchor_round:
-            im.append(im_current_rc)
-            continue
         # load the flow, invert and apply
-        flow = np.load(os.path.join(nb.register.flow_dir, "smooth", f"t{t}_r{r}.npy"), mmap_mode="r")[..., use_z]
+        flow = np.load(os.path.join(nb.register.flow_dir, "smooth", f"t{t}_r{r}.npy"), mmap_mode='r')
+        flow = flow[flow_indices]
+        # invert the flow
         flow = -(flow.astype(np.float32))
-        im_current_rc = warp(im_current_rc, coords + flow, order=1)
-        im.append(im_current_rc)
+        im[i] = warp(im[i].astype(np.float32), coords + flow, order=1, mode='constant', cval=0)
     # remove variables
-    del coords, flow, im_current_rc
+    del coords, flow
 
     # create viewer
     viewer = napari.Viewer()
@@ -895,3 +894,8 @@ def view_overlay(nb: Notebook, t: int = None, rc: list = None, use_z: np.ndarray
     viewer.dims.axis_labels = ["y", "x", "z"]
     viewer.dims.order = (2, 0, 1)
     napari.run()
+
+# nb_file = '/home/reilly/local_datasets/dante_bad_trc_test/notebook.npz'
+# nb = Notebook(nb_file)
+# view_overlay(nb, t=4, rc=[(7, 27), (3, 18)], use_z=np.arange(19, 29))
+# # Registration
