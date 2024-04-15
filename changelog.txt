@@ -10,6 +10,7 @@
  * _ref_call_spots.pdf now called _call_spots.pdf.
  * New ICP Viewer for point clouds.
  * New optical flow viewer.
+ * New optical flow config parameter `flow_cores` in `filter` section.
  * OMP checkpoint bug fixed.
  * Improvements in reading old reg results.
  * streamlined generation of reg images, meaning transforms no longer need to be applied when viewer is shown
