@@ -1,17 +1,18 @@
-2024/04/dd Alpha Update (v0.10.1):
+2024/04/15 Alpha Update (v0.10.1):
  * User documentation updates.
  * Filter image scaling is reduced to further avoid clipping.
  * New OMP gene counts figure in _omp.pdf.
  * Pillow buffer overflow vulnerability fixed.
- * HTTP request sometimes failing to GitHub bug catched.
+ * HTTP request sometimes failing to GitHub bug caught.
  * New spot position histograms in _call_spots.pdf and _omp.pdf.
  * New image viewing diagnostics for the users, explained in the documentation.
  * Simplified advanced usage for moving output and tile directories.
  * _ref_call_spots.pdf now called _call_spots.pdf.
  * New ICP Viewer for point clouds.
  * New optical flow viewer.
+ * New optical flow config parameter `flow_cores` in `register` section.
  * OMP checkpoint bug fixed.
- * improvements in reading old reg results
+ * Improvements in reading old reg results.
  * streamlined generation of reg images, meaning transforms no longer need to be applied when viewer is shown
  * Whole registration viewer has been refactored and improved making it easier to compare between different methods
     of registration.

@@ -1,10 +1,8 @@
 import os
 import scipy
 import pickle
-import skimage
 import itertools
 import numpy as np
-import math as maths
 from tqdm import tqdm
 from typing import Tuple
 from ..setup import NotebookPage
@@ -128,6 +126,7 @@ def register(
                 clip_val=config["flow_clip"],
                 output_dir=os.path.join(nbp_file.output_dir, "flow"),
                 file_name=f"t{t}_r{r}.npy",
+                n_cores=config["flow_cores"],
             )
         # Save the data to file
         with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
