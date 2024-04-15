@@ -97,7 +97,7 @@ def call_spots_omp(
     nbp.initial_intensity_thresh = omp.get_initial_intensity_thresh(config, nbp_call_spots)
 
     use_tiles = np.array(nbp_basic.use_tiles.copy())
-    if not os.path.isfile(nbp_file.omp_spot_shape):
+    if not os.path.isfile(nbp_file.omp_spot_shape) or not os.path.isfile(nbp_file.omp_spot_shape_float):
         # Set tile order so do shape_tile first to compute spot_shape from it.
         if shape_tile is None:
             shape_tile = filter_base.central_tile(nbp_basic.tilepos_yx, nbp_basic.use_tiles)
@@ -106,15 +106,16 @@ def call_spots_omp(
         shape_tile_ind = np.where(np.array(nbp_basic.use_tiles) == shape_tile)[0][0]
         use_tiles[0], use_tiles[shape_tile_ind] = use_tiles[shape_tile_ind], use_tiles[0]
         spot_shape = None
+        spot_shape_float = None
     else:
         nbp.shape_tile = None
         nbp.shape_spot_local_yxz = None
         nbp.shape_spot_gene_no = None
-        nbp.spot_shape_float = None
         # -1 because saved as uint16 so convert 0, 1, 2 to -1, 0, 1.
         spot_shape = np.load(nbp_file.omp_spot_shape)  # Put z to last index
-        if spot_shape.ndim == 3:
-            spot_shape = np.moveaxis(spot_shape, 0, 2)  # Put z to last index
+        spot_shape = np.moveaxis(spot_shape, 0, 2)  # Put z to last index
+        spot_shape_float = np.load(nbp_file.omp_spot_shape_float)
+        spot_shape_float = np.moveaxis(spot_shape_float, 0, 2)
 
     # Deal with case where algorithm has been run for some tiles and data saved
     if os.path.isfile(nbp_file.omp_spot_info) and os.path.isfile(nbp_file.omp_spot_coef):
@@ -181,7 +182,6 @@ def call_spots_omp(
         )
 
     logging.info(f"Finding OMP coefficients for all pixels on tiles {use_tiles}:")
-    spot_shape_float = None
     for i, t in enumerate(use_tiles):
         logging.info(f"Tile {np.where(use_tiles == t)[0][0] + 1}/{len(use_tiles)}")
 
@@ -206,7 +206,7 @@ def call_spots_omp(
             dp_norm_shift,
         )
 
-        if spot_shape is None:
+        if spot_shape is None or spot_shape_float is None:
             logging.info("Computing OMP spot shape")
             nbp.shape_tile = int(t)
             spot_yxz, spot_gene_no = omp.get_spots(
