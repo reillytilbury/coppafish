@@ -486,6 +486,49 @@ def generate_reg_images(nb: Notebook):
         save_reg_image(im=im_concat, file_path=file_name)
 
 
+def load_transformed_image(nb: Notebook, t: int, r: int, c: int, yxz: list, reg_type: str) -> np.ndarray:
+    """
+    Load the image from tile t, round r, channel c, apply the relevant registration and return the image.
+    Args:
+        nb: Notebook (must have register and register_debug page)
+        t: tile (int)
+        r: round (int)
+        c: channel (int)
+        yxz: [np.arange(y), np.arange(x), np.arange(z)] (list)
+        reg_type: str, 'none', 'flow' or 'flow_icp'
+            - none: no registration
+            - flow: apply channel correction (due to fluorescent beads) followed by optical flow
+            - flow_icp: apply affine correction (due to icp) followed by optical flow
+
+    Returns:
+        im: np.ndarray, image
+    """
+    assert reg_type in ['none', 'flow', 'flow_icp'], "reg_type must be 'none', 'flow' or 'flow_icp'"
+    # get the new origin
+    new_origin = np.array([yxz[0][0], yxz[1][0], yxz[2][0]])
+    im = tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t, r, c, yxz=yxz)
+    if reg_type == 'none':
+        return im
+
+    # If we get this far, we will either be doing flow or flow icp.
+    # These differ only by the affine correction we apply before.
+    affine_correction = nb.register_debug.channel_transform_initial[c] if reg_type == 'flow' else (
+        nb.register.icp_correction)[t, r, c]
+    affine_correction = adjust_affine(affine=affine_correction, new_origin=new_origin)
+    im = affine_transform(im, affine_correction, order=1, mode='constant', cval=0)
+
+    # Now apply the flow
+    flow = np.load(os.path.join(nb.register.flow_dir, 'smooth', f't{t}_r{r}.npy'), mmap_mode='r')
+    flow_indices = np.ix_(np.arange(3), np.arange(yxz[0][0], yxz[0][-1]), np.arange(yxz[1][0], yxz[1][-1]),
+                          np.arange(yxz[2][0], yxz[2][-1]))
+    flow = -(flow[flow_indices].astype(np.float32))
+    coords = np.meshgrid(np.arange(yxz[0].shape[0]), np.arange(yxz[1].shape[0]), np.arange(yxz[2].shape[0]),
+                         indexing='ij').astype(np.float32)
+    im = warp(im, coords + flow, order=1, mode='constant', cval=0, preserve_range=True)
+
+    return im
+
+
 def adjust_affine(affine: np.ndarray, new_origin: np.ndarray) -> np.ndarray:
     """
     adjusts the affine transform for a new origin, then converts from 4 x 3 to 3 x 4 format.
@@ -498,7 +541,7 @@ def adjust_affine(affine: np.ndarray, new_origin: np.ndarray) -> np.ndarray:
     """
     assert affine.shape == (4, 3), "Affine must be 4 x 3"
     affine = affine.T
-    affine[:, 3] += (affine[:, :3] - np.eye(3)) @ new_origin
+    affine[:, 3] += (affine[:3, :3] - np.eye(3)) @ new_origin
     return affine
 
 
