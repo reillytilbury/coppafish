@@ -48,6 +48,9 @@ def set_notebook_output_dir(notebook_path: str, new_output_dir: str) -> None:
     old_name = PurePath(nb.file_names.omp_spot_shape).name
     del nb.file_names.omp_spot_shape
     nb.file_names.omp_spot_shape = os.path.join(new_output_dir, old_name)
+    old_name = PurePath(nb.file_names.omp_spot_shape_float).name
+    del nb.file_names.omp_spot_shape_float
+    nb.file_names.omp_spot_shape_float = os.path.join(new_output_dir, old_name)
     old_name = PurePath(nb.file_names.omp_spot_info).name
     del nb.file_names.omp_spot_info
     nb.file_names.omp_spot_info = os.path.join(new_output_dir, old_name)
@@ -61,6 +64,7 @@ def set_notebook_output_dir(notebook_path: str, new_output_dir: str) -> None:
     old_name = PurePath(nb.file_names.big_anchor_image).name
     del nb.file_names.big_anchor_image
     nb.file_names.big_anchor_image = os.path.join(new_output_dir, old_name)
+
     nb.file_names.finalized = True
     nb.save(notebook_path)
 
