@@ -13,6 +13,7 @@
  * New optical flow config parameter `flow_cores` in `register` section.
  * OMP checkpoint bug fixed.
  * Improvements in reading old reg results.
+ * Coppafish's logging module now called 'log' to remove conflicting package names.
  * streamlined generation of reg images, meaning transforms no longer need to be applied when viewer is shown
  * Whole registration viewer has been refactored and improved making it easier to compare between different methods
     of registration.
