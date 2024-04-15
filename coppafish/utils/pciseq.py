@@ -4,7 +4,7 @@ import os
 
 from ..call_spots import qual_check
 from ..setup import NotebookPage, Notebook
-from .. import logging
+from .. import log
 
 
 def get_thresholds_page(nb: Notebook) -> NotebookPage:
@@ -51,7 +51,7 @@ def export_to_pciseq(nb: Notebook, method="omp", intensity_thresh: float = 0, sc
 
     """
     if method.lower() != "omp" and method.lower() != "ref" and method.lower() != "anchor" and method.lower() != "prob":
-        logging.error(ValueError(f"method must be 'omp', 'anchor' or 'prob' but {method} given."))
+        log.error(ValueError(f"method must be 'omp', 'anchor' or 'prob' but {method} given."))
     page_name = "omp" if method.lower() == "omp" else "ref_spots"
     index = 0
     if method.lower() == "ref" or method.lower() == "anchor":
@@ -59,9 +59,9 @@ def export_to_pciseq(nb: Notebook, method="omp", intensity_thresh: float = 0, sc
     elif method.lower() == "prob":
         index = 2
     if not nb.has_page(page_name):
-        logging.error(ValueError(f"Notebook does not contain {page_name} page."))
+        log.error(ValueError(f"Notebook does not contain {page_name} page."))
     if os.path.isfile(nb.file_names.pciseq[index]):
-        logging.error(FileExistsError(f"File already exists: {nb.file_names.pciseq[index]}"))
+        log.error(FileExistsError(f"File already exists: {nb.file_names.pciseq[index]}"))
     qual_ok = qual_check.quality_threshold(nb, method, intensity_thresh, score_thresh)
 
     # get coordinates in stitched image

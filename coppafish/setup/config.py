@@ -29,7 +29,7 @@ try:
 except ModuleNotFoundError:
     import importlib.resources as importlib_resources
 
-from .. import logging
+from .. import log
 
 
 def convert_tuple_to_list(x: str) -> list:
@@ -348,20 +348,20 @@ def get_config(ini_file):
     # 1. ensure all of the sections (defined in _options) included
     for section in _options.keys():
         if section not in _parser.keys():
-            logging.error(InvalidConfigError(section, None, None))
+            log.error(InvalidConfigError(section, None, None))
     # 2. ensure all of the options in each section (defined in
     # _options) have some value.
     for section in _options.keys():
         for name in _options[section].keys():
             if name not in _parser[section].keys():
-                logging.error(InvalidConfigError(section, name, None))
+                log.error(InvalidConfigError(section, name, None))
     # Second step of validation: ensure three things...
     ini_file_sections = list(_parser.keys())
     ini_file_sections.remove("DEFAULT")  # parser always contains this key.
     # 1. Ensure there are no extra sections in config file
     for section in ini_file_sections:
         if section not in _options.keys():
-            logging.error(InvalidConfigError(section, None, None))
+            log.error(InvalidConfigError(section, None, None))
     for section in _options.keys():
         for name, val in _parser[section].items():
             # 2. Ensure there are no extra options in config file, else remove them
@@ -370,7 +370,7 @@ def get_config(ini_file):
                 continue
             # 3. Ensure that all the option values pass type checking.
             if not _option_type_checkers[_options[section][name]](val):
-                logging.error(InvalidConfigError(section, name, val))
+                log.error(InvalidConfigError(section, name, val))
 
     # Now that we have validated, build the configuration dictionary
     out_dict = {section: {} for section in _options.keys()}

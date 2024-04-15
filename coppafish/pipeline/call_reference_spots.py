@@ -9,7 +9,7 @@ from ..filter import base as filter_base
 from .. import call_spots
 from .. import spot_colors
 from .. import utils
-from .. import logging
+from .. import log
 from scipy.sparse.linalg import svds
 
 
@@ -59,7 +59,7 @@ def call_reference_spots(
             Parameters added are: intensity, score, gene_no, score_diff
     """
     if overwrite_ref_spots:
-        logging.warn(
+        log.warn(
             "\noverwrite_ref_spots = True so will overwrite:\ngene_no, gene_score, score_diff, intensity,"
             "\nbackground_strength in nbp_ref_spots."
         )
@@ -81,7 +81,7 @@ def call_reference_spots(
                     f"\nRun with overwrite_ref_spots = True to get past this error."
                 )
         if len(error_message) > 0:
-            logging.error(ValueError(error_message))
+            log.error(ValueError(error_message))
 
     nbp_ref_spots.finalized = False  # So we can add and delete ref_spots page variables
     # delete all variables in ref_spots set to None so can add them later.
@@ -91,7 +91,7 @@ def call_reference_spots(
     nbp = NotebookPage("call_spots")
     nbp.software_version = utils.system.get_software_version()
     nbp.revision_hash = utils.system.get_software_hash()
-    logging.debug("Call ref spots started")
+    log.debug("Call ref spots started")
 
     # 0. Initialise frequently used variables
     # Load gene names and codes
@@ -370,7 +370,7 @@ def call_reference_spots(
             tile_bg_colours = np.repeat(tile_bg_colours[:, np.newaxis, :], n_rounds, axis=1)
         tile_bg_strength = np.sum(np.abs(tile_bg_colours), axis=(1, 2))
         if tile_bg_strength.size == 0 or np.allclose(tile_bg_strength, tile_bg_strength[0]):
-            logging.warn(
+            log.warn(
                 f"Failed to compute colour norm factor for {t=} because there was a lack of spots or uniform "
                 f"background strength. Norm factor will be set to 1."
             )
@@ -455,7 +455,7 @@ def call_reference_spots(
                     * (bg_strength < np.percentile(bg_strength, bg_percentile))
                     * np.isin(gene_no, my_genes))
             colours_trd = colours[keep, r, :]
-            logging.info(
+            log.info(
                 "Tile " + str(t) + " Round " + str(r) + " Dye" + str(d) + " has " + str(len(colours_trd)) + " spots."
             )
             if len(colours_trd) == 0:
@@ -542,6 +542,6 @@ def call_reference_spots(
                                                nbp_file=nbp_file, nbp_basic=nbp_basic, return_in_bounds=True)[0]
     pixel_intensity = call_spots.get_spot_intensity(np.abs(pixel_colors) / colour_norm_factor[central_tile])
     nbp.abs_intensity_percentile = np.percentile(pixel_intensity, np.arange(1, 101))
-    logging.debug("Call ref spots complete")
+    log.debug("Call ref spots complete")
 
     return nbp, nbp_ref_spots

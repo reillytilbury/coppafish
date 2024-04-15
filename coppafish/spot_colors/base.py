@@ -5,7 +5,7 @@ import os
 
 from ..setup import NotebookPage
 from ..utils import tiles_io
-from .. import logging
+from .. import log
 
 
 def apply_transform(

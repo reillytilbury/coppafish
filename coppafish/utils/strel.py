@@ -4,7 +4,7 @@ import numpy as np
 from typing import Optional
 
 from . import morphology
-from .. import logging
+from .. import log
 
 
 def periodic_line(p: int, v: np.ndarray) -> np.ndarray:
@@ -80,7 +80,7 @@ def disk(r: int, n: int = 4) -> np.ndarray:
         elif n == 8:
             v = np.array([[1, 0], [2, 1], [1, 1], [1, 2], [0, 1], [-1, 2], [-1, 1], [-2, 1]])
         else:
-            logging.error(ValueError(f"Value of n provided ({n}) is not 0, 4, 6 or 8."))
+            log.error(ValueError(f"Value of n provided ({n}) is not 0, 4, 6 or 8."))
         # Determine k, which is the desired radial extent of the periodic
         # line strels.  For the origin of this formula, see the second
         # paragraph on page 328 of the Rolf Adams paper.

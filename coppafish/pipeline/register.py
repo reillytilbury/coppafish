@@ -6,7 +6,7 @@ import numpy as np
 from tqdm import tqdm
 from typing import Tuple
 from ..setup import NotebookPage
-from .. import find_spots, logging
+from .. import find_spots, log
 from .. import spot_colors
 from ..register import preprocessing
 from ..register import base as register_base
@@ -53,7 +53,7 @@ def register(
 
     # Part 0: Initialisation
     # Initialise frequently used variables
-    logging.debug("Register started")
+    log.debug("Register started")
     nbp, nbp_debug = NotebookPage("register"), NotebookPage("register_debug")
     nbp.software_version = system.get_software_version()
     nbp.revision_hash = system.get_software_hash()
@@ -70,7 +70,7 @@ def register(
 
     # Part 1: Channel registration
     if registration_data["channel_registration"]["transform"].max() == 0:
-        logging.info("Running channel registration")
+        log.info("Running channel registration")
         if not nbp_basic.channel_camera:
             cameras = [0] * n_channels
         else:
@@ -134,7 +134,7 @@ def register(
     del anchor_image, round_image
 
     # Part 3: ICP
-    logging.info("Running Iterative Closest Point (ICP)")
+    log.info("Running Iterative Closest Point (ICP)")
     if "icp" not in registration_data.keys():
         # Initialise variables for ICP step
         ny, nx, nz = nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)
@@ -162,7 +162,7 @@ def register(
             for r in use_rounds:
                 # check if there are enough spots to run ICP
                 if nbp_find_spots.spot_no[t, r, c_ref] < config["icp_min_spots"]:
-                    logging.info(f"Tile {t}, round {r}, channel {c_ref} has too few spots to run ICP.")
+                    log.info(f"Tile {t}, round {r}, channel {c_ref} has too few spots to run ICP.")
                     round_correction[t, r][:3, :3] = np.eye(3)
                     continue
                 # load in flow
@@ -184,7 +184,7 @@ def register(
                         robust=False,
                     )
                 )
-                logging.info(f"Tile: {t}, Round: {r}, Converged: {converged_round[t, r]}")
+                log.info(f"Tile: {t}, Round: {r}, Converged: {converged_round[t, r]}")
             # don't do icp for the pre-seq round as we will not have spots in the anchor channel
             round_correction[t, -1] = np.eye(4, 3)
             # compute an affine correction to the channel transforms. This is done by finding the best affine map that
@@ -218,7 +218,7 @@ def register(
                     im_spots_tc = np.vstack((im_spots_tc, im_spots_trc))
                 # check if there are enough spots to run ICP
                 if im_spots_tc.shape[0] < config["icp_min_spots"]:
-                    logging.info(f"Tile {t}, channel {c} has too few spots to run ICP.")
+                    log.info(f"Tile {t}, channel {c} has too few spots to run ICP.")
                     channel_correction[t, c][:3, :3] = np.eye(3)
                     continue
                 # run ICP
@@ -233,7 +233,7 @@ def register(
                         robust=False,
                     )
                 )
-                logging.info(f"Tile: {t}, Channel: {c}, Converged: {converged_channel[t, c]}")
+                log.info(f"Tile: {t}, Channel: {c}, Converged: {converged_channel[t, c]}")
         # combine these corrections into the icp_correction
         use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
         for t, r, c in itertools.product(use_tiles, use_rounds, use_channels):
@@ -320,7 +320,7 @@ def register(
 
     # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
     # fluorescence
-    logging.debug("Compute background scale factors started")
+    log.debug("Compute background scale factors started")
     if nbp_basic.use_preseq:
         bg_scale = np.zeros((n_tiles, n_rounds, n_channels))
         r_pre = nbp_basic.pre_seq_round
@@ -363,9 +363,9 @@ def register(
         # Now add the bg_scale to the nbp_filter page. To do this we need to delete the bg_scale attribute.
         nbp_filter.finalized = False
         del nbp_filter.bg_scale
-        logging.debug("Compute background scale factors complete")
+        log.debug("Compute background scale factors complete")
         nbp_filter.bg_scale = bg_scale
         nbp_filter.finalized = True
 
-    logging.debug("Register complete")
+    log.debug("Register complete")
     return nbp, nbp_debug

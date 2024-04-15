@@ -5,7 +5,7 @@ from coppafish.utils import errors
 from typing import Optional, Union
 import numpy.typing as npt
 
-from ... import logging
+from ... import log
 
 
 def ftrans2(b: npt.NDArray[np.float_], t: Optional[npt.NDArray[np.float_]] = None) -> npt.NDArray[np.float_]:
@@ -73,9 +73,9 @@ def hanning_diff(r1: int, r2: int) -> npt.NDArray[np.float_]:
             Difference of two hanning window 2D convolve kernel.
     """
     if not 0 <= r1 <= r2 - 1:
-        logging.error(errors.OutOfBoundsError("r1", r1, 0, r2 - 1))
+        log.error(errors.OutOfBoundsError("r1", r1, 0, r2 - 1))
     if not r1 + 1 <= r2 <= np.inf:
-        logging.error(errors.OutOfBoundsError("r2", r1 + 1, np.inf))
+        log.error(errors.OutOfBoundsError("r2", r1 + 1, np.inf))
     h_outer = np.hanning(2 * r2 + 3)[1:-1]  # ignore zero values at first and last index
     h_outer = -h_outer / h_outer.sum()
     h_inner = np.hanning(2 * r1 + 3)[1:-1]
@@ -132,7 +132,7 @@ def ensure_odd_kernel(kernel: npt.NDArray[np.float_], pad_location: str = "start
         elif pad_location == "end":
             pad_dims = [tuple(np.array([0, 1]) * val) for val in even_dims]
         else:
-            logging.error(
+            log.error(
                 ValueError(f"pad_location has to be either 'start' or 'end' but value given was {pad_location}.")
             )
         return np.pad(kernel, pad_dims, mode="constant")
@@ -160,16 +160,16 @@ def top_hat(
         if sum(np.unique(kernel) == [0, 1]) == len(np.unique(kernel)):
             kernel = kernel.astype(np.uint8)  # kernel must be uint8
         else:
-            logging.error(ValueError(f"kernel is of type {kernel.dtype} but must be of data type np.uint8."))
+            log.error(ValueError(f"kernel is of type {kernel.dtype} but must be of data type np.uint8."))
     image_dtype = image.dtype  # so returned image is of same dtype as input
     if image.dtype == int:
         if image.min() >= 0 and image.max() <= np.iinfo(np.uint16).max:
             image = image.astype(np.uint16)
     if not (image.dtype == float or image.dtype == np.uint16):
-        logging.error(ValueError(f"image is of type {image.dtype} but must be of data type np.uint16 or float."))
+        log.error(ValueError(f"image is of type {image.dtype} but must be of data type np.uint16 or float."))
     if np.max(np.mod(kernel.shape, 2) == 0):
         # With even kernel, gives different results to MATLAB
-        logging.error(ValueError(f"kernel dimensions are {kernel.shape}. Require all dimensions to be odd."))
+        log.error(ValueError(f"kernel dimensions are {kernel.shape}. Require all dimensions to be odd."))
     # kernel = ensure_odd_kernel(kernel)  # doesn't work for tophat at start or end.
     return cv2.morphologyEx(image, cv2.MORPH_TOPHAT, kernel).astype(image_dtype)
 

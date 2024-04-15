@@ -4,7 +4,7 @@ import numpy as np
 from tqdm import tqdm
 from typing import Tuple
 
-from .. import utils, logging
+from .. import utils, log
 
 
 def wait_for_data(data_path: str, wait_time: int, dir: bool = False):
@@ -28,7 +28,7 @@ def wait_for_data(data_path: str, wait_time: int, dir: bool = False):
         else:
             wait_time_print = round(wait_time, 1)
             wait_time_unit = "seconds"
-        logging.warn(f"\nNo file named\n{data_path}\nexists. Waiting for {wait_time_print} {wait_time_unit}...")
+        log.warn(f"\nNo file named\n{data_path}\nexists. Waiting for {wait_time_print} {wait_time_unit}...")
         with tqdm(total=wait_time, position=0) as pbar:
             pbar.set_description(f"Waiting for {data_path}")
             for i in range(wait_time):
@@ -38,8 +38,8 @@ def wait_for_data(data_path: str, wait_time: int, dir: bool = False):
                 pbar.update(1)
         pbar.close()
         if not check_data_func(data_path):
-            logging.error(utils.errors.NoFileError(data_path))
-        logging.info("file found!\nWaiting for file to fully load...")
+            log.error(utils.errors.NoFileError(data_path))
+        log.info("file found!\nWaiting for file to fully load...")
         # wait for file to stop loading
         old_bytes = 0
         new_bytes = 0.00001
@@ -47,7 +47,7 @@ def wait_for_data(data_path: str, wait_time: int, dir: bool = False):
             time.sleep(5)
             old_bytes = new_bytes
             new_bytes = os.path.getsize(data_path)
-        logging.info("file loaded!")
+        log.info("file loaded!")
 
 
 def get_pixel_length(length_microns: float, pixel_size: float) -> int:

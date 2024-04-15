@@ -8,7 +8,7 @@ import numpy.typing as npt
 from typing import Union, Dict, List, Optional
 
 from ..setup.notebook import Notebook
-from .. import logging
+from .. import log
 
 
 def get_function_name() -> str:
@@ -79,7 +79,7 @@ def set_notebook_tile_dir(notebook_path: str, new_tile_dir: str) -> None:
     """
     assert os.path.isfile(notebook_path), f"Notebook {notebook_path} not found"
     if not os.path.isdir(new_tile_dir):
-        logging.warn(f"New tile directory {new_tile_dir} does not exist. Continuing anyway...")
+        log.warn(f"New tile directory {new_tile_dir} does not exist. Continuing anyway...")
 
     new_tile_dir = os.path.normpath(new_tile_dir)
 
@@ -142,7 +142,7 @@ def round_any(x: Union[float, npt.NDArray], base: float, round_type: str = "roun
     elif round_type == "floor":
         return base * np.floor(x / base)
     else:
-        logging.error(
+        log.error(
             ValueError(
                 f"round_type specified was {round_type} but it should be one of the following:\n" f"round, ceil, floor"
             )
@@ -234,7 +234,7 @@ def reed_solomon_codes(n_genes: int, n_rounds: int, n_channels: Optional[int] = 
             break
         degree += 1
         if degree == 20:
-            logging.error(ValueError("Polynomial degree required is too large for generating the gene codes"))
+            log.error(ValueError("Polynomial degree required is too large for generating the gene codes"))
     # Create a `degree` degree polynomial, where each coefficient goes between (0, n_rounds] to generate each unique
     # gene code
     codes = dict()
@@ -269,7 +269,7 @@ def reed_solomon_codes(n_genes: int, n_rounds: int, n_channels: Optional[int] = 
     values = list(codes.values())
     if len(values) != len(set(values)):
         # Not every gene code is unique
-        logging.error(
+        log.error(
             ValueError(
                 f"Could not generate {n_genes} unique gene codes with {n_rounds} rounds/dyes. "
                 + "Maybe try decreasing the number of genes or increasing the number of rounds."
