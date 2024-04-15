@@ -259,6 +259,7 @@ def optical_flow_register(
     clip_val: np.ndarray = np.ndarray([40, 40, 15]),
     output_dir: str = "",
     file_name: str = "",
+    n_cores: Optional[int] = None,
 ):
     """
     Function to carry out optical flow registration on a single tile and round.
@@ -282,7 +283,8 @@ def optical_flow_register(
         clip_val: np.ndarray size [3] of the clip value for the optical flow in y, x and z
         output_dir: str specifying the directory to save the optical flow information (flow, corr and smooth)
         file_name: str specifying the file name to save the optical flow information (flow, corr and smooth)
-
+        n_cores (int, optional): maximum cpu cores to use in parallel when computing optical flow. Default: all found
+            cpu cores.
     """
     # Create the output directory if it does not exist
     folders = ["raw", "corr", "smooth"]
@@ -312,6 +314,7 @@ def optical_flow_register(
         clip_val=clip_val,
         chunks_yx=4,
         loc=os.path.join(output_dir, "raw", file_name),
+        n_cores=n_cores,
     )
     # compute the correlation between the base and target images within a small window of each pixel
     correlation, _ = flow_correlation(
@@ -338,7 +341,7 @@ def optical_flow_single(
     clip_val: np.ndarray = np.array([10, 10, 15]),
     upsample_factor_yx: int = 4,
     chunks_yx: int = 4,
-    n_cores: int = None,
+    n_cores: Optional[int] = None,
     loc: str = "",
 ) -> np.ndarray:
     """

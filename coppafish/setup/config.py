@@ -174,6 +174,7 @@ _options = {
         "window_radius": "int",
         "smooth_sigma": "list_number",
         "smooth_thresh": "number",
+        "flow_cores": "maybe_int",
         "flow_clip": "maybe_list_number",
         # these parameters are for icp
         "neighb_dist_thresh_yx": "number",

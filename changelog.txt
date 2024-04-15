@@ -1,4 +1,4 @@
-2024/04/dd Alpha Update (v0.10.1):
+2024/04/15 Alpha Update (v0.10.1):
  * User documentation updates.
  * Filter image scaling is reduced to further avoid clipping.
  * New OMP gene counts figure in _omp.pdf.
@@ -11,7 +11,7 @@
  * New ICP Viewer for point clouds.
  * New optical flow viewer.
  * OMP checkpoint bug fixed.
- * improvements in reading old reg results
+ * Improvements in reading old reg results.
  * streamlined generation of reg images, meaning transforms no longer need to be applied when viewer is shown
  * Whole registration viewer has been refactored and improved making it easier to compare between different methods
     of registration.
