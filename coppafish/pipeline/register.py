@@ -6,7 +6,7 @@ import numpy as np
 from tqdm import tqdm
 from typing import Tuple
 from ..setup import NotebookPage
-from .. import find_spots, logging
+from .. import find_spots, log
 from .. import spot_colors
 from ..register import preprocessing
 from ..register import base as register_base
@@ -53,7 +53,7 @@ def register(
 
     # Part 0: Initialisation
     # Initialise frequently used variables
-    logging.debug("Register started")
+    log.debug("Register started")
     nbp, nbp_debug = NotebookPage("register"), NotebookPage("register_debug")
     nbp.software_version = system.get_software_version()
     nbp.revision_hash = system.get_software_hash()
@@ -70,7 +70,7 @@ def register(
 
     # Part 1: Channel registration
     if registration_data["channel_registration"]["transform"].max() == 0:
-        logging.info("Running channel registration")
+        log.info("Running channel registration")
         if not nbp_basic.channel_camera:
             cameras = [0] * n_channels
         else:
@@ -233,6 +233,7 @@ def register(
                 )
             )
             logging.info(f"Tile: {t}, Channel: {c}, Converged: {converged_channel[t, c]}")
+
         # combine these corrections into the icp_correction
         use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
         for t, r, c in itertools.product(use_tiles, use_rounds, use_channels):
@@ -316,7 +317,7 @@ def register(
 
     # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
     # fluorescence
-    logging.debug("Compute background scale factors started")
+    log.debug("Compute background scale factors started")
     if nbp_basic.use_preseq:
         bg_scale = np.zeros((n_tiles, n_rounds, n_channels))
         r_pre = nbp_basic.pre_seq_round
@@ -359,9 +360,9 @@ def register(
         # Now add the bg_scale to the nbp_filter page. To do this we need to delete the bg_scale attribute.
         nbp_filter.finalized = False
         del nbp_filter.bg_scale
-        logging.debug("Compute background scale factors complete")
+        log.debug("Compute background scale factors complete")
         nbp_filter.bg_scale = bg_scale
         nbp_filter.finalized = True
 
-    logging.debug("Register complete")
+    log.debug("Register complete")
     return nbp, nbp_debug

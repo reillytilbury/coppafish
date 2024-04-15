@@ -1,6 +1,6 @@
 import numpy as np
 
-from .. import logging
+from .. import log
 from ..setup import Notebook
 
 
@@ -49,9 +49,9 @@ def check_shifts_stitch(nb: Notebook):
             f"coppafish.plot.view_stitch_search\nIf stitching looks wrong, maybe try re-running with "
             f"different configuration parameters e.g. smaller shift_step or larger shift_max_range."
         )
-        logging.error(ValueError(f"{message}"))
+        log.error(ValueError(f"{message}"))
     elif n_fail >= 1:
-        logging.warn(message)
+        log.warn(message)
 
 
 def check_shifts_register(nb: Notebook):
@@ -118,6 +118,6 @@ def check_shifts_register(nb: Notebook):
                     f"Current channel {c_ref} has at least {spot_no[c_ref]} on all tiles and rounds "
                     f"but channel {c_most_spots} has at least {spot_no[c_most_spots]}."
                 )
-            logging.error(ValueError(f"{message}"))
+            log.error(ValueError(f"{message}"))
         else:
-            logging.warn(message)
+            log.warn(message)

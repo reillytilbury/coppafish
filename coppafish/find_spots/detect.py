@@ -2,7 +2,7 @@ import numpy as np
 from typing import Optional, Tuple
 
 from .. import utils
-from .. import logging
+from .. import log
 
 try:
     from .maxima_pytorch import get_local_maxima
@@ -63,7 +63,7 @@ def detect_spots(
             pad_size_z = 0
     if image.ndim == 2 and se.ndim == 3:
         mid_z = int(np.floor((se.shape[2] - 1) / 2))
-        logging.warn(
+        log.warn(
             f"2D image provided but 3D filter asked for.\n" f"Using the middle plane ({mid_z}) of this filter."
         )
         se = se[:, :, mid_z]
@@ -85,13 +85,13 @@ def detect_spots(
 
     consider_intensity = image[consider_yxz]
     consider_yxz = np.array(consider_yxz)
-    logging.debug(f"{consider_yxz.shape=}")
+    log.debug(f"{consider_yxz.shape=}")
     if consider_yxz.max() <= np.iinfo(np.int32).max:
         consider_yxz = consider_yxz.astype(np.int32)
     # Sometimes consider_yxz can have too many spots in it to be run all at once through get_local_maxima without
     # running out of memory, so it is separated into smaller batches and then recombined after.
     max_batch_size = np.floor(5_000_000 * utils.system.get_available_memory() / 64.5).astype(int)
-    logging.debug(f"{max_batch_size=}")
+    log.debug(f"{max_batch_size=}")
     paddings = np.array([pad_size_y, pad_size_x, pad_size_z])[: image.ndim]
     keep = np.zeros(n_consider, dtype=bool)
     final_i = np.ceil(n_consider / max_batch_size) - 1

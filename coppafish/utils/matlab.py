@@ -5,7 +5,7 @@ from typing import Union, List
 
 from ..setup.notebook import Notebook, NotebookPage
 from ..call_spots import qual_check
-from .. import logging
+from .. import log
 
 
 def load_v_less_7_3(file_name: str, var_names: Union[str, List[str]]) -> Union[tuple, np.ndarray]:
@@ -99,7 +99,7 @@ def update_dict(nbp: NotebookPage, nb: Notebook, spots_info_dict: dict, score_th
     """
     pf = nbp.name + "_"
     if pf != "omp_" and pf != "ref_spots_":
-        logging.error(ValueError("Wrong page given, should be 'omp' or 'ref_spots'"))
+        log.error(ValueError("Wrong page given, should be 'omp' or 'ref_spots'"))
     nbp.finalized = False
     score_thresh_old = nbp.score_thresh
     del nbp.score_thresh

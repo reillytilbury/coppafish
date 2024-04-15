@@ -6,7 +6,7 @@ from scipy.ndimage import correlate, convolve
 from scipy.signal import oaconvolve
 
 from .base import ensure_odd_kernel
-from ... import logging, utils
+from ... import log, utils
 
 
 def imfilter(
@@ -44,7 +44,7 @@ def imfilter(
         if corr_or_conv == "corr":
             kernel = np.flip(kernel)
         elif corr_or_conv != "conv":
-            logging.error(
+            log.error(
                 ValueError(f"corr_or_conv should be either 'corr' or 'conv' but given value is {corr_or_conv}")
             )
         kernel = ensure_odd_kernel(kernel, "end")
@@ -73,7 +73,7 @@ def imfilter(
             kernel = ensure_odd_kernel(kernel, "end")
             return convolve(image, kernel, mode=padding, cval=pad_value)
         else:
-            logging.error(
+            log.error(
                 ValueError(f"corr_or_conv should be either 'corr' or 'conv' but given value is {corr_or_conv}")
             )
 
@@ -162,24 +162,24 @@ def imfilter_coords(
     if corr_or_conv == "corr":
         kernel = np.flip(kernel)
     elif corr_or_conv != "conv":
-        logging.error(ValueError(f"corr_or_conv should be either 'corr' or 'conv' but given value is {corr_or_conv}"))
+        log.error(ValueError(f"corr_or_conv should be either 'corr' or 'conv' but given value is {corr_or_conv}"))
     kernel = ensure_odd_kernel(kernel, "end")
 
     # Ensure shape of image and kernel correct
     if image.ndim != coords.shape[1]:
-        logging.error(
+        log.error(
             ValueError(f"Image has {image.ndim} dimensions but coords only have {coords.shape[1]} dimensions.")
         )
     if image.ndim == 2:
         image = np.expand_dims(image, 2)
     elif image.ndim != 3:
-        logging.error(ValueError(f"image must have 2 or 3 dimensions but given image has {image.ndim}."))
+        log.error(ValueError(f"image must have 2 or 3 dimensions but given image has {image.ndim}."))
     if kernel.ndim == 2:
         kernel = np.expand_dims(kernel, 2)
     elif kernel.ndim != 3:
-        logging.error(ValueError(f"kernel must have 2 or 3 dimensions but given image has {image.ndim}."))
+        log.error(ValueError(f"kernel must have 2 or 3 dimensions but given image has {image.ndim}."))
     if kernel.max() > 1:
-        logging.error(
+        log.error(
             ValueError(f"kernel is expected to be binary, only containing 0 or 1 but kernel.max = {kernel.max()}")
         )
 
@@ -187,7 +187,7 @@ def imfilter_coords(
         # set all z coordinates to 0 if 2D.
         coords = np.append(coords, np.zeros((coords.shape[0], 1), dtype=int), axis=1)
     if (coords.max(axis=0) >= np.array(image.shape)).any():
-        logging.error(
+        log.error(
             ValueError(f"Max yxz coordinates provided are {coords.max(axis=0)} but image has shape {image.shape}.")
         )
 

@@ -7,7 +7,7 @@ from typing import Optional
 
 from ..filter import base as filter_base
 from ..setup.notebook import NotebookPage
-from .. import utils, spot_colors, call_spots, omp, logging
+from .. import utils, spot_colors, call_spots, omp, log
 
 
 def call_spots_omp(
@@ -54,7 +54,7 @@ def call_spots_omp(
     nbp = NotebookPage("omp")
     nbp.software_version = utils.system.get_software_version()
     nbp.revision_hash = utils.system.get_software_hash()
-    logging.debug("OMP started")
+    log.debug("OMP started")
 
     # use bled_codes with gene efficiency incorporated and only use_rounds/channels
     rc_ind = np.ix_(nbp_basic.use_rounds, nbp_basic.use_channels)
@@ -63,7 +63,7 @@ def call_spots_omp(
     utils.errors.check_color_nan(bled_codes, nbp_basic)
     norm_bled_codes = np.linalg.norm(bled_codes, axis=(1, 2))
     if np.abs(norm_bled_codes - 1).max() > 1e-6:
-        logging.error(
+        log.error(
             ValueError(
                 "nbp_call_spots.bled_codes_ge don't all have an L2 norm of 1 over " "use_rounds and use_channels."
             )
@@ -85,7 +85,7 @@ def call_spots_omp(
     if config["use_z"] is not None:
         use_z_oob = [val for val in config["use_z"] if val < 0 or val >= n_z]
         if len(use_z_oob) > 0:
-            logging.error(utils.errors.OutOfBoundsError("use_z", use_z_oob[0], 0, n_z - 1))
+            log.error(utils.errors.OutOfBoundsError("use_z", use_z_oob[0], 0, n_z - 1))
         if len(config["use_z"]) == 2:
             # use consecutive values if only 2 given.
             config["use_z"] = list(np.arange(config["use_z"][0], config["use_z"][1] + 1))
@@ -102,7 +102,7 @@ def call_spots_omp(
         if shape_tile is None:
             shape_tile = filter_base.central_tile(nbp_basic.tilepos_yx, nbp_basic.use_tiles)
         if shape_tile not in nbp_basic.use_tiles:
-            logging.error(ValueError(f"shape_tile, {shape_tile} is not in nbp_basic.use_tiles, {nbp_basic.use_tiles}"))
+            log.error(ValueError(f"shape_tile, {shape_tile} is not in nbp_basic.use_tiles, {nbp_basic.use_tiles}"))
         shape_tile_ind = np.where(np.array(nbp_basic.use_tiles) == shape_tile)[0][0]
         use_tiles[0], use_tiles[shape_tile_ind] = use_tiles[shape_tile_ind], use_tiles[0]
         spot_shape = None
@@ -120,7 +120,7 @@ def call_spots_omp(
     # Deal with case where algorithm has been run for some tiles and data saved
     if os.path.isfile(nbp_file.omp_spot_info) and os.path.isfile(nbp_file.omp_spot_coef):
         if spot_shape is None:
-            logging.error(
+            log.error(
                 ValueError(
                     f"OMP information already exists for some tiles but spot_shape tiff file does not:\n"
                     f"{nbp_file.omp_spot_shape}\nEither add spot_shape tiff or delete the files:\n"
@@ -131,7 +131,7 @@ def call_spots_omp(
         spot_info = np.load(nbp_file.omp_spot_info)
         if spot_coefs.shape[0] > spot_info.shape[0]:
             # Case where bugged out after saving spot_coefs but before saving spot_info, delete all excess spot_coefs.
-            logging.warn(
+            log.warn(
                 f"Have spot_coefs for {spot_coefs.shape[0]} spots but only spot_info for {spot_info.shape[0]}"
                 f" spots.\nSo deleting the excess spot_coefs and re-saving to {nbp_file.omp_spot_coef}."
             )
@@ -143,7 +143,7 @@ def call_spots_omp(
                 tile_origin, nbp_basic.use_tiles, nbp_basic.tile_centre, spot_info[:, :3], spot_info[:, 6]
             )
             if not_duplicate.size == spot_info.shape[0]:
-                logging.warn(
+                log.warn(
                     f"There were less spots in\n{nbp_file.omp_spot_info}\nthan\n{nbp_file.omp_spot_coef} "
                     f"because duplicates were deleted for spot_coefs but not for spot_info.\n"
                     f"Now, spot_info duplicates have also been deleted."
@@ -151,7 +151,7 @@ def call_spots_omp(
                 spot_info = spot_info[not_duplicate]
                 np.save(nbp_file.omp_spot_info, spot_info)
             else:
-                logging.error(
+                log.error(
                     ValueError(
                         f"Have spot_info for {spot_info.shape[0]} spots but only spot_coefs for "
                         f"{spot_coefs.shape[0]}\nNeed to delete both {nbp_file.omp_spot_coef} and "
@@ -161,29 +161,29 @@ def call_spots_omp(
         else:
             prev_found_tiles = np.unique(spot_info[:, -1])
             use_tiles = np.setdiff1d(use_tiles, prev_found_tiles)
-            logging.warn(
+            log.warn(
                 f"Already have OMP results for tiles {prev_found_tiles} so now just running on tiles " f"{use_tiles}."
             )
         del spot_coefs, spot_info
     elif os.path.isfile(nbp_file.omp_spot_coef):
         # If only have information only file but not the other, need to delete all files and start again.
-        logging.error(
+        log.error(
             ValueError(
                 f"The file {nbp_file.omp_spot_coef} exists but the file {nbp_file.omp_spot_info} does not.\n"
                 f"Delete or re-name the file {nbp_file.omp_spot_coef} to run omp part from scratch."
             )
         )
     elif os.path.isfile(nbp_file.omp_spot_info):
-        logging.error(
+        log.error(
             ValueError(
                 f"The file {nbp_file.omp_spot_info} exists but the file {nbp_file.omp_spot_coef} does not.\n"
                 f"Delete or re-name the file {nbp_file.omp_spot_info} to run omp part from scratch."
             )
         )
 
-    logging.info(f"Finding OMP coefficients for all pixels on tiles {use_tiles}:")
+    log.info(f"Finding OMP coefficients for all pixels on tiles {use_tiles}:")
     for i, t in enumerate(use_tiles):
-        logging.info(f"Tile {np.where(use_tiles == t)[0][0] + 1}/{len(use_tiles)}")
+        log.info(f"Tile {np.where(use_tiles == t)[0][0] + 1}/{len(use_tiles)}")
 
         z_chunk_size = 1
         # Since colour norm factor has already been indexed over tiles, color_norm_factor[0] is the color_norm_factor
@@ -207,7 +207,7 @@ def call_spots_omp(
         )
 
         if spot_shape is None or spot_shape_float is None:
-            logging.info("Computing OMP spot shape")
+            log.info("Computing OMP spot shape")
             nbp.shape_tile = int(t)
             spot_yxz, spot_gene_no = omp.get_spots(
                 pixel_coefs_t,
@@ -230,8 +230,8 @@ def call_spots_omp(
                 config["shape_sign_thresh"],
             )
             if not np.isin(0, spot_shape):
-                logging.warn(f"OMP spot shape contains no zeros, {config['shape_sign_thresh']=} may be too low")
-            logging.debug(
+                log.warn(f"OMP spot shape contains no zeros, {config['shape_sign_thresh']=} may be too low")
+            log.debug(
                 f"OMP spot shape contains {(spot_shape == -1).sum()} negatives, {(spot_shape == 1).sum()} positives, "
                 f"and {(spot_shape == 0).sum()} zeros"
             )
@@ -249,7 +249,7 @@ def call_spots_omp(
         else:
             spot_yxzg = None
 
-        logging.info(f"Saving OMP gene reads")
+        log.info(f"Saving OMP gene reads")
         spot_info_t = omp.get_spots(
             pixel_coefs_t,
             pixel_yxz_t,
@@ -297,7 +297,7 @@ def call_spots_omp(
 
     spot_info = np.load(nbp_file.omp_spot_info)
     # find duplicate spots as those detected on a tile which is not tile centre they are closest to
-    logging.debug(f"Finding duplicate spots")
+    log.debug(f"Finding duplicate spots")
     not_duplicate = call_spots.get_non_duplicate(
         tile_origin, nbp_basic.use_tiles, nbp_basic.tile_centre, spot_info[:, :3], spot_info[:, 5]
     )
@@ -311,7 +311,7 @@ def call_spots_omp(
 
     # Get colours, background_coef and intensity of final spots.
     n_spots = np.sum(not_duplicate)
-    logging.info(f"Getting colours, background coefficients, and intensity of {n_spots} OMP spots")
+    log.info(f"Getting colours, background coefficients, and intensity of {n_spots} OMP spots")
     invalid_value = -nbp_basic.tile_pixel_value_shift
     # Only read in used colours first for background/intensity calculation.
     nd_spot_colors_use = np.ones((0, n_rounds_use, n_channels_use), dtype=np.int32) * invalid_value
@@ -342,6 +342,6 @@ def call_spots_omp(
     del spot_colors_norm_max
     nbp.colors = nd_spot_colors_use
 
-    logging.debug("OMP complete")
+    log.debug("OMP complete")
 
     return nbp

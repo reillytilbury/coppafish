@@ -2,7 +2,7 @@ from tqdm import tqdm
 import numpy as np
 
 from .. import find_spots as fs
-from .. import utils, logging
+from .. import utils, log
 from ..setup.notebook import NotebookPage
 from ..utils import tiles_io, indexing
 
@@ -51,7 +51,7 @@ def find_spots(
         max_spots = config["max_spots_2d"]
     else:
         max_spots = config["max_spots_3d"]
-    logging.debug("Find spots started")
+    log.debug("Find spots started")
 
     # record threshold for isolated spots in each tile of reference round/channel
     if config["isolation_thresh"] is None:
@@ -153,6 +153,6 @@ def find_spots(
     nbp.spot_yxz = spot_info["spot_yxz"]
     nbp.spot_no = spot_info["spot_no"]
     nbp.isolated_spots = spot_info["isolated"]
-    logging.debug("Find spots complete")
+    log.debug("Find spots complete")
 
     return nbp
