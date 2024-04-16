@@ -401,7 +401,8 @@ def generate_reg_images(nb: Notebook):
     Args:
         nb: notebook.
     """
-    use_tiles, use_rounds, use_channels = nb.basic_info.use_tiles, nb.basic_info.use_rounds, nb.basic_info.use_channels
+    use_tiles, use_rounds, use_channels = (nb.basic_info.use_tiles.copy(), nb.basic_info.use_rounds.copy(),
+                                           nb.basic_info.use_channels.copy())
     if nb.basic_info.pre_seq_round is not None:
         use_rounds += [nb.basic_info.pre_seq_round]
     anchor_round, anchor_channel, dapi_channel = (nb.basic_info.anchor_round, nb.basic_info.anchor_channel,

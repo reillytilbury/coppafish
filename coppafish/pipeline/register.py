@@ -57,7 +57,8 @@ def register(
     nbp, nbp_debug = NotebookPage("register"), NotebookPage("register_debug")
     nbp.software_version = system.get_software_version()
     nbp.revision_hash = system.get_software_hash()
-    use_tiles, use_rounds, use_channels = nbp_basic.use_tiles, nbp_basic.use_rounds, nbp_basic.use_channels
+    use_tiles, use_rounds, use_channels = (nbp_basic.use_tiles.copy(), nbp_basic.use_rounds.copy(),
+                                           nbp_basic.use_channels.copy())
     n_tiles, n_rounds, n_channels = nbp_basic.n_tiles, nbp_basic.n_rounds, nbp_basic.n_channels
     # Initialise variable for ICP step
     neighb_dist_thresh_yx = config["neighb_dist_thresh_yx"]
@@ -324,7 +325,7 @@ def register(
         use_rounds = nbp_basic.use_rounds
         mid_z = len(nbp_basic.use_z) // 2
         tile_centre = np.array([nbp_basic.tile_sz // 2, nbp_basic.tile_sz // 2, mid_z])
-        yx_rad, z_rad = 250, 5
+        yx_rad, z_rad = min(nbp_basic.tile_sz // 2 - 1, 250), min(len(nbp_basic.use_z) // 2 - 1, 5)
         yxz = [np.arange(tile_centre[0] - yx_rad, tile_centre[0] + yx_rad),
                np.arange(tile_centre[1] - yx_rad, tile_centre[1] + yx_rad),
                np.arange(mid_z - z_rad, mid_z + z_rad)]

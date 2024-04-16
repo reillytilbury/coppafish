@@ -23,6 +23,17 @@
     each part of the pipeline where we don't want bad trcs.
  * Bad trc are now dealt with in call spots. For a given tile, if round r is bad, gene probs are computed from the
     remaining rounds. Gene efficiencies are computed only from spots living on tiles with no bad rounds.
+ * New registration viewer for viewing the registration results.
+ * New ICP viewer for viewing the ICP results, including the point clouds, buttons for switching between registered and
+    unregistered images, and a smoothed score image in the background showing where good shifts are.
+ * New bg scale viewer for viewing the background scale images. This also led to a change in the way we compute bg
+    scales, done on unblurred images. This is done by taking a small region of both images, looking at regions
+    where bg is high and taking the median of the ratio of the two images in these regions. The previous
+    method looked at approx 10 z-planes and the boundary z-planes were causing an issue. Regression was also
+    not robust to outliers.
+ * new entire overlay function allows users to select any 2 rc pairs and overlay them in the viewer in anchor frame of
+    reference. This is different from just viewing against anchor. Can be useful for background reg viewing. z-params
+    make loading faster.
 
 2024/03/26 Alpha Update (v0.10.0):
  * OMP scoring has been changed.
