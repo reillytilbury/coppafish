@@ -9,7 +9,7 @@ from scipy.ndimage import gaussian_filter, zoom
 from tqdm import tqdm
 from sklearn.linear_model import HuberRegressor
 from typing import Optional, Tuple
-from .. import logging
+from .. import log
 from .. import utils
 from ..register import preprocessing
 
@@ -33,7 +33,7 @@ def find_shift_array(subvol_base, subvol_target, position, r_threshold):
         shift_corr coef (n_z_subvolumes * n_y_subvolumes * n_x_subvolumes, 1)
     """
     if subvol_base.shape != subvol_target.shape:
-        logging.error(ValueError("Subvolume arrays have different shapes"))
+        log.error(ValueError("Subvolume arrays have different shapes"))
     z_subvolumes, y_subvolumes, x_subvolumes = subvol_base.shape[0], subvol_base.shape[1], subvol_base.shape[2]
     shift = np.zeros((z_subvolumes, y_subvolumes, x_subvolumes, 3))
     shift_corr = np.zeros((z_subvolumes, y_subvolumes, x_subvolumes))
@@ -129,7 +129,7 @@ def find_zyx_shift(subvol_base, subvol_target, pearson_r_threshold=0.9):
         shift_corr: correlation coefficient of shift (float)
     """
     if subvol_base.shape != subvol_target.shape:
-        logging.error(ValueError("Subvolume arrays have different shapes"))
+        log.error(ValueError("Subvolume arrays have different shapes"))
     shift, _, _ = skimage.registration.phase_cross_correlation(
         reference_image=subvol_target, moving_image=subvol_base, upsample_factor=10
     )
@@ -227,7 +227,7 @@ def huber_regression(shift, position, predict_shift=True):
     if len(set(position[:, 0])) <= 2:
         z_coef = np.array([0, 0, 0])
         z_shift = np.mean(shift[:, 0])
-        logging.warn(
+        log.warn(
             "Fewer than 3 z-coords in position. Setting z-coords of transform to no scaling and shift of mean(shift)"
         )
     else:
@@ -259,6 +259,7 @@ def optical_flow_register(
     clip_val: np.ndarray = np.ndarray([40, 40, 15]),
     output_dir: str = "",
     file_name: str = "",
+    n_cores: Optional[int] = None,
 ):
     """
     Function to carry out optical flow registration on a single tile and round.
@@ -282,7 +283,8 @@ def optical_flow_register(
         clip_val: np.ndarray size [3] of the clip value for the optical flow in y, x and z
         output_dir: str specifying the directory to save the optical flow information (flow, corr and smooth)
         file_name: str specifying the file name to save the optical flow information (flow, corr and smooth)
-
+        n_cores (int, optional): maximum cpu cores to use in parallel when computing optical flow. Default: all found
+            cpu cores.
     """
     # Create the output directory if it does not exist
     folders = ["raw", "corr", "smooth"]
@@ -312,6 +314,7 @@ def optical_flow_register(
         clip_val=clip_val,
         chunks_yx=4,
         loc=os.path.join(output_dir, "raw", file_name),
+        n_cores=n_cores,
     )
     # compute the correlation between the base and target images within a small window of each pixel
     correlation, _ = flow_correlation(
@@ -338,7 +341,7 @@ def optical_flow_single(
     clip_val: np.ndarray = np.array([10, 10, 15]),
     upsample_factor_yx: int = 4,
     chunks_yx: int = 4,
-    n_cores: int = None,
+    n_cores: Optional[int] = None,
     loc: str = "",
 ) -> np.ndarray:
     """
@@ -358,9 +361,9 @@ def optical_flow_single(
     """
     if os.path.exists(loc):
         # load the flow if it exists. As it is saved in the upsampled format, we need to downsample it
-        flow = np.load(loc, mmap_mode="r")[::upsample_factor_yx, ::upsample_factor_yx]
+        flow = np.load(loc, mmap_mode="r")[:, ::upsample_factor_yx, ::upsample_factor_yx]
         flow = flow.astype(np.float32)
-        flow[:2] = flow[:2] / upsample_factor_yx
+        flow[:-1] = flow[:-1] / upsample_factor_yx
         return flow
     t_start = time.time()
     # start by ensuring images are float32
@@ -390,7 +393,7 @@ def optical_flow_single(
     # compute the optical flow (in parallel)
     if n_cores is None:
         n_cores = utils.system.get_core_count()
-    logging.info(f"Computing optical flow using {n_cores} cores")
+    log.info(f"Computing optical flow using {n_cores} cores")
     flow_sub = joblib.Parallel(n_jobs=n_cores)(
         joblib.delayed(skimage.registration.optical_flow_ilk)(
             target_sub[n], base_sub[n], radius=window_radius, prefilter=True
@@ -420,7 +423,7 @@ def optical_flow_single(
         # save in yxz format
         np.save(loc, flow_up)
     t_end = time.time()
-    logging.info("Optical flow computation took " + str(t_end - t_start) + " seconds")
+    log.info("Optical flow computation took " + str(t_end - t_start) + " seconds")
 
     return flow
 
@@ -461,7 +464,7 @@ def flow_correlation(
     coords = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing="ij"), dtype=np.float32)
     base_warped = skimage.transform.warp(base, coords + flow, order=0, mode="constant", cval=0)
     del coords, base, flow
-    # divide base_warped and target by their max
+    # divide base_warped and target by their max.
     base_warped = base_warped / np.max(base_warped)
     target = target / np.max(target)
     for i in range(3):
@@ -494,7 +497,7 @@ def flow_correlation(
         # save in yxz format
         np.save(loc, correlation_up)
     t_end = time.time()
-    logging.info("Computing correlation took " + str(t_end - t_start) + " seconds")
+    log.info("Computing correlation took " + str(t_end - t_start) + " seconds")
     return correlation, correlation_up
 
 
@@ -519,6 +522,7 @@ def interpolate_flow(
     if os.path.exists(loc):
         return
     time_start = time.time()
+    # threshold the correlation
     mask = correlation >= np.quantile(correlation, threshold)
     flow_indicator = mask.astype(np.float32)
     # smooth the flow indicator
@@ -527,6 +531,8 @@ def interpolate_flow(
     flow = np.array([gaussian_filter(flow[i] * flow_indicator, sigma) for i in range(3)])
     # divide the flow by the smoothed indicator
     flow = np.array([flow[i] / flow_indicator_smooth for i in range(3)])
+    # remove nan values
+    flow = np.nan_to_num(flow)
     upsample_factor = (upsample_factor_yx, upsample_factor_yx, 1)
     # upsample the flow before saving
     flow = np.array(
@@ -541,7 +547,7 @@ def interpolate_flow(
         # save in yxz format
         np.save(loc, flow)
     time_end = time.time()
-    logging.info("Interpolating flow took " + str(time_end - time_start) + " seconds")
+    log.info("Interpolating flow took " + str(time_end - time_start) + " seconds")
     return flow
 
 
@@ -608,7 +614,7 @@ def channel_registration(
         # Set registration_data['channel_registration']['channel_transform'][c] = np.eye(3) for all channels c
         for c in range(n_cams):
             transform[c] = np.eye(3, 4)
-        logging.warn(
+        log.warn(
             "Fluorescent beads directory does not exist. Assuming that all channels are registered to each other."
         )
         return transform
@@ -663,7 +669,7 @@ def channel_registration(
             )
             if not converged:
                 transform[i] = np.eye(4, 3)
-                logging.error(Warning("ICP did not converge for camera " + str(i) + ". Replacing with identity."))
+                log.error(Warning("ICP did not converge for camera " + str(i) + ". Replacing with identity."))
             pbar.update(1)
 
     # Need to add in z coord info as not accounted for by registration due to all coords being equal

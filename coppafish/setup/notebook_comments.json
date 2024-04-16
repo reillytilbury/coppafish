@@ -174,6 +174,12 @@
             "Integer or None",
             "round number of pre-seq round"
         ],
+        "bad_trc": [
+            "eq",
+            "List of 3-tuples",
+            "List of bad tile, round, channel combinations. If a tile, round, channel combination is in this list,",
+            "it will not be used in the pipeline."
+        ],
         "software_version": [
             "eq",
             "String",
@@ -275,6 +281,11 @@
             "File",
             "*npy* file indicating average spot shape in *OMP* coefficient sign images.",
             "Saved image is *int8 npy* with only values being -1, 0, 1."
+        ],
+        "omp_spot_shape_float": [
+            "eq",
+            "File",
+            "*npy* file storing nb.omp.spot_shape_float"
         ],
         "omp_spot_info": [
             "eq",
@@ -817,7 +828,7 @@
         "gene_probs": [
             "",
             "Numpy float array [n_spots x n_genes]",
-            "Probability that spot $s$ is gene $g$."
+            "Von-Mises probability that spot $s$ is gene $g$."
         ],
         "dye_strengths": [
             "",

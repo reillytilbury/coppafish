@@ -1,7 +1,7 @@
 import numpy as np
 
 from ..setup import Notebook
-from .. import logging
+from .. import log
 
 
 def check_n_spots(nb: Notebook):
@@ -47,7 +47,7 @@ def check_n_spots(nb: Notebook):
         if n_bad_images[c] > 0:
             bad_images[:, 0] = use_tiles[bad_images[:, 0]]
             bad_images[:, 1] = use_rounds[bad_images[:, 1]]
-            logging.warn(
+            log.warn(
                 f"\nChannel {use_channels[c]} - {n_bad_images[c]} tiles/rounds with n_spots < {n_spots_warn}:"
                 f"\n{bad_images}"
             )
@@ -111,7 +111,7 @@ def check_n_spots(nb: Notebook):
         n_bad_images = len(bad_images)
         if n_bad_images > 0:
             bad_images = use_tiles[bad_images]
-            logging.warn(f"\nAnchor - {n_bad_images} tiles with n_spots < {n_spots_warn}:\n" f"{bad_images}")
+            log.warn(f"\nAnchor - {n_bad_images} tiles with n_spots < {n_spots_warn}:\n" f"{bad_images}")
 
         if n_bad_images > n_images_error:
             error_message = (
@@ -126,4 +126,4 @@ def check_n_spots(nb: Notebook):
             error_message + f"\nThe function coppafish.plot.view_find_spots may be useful for "
             f"investigating why the above tiles/rounds/channels had so few spots detected."
         )
-        logging.error(ValueError(error_message))
+        log.error(ValueError(error_message))

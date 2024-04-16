@@ -1,8 +1,45 @@
+2024/04/15 Alpha Update (v0.10.1):
+ * User documentation updates.
+ * Filter image scaling is reduced to further avoid clipping.
+ * New OMP gene counts figure in _omp.pdf.
+ * Pillow buffer overflow vulnerability fixed.
+ * HTTP request sometimes failing to GitHub bug caught.
+ * New spot position histograms in _call_spots.pdf and _omp.pdf.
+ * New image viewing diagnostics for the users, explained in the documentation.
+ * Simplified advanced usage for moving output and tile directories.
+ * _ref_call_spots.pdf now called _call_spots.pdf.
+ * New ICP Viewer for point clouds.
+ * New optical flow viewer.
+ * New optical flow config parameter `flow_cores` in `register` section.
+ * OMP checkpoint bug fixed.
+ * Improvements in reading old reg results.
+ * Coppafish's logging module now called 'log' to remove conflicting package names.
+ * streamlined generation of reg images, meaning transforms no longer need to be applied when viewer is shown
+ * Whole registration viewer has been refactored and improved making it easier to compare between different methods
+    of registration.
+ * Support for removing a bad tile round channel from any analysis - this includes new nbp basic variable and config
+    variable to remove a bad tile round channel.
+ * integrated bad_trc into new indexing method so that it is easier to remove a bad tile round channel from
+    each part of the pipeline where we don't want bad trcs.
+ * Bad trc are now dealt with in call spots. For a given tile, if round r is bad, gene probs are computed from the
+    remaining rounds. Gene efficiencies are computed only from spots living on tiles with no bad rounds.
+ * New registration viewer for viewing the registration results.
+ * New ICP viewer for viewing the ICP results, including the point clouds, buttons for switching between registered and
+    unregistered images, and a smoothed score image in the background showing where good shifts are.
+ * New bg scale viewer for viewing the background scale images. This also led to a change in the way we compute bg
+    scales, done on unblurred images. This is done by taking a small region of both images, looking at regions
+    where bg is high and taking the median of the ratio of the two images in these regions. The previous
+    method looked at approx 10 z-planes and the boundary z-planes were causing an issue. Regression was also
+    not robust to outliers.
+ * new entire overlay function allows users to select any 2 rc pairs and overlay them in the viewer in anchor frame of
+    reference. This is different from just viewing against anchor. Can be useful for background reg viewing. z-params
+    make loading faster.
+
 2024/03/26 Alpha Update (v0.10.0):
  * OMP scoring has been changed.
  * Optical flow added to registration.
  * Default Wiener deconvolution configuration in the filter stage is improved.
- * Difference of Hanning is now turned off in filter by default. This can be changed by setting the new variable 
+ * Difference of Hanning is now turned off in filter by default. This can be changed by setting the new variable
     difference_of_hanning to true in the scale config section.
  * Wiener deconvolve now does not shift pixel values after filtering fix.
  * Wiener deconvolution is optimised in pytorch CPU.
@@ -13,9 +50,9 @@
  * A warning is raised if the latest online coppafish version does not match the current coppafish version.
  * Pytorch GPU out of memory fix attempt.
  * Detecting spots is pytorch optimised and less memory intensive on all environments.
- * Incorrect `hist_counts` values in extract and filter pages. This caused the filter/extract PDF histograms to be 
+ * Incorrect `hist_counts` values in extract and filter pages. This caused the filter/extract PDF histograms to be
     incorrectly ranged along the x axis. This has now been fixed.
- * The ICP Mean Squared Error (MSE) for debugging has been improved. This can be viewed by clicking MSE in the 
+ * The ICP Mean Squared Error (MSE) for debugging has been improved. This can be viewed by clicking MSE in the
     RegistrationViewer.
  * New _omp.pdf diagnostic added.
  * The RegistrationViewer can be imported more easily by `from coppafish import RegistrationViewer`.
@@ -31,7 +68,7 @@
  * Docs + logo update for coppafish.
  * Removed all jax code.
  * Removed obsolete "continuous_dapi" config variable in extract section.
- * anchor_channel is default to 27, dapi_channel defaults to 0, dye_names defaults to 'ATTO425, AF488, DY520XL, AF532, 
+ * anchor_channel is default to 27, dapi_channel defaults to 0, dye_names defaults to 'ATTO425, AF488, DY520XL, AF532,
     AF594, AF647, AF750'
 
 
@@ -39,7 +76,7 @@
  * Background subtraction is now using the correct alignment parameters so it is actually working again
  * Background subtraction blurring was turned off by a bug but this is no longer the case
  * Background subtraction is only done if the background pixel is positive, which gives much better results
- * Sobel filtering was being applied by default on alpha. If there was no parameter for sobel in Merry, then this would 
+ * Sobel filtering was being applied by default on alpha. If there was no parameter for sobel in Merry, then this would
     at least partially explain why it was taking longer Izzie
  * Fixed the diagnostic to turn off the background image in the main viewer by clicking i
  * Fixed the viewer to view the spots in the gene efficiency viewer
@@ -55,7 +92,7 @@
 
 2024/02/15 Alpha Update (v0.9.2):
  * OMP is now significantly faster after vectorising an out of bounds check for spot positions.
- * All coppafish logs are saved in a file with default name pipeline.log, the name can be changed by editing the 
+ * All coppafish logs are saved in a file with default name pipeline.log, the name can be changed by editing the
     file_names config variable log_name.
  * Out of memory issue in pytorch GPU fix.
  * The Viewer's gene legend is dark themed again.
@@ -69,18 +106,18 @@
 
 
 2024/02/07 Alpha Update (v0.9.0):
- * The appropriate, tested package versions are installed by `pip install -r requirement...` with the wanted 
+ * The appropriate, tested package versions are installed by `pip install -r requirement...` with the wanted
     requirements text file.
- * Coppafish no longer has installation options, you just do `pip install -e .` to install coppafish after installing a 
-    requirements text file. 
- * New support for pytorch on the CPU as a new way to run most of OMP functions and some parts of call spots using CPU. 
-    The appropriate packages can be installed by `pip install -r requirements-pytorch.txt`. 
- * Pytorch 2.2.0 + cuda 12.1 is supported. The GPU is used to run parts of OMP. In detail, `get_all_coefs` will run 
-    with all tensors on the GPU when looping through OMP iterations. Then, when complete, the returned output will be 
-    on the CPU to not run out of memory on the GPU. The required packages can be installed by 
+ * Coppafish no longer has installation options, you just do `pip install -e .` to install coppafish after installing a
+    requirements text file.
+ * New support for pytorch on the CPU as a new way to run most of OMP functions and some parts of call spots using CPU.
+    The appropriate packages can be installed by `pip install -r requirements-pytorch.txt`.
+ * Pytorch 2.2.0 + cuda 12.1 is supported. The GPU is used to run parts of OMP. In detail, `get_all_coefs` will run
+    with all tensors on the GPU when looping through OMP iterations. Then, when complete, the returned output will be
+    on the CPU to not run out of memory on the GPU. The required packages can be installed by
     `pip install -r requirements-pytorchgpu.txt`.
  * Support for Windows when running coppafish with pytorch, pytorch with a GPU, or numpy-only.
- * For a single spot and round, if the largest magnitude spot colour is negative, its sign is flipped before computing 
+ * For a single spot and round, if the largest magnitude spot colour is negative, its sign is flipped before computing
     the Von-Mises gene probability.
  * OMP call spots colour norm factor applied incorrectly has now been fixed.
  * "extract_debug" notebook page checks still being used are now removed since the page does not exist any more fix.
@@ -94,7 +131,7 @@
 
 2024/01/31 Alpha Update (v0.8.2):
  * The default config value for r_smooth in filter section is now 1, 1, 2.
- * The notebook now backs itself up before re-saving itself. Therefore, there is always a fully complete notebook saved 
+ * The notebook now backs itself up before re-saving itself. Therefore, there is always a fully complete notebook saved
     in case the new one being saved gets corrupted.
  * Removed 'extract_debug' notebook page.
  * Comparing spot colour and predicted code in Viewer bug fixed.
@@ -104,9 +141,9 @@
 
 
 2024/01/26 Alpha Update (v0.8.1):
- * Bleed matrix computation in call spots has been slightly improved and is capable of reverting to a default bleed 
+ * Bleed matrix computation in call spots has been slightly improved and is capable of reverting to a default bleed
     matrix if there are too few genes to compute with.
- * Background scale computation for the preseq is thought to be improved and only computed using a single, registered z 
+ * Background scale computation for the preseq is thought to be improved and only computed using a single, registered z
     plane. Now only a scale factor is computed, no offset.
  * Config variable auto_n_shifts in stitch section is no longer a magic number, it now scales with tile size fix.
  * Dask array was converted to a float for jobs raw data has been fixed.
@@ -115,20 +152,20 @@
  * Config variable n_background_scale_threads in register renamed to max_background_scale_cores
  * Tile, round, channel indexing for extract, filter and find_spots now originates from functions in utils/indexing.py.
  * requirements.txt and requirements-optimised.txt files for python==3.9 fixed.
- * Sub Volume Registration (SVR) now has a tapered window applied to each subvolume image (Hanning in x and y, a Tukey 
+ * Sub Volume Registration (SVR) now has a tapered window applied to each subvolume image (Hanning in x and y, a Tukey
     window in z). This removes x, y and z axes aligned fake registration solutions caused by the image's harsh border.
  * Removed call_spots bleed_matrix.py unused code.
  * Removed outdated 2d pipeline code.
- * The notebook duplicates itself before adding and saving with a new notebook page included. This way if the code is 
-    user interrupted during a save, a backup notebook is available to revert to that will not be corrupted. The backup 
+ * The notebook duplicates itself before adding and saving with a new notebook page included. This way if the code is
+    user interrupted during a save, a backup notebook is available to revert to that will not be corrupted. The backup
     will automatically be deleted after the new save is fully complete.
  * New notebook tile by tile combining functionality reimplemented.
 
 
 2024/01/12 Alpha Update (v0.8.0):
- * Filtered images are now saved in ['file_names']['tile_dir']/filter and extract images are saved in 
+ * Filtered images are now saved in ['file_names']['tile_dir']/filter and extract images are saved in
     ['file_names']['tile_dir']/extract.
- * Removed notebook variables pixel_unique_values and pixel_unique_counts from ['filter_debug'] and ['extract_debug'] 
+ * Removed notebook variables pixel_unique_values and pixel_unique_counts from ['filter_debug'] and ['extract_debug']
     sections. These will be saved locally in the tile output directory.
  * Extract and filter now continue where they left off. They are checkpoint-ed after each iteration.
  * Optimised choice of zarr compressors for extract and filter through benchmarking.
@@ -162,16 +199,16 @@
 
 
 2024/01/02 Alpha Update (v0.7.0):
- * New diagnostics PDF builder has been created. It can be imported through `from coppafish import BuildPDF`, then with 
-    the notebook file path as nb_path, it can be run by `BuildPDF(nb_path)`. It currently shows diagnostic plots for 
-    scale, extract, filter and find_spots sections. The PDF builds itself at runtime after find_spots, stitch, 
+ * New diagnostics PDF builder has been created. It can be imported through `from coppafish import BuildPDF`, then with
+    the notebook file path as nb_path, it can be run by `BuildPDF(nb_path)`. It currently shows diagnostic plots for
+    scale, extract, filter and find_spots sections. The PDF builds itself at runtime after find_spots, stitch,
     reference_spots and OMP and saved as diagnostics.pdf in the output directory.
  * New coppafish installation instructions shown on the GitHub homepage (readme.md).
- * Frozen stable package versions given in the "requirements.txt" file, see GitHub homepage for instructions on 
+ * Frozen stable package versions given in the "requirements.txt" file, see GitHub homepage for instructions on
     installation.
  * Bug fixed most of the Viewer plots with the updated call_spots colour norm factor and bleed matrix variables.
  * Gene shape in viewer versus gene legend mismatch bug fix.
- * Removed unnecessary multiplying and dividing by weights in OMP when computing weighted least squares fitting 
+ * Removed unnecessary multiplying and dividing by weights in OMP when computing weighted least squares fitting
     (potential speed up).
 
 
@@ -184,29 +221,29 @@
 
 
 2023/12/19 Alpha Update (v0.5.0):
- * Extract and filter has now become two separate sections in the notebook. Extract runs first, then filter. We save 
-    raw, extracted images in the tiles_dir/raw directory. Also, when running from raw ND2 files, we keep all the found 
-    metadata from the ND2s for each round in a file called 'nd2_metadata_r{r}.pkl' inside the tiles_dir/raw directory. 
+ * Extract and filter has now become two separate sections in the notebook. Extract runs first, then filter. We save
+    raw, extracted images in the tiles_dir/raw directory. Also, when running from raw ND2 files, we keep all the found
+    metadata from the ND2s for each round in a file called 'nd2_metadata_r{r}.pkl' inside the tiles_dir/raw directory.
     This way we hope the raw ND2 files can be deleted without loss of any data.
- * All filter related config variables are now inside a new [filter] config section, i.e. variables r_dapi, 
-    r_dapi_auto_microns, auto_thresh_multiplier, deconvolve, all psf-related variables, wiener_constant, 
+ * All filter related config variables are now inside a new [filter] config section, i.e. variables r_dapi,
+    r_dapi_auto_microns, auto_thresh_multiplier, deconvolve, all psf-related variables, wiener_constant,
     wiener_pad_shape, n_clip_warn, n_clip_error, n_clip_error_images_thresh, num_rotations and pre_seq_blur_radius.
- * Default extraction file type (['extract']['file_type']) is now .zarr instead of .npy. This file_type is also used 
+ * Default extraction file type (['extract']['file_type']) is now .zarr instead of .npy. This file_type is also used
     when saving the filtered images in the tiles_dir directory.
  * Multiprocessing to compute background scales now includes no disk reading (safer).
  * The disk reading multiprocessing in OMP has been removed (safer).
  * The git hash and software version for each notebook section is saved when that pipeline section is run through.
  * OMP now runs on a single z plane at a time.
  * Default psf_isolation_dist in 'filter' config section changed from 20 -> 10.
- * psf is calculated on no more than 5,000 isolated spots to stop memory crashes in the filter section. This should be 
+ * psf is calculated on no more than 5,000 isolated spots to stop memory crashes in the filter section. This should be
     more than sufficient to converge.
- * Call spots probability thresholds are not constants any more, they are now computed percentiles based on the gene 
+ * Call spots probability thresholds are not constants any more, they are now computed percentiles based on the gene
     probability values.
  * Shift score hist in SVR diagnostics in the Registration Viewer now does not crash.
  * Round score shift colour-map in SVR diagnostics in the Registration Viewer is fixed when z_subvols is 1.
  * If a notebook is run on two different versions, a warning is given and the user is asked if they want to continue.
- * The notebook now contains variables pixel_unique_values and pixel_unique_counts in 'extract_debug' and 
-    'filter_debug' pages. They contain a count of every unique pixel in the unfiltered and filtered images for future 
+ * The notebook now contains variables pixel_unique_values and pixel_unique_counts in 'extract_debug' and
+    'filter_debug' pages. They contain a count of every unique pixel in the unfiltered and filtered images for future
     diagnostics.
  * Fixed a register image shifting bug.
  * Fixed deconvolution bug.
@@ -225,7 +262,7 @@
 
 
 2023/10/28 Alpha Update (v0.3.0):
- * Saving extracted tiles as .npy is the default save file type. Can be changed to .zarr (50% compression) by setting 
+ * Saving extracted tiles as .npy is the default save file type. Can be changed to .zarr (50% compression) by setting
     config['extract']['file_type'] = .zarr.
  * Compatibility with JOBS datasets.
  * Computing background scale factors is now parallelised.
@@ -242,7 +279,7 @@
  * Changed spot_no array from uint16 to uint32 for greater spot number support.
  * Registration pipeline now uses DAPI images when necessary.
  * Registration pipeline now computes camera transforms from fluorescent beads, if they exist.
- * Added new config variable [file_names][initial_bleed_matrix] to give a path to a `.npy` initial bleed matrix. 
+ * Added new config variable [file_names][initial_bleed_matrix] to give a path to a `.npy` initial bleed matrix.
     If left empty, will use the default initial bleed matrix in the source code.
  * Presequence .npy raw files support.
  * Fixed anchor auto threshold being set to zero due to regularisation.

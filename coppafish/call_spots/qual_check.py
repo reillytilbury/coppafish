@@ -4,7 +4,7 @@ import numpy.typing as npt
 
 from ..omp.scores import omp_scores_int_to_float
 from ..setup import NotebookPage, Notebook
-from .. import logging
+from .. import log
 
 
 def get_spot_intensity(spot_colors: npt.NDArray[np.float_]) -> npt.NDArray[np.float_]:
@@ -24,7 +24,7 @@ def get_spot_intensity(spot_colors: npt.NDArray[np.float_]) -> npt.NDArray[np.fl
         so high spot intensity is more indicative of a gene.
     """
     if (spot_colors <= -15_000).sum() > 0:
-        logging.warn(f"Found spot colors <= -15000")
+        log.warn(f"Found spot colors <= -15000")
     # Max over all channels, then median over all rounds
     return np.median(np.max(spot_colors, axis=2), axis=1)
 
@@ -86,7 +86,7 @@ def quality_threshold(
 
     """
     if method.lower() != "omp" and method.lower() != "ref" and method.lower() != "anchor" and method.lower() != "prob":
-        logging.error(ValueError(f"method must be 'omp' or 'anchor' but {method} given."))
+        log.error(ValueError(f"method must be 'omp' or 'anchor' but {method} given."))
     method_omp = method.lower() == "omp"
     method_anchor = method.lower() == "anchor" or method.lower() == "ref"
     method_prob = method.lower() == "prob"

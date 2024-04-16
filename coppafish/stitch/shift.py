@@ -4,7 +4,7 @@ import sklearn
 from typing import Tuple, Optional, List, Union
 import numpy_indexed
 
-from .. import logging
+from .. import log
 from ..utils import base as utils_base
 
 
@@ -56,7 +56,7 @@ def extend_array(array: np.ndarray, extend_scale: int, direction: str = "both") 
         elif direction == "both":
             ext_array = np.concatenate((ext_below, array, ext_above))
         else:
-            logging.error(
+            log.error(
                 ValueError(f"direction specified was {direction}, whereas it should be 'below', 'above' or 'both'")
             )
     return ext_array
@@ -436,7 +436,7 @@ def compute_shift(
     if np.asarray(z_scale).size == 1:
         z_scale = [z_scale, z_scale]
     if len(z_scale) > 2:
-        logging.error(ValueError(f"Only 2 z_scale values should be provided but z_scale given was {z_scale}."))
+        log.error(ValueError(f"Only 2 z_scale values should be provided but z_scale given was {z_scale}."))
     yx_base_slices, yx_transform_trees, z_shift_guess = get_2d_slices(yxz_base, yxz_transform, nz_collapse)
     if nz_collapse is not None:
         # Only do z-scaling in 3D case
@@ -476,7 +476,7 @@ def compute_shift(
         # keep extending range of shifts in yx until good score reached or hit max shift_range.
         while score_2d <= min_score_2d:
             if np.all(shift_ranges >= max_range_2d):
-                logging.warn(
+                log.warn(
                     f"Shift search range exceeds max_range = {max_range_2d} in yxz directions but \n"
                     f"best score is only {round(score_2d, 2)} which is below "
                     f"min_score = {round(min_score_2d, 2)}."
@@ -484,7 +484,7 @@ def compute_shift(
                 )
                 break
             else:
-                logging.warn(
+                log.warn(
                     f"Best shift found ({shift_2d}) has score of {round(score_2d, 2)} which is below "
                     f"min_score = {round(min_score_2d, 2)}."
                     f"\nRunning again with extended shift search range in yx."
@@ -557,7 +557,7 @@ def compute_shift(
             z_shift_range = np.ptp(z_shifts)
             while score < min_score_3d:
                 if z_shift_range > max_range_z:
-                    logging.warn(
+                    log.warn(
                         f"Shift search range exceeds max_range = {max_range_z} in z directions but \n"
                         f"best score is only {np.around(score, 2)} which is below "
                         f"min_score = {np.around(min_score_3d, 2)}."
@@ -565,7 +565,7 @@ def compute_shift(
                     )
                     break
                 else:
-                    logging.warn(
+                    log.warn(
                         f"Best shift found ({shift}) has score of {round(score, 2)} which is below "
                         f"min_score = {np.around(min_score_3d, 2)}."
                         f"\nRunning again with extended shift search range in z."

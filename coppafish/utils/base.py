@@ -1,6 +1,5 @@
 import os
 import tqdm
-import shutil
 import inspect
 import itertools
 import numpy as np
@@ -9,7 +8,7 @@ import numpy.typing as npt
 from typing import Union, Dict, List, Optional
 
 from ..setup.notebook import Notebook
-from .. import logging
+from .. import log
 
 
 def get_function_name() -> str:
@@ -22,55 +21,7 @@ def get_function_name() -> str:
     return str(inspect.stack()[1][3])
 
 
-def move_output_dir(current_dir: str, new_dir: str) -> None:
-    """
-    Move all output files from `current_dir` to `new_dir`. Changes the notebook file path variables in the moved
-    notebook to match the new directory position.
-
-    Args:
-        current_dir (str): current output directory.
-        new_dir (str): new output directory.
-
-    Notes:
-        - If the new output directory is located on a mount point (like a server), if the mount is not identical for
-            other users, this would not work for them. But, other users could then move the output directory again
-            somewhere that matches their file paths.
-        - The file's are copied so that the "date modified" and other metadata is preserved.
-    """
-    assert len(os.listdir(current_dir)) > 0, f"Current directory {current_dir} is empty"
-    assert len(os.listdir(new_dir)) == 0, f"New directory {new_dir} must be empty"
-    notebook_path = os.path.join(current_dir, "notebook.npz")
-    assert os.path.isfile(notebook_path), f"Notebook at {notebook_path} not found"
-    nb = Notebook(notebook_path)
-    assert nb.has_page("basic_info"), f"Notebook at {notebook_path} does not contain basic_info page"
-    assert nb.has_page("file_names"), f"Notebook at {notebook_path} does not contain file_names page"
-    del nb
-
-    current_dir = os.path.normpath(current_dir)
-    new_dir = os.path.normpath(new_dir)
-
-    with tqdm.tqdm(desc="Copying files", ascii=True, unit="file") as pbar:
-        for name in os.listdir(current_dir):
-            path = os.path.normpath(os.path.join(current_dir, name))
-            new_path = os.path.normpath(os.path.join(new_dir, name))
-            if os.path.normpath(os.path.dirname(nb.file_names.tile_dir)) == path:
-                # Skip tile directory
-                continue
-            pbar.set_postfix({"filename": name})
-            if os.path.isfile(path):
-                shutil.copy2(path, new_path)
-            elif os.path.isdir(path):
-                shutil.copytree(path, new_path)
-            else:
-                TypeError(f"Cannot copy {path}")
-            pbar.update()
-
-    print(f"Updating new notebook")
-    new_notebook_path = os.path.join(current_dir, "notebook.npz")
-    set_notebook_output_dir(new_notebook_path, new_dir)
-
-
-def set_notebook_output_dir(notebook_path: str, new_dir: str) -> None:
+def set_notebook_output_dir(notebook_path: str, new_output_dir: str) -> None:
     """
     Changes the notebook variables to use the given `output_dir`, then re-saves the notebook.
 
@@ -79,76 +30,43 @@ def set_notebook_output_dir(notebook_path: str, new_dir: str) -> None:
         new_dir (str): new output directory.
     """
     assert os.path.isfile(notebook_path), f"Notebook at {notebook_path} not found"
-    assert os.path.isdir(new_dir), f"{new_dir} directory not found"
+    assert os.path.isdir(new_output_dir), f"{new_output_dir} directory not found"
 
-    nb_new = Notebook(notebook_path)
+    nb = Notebook(notebook_path)
     # Set the copied notebook variables to the right output directory.
-    nb_new.file_names.finalized = False
-    del nb_new.file_names.output_dir
-    nb_new.file_names.output_dir = new_dir
+    nb.file_names.finalized = False
+    del nb.file_names.output_dir
+    nb.file_names.output_dir = new_output_dir
 
-    old_name = PurePath(nb_new.file_names.spot_details_info).name
-    del nb_new.file_names.spot_details_info
-    nb_new.file_names.spot_details_info = os.path.join(new_dir, old_name)
-    old_name = PurePath(nb_new.file_names.psf).name
-    del nb_new.file_names.psf
-    nb_new.file_names.psf = os.path.join(new_dir, old_name)
+    old_name = PurePath(nb.file_names.spot_details_info).name
+    del nb.file_names.spot_details_info
+    nb.file_names.spot_details_info = os.path.join(new_output_dir, old_name)
+    old_name = PurePath(nb.file_names.psf).name
+    del nb.file_names.psf
+    nb.file_names.psf = os.path.join(new_output_dir, old_name)
 
-    old_name = PurePath(nb_new.file_names.omp_spot_shape).name
-    del nb_new.file_names.omp_spot_shape
-    nb_new.file_names.omp_spot_shape = os.path.join(new_dir, old_name)
-    old_name = PurePath(nb_new.file_names.omp_spot_info).name
-    del nb_new.file_names.omp_spot_info
-    nb_new.file_names.omp_spot_info = os.path.join(new_dir, old_name)
-    old_name = PurePath(nb_new.file_names.omp_spot_coef).name
-    del nb_new.file_names.omp_spot_coef
-    nb_new.file_names.omp_spot_coef = os.path.join(new_dir, old_name)
+    old_name = PurePath(nb.file_names.omp_spot_shape).name
+    del nb.file_names.omp_spot_shape
+    nb.file_names.omp_spot_shape = os.path.join(new_output_dir, old_name)
+    old_name = PurePath(nb.file_names.omp_spot_shape_float).name
+    del nb.file_names.omp_spot_shape_float
+    nb.file_names.omp_spot_shape_float = os.path.join(new_output_dir, old_name)
+    old_name = PurePath(nb.file_names.omp_spot_info).name
+    del nb.file_names.omp_spot_info
+    nb.file_names.omp_spot_info = os.path.join(new_output_dir, old_name)
+    old_name = PurePath(nb.file_names.omp_spot_coef).name
+    del nb.file_names.omp_spot_coef
+    nb.file_names.omp_spot_coef = os.path.join(new_output_dir, old_name)
 
-    old_name = PurePath(nb_new.file_names.big_dapi_image).name
-    del nb_new.file_names.big_dapi_image
-    nb_new.file_names.big_dapi_image = os.path.join(new_dir, old_name)
-    old_name = PurePath(nb_new.file_names.big_anchor_image).name
-    del nb_new.file_names.big_anchor_image
-    nb_new.file_names.big_anchor_image = os.path.join(new_dir, old_name)
-    nb_new.file_names.finalized = True
-    nb_new.save(notebook_path)
+    old_name = PurePath(nb.file_names.big_dapi_image).name
+    del nb.file_names.big_dapi_image
+    nb.file_names.big_dapi_image = os.path.join(new_output_dir, old_name)
+    old_name = PurePath(nb.file_names.big_anchor_image).name
+    del nb.file_names.big_anchor_image
+    nb.file_names.big_anchor_image = os.path.join(new_output_dir, old_name)
 
-
-def move_tile_dir(current_tile_dir: str, new_tile_dir: str, notebook_path: str) -> None:
-    """
-    Copies the tile directory and all its contents to `new_tile_dir`. The notebook at `notebook_path` is then updated
-    to use the new tile directory. The old tile directory is not deleted.
-
-    Args:
-        current_tile_dir (str): current tile directory.
-        new_tile_dir (str): new tile directory.
-        notebook_path (str): path to the notebook.
-    """
-    assert os.path.isfile(notebook_path), f"Notebook at {notebook_path} not found"
-    assert os.path.isdir(current_tile_dir), f"Current tile directory {current_tile_dir} not found"
-    assert len(os.listdir(current_tile_dir)) > 0, f"Current tile directory {current_tile_dir} is empty"
-    if not os.path.isdir(new_tile_dir):
-        logging.warn(f"{new_tile_dir} tile directory does not exist, creating it...")
-        os.mkdir(new_tile_dir)
-
-    with tqdm.tqdm(desc="Copying files", ascii=True, unit="file") as pbar:
-        for name in os.listdir(current_tile_dir):
-            pbar.set_postfix({"filename": name})
-            path = os.path.join(current_tile_dir, name)
-            new_path = os.path.join(new_tile_dir, name)
-            if os.path.isfile(new_path) or os.path.isdir(new_path):
-                logging.warn(f"Path {new_path} already exists, skipping.")
-                continue
-            if os.path.isfile(path):
-                shutil.copy2(path, new_path)
-            elif os.path.isdir(path):
-                shutil.copytree(path, new_path)
-            else:
-                raise TypeError(f"Cannot copy {path}")
-            pbar.update()
-
-    print(f"Updating notebook")
-    set_notebook_tile_dir(notebook_path, new_tile_dir)
+    nb.file_names.finalized = True
+    nb.save(notebook_path)
 
 
 def set_notebook_tile_dir(notebook_path: str, new_tile_dir: str) -> None:
@@ -161,7 +79,7 @@ def set_notebook_tile_dir(notebook_path: str, new_tile_dir: str) -> None:
     """
     assert os.path.isfile(notebook_path), f"Notebook {notebook_path} not found"
     if not os.path.isdir(new_tile_dir):
-        logging.warn(f"New tile directory {new_tile_dir} does not exist. Continuing anyway...")
+        log.warn(f"New tile directory {new_tile_dir} does not exist. Continuing anyway...")
 
     new_tile_dir = os.path.normpath(new_tile_dir)
 
@@ -224,7 +142,7 @@ def round_any(x: Union[float, npt.NDArray], base: float, round_type: str = "roun
     elif round_type == "floor":
         return base * np.floor(x / base)
     else:
-        logging.error(
+        log.error(
             ValueError(
                 f"round_type specified was {round_type} but it should be one of the following:\n" f"round, ceil, floor"
             )
@@ -304,6 +222,7 @@ def reed_solomon_codes(n_genes: int, n_rounds: int, n_channels: Optional[int] = 
     assert n_rounds > 1, "Require at least two rounds"
     assert n_channels > 1, "Require at least two channels"
     assert n_genes > 0, "Require at least one gene"
+    assert n_channels < 10, "n_channels >= 10 is not supported"
 
     verbose = n_genes > 10
     degree = 0
@@ -315,7 +234,7 @@ def reed_solomon_codes(n_genes: int, n_rounds: int, n_channels: Optional[int] = 
             break
         degree += 1
         if degree == 20:
-            logging.error(ValueError("Polynomial degree required is too large for generating the gene codes"))
+            log.error(ValueError("Polynomial degree required is too large for generating the gene codes"))
     # Create a `degree` degree polynomial, where each coefficient goes between (0, n_rounds] to generate each unique
     # gene code
     codes = dict()
@@ -350,7 +269,7 @@ def reed_solomon_codes(n_genes: int, n_rounds: int, n_channels: Optional[int] = 
     values = list(codes.values())
     if len(values) != len(set(values)):
         # Not every gene code is unique
-        logging.error(
+        log.error(
             ValueError(
                 f"Could not generate {n_genes} unique gene codes with {n_rounds} rounds/dyes. "
                 + "Maybe try decreasing the number of genes or increasing the number of rounds."

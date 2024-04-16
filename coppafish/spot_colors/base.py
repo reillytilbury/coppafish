@@ -5,7 +5,7 @@ import os
 
 from ..setup import NotebookPage
 from ..utils import tiles_io
-from .. import logging
+from .. import log
 
 
 def apply_transform(
@@ -34,13 +34,14 @@ def apply_transform(
         - ```in_range``` - ```bool [n_spots]```.
             Whether spot s was in the bounds of the tile when transformed to round `r`, channel `c`.
     """
-    # load in shifts for each pixel
-    y_indices, x_indices, z_indices = yxz.T
-    # apply shifts to each pixel
-    yxz_shifts = (-flow[:, y_indices, x_indices, z_indices].T).astype(np.float32)
-    yxz_transform = np.asarray(yxz + yxz_shifts)
+    if flow is not None:
+        # load in shifts for each pixel
+        y_indices, x_indices, z_indices = yxz.T
+        # apply shifts to each pixel
+        yxz_shifts = (-flow[:, y_indices, x_indices, z_indices].T).astype(np.float32)
+        yxz = np.asarray(yxz + yxz_shifts)
     # apply icp correction
-    yxz_transform = np.pad(yxz_transform, ((0, 0), (0, 1)), constant_values=1)
+    yxz_transform = np.pad(yxz, ((0, 0), (0, 1)), constant_values=1)
     yxz_transform = np.round(yxz_transform @ icp_correction).astype(np.int16)
     in_range = np.logical_and(
         (yxz_transform >= np.array([0, 0, 0])).all(axis=1), (yxz_transform < tile_sz).all(axis=1)
@@ -149,11 +150,16 @@ def get_spot_colors(
         yxz_base = yxz_base[colours_valid]
 
     # if we are using bg colours, address that here
+    bad_rc = [(trc[1], trc[2]) for trc in nbp_basic.bad_trc if trc[0] == t]
     if bg_scale is not None:
         bg_colours = np.repeat(spot_colors[:, -1, :][:, None, :], n_use_rounds - 1, axis=1).astype(np.float32)
         bg_colours = np.maximum(bg_colours, 0)
         bg_colours *= bg_scale[t][np.ix_(use_rounds[:-1], use_channels)][None, :, :]
         bg_colours = bg_colours.astype(np.int32)
+        # set bg colours to 0 if spot is in bad rc
+        for rc in bad_rc:
+            r, c = use_rounds.index(rc[0]), use_channels.index(rc[1])
+            bg_colours[:, r, c] = 0
         spot_colors = spot_colors[:, :-1, :]
         spot_colors = spot_colors - bg_colours
 

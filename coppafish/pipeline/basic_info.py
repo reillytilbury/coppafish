@@ -4,7 +4,7 @@ import numpy as np
 
 from ..setup.notebook import NotebookPage
 from .. import utils, setup
-from .. import logging
+from .. import log
 
 
 def set_basic_info(config_file: dict, config_basic: dict, n_rounds: int = 7) -> NotebookPage:
@@ -50,27 +50,27 @@ def set_basic_info(config_file: dict, config_basic: dict, n_rounds: int = 7) -> 
         config_basic["anchor_channel"] = None  # set anchor channel to None if no anchor round
         config_basic["dapi_channel"] = None  # set dapi channel to None if no anchor round
         if config_basic["ref_round"] is None:
-            logging.error(ValueError("No anchor round used, but ref_round not specified"))
+            log.error(ValueError("No anchor round used, but ref_round not specified"))
         if config_basic["ref_channel"] is None:
-            logging.error(ValueError("No anchor round used, but ref_channel not specified"))
+            log.error(ValueError("No anchor round used, but ref_channel not specified"))
         nbp.anchor_round = None
         nbp.n_extra_rounds = 0
         nbp.use_anchor = False
-        logging.warn(
+        log.warn(
             f"Anchor file not given."
             f"\nWill use round {config_basic['ref_round']}, "
             f"channel {config_basic['ref_channel']} as reference"
         )
     else:
         if config_basic["anchor_channel"] is None:
-            logging.error(ValueError("Using anchor round, but anchor_channel not specified"))
+            log.error(ValueError("Using anchor round, but anchor_channel not specified"))
         # always have anchor as first round after imaging rounds
         nbp.anchor_round = n_rounds
         config_basic["ref_round"] = nbp.anchor_round
         config_basic["ref_channel"] = config_basic["anchor_channel"]
         nbp.n_extra_rounds = 1
         nbp.use_anchor = True
-        logging.warn(
+        log.warn(
             f"Anchor file given and anchor channel specified."
             f"\nWill use anchor round, channel {config_basic['anchor_channel']} as reference"
         )
@@ -85,7 +85,7 @@ def set_basic_info(config_file: dict, config_basic: dict, n_rounds: int = 7) -> 
     nbp.use_rounds.sort()  # ensure ascending
     use_rounds_oob = [val for val in nbp.use_rounds if val < 0 or val >= n_rounds]
     if len(use_rounds_oob) > 0:
-        logging.error(utils.errors.OutOfBoundsError("use_rounds", use_rounds_oob[0], 0, n_rounds - 1))
+        log.error(utils.errors.OutOfBoundsError("use_rounds", use_rounds_oob[0], 0, n_rounds - 1))
 
     # These 3 are different ways of obtaining the file from which we will obtain the metadata
     if config_file["round"] is not None:
@@ -124,7 +124,7 @@ def set_basic_info(config_file: dict, config_basic: dict, n_rounds: int = 7) -> 
         metadata["sizes"]["t"] = n_tiles
         metadata["xy_pos"] = utils.nd2.get_jobs_xypos(config_file["input_dir"], first_round_files)
     else:
-        logging.error(
+        log.error(
             ValueError(
                 f"config_file['raw_extension'] should be either '.nd2' or '.npy' but it is "
                 f"{config_file['raw_extension']}."
@@ -140,7 +140,7 @@ def set_basic_info(config_file: dict, config_basic: dict, n_rounds: int = 7) -> 
         nbp.use_channels.sort()
         use_channels_oob = [val for val in nbp.use_channels if val < 0 or val >= n_channels]
         if len(use_channels_oob) > 0:
-            logging.error(utils.errors.OutOfBoundsError("use_channels", use_channels_oob[0], 0, n_channels - 1))
+            log.error(utils.errors.OutOfBoundsError("use_channels", use_channels_oob[0], 0, n_channels - 1))
     elif config_file["raw_extension"] == "jobs":
         n_channels = metadata["sizes"]["c"] * 7
         nbp.use_channels = config_basic["use_channels"]
@@ -154,7 +154,7 @@ def set_basic_info(config_file: dict, config_basic: dict, n_rounds: int = 7) -> 
     # nbp.use_channels.sort()
     # use_channels_oob = [val for val in nbp.use_channels if val < 0 or val >= n_channels]
     # if len(use_channels_oob) > 0:
-    #     logging.error(utils.errors.OutOfBoundsError("use_channels", use_channels_oob[0], 0, n_channels - 1))
+    #     log.error(utils.errors.OutOfBoundsError("use_channels", use_channels_oob[0], 0, n_channels - 1))
     #
 
     # get z info
@@ -169,7 +169,7 @@ def set_basic_info(config_file: dict, config_basic: dict, n_rounds: int = 7) -> 
     nbp.use_z.sort()
     use_z_oob = [val for val in nbp.use_z if val < 0 or val >= metadata["sizes"]["z"]]
     if len(use_z_oob) > 0:
-        logging.error(utils.errors.OutOfBoundsError("use_z", use_z_oob[0], 0, metadata["sizes"]["z"] - 1))
+        log.error(utils.errors.OutOfBoundsError("use_z", use_z_oob[0], 0, metadata["sizes"]["z"] - 1))
 
     # get tile info
     tile_sz = metadata["sizes"]["x"]
@@ -183,7 +183,7 @@ def set_basic_info(config_file: dict, config_basic: dict, n_rounds: int = 7) -> 
         if config_basic["use_tiles"] is None:
             config_basic["use_tiles"] = use_tiles_folder
         elif np.setdiff1d(config_basic["use_tiles"], use_tiles_folder).size > 0:
-            logging.error(
+            log.error(
                 ValueError(
                     f"config_basic['use_tiles'] = {config_basic['use_tiles']}\n"
                     f"But in the folder:\n{first_round_raw}\nTiles Available are {use_tiles_folder}."
@@ -200,28 +200,28 @@ def set_basic_info(config_file: dict, config_basic: dict, n_rounds: int = 7) -> 
     nbp.use_tiles.sort()
     use_tiles_oob = [val for val in nbp.use_tiles if val < 0 or val >= n_tiles]
     if len(use_tiles_oob) > 0:
-        logging.error(utils.errors.OutOfBoundsError("use_tiles", use_tiles_oob[0], 0, n_tiles - 1))
+        log.error(utils.errors.OutOfBoundsError("use_tiles", use_tiles_oob[0], 0, n_tiles - 1))
 
     # get dye info
     if config_basic["dye_names"] is None:
-        logging.warn(f"dye_names not specified so assuming separate dye for each channel.")
+        log.warn(f"dye_names not specified so assuming separate dye for each channel.")
         n_dyes = n_channels
     else:
         # Ensure channel_camera/channel_laser are correct sizes
         n_dyes = len(config_basic["dye_names"])
         if config_basic["channel_camera"] is None:
-            logging.error(ValueError("dye_names specified but channel_camera is not."))
+            log.error(ValueError("dye_names specified but channel_camera is not."))
         elif len(config_basic["channel_camera"]) != n_channels:
-            logging.error(
+            log.error(
                 ValueError(
                     f"channel_camera contains {len(config_basic['channel_camera'])} values.\n"
                     f"But there must be a value for each channel and there are {n_channels} channels."
                 )
             )
         if config_basic["channel_laser"] is None:
-            logging.error(ValueError("dye_names specified but channel_laser is not."))
+            log.error(ValueError("dye_names specified but channel_laser is not."))
         elif len(config_basic["channel_laser"]) != n_channels:
-            logging.error(
+            log.error(
                 ValueError(
                     f"channel_laser contains {len(config_basic['channel_camera'])} values.\n"
                     f"But there must be a value for each channel and there are {n_channels} channels."
@@ -260,19 +260,19 @@ def set_basic_info(config_file: dict, config_basic: dict, n_rounds: int = 7) -> 
     # Make sure reference rounds/channels are in range of data provided.
     if nbp.use_anchor:
         if not 0 <= nbp.ref_channel <= n_channels - 1:
-            logging.error(utils.errors.OutOfBoundsError("ref_channel", nbp.ref_channel, 0, n_channels - 1))
+            log.error(utils.errors.OutOfBoundsError("ref_channel", nbp.ref_channel, 0, n_channels - 1))
         if nbp.dapi_channel is not None:
             if not 0 <= nbp.dapi_channel <= n_channels - 1:
-                logging.error(utils.errors.OutOfBoundsError("dapi_channel", nbp.ref_channel, 0, n_channels - 1))
+                log.error(utils.errors.OutOfBoundsError("dapi_channel", nbp.ref_channel, 0, n_channels - 1))
     else:
         # Seen as ref_channel is an imaging channel if anchor not used, ref_channel must be an imaging channels i.e.
         # must be in use_channels. Same goes for ref_round.
         if not np.isin(nbp.ref_channel, nbp.use_channels):
-            logging.error(
+            log.error(
                 ValueError(f"ref_channel is {nbp.ref_channel} which is not in use_channels = {nbp.use_channels}.")
             )
         if not np.isin(nbp.ref_round, nbp.use_rounds):
-            logging.error(ValueError(f"ref_round is {nbp.ref_round} which is not in use_rounds = {nbp.use_rounds}."))
+            log.error(ValueError(f"ref_round is {nbp.ref_round} which is not in use_rounds = {nbp.use_rounds}."))
 
     return nbp
 
@@ -313,7 +313,7 @@ def set_basic_info_new(config: dict) -> NotebookPage:
     all_files.sort()
     if raw_extension == ".nd2":
         if config_file["round"] is None and config_file["anchor"] is None:
-            logging.error(ValueError(f"config_file['round'] or config_file['anchor'] should not both be left blank"))
+            log.error(ValueError(f"config_file['round'] or config_file['anchor'] should not both be left blank"))
         # load in metadata of nd2 file corresponding to first round
         # Allow for degenerate case when only anchor has been provided
         if config_file["round"] is not None:
@@ -326,7 +326,7 @@ def set_basic_info_new(config: dict) -> NotebookPage:
         # Load in metadata as dictionary from a json file
         metadata_file = [file for file in all_files if file.endswith(".json")][0]
         if metadata_file is None:
-            logging.error(
+            log.error(
                 ValueError(
                     f"There is no json metadata file in input_dir. This should have been set at the point of "
                     f"ND2 extraction to npy."
@@ -337,7 +337,7 @@ def set_basic_info_new(config: dict) -> NotebookPage:
     elif raw_extension == "jobs":
         metadata = utils.nd2.get_jobs_metadata(all_files, config_file["input_dir"], config=config)
     else:
-        logging.error(
+        log.error(
             ValueError(
                 f"config_file['raw_extension'] should be either '.nd2' or '.npy' but it is "
                 f"{config_file['raw_extension']}."
@@ -345,13 +345,16 @@ def set_basic_info_new(config: dict) -> NotebookPage:
         )
 
     # Stage 2: Read in page contents from config that cannot be computed from metadata.
-    # the metadata. First 12 keys in the basic info page are only variables that the user can influence
-    for key, value in list(config_basic.items())[:12]:
+    # the metadata. First few keys in the basic info page are only variables that the user can influence
+    for key, value in list(config_basic.items())[:13]:
         nbp.__setattr__(key=key, value=value)
+    if nbp.bad_trc is None:
+        del nbp.bad_trc
+        nbp.bad_trc = list()
 
-    # Only 3 of these can NOT be left empty
+    # some of these can NOT be left empty
     if nbp.dye_names is None or nbp.tile_pixel_value_shift is None or nbp.use_anchor is None:
-        logging.error(
+        log.error(
             ValueError(
                 "One or more of the 3 variables which cannot be computed from anything else has been left "
                 "empty. Please fill in the use_anchor, dye_names and pixel_value_shift variables."
@@ -376,7 +379,7 @@ def set_basic_info_new(config: dict) -> NotebookPage:
             del nbp.anchor_round
             nbp.anchor_round = metadata["n_rounds"]
         if nbp.anchor_channel is None:
-            logging.error(ValueError("Need to provide an anchor channel if using anchor!"))
+            log.error(ValueError("Need to provide an anchor channel if using anchor!"))
     else:
         nbp.n_extra_rounds = 0
 
@@ -408,7 +411,7 @@ def set_basic_info_new(config: dict) -> NotebookPage:
         if i == (nbp.nz - 1):
             break
         if abs(nbp.use_z[i] - nbp.use_z[i + 1]) > 1:
-            logging.warn("use_z contains z planes that are not connected. This may cause software instability")
+            log.warn("use_z contains z planes that are not connected. This may cause software instability")
 
     if nbp.use_dyes is None:
         del nbp.use_dyes
@@ -441,7 +444,7 @@ def set_basic_info_new(config: dict) -> NotebookPage:
         else:
             nbp.use_preseq = False
             nbp.pre_seq_round = None
-            logging.warn(
+            log.warn(
                 f"Pre-sequencing round not found at "
                 f"{os.path.join(config_file['input_dir'], config_file['pre_seq'] +'.nd2')}. "
                 f"Setting pre_seq_round to False. If this is not what you want, please check that the "
@@ -458,7 +461,7 @@ def set_basic_info_new(config: dict) -> NotebookPage:
         else:
             nbp.use_preseq = False
             nbp.pre_seq_round = None
-            logging.warn(
+            log.warn(
                 f"Pre-sequencing round not found at "
                 f"{os.path.join(config_file['input_dir'], config_file['pre_seq'] +'.nd2')}. "
                 f"Setting pre_seq_round to False. If this is not what you want, please check that the "
@@ -475,7 +478,7 @@ def set_basic_info_new(config: dict) -> NotebookPage:
         else:
             nbp.use_preseq = False
             nbp.pre_seq_round = None
-            logging.warn(
+            log.warn(
                 f"Pre-sequencing round not found at "
                 f"{config['input_dir']}."
                 f"Setting pre_seq_round to False. If this is not what you want, please check that the "

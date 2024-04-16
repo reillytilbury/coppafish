@@ -5,13 +5,14 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.transforms import ScaledTranslation
 from matplotlib.backends.backend_pdf import PdfPages
-from typing import Union, Optional, Tuple
+from typing import Union, Optional, Tuple, List
 
 from ..omp import scores as omp_scores
 from ..setup import Notebook, NotebookPage
 from ..utils import tiles_io
-from .. import logging
+from .. import log
 
 
 # Plot settings
@@ -24,6 +25,8 @@ TINY_FONTSIZE = 4
 INFO_FONTDICT = {"fontsize": NORMAL_FONTSIZE, "verticalalignment": "center"}
 N_GENES_SHOW = 40
 GENE_PROB_THRESHOLD = 0.7
+DEFAULT_REF_SCORE_THRESHOLD = 0.3
+DEFAULT_OMP_SCORE = 0.3
 
 
 class BuildPDF:
@@ -42,7 +45,7 @@ class BuildPDF:
             output_dir (str, optional): directory to save pdfs. Default: `nb.basic_info.file_names/diagnostics.pdf`.
             auto_open (bool, optional): open the PDF in a web browser after creation. Default: true.
         """
-        logging.debug("Creating diagnostic PDF started")
+        log.debug("Creating diagnostic PDF started")
         pbar = tqdm(desc="Creating Diagnostic PDFs", total=9, unit="section")
         pbar.set_postfix_str("Loading notebook")
         if isinstance(nb, str):
@@ -53,7 +56,7 @@ class BuildPDF:
         output_dir = os.path.abspath(output_dir)
         assert os.path.isdir(output_dir), f"output_dir {output_dir} is not a valid directory"
 
-        # Light theme
+        # Light default theme
         plt.style.use("default")
         self.use_channels_anchor = [
             c for c in [nb.basic_info.dapi_channel, nb.basic_info.anchor_channel] if c is not None
@@ -236,10 +239,22 @@ class BuildPDF:
         pbar.set_postfix_str("Stitch")
         pbar.update()
 
-        pbar.set_postfix_str("Reference and call spots")
-        ref_spots_filepath = os.path.join(output_dir, "_ref_call_spots.pdf")
+        pbar.set_postfix_str("Call spots")
+        ref_spots_filepath = os.path.join(output_dir, "_call_spots.pdf")
         if not os.path.isfile(ref_spots_filepath) and nb.has_page("ref_spots") and nb.has_page("call_spots"):
             with PdfPages(ref_spots_filepath) as pdf:
+                for t in nb.basic_info.use_tiles:
+                    keep = nb.ref_spots.tile == t
+                    fig = self.create_positions_histograms(
+                        nb.ref_spots.score[keep],
+                        nb.ref_spots.local_yxz[keep],
+                        DEFAULT_REF_SCORE_THRESHOLD,
+                        title=f"Spot position histograms for {t=}, scores "
+                        + r"$\geq$"
+                        + str(DEFAULT_REF_SCORE_THRESHOLD),
+                        use_z=nb.basic_info.use_z,
+                    )
+                    pdf.savefig(fig)
                 # Create a page for every gene
                 gene_probs = nb.ref_spots.gene_probs
                 # bg colour was subtracted if use_preseq
@@ -338,11 +353,26 @@ class BuildPDF:
 
                 fig = self.create_omp_spot_shape_fig(nb.omp)
                 pdf.savefig(fig)
+
+                for i in range(10):
+                    fig = self.create_omp_gene_counts_fig(nb.file_names, nb.ref_spots, nb.omp, score_threshold=i * 0.1)
+                    pdf.savefig(fig)
+
+                for t in nb.basic_info.use_tiles:
+                    keep = nb.omp.tile == t
+                    fig = self.create_positions_histograms(
+                        nb.omp.scores[keep],
+                        nb.omp.local_yxz[keep],
+                        DEFAULT_OMP_SCORE,
+                        title=f"Spot position histograms for {t=}, scores " + r"$\geq$" + str(DEFAULT_OMP_SCORE),
+                        use_z=nb.basic_info.use_z,
+                    )
+                    pdf.savefig(fig)
             plt.close(fig)
         pbar.update()
         pbar.close()
 
-        logging.debug("Creating diagnostic PDF complete")
+        log.debug("Creating diagnostic PDF complete")
         if auto_open:
             webbrowser.open_new_tab(rf"{output_dir}")
 
@@ -550,7 +580,7 @@ class BuildPDF:
                                 continue
                             hist_x[k] = np.log2(count)
                     if np.sum(hist_x) <= 0:
-                        logging.warn(f"The {section_name.lower()} image for {t=}, {r=}, {c=} looks to be all zeroes!")
+                        log.warn(f"The {section_name.lower()} image for {t=}, {r=}, {c=} looks to be all zeroes!")
                         continue
                     ax.bar(x=hist_loc, height=hist_x, color="red", width=bin_size)
                     ax.set_xlim(pixel_min, pixel_max)
@@ -613,9 +643,9 @@ class BuildPDF:
         fig.suptitle("OMP spots")
         # Plot a bar graph of the spot count found by OMP for each z plane and tile. The colour of the bar
         # represents the mean score of the spots in that z plane and tile
-        mean_scores = np.zeros(len(basic_info_page.use_tiles) * len(basic_info_page.use_z))
-        spot_counts = np.zeros_like(mean_scores, dtype=int)
-        bar_x = np.arange(0, mean_scores.size, dtype=float) + 0.5
+        median_scores = np.zeros(len(basic_info_page.use_tiles) * len(basic_info_page.use_z))
+        spot_counts = np.zeros_like(median_scores, dtype=int)
+        bar_x = np.arange(0, median_scores.size, dtype=float) + 0.5
         ticks = []
         labels = []
         scores: np.ndarray = omp_scores.omp_scores_int_to_float(omp_page.scores)
@@ -627,7 +657,7 @@ class BuildPDF:
                 spot_counts[i] = np.logical_and(tile == t, local_z == z).sum()
                 scores_t_z = scores[np.logical_and(tile == t, local_z == z)]
                 if scores_t_z.size > 0:
-                    mean_scores[i] = scores_t_z.mean()
+                    median_scores[i] = np.median(scores_t_z)
                 if z == basic_info_page.use_z[len(basic_info_page.use_z) // 2]:
                     labels.append(f"Tile {t}")
                     ticks.append(bar_x[i])
@@ -636,17 +666,17 @@ class BuildPDF:
                     ticks.append(bar_x[i])
                 i += 1
         del i
-        # Create a colour map for the bars to be coloured based on the mean spot score
+        # Create a colour map for the bars to be coloured based on the median spot score
+        max_median_score = median_scores.max()
         cmap = mpl.cm.plasma
-        max_mean_score = mean_scores.max()
-        norm = mpl.colors.Normalize(vmin=0, vmax=max_mean_score)
+        norm = mpl.colors.Normalize(vmin=0, vmax=max_median_score)
         fig.colorbar(
             mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
             cax=axes[0, 1],
             orientation="vertical",
-            label="Mean score",
+            label="Median score",
         )
-        bar_colours = [cmap(norm(mean_scores[i])) for i in range(mean_scores.size)]
+        bar_colours = [cmap(norm(median_scores[i])) for i in range(median_scores.size)]
         axes[0, 0].set_title(f"Counts")
         axes[0, 0].bar(bar_x, spot_counts, width=1, color=bar_colours, edgecolor="black", linewidth=0.5)
         axes[0, 0].set_xticks(ticks, labels=labels)
@@ -723,5 +753,105 @@ class BuildPDF:
                 show_right_frame=True,
             )
 
+        fig.tight_layout()
+        return fig
+
+    def create_omp_gene_counts_fig(
+        self, file_page: NotebookPage, ref_spots_page: NotebookPage, omp_page: NotebookPage, score_threshold: float = 0
+    ) -> mpl.figure.Figure:
+        """Creates a gene count bar chart. Each bar is coloured based on the median spot score of the gene."""
+        fig, axes = self.create_empty_page(1, 2, gridspec_kw={"width_ratios": [24, 1]})
+        ax: plt.Axes = axes[0, 0]
+        labels = []
+        gene_counts = []
+        median_scores = []
+        n_genes = ref_spots_page.gene_probs.shape[1]
+        if os.path.isfile(file_page.code_book):
+            gene_names, _ = np.genfromtxt(file_page.code_book, dtype=(str, str)).transpose()
+        else:
+            gene_names = [f"gene_{g}" for g in range(n_genes)]
+
+        scores = omp_scores.omp_scores_int_to_float(omp_page.scores)
+        gene_numbers = omp_page.gene_no[scores >= score_threshold]
+        unique_genes, counts = np.unique(gene_numbers, return_counts=True)
+        for g, gene_name in enumerate(gene_names):
+            if np.isin(g, unique_genes):
+                gene_counts.append(int(counts[unique_genes == g]))
+                scores_g = scores[np.logical_and(omp_page.gene_no == g, scores >= score_threshold)]
+                median_scores.append(float(np.median(scores_g)))
+            else:
+                gene_counts.append(0)
+                median_scores.append(0)
+            labels.append(gene_name)
+        bar_x = np.arange(n_genes) + 0.5
+        if score_threshold > 0:
+            ax.set_title(r"Gene counts for scores $\geq$ " + str(round(score_threshold, 3)))
+        else:
+            ax.set_title(f"Gene counts")
+        # Create a colour map for the bars to be coloured based on the median scores
+        cmap = mpl.cm.viridis
+        norm = mpl.colors.Normalize(vmin=0, vmax=1)
+        fig.colorbar(
+            mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
+            cax=axes[0, 1],
+            orientation="vertical",
+            label="Median score",
+        )
+        bar_colours = [cmap(norm(median_scores[i])) for i in range(n_genes)]
+        ax.bar(bar_x, gene_counts, color=bar_colours, linewidth=0.9, edgecolor="black")
+        ax.set_xticks(bar_x, labels, rotation=70, ha="right")
+        # Apply a 5pt x offset to all x tick labels, makes gene labels better aligned with ticks
+        dx, dy = 5, 0
+        offset = ScaledTranslation(dx / fig.dpi, dy / fig.dpi, fig.dpi_scale_trans)
+        for label in ax.xaxis.get_majorticklabels():
+            label.set_transform(label.get_transform() + offset)
+
+        fig.tight_layout()
+        return fig
+
+    def create_positions_histograms(
+        self,
+        scores: np.ndarray,
+        local_yxz: np.ndarray,
+        score_threshold: float = 0,
+        title: Optional[str] = None,
+        use_z: Optional[List[int]] = None,
+    ) -> plt.Figure:
+        """
+        Histograms of positions x, y, and z.
+
+        Args:
+            scores (`(n_spots) ndarray[float]`): scores of each position.
+            local_yxz (`(n_spots x 3) ndarray[int]`): local x, y, and z positions.
+            score_threshold (float): score threshold. Default: 0.
+            title (str, optional): plot title.
+
+        Returns:
+            figure: positions histograms plot.
+        """
+        assert scores.size == local_yxz.shape[0]
+
+        fig, axes = self.create_empty_page(3, 1, share_y=True)
+        positions = {1: "x", 0: "y", 2: "z"}
+        colours = ["green", "blue", "red"]
+        bins = [100, 100, local_yxz[:, 2].max() + 1]
+        if use_z is not None:
+            bins[2] = len(use_z)
+        for index, position in positions.items():
+            ax: plt.Axes = axes[index, 0]
+            ax.set_title(position.upper())
+            ax.hist(
+                local_yxz[scores >= score_threshold, index],
+                color=colours[index],
+                bins=bins[index],
+                edgecolor="black",
+                linewidth=0.4,
+                range=(use_z[0], use_z[-1]) if position == "z" else None,
+            )
+            ax.set_ylabel("Count")
+        if title is None:
+            fig.suptitle(r"Position histogram for scores $\geq$" + str(score_threshold))
+        else:
+            fig.suptitle(title)
         fig.tight_layout()
         return fig

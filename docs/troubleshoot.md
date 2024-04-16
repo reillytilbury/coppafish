@@ -1,20 +1,45 @@
+## Pipeline crash
+
+If the coppafish pipeline is crashing, first read the error message. If there is a suggestion about how to fix the
+issue in the config, try changing the config variable and run the pipeline again. If the suggestion does not make sense
+to you, feel free to reach out to the developers for help. If the error message is not clear to you, please
+[create an issue](https://github.com/reillytilbury/coppafish/issues/new) on GitHub!
+
+## Notebook will not open
+
+A notebook file can be corrupted if a process is killed while the notebook is being re-saved. When this happens, an
+error like:
+
+```python
+TypeError: byte indices must be integers or slices, not tuple
+```
+
+will occur when trying to load the notebook. To fix this issue, delete the corrupted notebook, rename the backup
+notebook called `notebook_backup.npz` to the original notebook name and continue from there.
+
 ## Cannot open napari issues
 
-If napari fails to open and you see an error such as 
+If napari fails to open and you see an error such as
 
 ```python
 WARNING: composeAndFlush: makeCurrent() failed
 ```
 
-in the terminal, here are a few suggestions that might fix the issue:
+when trying to open the Viewer or RegistrationViewer, here are a few suggestions that might fix the issue:
 
 * In the conda environment, run `conda install -c conda-forge libstdcxx-ng`
 * In the conda environment, run `conda install -c conda-forge libffi`.
 
+## Filter image clip error
 
-## Pipeline crash
+An error can occur when a filtered image clips off too many pixels when trying to save. This happens because the filter
+step will scale up every non-DAPI image by a common factor to improve precision. There are two options to deal with this
+issue:
 
-If the coppafish pipeline is crashing, first read the error message. If there is a suggestion about how to fix the 
-issue in the config, try changing the config variable and run the pipeline again. If the suggestion does not make sense 
-to you, feel free to reach out to the developers for help. If the error message is not clear to you, please 
-[create an issue](https://github.com/reillytilbury/coppafish/issues) on GitHub!
+ * Reduce image clipping by lowering `scale_multiplier` below the default value found in the `filter` config (the
+   default is found [here](https://github.com/reillytilbury/coppafish/raw/HEAD/coppafish/setup/settings.default.ini")).
+   After this, delete the `filter` directory found in the tiles directory and the `scale.txt`. Then, restart the pipeline.
+ * Follow a "I don't care" strategy by increasing `percent_clip_error` above the default to allow for more clipped
+   pixels. You can then restart the pipeline without deleting any files. If you wish to ignore warnings too, increase
+   `percent_clip_warn`.
+

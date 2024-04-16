@@ -31,12 +31,17 @@ def get_remote_software_version() -> str:
     Returns:
         str: version tag. None if the version could not be retrieved.
     """
+    fallback = None
     if not internet_is_active():
-        return None
-    f = urllib.request.urlopen(VERSION_URL)
-    version_contents = str(f.read())
-    index_start = version_contents.index(VERSION_ENCAPSULATE)
-    index_end = version_contents.index(VERSION_ENCAPSULATE, index_start + 1)
+        return fallback
+    try:
+        f = urllib.request.urlopen(VERSION_URL)
+        version_contents = str(f.read())
+        index_start = version_contents.index(VERSION_ENCAPSULATE)
+        index_end = version_contents.index(VERSION_ENCAPSULATE, index_start + 1)
+    except urllib.error.HTTPError:
+        # This can be reached if GitHub refuses the request due to too many recent requests.
+        return fallback
     return version_contents[index_start + 1 : index_end]
 
 

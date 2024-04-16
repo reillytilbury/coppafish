@@ -29,7 +29,28 @@ try:
 except ModuleNotFoundError:
     import importlib.resources as importlib_resources
 
-from .. import logging
+from .. import log
+
+
+def convert_tuple_to_list(x: str) -> list:
+    """
+    Convert a string representation of a list of tuples to a list of lists.
+
+    Args:
+        x (str): string representation of a list of tuples
+
+    Returns:
+        list: list of lists
+    """
+    y = []
+    while x:
+        left_idx = x.find("(")
+        right_idx = x.find(")")
+        string = x[left_idx + 1 : right_idx]
+        y.append(string)
+        x = x[right_idx + 1 :]
+    return y
+
 
 # List of options and their type.  If you change this, update the
 # config.default.ini file too.  Make sure the type is valid.
@@ -49,6 +70,7 @@ _options = {
         "is_3d": "bool",
         "ignore_first_z_plane": "bool",
         "minimum_print_severity": "int",
+        "bad_trc": "maybe_list_tuple_int",
         # From here onwards these are not compulsory to enter and will be taken from the metadata
         # Only leaving them here to have backwards compatibility as Max thinks the user should influence these
         "channel_camera": "maybe_list_int",
@@ -150,8 +172,9 @@ _options = {
         # these parameters are for round registration
         "sample_factor_yx": "int",
         "window_radius": "int",
-        "smooth_sigma": "number",
+        "smooth_sigma": "list_number",
         "smooth_thresh": "number",
+        "flow_cores": "maybe_int",
         "flow_clip": "maybe_list_number",
         # these parameters are for icp
         "neighb_dist_thresh_yx": "number",
@@ -244,6 +267,8 @@ _option_type_checkers = {
     "maybe_str": lambda x: x.strip() == "" or _option_type_checkers["str"](x),
     "maybe_list_str": lambda x: x.strip() == "" or _option_type_checkers["list_str"](x),
     "maybe_file": lambda x: x.strip() == "" or _option_type_checkers["file"](x),
+    "maybe_list_tuple_int": lambda x: x.strip() == ""
+    or all([_option_type_checkers["list_int"](y) for y in convert_tuple_to_list(x)]),
 }
 _option_formatters = {
     "int": lambda x: int(x),
@@ -263,6 +288,9 @@ _option_formatters = {
     "maybe_str": lambda x: None if x == "" else _option_formatters["str"](x),
     "maybe_list_str": lambda x: None if x == "" else _option_formatters["list_str"](x),
     "maybe_file": lambda x: None if x == "" else _option_formatters["file"](x),
+    "maybe_list_tuple_int": lambda x: (
+        None if x == "" else [tuple(_option_formatters["list_int"](y)) for y in convert_tuple_to_list(x)]
+    ),
 }
 
 
@@ -320,20 +348,20 @@ def get_config(ini_file):
     # 1. ensure all of the sections (defined in _options) included
     for section in _options.keys():
         if section not in _parser.keys():
-            logging.error(InvalidConfigError(section, None, None))
+            log.error(InvalidConfigError(section, None, None))
     # 2. ensure all of the options in each section (defined in
     # _options) have some value.
     for section in _options.keys():
         for name in _options[section].keys():
             if name not in _parser[section].keys():
-                logging.error(InvalidConfigError(section, name, None))
+                log.error(InvalidConfigError(section, name, None))
     # Second step of validation: ensure three things...
     ini_file_sections = list(_parser.keys())
     ini_file_sections.remove("DEFAULT")  # parser always contains this key.
     # 1. Ensure there are no extra sections in config file
     for section in ini_file_sections:
         if section not in _options.keys():
-            logging.error(InvalidConfigError(section, None, None))
+            log.error(InvalidConfigError(section, None, None))
     for section in _options.keys():
         for name, val in _parser[section].items():
             # 2. Ensure there are no extra options in config file, else remove them
@@ -342,7 +370,7 @@ def get_config(ini_file):
                 continue
             # 3. Ensure that all the option values pass type checking.
             if not _option_type_checkers[_options[section][name]](val):
-                logging.error(InvalidConfigError(section, name, val))
+                log.error(InvalidConfigError(section, name, val))
 
     # Now that we have validated, build the configuration dictionary
     out_dict = {section: {} for section in _options.keys()}

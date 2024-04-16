@@ -17,6 +17,7 @@ def create(
     include_dapi_seq: bool = False,
     include_dapi_anchor: bool = False,
     include_dapi_preseq: bool = False,
+    include_bad_trc: bool = True,
 ) -> Union[List[Tuple[int, int, int]], List[Tuple[int, int]], List[Tuple[int]]]:
     """
     Create tile, round and/or channel indices to loops through. Used throughout the coppafish pipeline. The defaults
@@ -36,6 +37,7 @@ def create(
         include_dapi_seq (bool, optional): include dapi channel in sequencing rounds. Default: False.
         include_dapi_anchor (bool, optional): include dapi channel in anchor round. Default: False.
         include_dapi_preseq (bool, optional): include dapi channel in presequencing round. Default: False.
+        include_bad_trc (bool, optional): include bad tile, round, channel combinations. Default: False.
 
     Returns:
         list of tuple[int, int, int]] or list of tuple[int, int] or list of tuple[int] or list or tuple]: a list of
@@ -99,8 +101,11 @@ def create(
             new_index += (c,)
         output.append(new_index)
     # Remove any duplicate indices
-    output = list(set(output))
-    return sorted(output)
+    output = sorted(list(set(output)))
+    if not include_bad_trc:
+        bad_trc = [tuple(trc) for trc in nbp_basic.bad_trc]
+        output = [index for index in output if index not in bad_trc]
+    return output
 
 
 def unique(indices: List[Tuple[Any]], axis: Optional[int] = None) -> List[Tuple[Any]]:

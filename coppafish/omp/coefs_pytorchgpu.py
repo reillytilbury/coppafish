@@ -1,4 +1,4 @@
-import time
+import os
 import tqdm
 import torch
 import scipy
@@ -6,7 +6,7 @@ import numpy as np
 from typing import Tuple, Union, List, Any
 
 from . import base
-from .. import utils, call_spots, logging
+from .. import utils, call_spots, log
 from ..call_spots import dot_product_pytorch as dot_product
 from ..setup import NotebookPage
 
@@ -361,7 +361,7 @@ def get_all_coefs(
     check_spot = torch.randint(0, n_pixels, size=(1,))[0].item()
     diff_to_int = torch.round(pixel_colors[check_spot]).to(int) - pixel_colors[check_spot]
     if torch.abs(diff_to_int).max() == 0:
-        logging.error(
+        log.error(
             ValueError(
                 f"pixel_coefs should be found using normalised pixel_colors."
                 f"\nBut for pixel {check_spot}, pixel_colors given are integers indicating they are "
@@ -371,7 +371,7 @@ def get_all_coefs(
 
     n_genes, n_rounds, n_channels = bled_codes.shape
     if not utils.errors.check_shape(pixel_colors, [n_pixels, n_rounds, n_channels]):
-        logging.error(utils.errors.ShapeError("pixel_colors", pixel_colors.shape, (n_pixels, n_rounds, n_channels)))
+        log.error(utils.errors.ShapeError("pixel_colors", pixel_colors.shape, (n_pixels, n_rounds, n_channels)))
     no_verbose = n_pixels < 1000  # show progress bar with more than 1000 pixels.
 
     # Fit background and override initial pixel_colors
@@ -398,7 +398,7 @@ def get_all_coefs(
     gene_coefs = gene_coefs.to(cuda)
 
     continue_pixels = torch.arange(n_pixels, device=cuda)
-    logging.debug("Finding OMP coefficients started")
+    log.debug("Finding OMP coefficients started")
     with tqdm.tqdm(total=max_genes, disable=no_verbose, desc="Finding OMP coefficients for each pixel") as pbar:
         for i in range(max_genes):
             if i == 0:
@@ -457,7 +457,7 @@ def get_all_coefs(
                     torch.asarray(continue_pixels, device=cuda)[:, None], torch.asarray(added_genes, device=cuda)
                 ] = torch.asarray(i_coefs, device=cuda)
             pbar.update()
-    logging.debug("Finding OMP coefficients complete")
+    log.debug("Finding OMP coefficients complete")
 
     gene_coefs_cpu = gene_coefs.type(torch.float32).to(cpu)
     background_coefs_cpu = background_coefs.type(torch.float32).to(cpu)
@@ -523,12 +523,15 @@ def get_pixel_coefs_yxz(
             found.
         - (`[n_pixels x n_genes]`): `pixel_coefs_t` contains the gene coefficients for each pixel.
     """
+    # Turn off memory fragmentation on GPU. This stops pytorch from crashing because of large memory allocations.
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
     pixel_yxz_t = np.zeros((0, 3), dtype=np.int16)
     pixel_coefs_t = scipy.sparse.csr_matrix(np.zeros((0, n_genes), dtype=np.float32))
 
     z_chunks = len(use_z) // z_chunk_size + 1
     for z_chunk in range(z_chunks):
-        logging.info(f"z_chunk {z_chunk + 1}/{z_chunks}")
+        log.info(f"z_chunk {z_chunk + 1}/{z_chunks}")
         # While iterating through tiles, only save info for rounds/channels using
         # - add all rounds/channels back in later. This returns colors in use_rounds/channels only and no invalid.
         pixel_yxz_tz, pixel_colors_tz = base.get_pixel_colours(

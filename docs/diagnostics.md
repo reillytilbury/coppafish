@@ -62,3 +62,47 @@ specify the directory to save to by
 ```python
 BuildPDF("path/to/notebook.npz", "path/to/output/directory")
 ```
+if you want the PDFs to be re-created, you must delete the old ones first.
+
+## Viewing images
+
+### Raw images
+
+Raw images for particular tiles, round, and channels can be viewed with access to `nb.file_names.input_dir`:
+
+```python
+from coppafish import Notebook, plot
+
+nb = Notebook("/path/to/notebook.npz")
+plot.view_raw(nb, tiles, rounds, channels)
+```
+
+where `tiles`, `rounds`, and `channels` are lists of integers specifying which images to view.
+
+### Extracted images
+
+Extracted images are identical to raw images, these are viewed by
+
+```python
+from coppafish import Notebook, plot
+
+nb = Notebook("/path/to/notebook.npz")
+plot.view_extracted_images(nb, tiles, rounds, channels)
+```
+
+where `tiles`, `rounds`, and `channels` are lists of integers specifying which images to view. Set these to `None` if 
+you wish to view all of the them from the sequencing images.
+
+### Filtered images
+
+Images after all [filtering](method.md#filter) are viewed by
+
+```python
+from coppafish import Notebook, plot
+
+nb = Notebook("/path/to/notebook.npz")
+plot.view_filtered_images(nb, tiles, rounds, channels)
+```
+
+where `tiles`, `rounds`, and `channels` are lists of integers specifying which images to view. Set these to `None` if 
+you wish to view all of the them from the sequencing images.
