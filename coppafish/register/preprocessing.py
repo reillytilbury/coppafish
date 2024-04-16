@@ -402,6 +402,8 @@ def generate_reg_images(nb: Notebook):
         nb: notebook.
     """
     use_tiles, use_rounds, use_channels = nb.basic_info.use_tiles, nb.basic_info.use_rounds, nb.basic_info.use_channels
+    if nb.basic_info.pre_seq_round is not None:
+        use_rounds += [nb.basic_info.pre_seq_round]
     anchor_round, anchor_channel, dapi_channel = (nb.basic_info.anchor_round, nb.basic_info.anchor_channel,
                                                   nb.basic_info.dapi_channel)
     yx_centre = nb.basic_info.tile_centre.astype(int)[:2]
@@ -447,7 +449,7 @@ def generate_reg_images(nb: Notebook):
         save_reg_image(im=im_concat, file_path=file_name)
 
     # get the channel images, save, apply optical flow, save, apply icp, save
-    r_mid = int(np.median(np.array(use_rounds)))
+    r_mid = 3
     for t, c in tqdm(product(use_tiles, use_channels), desc='Channel Images', total=len(use_tiles) * len(use_channels)):
         im = load_transformed_image(nb=nb, t=t, r=r_mid, c=c, yxz=yxz, reg_type='none')
         im_flow = load_transformed_image(nb=nb, t=t, r=r_mid, c=c, yxz=yxz, reg_type='flow')
@@ -488,27 +490,39 @@ def load_transformed_image(nb: Notebook, t: int, r: int, c: int, yxz: list, reg_
     affine_correction = np.eye(4, 3)
     if 'reg_type' == 'flow':
         if c != nb.basic_info.dapi_channel:
-            affine_correction = nb.register_debug.channel_correction[t, c]
+            affine_correction = nb.register_debug.channel_correction[t, c].copy()
     elif reg_type == 'flow_icp':
         if c == nb.basic_info.dapi_channel:
-            affine_correction = nb.register.icp_correction[t, r, nb.basic_info.anchor_channel]
+            affine_correction = nb.register.icp_correction[t, r, nb.basic_info.anchor_channel].copy()
         if c != nb.basic_info.dapi_channel:
-            affine_correction = nb.register.icp_correction[t, r, c]
+            affine_correction = nb.register.icp_correction[t, r, c].copy()
     # adjust the affine correction for the new origin
     affine_correction = adjust_affine(affine=affine_correction, new_origin=new_origin)
-    im = affine_transform(im, affine_correction, order=1, mode='constant', cval=0)
-
-    # Now apply the flow
-    if r == nb.basic_info.anchor_round:
-        return im
-    flow = np.load(os.path.join(nb.register.flow_dir, 'smooth', f't{t}_r{r}.npy'), mmap_mode='r')
     flow_indices = np.ix_(np.arange(3), np.arange(yxz[0][0], yxz[0][-1] + 1), np.arange(yxz[1][0], yxz[1][-1] + 1),
                           np.arange(yxz[2][0], yxz[2][-1] + 1))
-    flow = -(flow[flow_indices].astype(np.float32))
-    coords = np.meshgrid(np.arange(yxz[0].shape[0], dtype=np.float32), np.arange(yxz[1].shape[0], dtype=np.float32),
-                         np.arange(yxz[2].shape[0], dtype=np.float32), indexing='ij')
-    im = warp(im, coords + flow, order=1, mode='constant', cval=0, preserve_range=True)
+    flow_dir = os.path.join(nb.register.flow_dir, 'smooth', f't{t}_r{r}.npy')
+    im = transform_im(im=im, affine=affine_correction, flow_dir=flow_dir, flow_ind=flow_indices)
 
+    return im
+
+
+def transform_im(im: np.ndarray, affine: np.ndarray, flow_dir: str, flow_ind: tuple) -> np.ndarray:
+    """
+    Function to apply affine and flow transformations to an image.
+    Args:
+        im: image to transform
+        affine: 3 x 4 affine transform
+        flow_dir: directory containing the flow file
+        flow_ind: indices to take from the flow file
+    """
+    # Apply the affine transform
+    im = affine_transform(im, affine, order=1, mode='constant', cval=0)
+    # Apply the flow transform
+    flow = np.load(flow_dir, mmap_mode='r')
+    flow = -(flow[flow_ind].astype(np.float32))
+    coords = np.meshgrid(np.arange(im.shape[0], dtype=np.float32), np.arange(im.shape[1], dtype=np.float32),
+                         np.arange(im.shape[2], dtype=np.float32), indexing='ij')
+    im = warp(im, coords + flow, order=1, mode='constant', cval=0, preserve_range=True)
     return im
 
 

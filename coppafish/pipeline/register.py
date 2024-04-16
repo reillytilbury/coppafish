@@ -323,39 +323,54 @@ def register(
         r_pre = nbp_basic.pre_seq_round
         use_rounds = nbp_basic.use_rounds
         mid_z = len(nbp_basic.use_z) // 2
-        pixels_anchor = spot_colors.all_pixel_yxz(y_size=nbp_basic.tile_sz, x_size=nbp_basic.tile_sz, z_planes=[mid_z])
-
+        tile_centre = np.array([nbp_basic.tile_sz // 2, nbp_basic.tile_sz // 2, mid_z])
+        yx_rad, z_rad = 250, 5
+        yxz = [np.arange(tile_centre[0] - yx_rad, tile_centre[0] + yx_rad),
+               np.arange(tile_centre[1] - yx_rad, tile_centre[1] + yx_rad),
+               np.arange(mid_z - z_rad, mid_z + z_rad)]
+        flow_ind = np.ix_(np.arange(3), np.arange(tile_centre[0] - yx_rad, tile_centre[0] + yx_rad),
+                          np.arange(tile_centre[1] - yx_rad, tile_centre[1] + yx_rad),
+                          np.arange(mid_z - z_rad, mid_z + z_rad))
+        new_origin = np.array([yxz[0][0], yxz[1][0], yxz[2][0]])
         for t, c in tqdm(
             itertools.product(use_tiles, use_channels),
             desc="Computing background scale factors",
             total=len(use_tiles) * len(use_channels),
         ):
-            flow_t_pre = np.load(os.path.join(nbp.flow_dir, "smooth", f"t{t}_r{r_pre}.npy"), mmap_mode="r")
-            pixels_pre, in_range_pre = spot_colors.apply_transform(
-                yxz=pixels_anchor,
-                flow=flow_t_pre,
-                icp_correction=nbp.icp_correction[t, r_pre, c],
-                tile_sz=nbp_basic.tile_sz,
+            flow_t_pre_dir = os.path.join(nbp.flow_dir, "smooth", f"t{t}_r{r_pre}.npy")
+            affine_correction = preprocessing.adjust_affine(icp_correction[t, r_pre, c].copy(), new_origin)
+            im_pre = tiles_io.load_image(
+                nbp_file,
+                nbp_basic,
+                nbp_extract.file_type,
+                t=t,
+                r=r_pre,
+                c=c,
+                suffix="_raw",
+                apply_shift=True,
+                yxz=yxz,
             )
+            im_pre = preprocessing.transform_im(im_pre, affine_correction, flow_t_pre_dir, flow_ind)
+            im_pre = im_pre[:, :, z_rad-1:z_rad+1]
+            bright = im_pre > np.percentile(im_pre, 99)
+            im_pre = im_pre[bright]
             for r in use_rounds:
-                flow_tr = np.load(os.path.join(nbp.flow_dir, "smooth", f"t{t}_r{r}.npy"), mmap_mode="r")
-                pixels_r, in_range_r = spot_colors.apply_transform(
-                    yxz=pixels_anchor,
-                    flow=flow_tr,
-                    icp_correction=nbp.icp_correction[t, r, c],
-                    tile_sz=nbp_basic.tile_sz,
-                )
-                in_range = in_range_pre * in_range_r
-                im_pre = tiles_io.load_image(
-                    nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r_pre, c=c, yxz=pixels_pre[in_range]
-                )
+                flow_t_r_dir = os.path.join(nbp.flow_dir, "smooth", f"t{t}_r{r}.npy")
+                affine_correction = preprocessing.adjust_affine(icp_correction[t, r, c].copy(), new_origin)
                 im_r = tiles_io.load_image(
-                    nbp_file, nbp_basic, nbp_extract.file_type, t=t, r=r, c=c, yxz=pixels_r[in_range]
+                    nbp_file,
+                    nbp_basic,
+                    nbp_extract.file_type,
+                    t=t,
+                    r=r,
+                    c=c,
+                    apply_shift=True,
+                    yxz=yxz,
                 )
-                bright = im_pre > np.percentile(im_pre, 99)
-                positive = (im_r > 0) * (im_pre > 0)
-                im_pre, im_r = im_pre[bright * positive], im_r[bright * positive]
-                bg_scale[t, r, c] = np.linalg.lstsq(im_pre[:, None], im_r, rcond=None)[0]
+                im_r = preprocessing.transform_im(im_r, affine_correction, flow_t_r_dir, flow_ind)
+                im_r = im_r[:, :, z_rad-1:z_rad+1]
+                im_r = im_r[bright]
+                bg_scale[t, r, c] = np.median(im_r) / np.median(im_pre)
 
         # Now add the bg_scale to the nbp_filter page. To do this we need to delete the bg_scale attribute.
         nbp_filter.finalized = False
