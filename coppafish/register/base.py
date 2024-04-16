@@ -531,6 +531,8 @@ def interpolate_flow(
     flow = np.array([gaussian_filter(flow[i] * flow_indicator, sigma) for i in range(3)])
     # divide the flow by the smoothed indicator
     flow = np.array([flow[i] / flow_indicator_smooth for i in range(3)])
+    # remove nan values
+    flow = np.nan_to_num(flow)
     upsample_factor = (upsample_factor_yx, upsample_factor_yx, 1)
     # upsample the flow before saving
     flow = np.array(

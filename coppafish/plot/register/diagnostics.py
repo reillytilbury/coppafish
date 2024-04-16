@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QPushButton, QMainWindow, QSlider
+from PyQt5.QtWidgets import QPushButton, QMainWindow, QSlider, QLineEdit, QLabel
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from coppafish.spot_colors import apply_transform
 from coppafish.utils.tiles_io import load_image
@@ -6,7 +6,6 @@ from scipy.ndimage import affine_transform
 from coppafish.register import preprocessing
 from coppafish.find_spots import spot_yxz
 from coppafish.setup import Notebook
-from skimage.transform import warp
 from scipy.spatial import KDTree
 from superqt import QRangeSlider
 from qtpy.QtCore import Qt
@@ -52,7 +51,7 @@ class RegistrationViewer:
         self.reg_data_dir = os.path.join(self.nb.file_names.output_dir, "reg_images", f"t{self.t}")
         # load round images
         round_im, channel_im = {}, {}
-        for r in self.nb.basic_info.use_rounds:
+        for r in self.nb.basic_info.use_rounds + [self.nb.basic_info.pre_seq_round] * self.nb.basic_info.use_preseq:
             round_im[f"r{r}"] = np.load(os.path.join(self.reg_data_dir, "round", f"r{r}.npy"))
         # repeat anchor image 3 times along new 0 axis
         im_anchor = np.load(os.path.join(self.reg_data_dir, "round", "anchor.npy"))
@@ -154,11 +153,16 @@ class RegistrationViewer:
         self.add_tile_buttons()
         # add buttons to view optical flow results
         self.add_optical_flow_buttons()
+        # add buttons to view background scale
+        self.add_bg_scale_buttons()
+        # add buttons to view overlay
+        self.add_overlay_buttons()
         # add buttons to view ICP correction and ICP iterations
         self.add_icp_buttons()
         # add buttons to view camera correction
         self.add_fluorescent_bead_buttons()
 
+    # Functions to add buttons and sliders to the viewer
     def add_contrast_lim_sliders(self):
         # add contrast limits sliders
         contrast_limit_sliders = [QRangeSlider(Qt.Horizontal) for _ in range(2)]
@@ -199,6 +203,31 @@ class RegistrationViewer:
             b.clicked.connect(lambda _, r=use_rounds[i]: view_optical_flow(self.nb, self.t, r))
         self.viewer.window.add_dock_widget(button, area="left", name="optical flow viewer")
 
+    def add_bg_scale_buttons(self):
+        # add button to view background scale
+        button_loc = generate_button_positions(n_buttons=3, n_cols=2, x_offset=50, x_spacing=100)
+        button_name = ["r", "c"]
+        text_buttons = TextButtonCreator(button_name, button_loc, size=(50, 28))
+        # connect the view button to the appropriate function
+        text_buttons.button.clicked.connect(lambda _: view_bg_scale(self.nb, self.t,
+                                                                    r=int(text_buttons.text_box[0].text()),
+                                                                    c=int(text_buttons.text_box[1].text())))
+        self.viewer.window.add_dock_widget(text_buttons, area="left", name="bg scale")
+
+    def add_overlay_buttons(self):
+        # add button to view background scale
+        button_loc = generate_button_positions(n_buttons=7, n_cols=2, x_offset=50, x_spacing=100)
+        button_name = ["r1", "c1", "r2", "c2", "z_s", "z_e"]
+        text_buttons = TextButtonCreator(button_name, button_loc, size=(50, 28))
+        text_buttons.button.clicked.connect(lambda _: view_overlay(self.nb, self.t,
+                                                                 rc=[(int(text_buttons.text_box[0].text()),
+                                                                      int(text_buttons.text_box[1].text())),
+                                                                     (int(text_buttons.text_box[2].text()),
+                                                                      int(text_buttons.text_box[3].text()))],
+                                                                 use_z=np.arange(int(text_buttons.text_box[4].text()),
+                                                                                 int(text_buttons.text_box[5].text()))))
+        self.viewer.window.add_dock_widget(text_buttons, area="left", name="overlay")
+
     def add_icp_buttons(self):
         # add buttons to view ICP correction and ICP iterations
         use_tiles, use_rounds, use_channels = (
@@ -221,7 +250,7 @@ class RegistrationViewer:
         button_loc = np.concatenate([button_loc_1, button_loc_2, button_loc_3, button_loc_4])
         # name all buttons (tile, tile iter, round, channel)
         button_name = (
-            [f"t{t}" for t in use_tiles]
+            [f"t{t} diff" for t in use_tiles]
             + [f"t{t} iter" for t in use_tiles]
             + [f"r{r}" for r in use_rounds]
             + [f"c{c}" for c in use_channels]
@@ -295,6 +324,29 @@ class ButtonCreator(QMainWindow):
             self.buttons.append(QPushButton(name, self))
             self.buttons[-1].setCheckable(True)
             self.buttons[-1].setGeometry(position[i][0], position[i][1], size[0], size[1])
+
+
+class TextButtonCreator(QMainWindow):
+    def __init__(self, names: list, position: np.ndarray, size: tuple = (75, 28)):
+        """
+        Create buttons with text.
+        Args:
+            names: list of n_buttons names (str)
+            position: array of n_buttons positions (x, y) for the buttons
+            size: (width, height) of the buttons
+        """
+        super().__init__()
+        assert len(names) == len(position) - 1, "Number of names should be one less than the number of positions."
+        self.text_box = []
+        for i, name in enumerate(names):
+            label = QLabel(self)
+            label.setText(name)
+            label.setGeometry(position[i][0] - 30, position[i][1], size[0], size[1])
+            self.text_box.append(QLineEdit(name, self))
+            self.text_box[-1].setGeometry(position[i][0], position[i][1], size[0], size[1])
+            self.text_box[-1].setText('0')
+        self.button = QPushButton("view", self)
+        self.button.setGeometry(position[-1][0], position[-1][1], size[0], size[1])
 
 
 class ICPPointCloudViewer:
@@ -624,7 +676,7 @@ def view_icp_correction(nb: Notebook, t: int):
     """
     use_rounds = nb.basic_info.use_rounds
     use_channels = nb.basic_info.use_channels
-    transform = nb.register.icp_correction[t][np.ix_(use_rounds, use_channels)]
+    transform = nb.register.icp_correction[t][np.ix_(use_rounds, use_channels)].copy()
     scale, shift = np.zeros((len(use_rounds), len(use_channels), 3)), np.zeros((len(use_rounds), len(use_channels), 3))
     # populate scales and shifts
     for r, c in np.ndindex(len(use_rounds), len(use_channels)):
@@ -783,55 +835,51 @@ def view_bg_scale(nb: Notebook, t: int, r: int, c: int):
     assert nb.basic_info.use_preseq, "Background scaling is only available for pre-seq data."
     # get the data
     mid_z = len(nb.basic_info.use_z) // 2
-    z_rad = 8
-    z_range = np.arange(mid_z - z_rad, mid_z + z_rad + 1)
+    z_rad = 4
+    tile_sz = nb.basic_info.tile_sz
+    tile_center = tile_sz // 2
+    yx_rad = 250
+    yxz = [np.arange(tile_center - yx_rad, tile_center + yx_rad), np.arange(tile_center - yx_rad, tile_center + yx_rad),
+           np.arange(mid_z - z_rad, mid_z + z_rad)]
     r_pre = nb.basic_info.pre_seq_round
-    bg_scale = nb.filter.bg_scale[t, r, c]
     # get the images
-    base = load_image(
-        nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=c, yxz=[None, None, z_range]
-    ).astype(np.float32)
-    pre = load_image(
-        nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r_pre, c=c, yxz=[None, None, z_range]
-    ).astype(np.float32)
-    affine_tr = nb.register.icp_correction[t, r, c].T
-    affine_t_pre = nb.register.icp_correction[t, r_pre, c].T
-    # change the shift as we are only looking at a subset of the z
-    affine_tr[:, 3] += (affine_tr[:3, :3] - np.eye(3)) @ np.array([0, 0, mid_z - z_rad])
-    affine_t_pre[:, 3] += (affine_t_pre[:3, :3] - np.eye(3)) @ np.array([0, 0, mid_z - z_rad])
-    base = affine_transform(base, affine_tr, order=0)
-    pre = affine_transform(pre, affine_t_pre, order=0)
-    print("Images loaded and affine corrected.")
-    flow_t_pre = np.load(os.path.join(nb.register.flow_dir, "smooth", f"t{t}_r{r_pre}.npy"), mmap_mode="r")[
-        ..., z_range
-    ]
-    flow_t_pre = flow_t_pre.astype(np.float32)
-    flow_t_r = np.load(os.path.join(nb.register.flow_dir, "smooth", f"t{t}_r{r}.npy"))[..., z_range]
-    flow_t_r = flow_t_r.astype(np.float32)
-    coords = np.array(np.meshgrid(range(base.shape[0]), range(base.shape[1]), range(base.shape[2]), indexing="ij"))
-    print("Flows loaded.")
-    warp_tr = coords - flow_t_r
-    warp_t_pre = coords - flow_t_pre
-    base = warp(base, warp_tr, order=0)[..., z_rad]
-    pre = warp(pre, warp_t_pre, order=0)[..., z_rad]
-    print("Images warped.")
-    # blur base
-    base = skimage.filters.gaussian(base, sigma=3)
+    base = preprocessing.load_transformed_image(nb=nb, t=t, r=r, c=c, yxz=yxz, reg_type='flow_icp').astype(np.float32)
+    pre = preprocessing.load_transformed_image(nb=nb, t=t, r=r_pre, c=c, yxz=yxz, reg_type='flow_icp').astype(np.float32)
+    base = base[:, :, z_rad-1:z_rad+1]
+    pre = pre[:, :, z_rad-1:z_rad+1]
+    # get the bright mask
     bright = pre > np.percentile(pre, 99)
     base_values = base[bright]
     pre_values = pre[bright]
+    ratio_vals = base_values / pre_values
+    bg_scale = np.percentile(ratio_vals, [25, 50, 75])
 
     # create plots
     viewer = napari.Viewer()
     viewer.add_image(base, name=f"t{t}_r{r}_c{c}", colormap="red", blending="additive")
     viewer.add_image(pre, name=f"t{t}_r{r_pre}_c{c}", colormap="green", blending="additive")
     viewer.add_image(bright, name="bright", colormap="blue", blending="additive")
+    viewer.dims.axis_labels = ["y", "x", "z"]
+    viewer.dims.order = (2, 0, 1)
 
-    # add the background scaling
-    plt.scatter(x=pre_values, y=base_values, s=1, alpha=0.1)
-    plt.plot(pre_values, bg_scale * pre_values, color="red", linestyle="--")
+    plt.subplot(1, 2, 1)
+    plt.scatter(x=pre_values, y=base_values, s=1, alpha=0.25)
+    col = ["red", "green", "blue"]
+    title = [f"25th percentile: {bg_scale[0]:.2f}", f"50th percentile: {bg_scale[1]:.2f}",
+             f"75th percentile: {bg_scale[2]:.2f}"]
+    for i in range(3):
+        plt.plot(pre_values, bg_scale[i] * pre_values, color=col[i], label=title[i])
+    plt.legend()
     plt.xlabel("pre values")
     plt.ylabel("base values")
+    plt.title(f"Background scaling for t{t}, r{r}, c{c}")
+    plt.subplot(1, 2, 2)
+    plt.hist(ratio_vals, bins=np.linspace(np.percentile(ratio_vals, 1), np.percentile(ratio_vals, 99), 100))
+    for i in range(3):
+        plt.axvline(bg_scale[i], color=col[i], label=title[i])
+    plt.legend()
+    plt.xlabel("base/pre values")
+    plt.ylabel("count")
     plt.title(f"Background scaling for t{t}, r{r}, c{c}")
     plt.show()
 
@@ -843,53 +891,30 @@ def view_overlay(nb: Notebook, t: int = None, rc: list = None, use_z: np.ndarray
         nb: Notebook object (must have register and register_debug pages)
         t: common tile
         rc: list of length n_images where rc[i] = (r, c) for the i-th image
-        use_z: list of z planes to load
+        use_z: np.ndarray of z planes to load
     """
     assert len(rc) > 0, "At least one round and channel should be provided."
     if use_z is None:
-        use_z = [z - 1 for z in nb.basic_info.use_z]
-
-    new_origin = np.array([0, 0, use_z[0]]).astype(np.float32)
-    flow_indices = np.ix_(np.arange(3), np.arange(nb.basic_info.tile_sz), np.arange(nb.basic_info.tile_sz), use_z)
-    coords = np.array(np.meshgrid(range(nb.basic_info.tile_sz), range(nb.basic_info.tile_sz), range(len(use_z)),
-                                  indexing='ij'))
+        use_z = np.ndarray([z - np.min(nb.basic_info.use_z) for z in nb.basic_info.use_z])
+    yxz = [np.arange(nb.basic_info.tile_sz), np.arange(nb.basic_info.tile_sz), use_z]
     n_im = len(rc)
-    im = np.zeros((n_im, nb.basic_info.tile_sz, nb.basic_info.tile_sz, len(use_z)), dtype=np.float32)
+    im_none = np.zeros((n_im, nb.basic_info.tile_sz, nb.basic_info.tile_sz, len(use_z)), dtype=np.float32)
+    im = im_none.copy()
 
     # load, affine correct, and flow correct the images
     for i, rc_pair in tqdm(enumerate(rc), total=len(rc), desc="Loading images"):
         # LOAD IMAGE
         r, c = rc_pair
-        suffix = "_raw" if r == nb.basic_info.pre_seq_round else ""
-        im[i] = load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=c,
-                           yxz=[None, None, use_z], suffix=suffix)
-
-        # AFFINE CORRECTION
-        if r == nb.basic_info.anchor_round:
-            continue
-        if c == nb.basic_info.dapi_channel:
-            icp_correction = nb.register.icp_correction[t, r, nb.basic_info.anchor_channel]
-        else:
-
-            icp_correction = nb.register.icp_correction[t, r, c]
-        icp_correction = preprocessing.adjust_affine(affine=icp_correction, new_origin=new_origin)
-        im[i] = affine_transform(im[i].astype(np.float32), icp_correction, order=1, mode='constant', cval=0)
-
-        # FLOW CORRECTION
-        # load the flow, invert and apply
-        flow = np.load(os.path.join(nb.register.flow_dir, "smooth", f"t{t}_r{r}.npy"), mmap_mode='r')
-        flow = flow[flow_indices]
-        # invert the flow
-        flow = -(flow.astype(np.float32))
-        im[i] = warp(im[i].astype(np.float32), coords + flow, order=1, mode='constant', cval=0)
-    # remove variables
-    del coords, flow
+        im_none[i] = preprocessing.load_transformed_image(nb=nb, t=t, r=r, c=c, yxz=yxz, reg_type='none')
+        im[i] = preprocessing.load_transformed_image(nb=nb, t=t, r=r, c=c, yxz=yxz, reg_type='flow_icp')
 
     # create viewer
     viewer = napari.Viewer()
     colours = ["red", "green", "blue", "yellow"]
     for i, rc_pair in enumerate(rc):
         r, c = rc_pair
+        viewer.add_image(im_none[i], name=f"t{t}_r{r}_c{c}_none", colormap=colours[i], blending="additive",
+                         visible=False)
         viewer.add_image(im[i], name=f"t{t}_r{r}_c{c}", colormap=colours[i], blending="additive")
     viewer.dims.axis_labels = ["y", "x", "z"]
     viewer.dims.order = (2, 0, 1)
@@ -898,4 +923,3 @@ def view_overlay(nb: Notebook, t: int = None, rc: list = None, use_z: np.ndarray
 # nb_file = '/home/reilly/local_datasets/dante_bad_trc_test/notebook.npz'
 # nb = Notebook(nb_file)
 # view_overlay(nb, t=4, rc=[(7, 27), (3, 18)], use_z=np.arange(19, 29))
-# # Registration
