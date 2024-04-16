@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QPushButton, QMainWindow, QSlider
+from PyQt5.QtWidgets import QPushButton, QMainWindow, QSlider, QLineEdit, QLabel
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from coppafish.spot_colors import apply_transform
 from coppafish.utils.tiles_io import load_image
@@ -6,7 +6,6 @@ from scipy.ndimage import affine_transform
 from coppafish.register import preprocessing
 from coppafish.find_spots import spot_yxz
 from coppafish.setup import Notebook
-from skimage.transform import warp
 from scipy.spatial import KDTree
 from superqt import QRangeSlider
 from qtpy.QtCore import Qt
@@ -154,11 +153,16 @@ class RegistrationViewer:
         self.add_tile_buttons()
         # add buttons to view optical flow results
         self.add_optical_flow_buttons()
+        # add buttons to view background scale
+        self.add_bg_scale_buttons()
+        # add buttons to view overlay
+        self.add_overlay_buttons()
         # add buttons to view ICP correction and ICP iterations
         self.add_icp_buttons()
         # add buttons to view camera correction
         self.add_fluorescent_bead_buttons()
 
+    # Functions to add buttons and sliders to the viewer
     def add_contrast_lim_sliders(self):
         # add contrast limits sliders
         contrast_limit_sliders = [QRangeSlider(Qt.Horizontal) for _ in range(2)]
@@ -199,6 +203,31 @@ class RegistrationViewer:
             b.clicked.connect(lambda _, r=use_rounds[i]: view_optical_flow(self.nb, self.t, r))
         self.viewer.window.add_dock_widget(button, area="left", name="optical flow viewer")
 
+    def add_bg_scale_buttons(self):
+        # add button to view background scale
+        button_loc = generate_button_positions(n_buttons=3, n_cols=2, x_offset=50, x_spacing=100)
+        button_name = ["r", "c"]
+        text_buttons = TextButtonCreator(button_name, button_loc, size=(50, 28))
+        # connect the view button to the appropriate function
+        text_buttons.button.clicked.connect(lambda _: view_bg_scale(self.nb, self.t,
+                                                                    r=int(text_buttons.text_box[0].text()),
+                                                                    c=int(text_buttons.text_box[1].text())))
+        self.viewer.window.add_dock_widget(text_buttons, area="left", name="bg scale")
+
+    def add_overlay_buttons(self):
+        # add button to view background scale
+        button_loc = generate_button_positions(n_buttons=7, n_cols=2, x_offset=50, x_spacing=100)
+        button_name = ["r1", "c1", "r2", "c2", "z_s", "z_e"]
+        text_buttons = TextButtonCreator(button_name, button_loc, size=(50, 28))
+        text_buttons.button.clicked.connect(lambda _: view_overlay(self.nb, self.t,
+                                                                 rc=[(int(text_buttons.text_box[0].text()),
+                                                                      int(text_buttons.text_box[1].text())),
+                                                                     (int(text_buttons.text_box[2].text()),
+                                                                      int(text_buttons.text_box[3].text()))],
+                                                                 use_z=np.arange(int(text_buttons.text_box[4].text()),
+                                                                                 int(text_buttons.text_box[5].text()))))
+        self.viewer.window.add_dock_widget(text_buttons, area="left", name="overlay")
+
     def add_icp_buttons(self):
         # add buttons to view ICP correction and ICP iterations
         use_tiles, use_rounds, use_channels = (
@@ -221,7 +250,7 @@ class RegistrationViewer:
         button_loc = np.concatenate([button_loc_1, button_loc_2, button_loc_3, button_loc_4])
         # name all buttons (tile, tile iter, round, channel)
         button_name = (
-            [f"t{t}" for t in use_tiles]
+            [f"t{t} diff" for t in use_tiles]
             + [f"t{t} iter" for t in use_tiles]
             + [f"r{r}" for r in use_rounds]
             + [f"c{c}" for c in use_channels]
@@ -295,6 +324,29 @@ class ButtonCreator(QMainWindow):
             self.buttons.append(QPushButton(name, self))
             self.buttons[-1].setCheckable(True)
             self.buttons[-1].setGeometry(position[i][0], position[i][1], size[0], size[1])
+
+
+class TextButtonCreator(QMainWindow):
+    def __init__(self, names: list, position: np.ndarray, size: tuple = (75, 28)):
+        """
+        Create buttons with text.
+        Args:
+            names: list of n_buttons names (str)
+            position: array of n_buttons positions (x, y) for the buttons
+            size: (width, height) of the buttons
+        """
+        super().__init__()
+        assert len(names) == len(position) - 1, "Number of names should be one less than the number of positions."
+        self.text_box = []
+        for i, name in enumerate(names):
+            label = QLabel(self)
+            label.setText(name)
+            label.setGeometry(position[i][0] - 30, position[i][1], size[0], size[1])
+            self.text_box.append(QLineEdit(name, self))
+            self.text_box[-1].setGeometry(position[i][0], position[i][1], size[0], size[1])
+            self.text_box[-1].setText('0')
+        self.button = QPushButton("view", self)
+        self.button.setGeometry(position[-1][0], position[-1][1], size[0], size[1])
 
 
 class ICPPointCloudViewer:
