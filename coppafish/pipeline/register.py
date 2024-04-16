@@ -134,7 +134,7 @@ def register(
     del anchor_image, round_image
 
     # Part 3: ICP
-    logging.info("Running Iterative Closest Point (ICP)")
+    log.info("Running Iterative Closest Point (ICP)")
     # Initialise variables for ICP step
     ny, nx, nz = nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)
     use_rounds = nbp_basic.use_rounds
@@ -161,7 +161,7 @@ def register(
         for r in use_rounds:
             # check if there are enough spots to run ICP
             if nbp_find_spots.spot_no[t, r, c_ref] < config["icp_min_spots"]:
-                logging.info(f"Tile {t}, round {r}, channel {c_ref} has too few spots to run ICP.")
+                log.info(f"Tile {t}, round {r}, channel {c_ref} has too few spots to run ICP.")
                 round_correction[t, r][:3, :3] = np.eye(3)
                 continue
             # load in flow
@@ -183,7 +183,7 @@ def register(
                     robust=False,
                 )
             )
-            logging.info(f"Tile: {t}, Round: {r}, Converged: {converged_round[t, r]}")
+            log.info(f"Tile: {t}, Round: {r}, Converged: {converged_round[t, r]}")
         # don't do icp for the pre-seq round as we will not have spots in the anchor channel
         round_correction[t, -1] = np.eye(4, 3)
         # compute an affine correction to the channel transforms. This is done by finding the best affine map that
@@ -217,7 +217,7 @@ def register(
                 im_spots_tc = np.vstack((im_spots_tc, im_spots_trc))
             # check if there are enough spots to run ICP
             if im_spots_tc.shape[0] < config["icp_min_spots"]:
-                logging.info(f"Tile {t}, channel {c} has too few spots to run ICP.")
+                log.info(f"Tile {t}, channel {c} has too few spots to run ICP.")
                 channel_correction[t, c][:3, :3] = np.eye(3)
                 continue
             # run ICP
@@ -232,7 +232,7 @@ def register(
                     robust=False,
                 )
             )
-            logging.info(f"Tile: {t}, Channel: {c}, Converged: {converged_channel[t, c]}")
+            log.info(f"Tile: {t}, Channel: {c}, Converged: {converged_channel[t, c]}")
 
         # combine these corrections into the icp_correction
         use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
