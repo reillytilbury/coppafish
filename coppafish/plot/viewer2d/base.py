@@ -19,20 +19,36 @@ from ...setup.notebook import Notebook
 class Viewer2D:
     class Keywords:
         # All keywords must be lowercase.
-        QUIT = ("q", "quit", "exit")
-        HELP = ("help", "h")
-        REDRAW = ("r", "redraw")
-        METHOD = ("m", "method")
         Z_UP = ("u", "up")
         Z_DOWN = ("d", "down")
         Z_SHIFT = ("shift",)
         Z_MIN = ("min", "zmin")
         Z_MAX = ("max", "zmax")
+
         SCORE_MIN = ("scoremin", "score_min")
         SCORE_MAX = ("scoremax", "score_max")
         TOGGLE_LEGEND = ("l", "legend")
         TOGGLE_DARK_LIGHT_MODE = ("toggledark",)
+        REDRAW = ("r", "redraw")
+
+        METHOD = ("m", "method")
+        TOGGLE_GENE = ("toggle",)
+        TOGGLE_GENE_COLOUR = ("togglec", "togglecolour", "togglecolor")
+
+        HELP = ("help", "h")
         COUNT_GENES = ("count",)
+
+        QUIT = ("q", "quit", "exit")
+
+        # Each keyword is placed in a subheading for a clearer 'help' view. Any unassigned keywords are placed in the
+        # last subheading
+        SECTIONS = {
+            "Navigating": (Z_UP, Z_DOWN, Z_SHIFT, Z_MIN, Z_MAX),
+            "Viewing": (SCORE_MIN, SCORE_MAX, TOGGLE_LEGEND, TOGGLE_DARK_LIGHT_MODE, REDRAW),
+            "Gene selection": (METHOD, TOGGLE_GENE, TOGGLE_GENE_COLOUR),
+            "Information": (HELP, COUNT_GENES),
+            "Others": (QUIT,),
+        }
 
     class Methods:
         anchor = "anchor"
@@ -86,6 +102,10 @@ class Viewer2D:
             self.Keywords.REDRAW: f"{self._tuple_to_str(self.Keywords.REDRAW)} manually redraw the Viewer",
             self.Keywords.METHOD: f"{self._tuple_to_str(self.Keywords.METHOD)} [method] show the given gene calling "
             + "method. Can be 'anchor' (default), 'probs' for Von-Mises probabilities, or 'omp'",
+            self.Keywords.TOGGLE_GENE: f"{self._tuple_to_str(self.Keywords.TOGGLE_GENE)} [gene] toggle the given "
+            + "gene name on or off",
+            self.Keywords.TOGGLE_GENE_COLOUR: f"{self._tuple_to_str(self.Keywords.TOGGLE_GENE_COLOUR)} [gene] toggle "
+            + "the given gene name's colour on or off",
             self.Keywords.Z_UP: f"{self._tuple_to_str(self.Keywords.Z_UP)} move up by one z plane",
             self.Keywords.Z_DOWN: f"{self._tuple_to_str(self.Keywords.Z_DOWN)} move down by one z plane",
             self.Keywords.Z_SHIFT: f"{self._tuple_to_str(self.Keywords.Z_SHIFT)} [value] move up by value z plane(s). "
@@ -120,14 +140,14 @@ class Viewer2D:
         self.legend_gene_no = np.ones(n_legend_genes, dtype=int)
         self.legend_gene_colours = np.zeros((n_legend_genes, 3), dtype=float)
         # n_genes x 3 (R, G, and B values each between 0 and 1)
-        self.gene_color = np.zeros((len(nb.call_spots.gene_names), 3))
+        self.gene_colours = np.zeros((len(nb.call_spots.gene_names), 3))
         self.gene_names = nb.call_spots.gene_names
         for i in range(n_legend_genes):
             self.legend_gene_no[i] = np.where(self.gene_names == gene_legend_info["GeneNames"][i])[0][0]
             self.legend_gene_colours[i, 0] = float(gene_legend_info.loc[i, "ColorR"])
             self.legend_gene_colours[i, 1] = float(gene_legend_info.loc[i, "ColorG"])
             self.legend_gene_colours[i, 2] = float(gene_legend_info.loc[i, "ColorB"])
-            self.gene_color[self.legend_gene_no[i]] = [
+            self.gene_colours[self.legend_gene_no[i]] = [
                 gene_legend_info.loc[i, "ColorR"],
                 gene_legend_info.loc[i, "ColorG"],
                 gene_legend_info.loc[i, "ColorB"],
@@ -157,7 +177,8 @@ class Viewer2D:
             self.Methods.omp: (0.30, 1.00),
         }
         self.z_min: int = nb.basic_info.use_z[len(nb.basic_info.use_z) // 2]
-        self.z_max: int = self.z_min
+        self.z_max: int = self.z_min + 1
+        self.show_gene_no = np.full_like(self.gene_names, fill_value=True, dtype=bool)
         self.legend_show = self.legend_gene_no.size > 0
         self.legend_gene_separation_horizontal = 1
         self.legend_gene_separation_vertical = 1
@@ -234,19 +255,21 @@ class Viewer2D:
         self.marker_count = 0
         # We must for loop over genes because each gene has a different marker.
         for g in np.unique(gene_no):
+            if not self.show_gene_no[g]:
+                continue
             is_gene_g = gene_no == g
             if np.isin(g, self.legend_gene_no):
                 marker = self.legend_symbols[self.legend_gene_no == g].item()
             else:
-                marker = ""
                 logging.warn(f"Gene number {g} does not have an assigned marker")
+                marker = ""
             keep = in_z_range * is_gene_g * in_score_range
             self.marker_count += keep.sum()
             ax_genes.scatter(
                 global_yxz[keep, 1],
                 global_yxz[keep, 0],
                 s=50,
-                c=self.gene_color[[g]],
+                c=self.gene_colours[[g]],
                 marker=marker,
             )
         score_str = self.method_score_thresholds[self.method_selected]
@@ -257,6 +280,12 @@ class Viewer2D:
         ax_genes.set_title(f"Gene calls, {method_str}, z=[{self.z_min}, {self.z_max}], scores=[{score_str}]")
         fig.set_layout_engine("constrained")
         plt.ion()
+
+    def _print_helper(self) -> None:
+        for subheading in self.Keywords.SECTIONS:
+            print(subheading.center(40, "="))
+            for keywords in self.Keywords.SECTIONS[subheading]:
+                print(self.commands[keywords])
 
     def _interpret_command(self, command: str) -> None:
         """Handles user commands sent to the Viewer2D through the terminal."""
@@ -274,9 +303,7 @@ class Viewer2D:
             self._exit()
         elif keyword in self.Keywords.HELP:
             if len(args) == 0:
-                print(f"Viewer2D help:")
-                for _, description in self.commands.items():
-                    print(description)
+                self._print_helper()
             elif self._keyword_exists(args[0]):
                 # Show help for given keyword
                 print(self._get_keyword_description(args[0]))
@@ -293,7 +320,7 @@ class Viewer2D:
             self.z_max -= 1
         elif keyword in self.Keywords.Z_SHIFT:
             if len(args) == 0:
-                print(f"Must specify z shift amount")
+                self._argument_not_given("z shift amount")
                 return
             else:
                 try:
@@ -324,11 +351,11 @@ class Viewer2D:
             self.legend_show = not self.legend_show
         elif keyword in self.Keywords.METHOD:
             if len(args) == 0:
-                print(f"No method given")
+                self._argument_not_given("method")
                 return
             method = self._str_to_method(args[0])
             if method is None:
-                print(f"Unknown method: '{args[0]}'")
+                self._argument_invalid("method", args[0])
                 return
             elif method == self.Methods.omp and not self.omp_available:
                 print(f"omp method not available")
@@ -336,7 +363,7 @@ class Viewer2D:
             self.method_selected = method
         elif keyword in self.Keywords.SCORE_MIN:
             if len(args) == 0:
-                print(f"No new value given")
+                self._argument_not_given("new score min")
                 return
             try:
                 new_score_min = float(args[0])
@@ -347,7 +374,7 @@ class Viewer2D:
             self.method_score_thresholds[self.method_selected] = (new_score_min, old_score_max)
         elif keyword in self.Keywords.SCORE_MAX:
             if len(args) == 0:
-                print(f"No new value given")
+                self._argument_not_given("new score max")
                 return
             try:
                 new_score_max = float(args[0])
@@ -361,6 +388,24 @@ class Viewer2D:
         elif keyword in self.Keywords.COUNT_GENES:
             print(f"Total gene reads shown: {self.marker_count}")
             return
+        elif keyword in self.Keywords.TOGGLE_GENE:
+            if len(args) == 0:
+                self._argument_not_given("gene name")
+                return
+            gene_no = self._get_unique_gene_starting_with(args[0])
+            if gene_no is None:
+                print(f"Could not find unique gene called {args[0]}")
+                return
+            self.show_gene_no[gene_no] = not self.show_gene_no[gene_no]
+        elif keyword in self.Keywords.TOGGLE_GENE_COLOUR:
+            if len(args) == 0:
+                self._argument_not_given("gene name")
+                return
+            gene_no = self._get_unique_gene_starting_with(args[0])
+            if gene_no is None:
+                print(f"Could not find unique gene called {args[0]}")
+                return
+            self._toggle_gene_colour(gene_no)
         else:
             raise LookupError(f"Should not reach here")
         self._close()
@@ -378,6 +423,12 @@ class Viewer2D:
     def _assignment_error(self, given_input: str, to_assign: str) -> None:
         print(f"Cannot assign {to_assign} to '{given_input}' given")
 
+    def _argument_invalid(self, argument_name: str, given_value: str) -> None:
+        print(f"'{given_value}' is invalid for {argument_name}")
+
+    def _argument_not_given(self, argument_name: str) -> None:
+        print(f"Argument {argument_name} not given")
+
     def _get_keyword_description(self, keyword: str) -> str:
         for keywords, description in self.commands.items():
             if keyword in keywords:
@@ -388,6 +439,29 @@ class Viewer2D:
             if keyword in keywords:
                 return True
         return False
+
+    def _toggle_gene_colour(self, gene_no: int) -> None:
+        """Toggle all genes with the same colour as the given gene number."""
+        colour = self.gene_colours[gene_no]
+        gene_numbers = []
+        for i, c in enumerate(self.gene_colours):
+            if np.allclose(c, colour):
+                gene_numbers.append(i)
+        if self.show_gene_no[gene_numbers].any() and (~self.show_gene_no[gene_numbers]).any():
+            self.show_gene_no[gene_numbers] = False
+            return
+        self.show_gene_no[gene_numbers] = not self.show_gene_no[gene_numbers[0]]
+
+    def _get_unique_gene_starting_with(self, value: str) -> Union[int, None]:
+        """Returns None if too many gene names start with value or none do."""
+        gene_numbers = self._get_genes_starting_with(value)
+        if gene_numbers.size > 1 or gene_numbers.size == 0:
+            return None
+        return gene_numbers[0].item()
+
+    def _get_genes_starting_with(self, value: str) -> np.ndarray[int]:
+        starts_with = np.array([gene_name.lower().startswith(value) for gene_name in self.gene_names])
+        return np.where(starts_with)[0]
 
     def _maximise_plot(self) -> None:
         # This works on Windows. If it does not work on Linux... ¯\_(ツ)_/¯
