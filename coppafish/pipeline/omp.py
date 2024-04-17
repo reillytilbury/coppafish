@@ -4,7 +4,6 @@ import numpy_indexed
 from scipy import sparse
 from typing import Optional
 
-
 from ..filter import base as filter_base
 from ..setup.notebook import NotebookPage
 from .. import utils, spot_colors, call_spots, omp, log
