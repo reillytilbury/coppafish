@@ -202,7 +202,7 @@ def spot_neighbourhood(
     if max_size_odd_loc.size > 0:
         max_size[max_size_odd_loc] += 1  # ensure shape is odd
 
-    # get image centred on each spot.
+    # get spot image centred on each spot.
     # Big image shape which will be cropped later.
     spot_images = np.zeros((0, *max_size), dtype=int)
     spots_used = np.zeros(n_spots, dtype=bool)
@@ -245,15 +245,6 @@ def spot_neighbourhood(
     # Where mean sign is low, set to 0.
     av_spot_image[np.abs(av_spot_image) < mean_sign_thresh] = 0
     av_spot_image = np.sign(av_spot_image).astype(np.int8)
-
-    # Crop image and mean image by removing zeros at extremities
-    # may get issue here if there is a positive sign pixel further away than negative but think unlikely.
-    av_spot_image_float = av_spot_image_float[:, :, ~np.all(av_spot_image == 0, axis=(0, 1))]
-    av_spot_image_float = av_spot_image_float[:, ~np.all(av_spot_image == 0, axis=(0, 2)), :]
-    av_spot_image_float = av_spot_image_float[~np.all(av_spot_image == 0, axis=(1, 2)), :, :]
-    av_spot_image = av_spot_image[:, :, ~np.all(av_spot_image == 0, axis=(0, 1))]
-    av_spot_image = av_spot_image[:, ~np.all(av_spot_image == 0, axis=(0, 2)), :]
-    av_spot_image = av_spot_image[~np.all(av_spot_image == 0, axis=(1, 2)), :, :]
 
     if np.sum(av_spot_image == 1) == 0:
         log.warn(

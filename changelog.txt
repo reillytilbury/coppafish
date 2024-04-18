@@ -1,3 +1,11 @@
+2024/04/18 Alpha Update (v0.10.2):
+ * OMP spot shape wrongly computed has been fixed.
+ * OMP spot shape maximum size now 27, 27, 9 -> 15, 15, 9 by default.
+ * OMP score threshold changed 0.1 -> 0.15 by default.
+ * idna package security update.
+ * Docs update.
+
+
 2024/04/15 Alpha Update (v0.10.1):
  * User documentation updates.
  * Filter image scaling is reduced to further avoid clipping.
@@ -34,6 +42,7 @@
  * new entire overlay function allows users to select any 2 rc pairs and overlay them in the viewer in anchor frame of
     reference. This is different from just viewing against anchor. Can be useful for background reg viewing. z-params
     make loading faster.
+
 
 2024/03/26 Alpha Update (v0.10.0):
  * OMP scoring has been changed.
