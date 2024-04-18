@@ -479,8 +479,8 @@ def flow_correlation(
     base_warped = np.moveaxis(base_warped, [0, 2, 4], [0, 1, 2])
     target = np.moveaxis(target, [0, 2, 4], [0, 1, 2])
     # Now reshape so the window dimensions and pixel dimensions are flattened
-    base_warped = base_warped.reshape(np.product(n_win), np.product(win_size))
-    target = target.reshape(np.product(n_win), np.product(win_size))
+    base_warped = base_warped.reshape(np.prod(n_win), np.prod(win_size))
+    target = target.reshape(np.prod(n_win), np.prod(win_size))
     # compute the correlation
     correlation = np.sum(base_warped * target, axis=1)
     # reshape the correlation back to the window dimensions
@@ -614,9 +614,7 @@ def channel_registration(
         # Set registration_data['channel_registration']['channel_transform'][c] = np.eye(3) for all channels c
         for c in range(n_cams):
             transform[c] = np.eye(3, 4)
-        log.warn(
-            "Fluorescent beads directory does not exist. Assuming that all channels are registered to each other."
-        )
+        log.warn("Fluorescent beads directory does not exist. Assuming that all channels are registered to each other.")
         return transform
 
     # open the fluorescent bead images as nd2 files
