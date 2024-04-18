@@ -1,5 +1,7 @@
 2024/04/18 Alpha Update (v0.10.2):
  * OMP spot shape wrongly computed has been fixed.
+ * OMP spot shape maximum size now 27, 27, 9 -> 15, 15, 9 by default.
+ * OMP score threshold changed 0.1 -> 0.15 by default.
  * idna package security update.
  * Docs update.
 
