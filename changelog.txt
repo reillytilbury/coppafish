@@ -1,3 +1,7 @@
+2024/04/18 Alpha Update (v0.10.3):
+ * OMP crash on empty coef_image bug fix.
+
+
 2024/04/18 Alpha Update (v0.10.2):
  * OMP spot shape wrongly computed has been fixed.
  * OMP spot shape maximum size now 27, 27, 9 -> 15, 15, 9 by default.
