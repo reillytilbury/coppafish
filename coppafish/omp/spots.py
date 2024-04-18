@@ -355,10 +355,10 @@ def get_spots(
         # shift nzg_pixel_yxz so min is 0 in each axis so smaller image can be formed.
         # Note size of image will be different for each gene.
         coef_image, coord_shift = cropped_coef_image(pixel_yxz, pixel_coefs[:, g])
-        image_dims = coef_image.ndim
         if coef_image is None:
             # If no non-zero coefficients, go to next gene
             continue
+        image_dims = coef_image.ndim
         if spot_yxzg is None:
             spot_yxz = detect_spots(coef_image, coef_thresh, radius_xy, radius_z, False)[0]
         else:
