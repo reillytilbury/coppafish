@@ -939,15 +939,6 @@
             "",
             "Page added to *Notebook* in *pipeline/call_spots_omp.py*"
         ],
-        "initial_intensity_thresh": [
-            "",
-            "Float",
-            "To save time in `call_spots_omp`, coefficients only found for pixels with `intensity` ",
-            "of absolute `spot_colors` greater than `initial_intensity_thresh`.",
-            "This threshold is set to the `config['omp']['initial_intensity_thresh_percentile']` percentile ",
-            "of the absolute `intensity` of all pixels on the mid z-plane of the central tile (uses `nb.call_spots.abs_intensity_percentile`).",
-            "It is also clamped between the min and max values given in config file."
-        ],
         "shape_tile": [
             "",
             "Integer or None",
