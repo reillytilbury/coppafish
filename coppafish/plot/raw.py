@@ -3,8 +3,7 @@ import numbers
 import numpy as np
 from tqdm import tqdm
 from typing import Union, Optional, List, Tuple
-
-from ..utils import raw
+from ..utils import raw, nd2
 from ..setup import Notebook
 from ..pipeline.basic_info import set_basic_info
 
@@ -152,57 +151,82 @@ def view_raw(
 def view_tile_layout(
     nb: Notebook,
     num_rotations: int = 0,
-    flip_y: bool = False,
-    flip_x: bool = False,
     tiles: Optional[Union[int, List[int]]] = None,
-    anchor: bool = False,
+    channel: int = 0
 ):
     """
+    Function to view the tile layout in napari. Images will be middle z plane from nd2 files in the anchor round.
+    Channel can be specified.
     Args:
         nb: Notebook containing at least basic info and file names.
         num_rotations: Number of 90 degree rotations to apply to each individual tile. These rotations always in the
         direction taking the y axis to the x axis.
-        flip_y: Whether to flip the vertical order of the tiles
-        flip_x: Whether to flip the horizontal order of the tiles
         tiles: Which tiles to view. If `None`, will view use_tiles.
+        channel: Which channel to view.
     """
+    assert channel in nb.basic_info.use_channels or channel == nb.basic_info.dapi_channel, f"Invalid channel: {channel}"
+
     if tiles is None:
         tiles = nb.basic_info.use_tiles
 
-    # Check if user has dapi and has specified they want dapi
-    if nb.basic_info.dapi_channel is not None and anchor is False:
-        raw_images = get_raw_images(
-            nb,
-            tiles=tiles,
-            rounds=[nb.basic_info.anchor_round],
-            channels=[nb.basic_info.dapi_channel],
-            use_z=[nb.basic_info.nz // 2],
-        )[:, 0, 0, :, :, 0]
-    else:
-        raw_images = get_raw_images(
-            nb,
-            tiles=tiles,
-            rounds=[nb.basic_info.anchor_round],
-            channels=[nb.basic_info.anchor_channel],
-            use_z=[nb.basic_info.nz // 2],
-        )[:, 0, 0, :, :, 0]
+    raw_images = get_raw_images(
+        nb,
+        tiles=tiles,
+        rounds=[nb.basic_info.anchor_round],
+        channels=[channel],
+        use_z=[nb.basic_info.nz // 2],
+    )[:, 0, 0, :, :, 0]
 
     # First rotate the images. This makes num_rotations rotations in the direction taking the y axis to the x axis
     raw_images = np.rot90(raw_images, k=num_rotations, axes=(1, 2))
-
-    # Now flip the order of the tiles if necessary
+    tiles_nd2 = nd2.get_nd2_tile_ind(tiles, nb.basic_info.tilepos_yx_nd2, nb.basic_info.tilepos_yx)
     tilepos_yx = nb.basic_info.tilepos_yx.copy()
-    if flip_y:
-        tilepos_yx[:, 0] = tilepos_yx[:, 0].max() - tilepos_yx[:, 0]
-    if flip_x:
-        tilepos_yx[:, 1] = tilepos_yx[:, 1].max() - tilepos_yx[:, 1]
+    tilepos_yx_nd2 = nb.basic_info.tilepos_yx_nd2.copy()
 
     # Now plot
     expected_overlap = nb.get_config()["stitch"]["expected_overlap"]
     tile_sz = nb.basic_info.tile_sz
     yx_step = tile_sz * (1 - expected_overlap)
     viewer = napari.Viewer()
+    text_npy_ind = {
+        "string": [f"{t}" for t in tiles],
+        "color": "red",
+        "size": 36,
+    }
+    text_nd2_ind = {
+        "string": [f"{t}" for t in tiles_nd2],
+        "color": "cyan",
+        "size": 36,
+    }
+    text_npy_pos = {
+        "string": [f"{tilepos_yx[t]}" for t in tiles],
+        "color": "red",
+        "size": 36,
+    }
+    text_nd2_pos = {
+        "string": [f"{tilepos_yx_nd2[t]}" for t in tiles_nd2],
+        "color": "cyan",
+        "size": 36,
+    }
+    point_locs = [tilepos_yx[t] * yx_step + np.array([tile_sz // 2, tile_sz // 2]) for t in tiles]
     for t in range(len(tiles)):
         viewer.add_image(raw_images[t], name=f"Tile {tiles[t]}", translate=tilepos_yx[tiles[t]] * yx_step)
+    viewer.add_points(point_locs, text=text_npy_ind, size=0, name="NPY Tile Indices")
+    viewer.add_points(point_locs, text=text_nd2_ind, size=0, name="ND2 Tile Indices", visible=False)
+    viewer.add_points(point_locs, text=text_npy_pos, size=0, name="NPY YX Positions", visible=False)
+    viewer.add_points(point_locs, text=text_nd2_pos, size=0, name="ND2 YX Positions", visible=False)
+    viewer.add_vectors(
+        np.array([[0, 0], [0, 1]]) * tile_sz, edge_width=50, edge_color="green", name="Y Axis")
+    viewer.add_vectors(
+        np.array([[0, 0], [1, 0]]) * tile_sz, edge_width=50, edge_color="green",  name="X Axis"
+    )
+    axis_text = {
+        "string": ["Y", "X"],
+        "color": "green",
+        "size": 36,
+    }
+    axis_label_locs = np.array([[tile_sz, -200], [-200, tile_sz]])
+    viewer.add_points(axis_label_locs, text=axis_text, size=0, name="Axis Labels")
+    viewer.dims.axis_labels = ["y", "x"]
 
     napari.run()
