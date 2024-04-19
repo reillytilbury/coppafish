@@ -74,6 +74,7 @@ def weight_selected_genes(
         - (`(im_y x im_x x im_z x (n_rounds * n_channels)) ndarray[float32]`) residuals: pixel colours left after removing
             bled codes with computed coefficients. np.nan for any pixel that is not computed on.
     """
+    # This function used to be called fit_coefs and fit_coefs_weight
     assert bled_codes.ndim == 2
     assert pixel_colours.ndim == 4
     assert genes.ndim == 4

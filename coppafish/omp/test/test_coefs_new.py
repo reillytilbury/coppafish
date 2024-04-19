@@ -32,6 +32,13 @@ def test_weight_selected_genes() -> None:
     assert np.isclose(coefficients[0, 2, 0, 0], 0)
     assert np.isclose(coefficients[0, 2, 0, 1], 2)
 
+    rng = np.random.RandomState(0)
+    weight = rng.rand(im_y, im_x, im_z, n_rounds_channels).astype(np.float32)
+
+    coefficients, residuals = weight_selected_genes(consider_pixels, bled_codes, pixel_colours, genes, weight)
+    assert coefficients.shape == (im_y, im_x, im_z, n_genes_added)
+    assert residuals.shape == (im_y, im_x, im_z, n_rounds_channels)
+
 
 if __name__ == "__main__":
     test_weight_selected_genes()
