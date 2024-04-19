@@ -2,6 +2,8 @@ import numpy as np
 import numpy.typing as npt
 from typing import Tuple, Optional
 
+from .. import call_spots
+
 
 def get_next_best_gene(
     consider_pixels: npt.NDArray[np.bool_],
@@ -24,12 +26,13 @@ def get_next_best_gene(
         consider_pixels (`(im_y x im_x x im_z) ndarray`): true for a pixel to compute on.
         residual_pixel_colours (`(im_y x im_x x im_z x (n_rounds * n_channels)) ndarray`): residual pixel colours, left
             over from any previous OMP iteration.
-        all_bled_codes (`(n_genes x (n_rounds * n_channels)) ndarray`): bled codes for each gene in the dataset. Each
+        all_bled_codes (`((n_rounds * n_channels) x n_genes) ndarray`): bled codes for each gene in the dataset. Each
             pixel should be made up of a superposition of the different bled codes.
         coefficients (`(im_y x im_x x im_z x n_genes_added) ndarray`): OMP coefficients (weights) computed from the
             previous iteration of OMP.
         genes_added (`(im_y x im_x x im_z x n_genes_added) ndarray`): the genes that have already been assigned to the
             pixels.
+        norm_shift (float): shift to apply to normalisation of spot colours to limit the boost of weak spots.
         score_threshold (float): a gene assignment with a dot product score below this value is not assigned to the
             pixel and OMP iterations will stop for the pixel.
         alpha (float): an OMP weighting parameter.
@@ -39,22 +42,78 @@ def get_next_best_gene(
             variance, this is given here for each pixel.
 
     Returns:
-        - (`(im_y x im_x x im_z) ndarray`) best_gene: the best gene to add for each pixel. A pixel is given a np.nan
-            value if consider_pixels is false for the given pixel.
+        - (`(im_y x im_x x im_z) ndarray`) best_gene: the best gene to add for each pixel. A pixel is given a value of
+            -100 if consider_pixels is false for the given pixel.
         - (`(im_y x im_x x im_z) ndarray`) pass_threshold: true if the next gene given passes the thresholds. This is
             false if consider_pixels is false for the given pixel.
         - (`(im_y x im_x x im_z x (n_rounds * n_channels)) ndarray`) inverse_variance: the reciprocal of the variance
             for each round/channel based on the genes fit to the pixel.
     """
-    assert consider_pixels.shape == 3
-    assert residual_pixel_colours.shape == 4
-    assert all_bled_codes.shape == 2
-    assert coefficients.shape == 4
-    assert genes_added.shape == 4
+    assert consider_pixels.ndim == 3
+    assert residual_pixel_colours.ndim == 4
+    assert all_bled_codes.ndim == 2
+    assert coefficients.ndim == 4
+    assert genes_added.ndim == 4
+    assert coefficients.ndim == genes_added.ndim
     assert score_threshold >= 0
     assert alpha >= 0
-    assert background_genes.shape == 1
-    assert background_variance.shape == 4
+    assert background_genes.ndim == 1
+    assert background_variance.ndim == 4
+
+    image_shape = residual_pixel_colours.shape[:3]
+    n_pixels = residual_pixel_colours.shape[0] * residual_pixel_colours.shape[1] * residual_pixel_colours.shape[2]
+    n_rounds_channels = residual_pixel_colours.shape[3]
+    n_genes_added = coefficients.shape[3]
+    n_genes = all_bled_codes.shape[1]
+
+    # Flatten all shapes of type im_y x im_x x im_z into n_pixels
+    consider_pixels_flattened = consider_pixels.reshape((n_pixels))
+    residual_pixel_colours_flattened = residual_pixel_colours.reshape((n_pixels, n_rounds_channels))
+    coefficients_flattened = coefficients.reshape((n_pixels, n_genes_added))
+    genes_added_flattened = genes_added.reshape((n_pixels, n_genes_added))
+    background_variance_flattened = background_variance.reshape((n_pixels, n_rounds_channels))
+    # Ensure bled_codes are normalised for each gene
+    all_bled_codes /= np.linalg.norm(all_bled_codes, axis=0, keepdims=True)
+
+    # See Josh's OMP documentation for details about this exact equation
+    inverse_variances_flattened = np.reciprocal(
+        np.matmul((coefficients_flattened**2)[:, None], all_bled_codes.T[genes_added_flattened] ** 2 * alpha)[:, 0]
+        + background_variance_flattened
+    )
+    # Do not assign any pixels to background genes or to already added genes. If this happens, then the iterating stops.
+    ignore_genes = background_genes[np.newaxis].repeat(n_pixels, axis=0)
+    ignore_genes = np.append(ignore_genes, genes_added_flattened, axis=1)
+    n_genes_ignore = ignore_genes.shape[1]
+    # Pick the best scoring one for each pixel
+    all_gene_scores = np.full((n_pixels, n_genes), fill_value=np.nan, dtype=np.float32)
+    all_gene_scores[consider_pixels_flattened] = call_spots.dot_product_score(
+        residual_pixel_colours_flattened[consider_pixels_flattened],
+        all_bled_codes.T,
+        inverse_variances_flattened[consider_pixels_flattened],
+        norm_shift,
+    )[3]
+    best_genes = np.full(n_pixels, fill_value=-100, dtype=np.int16)
+    best_genes[consider_pixels_flattened] = np.argmax(np.abs(all_gene_scores[consider_pixels_flattened]), axis=1)
+    best_scores = np.full(n_pixels, fill_value=np.nan, dtype=np.float32)
+    best_scores[consider_pixels_flattened] = all_gene_scores[
+        consider_pixels_flattened, best_genes[consider_pixels_flattened]
+    ]
+    # The score is considered zero if the assigned gene is in ignore_genes
+    best_scores[consider_pixels_flattened] *= np.logical_not(
+        (
+            best_genes[consider_pixels_flattened][:, None].repeat(n_genes_ignore, axis=1)
+            == ignore_genes[consider_pixels_flattened]
+        ).any(1)
+    )
+    genes_passing_score = np.zeros(n_pixels, dtype=bool)
+    genes_passing_score[consider_pixels_flattened] = np.abs(best_scores[consider_pixels_flattened]) > score_threshold
+    del best_scores, all_gene_scores
+
+    return (
+        best_genes.reshape(image_shape),
+        genes_passing_score.reshape(image_shape),
+        inverse_variances_flattened.reshape(image_shape + (n_rounds_channels,)),
+    )
 
 
 def weight_selected_genes(
@@ -65,7 +124,7 @@ def weight_selected_genes(
     weight: Optional[npt.NDArray[np.float32]] = None,
 ) -> Tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
     """
-    Finds how to best weight the given genes to describe the seen pixel colour. Done for every given pixel individually.
+    Finds how to best weight the given genes to describe the pixel colours. Done for every given pixel individually.
 
     Args:
         consider_pixels (`(im_y x im_x x im_z) ndarray`): true for pixels to compute on.
