@@ -1,8 +1,45 @@
 import numpy as np
 import numpy.typing as npt
+from typing_extensions import assert_type
 from typing import Tuple, Optional
 
 from .. import call_spots
+
+
+def compute_omp_coefficients(
+    bled_codes: npt.NDArray[np.float32],
+    maximum_iterations: int,
+    colour_norm_factor: npt.NDArray[np.float32],
+    dot_product_norm_shift: float,
+    weight_coefficient_fit: bool,
+    alpha: float,
+    beta: float,
+):
+    """
+    Find OMP coefficients for the all pixels.
+
+    Args:
+        bled_codes (`(n_genes x n_rounds x n_channels) ndarray`): gene bled codes.
+        maximum_iterations (int): the maximum number of unique genes that can be assigned to each pixel.
+        colour_norm_factor (`(n_rounds x n_channels) ndarray`): normalisation factor divided through by colours to
+            equalise each channel intensity.
+        dot_product_norm_shift (float): a shift applied during the dot product calculations to limit the boost of weak
+            pixel intensities.
+        weight_coefficient_fit (bool): use Josh's OMP weighting, used to try and reduce the boost of large residuals
+            after subtracting a gene assignment.
+        alpha (float): OMP weighting parameter. Applied if weight_coefficient_fit is true.
+        beta (float): OMP weighting parameter. Applied if weight_coefficient_fit is true.
+
+    Returns:
+        - (`(im_y x im_x x im_z x maximum_iterations) ndarray`) pixel_coefficients: OMP coefficients for every pixel.
+    """
+    assert bled_codes.ndim == 3
+    assert maximum_iterations >= 1
+    assert colour_norm_factor.ndim == 2
+    assert dot_product_norm_shift >= 0
+    assert_type(weight_coefficient_fit, bool)
+    assert alpha >= 0
+    assert beta >= 0
 
 
 def get_next_best_gene(
