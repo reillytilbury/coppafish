@@ -9,6 +9,7 @@ def get_next_best_gene(
     all_bled_codes: npt.NDArray[np.float32],
     coefficients: npt.NDArray[np.float32],
     genes_added: npt.NDArray[np.int16],
+    norm_shift: float,
     score_threshold: float,
     alpha: float,
     background_genes: npt.NDArray[np.int16],
@@ -45,7 +46,15 @@ def get_next_best_gene(
         - (`(im_y x im_x x im_z x (n_rounds * n_channels)) ndarray`) inverse_variance: the reciprocal of the variance
             for each round/channel based on the genes fit to the pixel.
     """
-    pass
+    assert consider_pixels.shape == 3
+    assert residual_pixel_colours.shape == 4
+    assert all_bled_codes.shape == 2
+    assert coefficients.shape == 4
+    assert genes_added.shape == 4
+    assert score_threshold >= 0
+    assert alpha >= 0
+    assert background_genes.shape == 1
+    assert background_variance.shape == 4
 
 
 def weight_selected_genes(
