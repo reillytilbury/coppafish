@@ -1,3 +1,7 @@
+2024/04/dd Alpha Update (v0.10.4):
+ * OMP unbound variable i_added_genes bug fixed in pytorch GPU.
+
+
 2024/04/18 Alpha Update (v0.10.3):
  * OMP crash on empty coef_image bug fix.
 
