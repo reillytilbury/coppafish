@@ -1,45 +1,127 @@
+import tqdm
+import scipy
 import numpy as np
 import numpy.typing as npt
 from typing_extensions import assert_type
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 
-from .. import call_spots
+from .. import log, call_spots
+
+
+NO_GENE_SELECTION = -32768
 
 
 def compute_omp_coefficients(
+    pixel_colours: npt.NDArray[np.float32],
     bled_codes: npt.NDArray[np.float32],
     maximum_iterations: int,
-    colour_norm_factor: npt.NDArray[np.float32],
+    background_coefficients: npt.NDArray[np.float32],
+    background_codes: npt.NDArray[np.float32],
+    dot_product_threshold: float,
     dot_product_norm_shift: float,
     weight_coefficient_fit: bool,
     alpha: float,
     beta: float,
 ):
     """
-    Find OMP coefficients for the all pixels.
+    Find OMP coefficients on all pixels.
 
     Args:
-        bled_codes (`(n_genes x n_rounds x n_channels) ndarray`): gene bled codes.
+        pixel_colours (`(im_y x im_x x im_z x n_rounds_use x n_channels_use) ndarray`): pixel colours with all
+            processing done already, like background gene fitting and pre-sequence subtraction.
+        bled_codes (`(n_genes x n_rounds_use x n_channels_use) ndarray`): gene bled codes.
         maximum_iterations (int): the maximum number of unique genes that can be assigned to each pixel.
-        colour_norm_factor (`(n_rounds x n_channels) ndarray`): normalisation factor divided through by colours to
-            equalise each channel intensity.
+        background_coefficients (`(im_y x im_x x im_z x n_channels_use) ndarray`): background coefficients for each
+            pixel.
+        background_codes (`(n_channels_use x n_rounds_use x n_channels_use) ndarray`): each background gene code.
+        dot_product_threshold (float): any dot product below this threshold is a failed gene assignment and the
+            iterations stop for that pixel.
         dot_product_norm_shift (float): a shift applied during the dot product calculations to limit the boost of weak
             pixel intensities.
-        weight_coefficient_fit (bool): use Josh's OMP weighting, used to try and reduce the boost of large residuals
+        weight_coefficient_fit (bool): apply Josh's OMP weighting, used to try and reduce the boost of large residuals
             after subtracting a gene assignment.
         alpha (float): OMP weighting parameter. Applied if weight_coefficient_fit is true.
         beta (float): OMP weighting parameter. Applied if weight_coefficient_fit is true.
 
     Returns:
-        - (`(im_y x im_x x im_z x maximum_iterations) ndarray`) pixel_coefficients: OMP coefficients for every pixel.
+        - (`((im_y * im_x * im_z) x n_genes) sparse csr_matrix`) pixel_coefficients: OMP
+            coefficients for every pixel. Since most coefficients are zero, the results are stored as a sparse matrix.
+            Flattening the image dimensions is done using numpy's reshape method for consistency.
     """
+    assert pixel_colours.ndim == 5
     assert bled_codes.ndim == 3
     assert maximum_iterations >= 1
-    assert colour_norm_factor.ndim == 2
+    assert background_coefficients.ndim == 4
+    assert background_codes.ndim == 3
+    assert dot_product_threshold >= 0
     assert dot_product_norm_shift >= 0
     assert_type(weight_coefficient_fit, bool)
     assert alpha >= 0
     assert beta >= 0
+
+    n_genes, n_rounds_use, n_channels_use = bled_codes.shape
+    image_shape = pixel_colours.shape[:3]
+
+    # Convert all n_rounds_use x n_channels_use shapes to n_rounds_use * n_channels_use
+    pixel_colours = pixel_colours.reshape(image_shape + (n_rounds_use * n_channels_use,))
+    bled_codes = bled_codes.reshape((n_genes, -1))
+    background_codes = background_codes.reshape((n_channels_use, -1))
+
+    all_bled_codes = np.concatenate((bled_codes, background_codes))
+    # Background genes are placed at the end of the other gene bled codes
+    background_genes = np.arange(n_genes, n_genes + n_channels_use)
+    # Background variance will not change between iterations
+    background_variance = (
+        np.square(background_coefficients) @ np.square(all_bled_codes[background_genes]) * alpha + beta**2
+    )
+
+    iterate_on_pixels = np.ones(image_shape, dtype=bool)
+    verbose = iterate_on_pixels.sum() > 1_000
+    pixels_iterated: List[int] = []
+    genes_added = np.full(image_shape + (0,), fill_value=NO_GENE_SELECTION, dtype=np.int16)
+    genes_added_coefficients = np.zeros_like(genes_added, dtype=np.float32)
+    coefficient_image = scipy.sparse.csr_matrix(np.zeros((np.prod(image_shape), n_genes), dtype=np.float32))
+
+    for i in tqdm.trange(maximum_iterations, desc="Computing OMP coefficients", unit="iteration", disable=not verbose):
+        pixels_iterated.append(iterate_on_pixels.sum())
+        best_genes, pass_threshold, inverse_variance = get_next_best_gene(
+            iterate_on_pixels,
+            pixel_colours,
+            all_bled_codes.T,
+            genes_added_coefficients,
+            genes_added,
+            dot_product_norm_shift,
+            dot_product_threshold,
+            alpha,
+            background_genes,
+            background_variance,
+        )
+        # Update what pixels to continue iterating on
+        iterate_on_pixels = np.logical_and(iterate_on_pixels, pass_threshold)
+        genes_added = np.append(genes_added, best_genes[:, :, :, np.newaxis], axis=3)
+
+        # Update coefficients for pixels with new a gene assignment and keep the residual pixel colour
+        genes_added_coefficients, pixel_colours = weight_selected_genes(
+            iterate_on_pixels,
+            bled_codes.T,
+            pixel_colours,
+            genes_added,
+            weight=np.sqrt(inverse_variance) if weight_coefficient_fit else None,
+        )
+
+        # Populate sparse matrix with the updated coefficient results
+        # FIXME: This is a horribly unoptimised piece of code.
+        n_pixels = coefficient_image.shape[0]
+        print(f"{coefficient_image.shape=}")
+        print(f"{genes_added_coefficients.shape=}")
+        print(f"{genes_added.shape=}")
+        print(f"{genes_added.max()=}")
+        print(f"{genes_added.min()=}")
+        for p in range(n_pixels):
+            coefficient_image[p, genes_added.reshape(-1, i + 1)[p]] = genes_added_coefficients.reshape(-1, i + 1)[p, i]
+
+    log.info(f"Pixels iterated on: {pixels_iterated}")
+    return coefficient_image
 
 
 def get_next_best_gene(
@@ -80,7 +162,7 @@ def get_next_best_gene(
 
     Returns:
         - (`(im_y x im_x x im_z) ndarray`) best_gene: the best gene to add for each pixel. A pixel is given a value of
-            -100 if consider_pixels is false for the given pixel.
+            np.iinfo(np.int16).min if consider_pixels is false for the given pixel.
         - (`(im_y x im_x x im_z) ndarray`) pass_threshold: true if the next gene given passes the thresholds. This is
             false if consider_pixels is false for the given pixel.
         - (`(im_y x im_x x im_z x (n_rounds * n_channels)) ndarray`) inverse_variance: the reciprocal of the variance
@@ -117,7 +199,8 @@ def get_next_best_gene(
         np.matmul((coefficients_flattened**2)[:, None], all_bled_codes.T[genes_added_flattened] ** 2 * alpha)[:, 0]
         + background_variance_flattened
     )
-    # Do not assign any pixels to background genes or to already added genes. If this happens, then the iterating stops.
+    # Do not assign any pixels to background genes or to already added genes. If this happens, then gene assignment
+    # failed.
     ignore_genes = background_genes[np.newaxis].repeat(n_pixels, axis=0)
     ignore_genes = np.append(ignore_genes, genes_added_flattened, axis=1)
     n_genes_ignore = ignore_genes.shape[1]
@@ -129,19 +212,21 @@ def get_next_best_gene(
         inverse_variances_flattened[consider_pixels_flattened],
         norm_shift,
     )[3]
-    best_genes = np.full(n_pixels, fill_value=-100, dtype=np.int16)
+    best_genes = np.full(n_pixels, fill_value=NO_GENE_SELECTION, dtype=np.int16)
     best_genes[consider_pixels_flattened] = np.argmax(np.abs(all_gene_scores[consider_pixels_flattened]), axis=1)
     best_scores = np.full(n_pixels, fill_value=np.nan, dtype=np.float32)
     best_scores[consider_pixels_flattened] = all_gene_scores[
         consider_pixels_flattened, best_genes[consider_pixels_flattened]
     ]
-    # The score is considered zero if the assigned gene is in ignore_genes
-    best_scores[consider_pixels_flattened] *= np.logical_not(
+    consider_pixels_flattened[consider_pixels_flattened] *= np.logical_not(
         (
             best_genes[consider_pixels_flattened][:, None].repeat(n_genes_ignore, axis=1)
             == ignore_genes[consider_pixels_flattened]
         ).any(1)
     )
+    # The score is considered zero if the assigned gene is in ignore_genes
+    best_scores[~consider_pixels_flattened] = 0
+    best_genes[~consider_pixels_flattened] = NO_GENE_SELECTION
     genes_passing_score = np.zeros(n_pixels, dtype=bool)
     genes_passing_score[consider_pixels_flattened] = np.abs(best_scores[consider_pixels_flattened]) > score_threshold
     del best_scores, all_gene_scores
@@ -157,7 +242,7 @@ def weight_selected_genes(
     consider_pixels: npt.NDArray[np.bool_],
     bled_codes: npt.NDArray[np.float32],
     pixel_colours: npt.NDArray[np.float32],
-    genes: npt.NDArray[np.int_],
+    genes: npt.NDArray[np.int16],
     weight: Optional[npt.NDArray[np.float32]] = None,
 ) -> Tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
     """
@@ -175,9 +260,9 @@ def weight_selected_genes(
 
     Returns:
         - (`(im_y x im_x x im_z x n_genes_added) ndarray[float32]`) coefficients: OMP coefficients computed through
-            least squares. np.nan for any pixel that is not computed on.
+            least squares. Set to 0 for any pixel that is not computed on.
         - (`(im_y x im_x x im_z x (n_rounds * n_channels)) ndarray[float32]`) residuals: pixel colours left after removing
-            bled codes with computed coefficients. np.nan for any pixel that is not computed on.
+            bled codes with computed coefficients. Remains pixel colour for any pixel that is not computed on.
     """
     # This function used to be called fit_coefs and fit_coefs_weight
     assert bled_codes.ndim == 2
@@ -193,30 +278,31 @@ def weight_selected_genes(
     n_genes_added = genes.shape[3]
     image_shape = pixel_colours.shape[:3]
 
-    genes_flattened = genes.reshape((-1, n_rounds_channels))
+    genes_flattened = genes.reshape((np.prod(image_shape), n_genes_added))
     # Flatten to be n_pixels x (n_rounds * n_channels).
     weight_flattened = weight.reshape((-1, n_rounds_channels))
-    # Flatten and weight the bled codes, becomes shape n_pixels x n_rounds_channels x n_genes_added.
-    bled_codes_weighted = bled_codes[:, genes_flattened].swapaxes(0, 1) * weight_flattened[..., np.newaxis]
     # Flatten to be n_pixels x (n_rounds * n_channels).
     pixel_colours_flattened = pixel_colours.reshape((-1, n_rounds_channels))
     pixel_colours_flattened = pixel_colours_flattened * weight_flattened
     consider_pixels_flattened = consider_pixels.reshape(-1)
+    # Flatten and weight the bled codes, becomes shape n_pixels x n_rounds_channels x n_genes_added.
+    bled_codes_weighted = (
+        bled_codes[:, genes_flattened[consider_pixels_flattened]].swapaxes(0, 1)
+        * weight_flattened[consider_pixels_flattened, :, np.newaxis]
+    )
 
     coefficients = np.zeros((n_pixels, n_genes_added), dtype=np.float32)
     residuals = np.zeros((n_pixels, n_rounds_channels), dtype=np.float32)
-    coefficients[:] = np.nan
-    residuals[:] = np.nan
+    residuals = pixel_colours_flattened
+    coefficients[:] = 0
     for p in np.where(consider_pixels_flattened)[0]:
         pixel_colour = pixel_colours_flattened[p]
-        gene = genes_flattened[p]
+        gene = genes[p]
         w = weight_flattened[p]
         coefficients[p] = np.linalg.lstsq(bled_codes[:, gene] * w[:, np.newaxis], pixel_colour * w, rcond=-1)[0]
     residuals[consider_pixels_flattened] = (
         pixel_colours_flattened[consider_pixels_flattened]
-        - np.matmul(
-            bled_codes_weighted[consider_pixels_flattened], coefficients[consider_pixels_flattened, :, np.newaxis]
-        )[..., 0]
+        - np.matmul(bled_codes_weighted, coefficients[consider_pixels_flattened, :, np.newaxis])[..., 0]
     )
     residuals[consider_pixels_flattened] /= weight_flattened[consider_pixels_flattened]
     coefficients = coefficients.reshape(image_shape + (n_genes_added,))

@@ -1,6 +1,43 @@
 import numpy as np
 
-from coppafish.omp.coefs_new import weight_selected_genes, get_next_best_gene
+from coppafish.omp import coefs_new
+
+
+def test_compute_omp_coefficients() -> None:
+    rng = np.random.RandomState(0)
+    im_y, im_x, im_z = 7, 8, 9
+    n_rounds_use = 5
+    n_channels_use = 6
+    n_genes = 2
+
+    pixel_colours = rng.rand(im_y, im_x, im_z, n_rounds_use, n_channels_use).astype(np.float32)
+    bled_codes = np.zeros((n_genes, n_rounds_use, n_channels_use), dtype=np.float32)
+    bled_codes[0, 0, 0] = 1.2
+    bled_codes[1, 0, 1] = 0.5
+    bled_codes[1, 0, 2] = 1.5
+    maximum_iterations = 3
+    background_coefficients = rng.rand(im_y, im_x, im_z, n_channels_use).astype(np.float32) * 0.2
+    background_codes = np.zeros((n_channels_use, n_rounds_use, n_channels_use), dtype=np.float32)
+    for c in range(n_channels_use):
+        background_codes[c, :, c] = 1
+    dot_product_threshold = 0.01
+    dot_product_norm_shift = rng.rand() * 0.01
+    weight_coefficient_fit = [True, False]
+    alpha = rng.rand() * 0.02
+    beta = rng.rand() * 0.02
+    for weight in weight_coefficient_fit:
+        pixel_coefficients = coefs_new.compute_omp_coefficients(
+            pixel_colours,
+            bled_codes,
+            maximum_iterations,
+            background_coefficients,
+            background_codes,
+            dot_product_threshold,
+            dot_product_norm_shift,
+            weight,
+            alpha,
+            beta,
+        ).toarray()
 
 
 def test_get_next_best_gene() -> None:
@@ -28,7 +65,7 @@ def test_get_next_best_gene() -> None:
     background_genes = np.array([0], dtype=np.int16)
     background_variance = np.ones((im_y, im_x, im_z, n_rounds_channels), dtype=np.float32)
 
-    best_gene, pass_threshold, inverse_variance = get_next_best_gene(
+    best_gene, pass_threshold, inverse_variance = coefs_new.get_next_best_gene(
         consider_pixels,
         residual_pixel_colours,
         all_bled_codes,
@@ -43,8 +80,10 @@ def test_get_next_best_gene() -> None:
     assert best_gene.shape == (im_y, im_x, im_z)
     assert pass_threshold.shape == (im_y, im_x, im_z)
     assert inverse_variance.shape == (im_y, im_x, im_z, n_rounds_channels)
-    assert (best_gene[~consider_pixels] == -100).all()
+    assert (best_gene[~consider_pixels] == coefs_new.NO_GENE_SELECTION).all()
     assert (~pass_threshold[~consider_pixels]).all()
+    assert np.allclose(best_gene[0, 1, 0], 1)
+    assert np.allclose(best_gene[0, 2, 0], 2)
 
 
 def test_weight_selected_genes() -> None:
@@ -66,11 +105,11 @@ def test_weight_selected_genes() -> None:
     genes[:, :, :, 1] = 1
     weight = None
 
-    coefficients, residuals = weight_selected_genes(consider_pixels, bled_codes, pixel_colours, genes, weight)
+    coefficients, residuals = coefs_new.weight_selected_genes(consider_pixels, bled_codes, pixel_colours, genes, weight)
     assert coefficients.shape == (im_y, im_x, im_z, n_genes_added)
     assert residuals.shape == (im_y, im_x, im_z, n_rounds_channels)
-    assert np.isnan(coefficients[~consider_pixels]).all()
-    assert np.isnan(residuals[~consider_pixels]).all()
+    assert np.allclose(coefficients[~consider_pixels], 0)
+    assert np.allclose(residuals[~consider_pixels], pixel_colours[~consider_pixels])
     assert np.isclose(coefficients[0, 1, 0, 0], 1)
     assert np.isclose(coefficients[0, 1, 0, 1], 0)
     assert np.isclose(coefficients[0, 2, 0, 0], 0)
@@ -79,11 +118,12 @@ def test_weight_selected_genes() -> None:
     rng = np.random.RandomState(0)
     weight = rng.rand(im_y, im_x, im_z, n_rounds_channels).astype(np.float32)
 
-    coefficients, residuals = weight_selected_genes(consider_pixels, bled_codes, pixel_colours, genes, weight)
+    coefficients, residuals = coefs_new.weight_selected_genes(consider_pixels, bled_codes, pixel_colours, genes, weight)
     assert coefficients.shape == (im_y, im_x, im_z, n_genes_added)
     assert residuals.shape == (im_y, im_x, im_z, n_rounds_channels)
 
 
 if __name__ == "__main__":
-    test_get_next_best_gene()
+    # test_compute_omp_coefficients()
+    # test_get_next_best_gene()
     test_weight_selected_genes()
