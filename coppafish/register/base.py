@@ -256,7 +256,7 @@ def optical_flow_register(
     window_radius: int = 5,
     smooth_threshold: float = 0.9,
     smooth_sigma: float = 10,
-    clip_val: np.ndarray = np.ndarray([40, 40, 15]),
+    clip_val: np.ndarray = np.array([40, 40, 15]),
     output_dir: str = "",
     file_name: str = "",
     n_cores: Optional[int] = None,
