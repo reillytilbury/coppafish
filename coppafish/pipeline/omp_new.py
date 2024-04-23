@@ -1,5 +1,6 @@
 import os
 import scipy
+from torch import maximum
 from typing_extensions import assert_type
 import numpy as np
 import numpy_indexed
@@ -66,7 +67,6 @@ def call_spots_omp(
     n_genes = nbp_call_spots.bled_codes_ge.shape[0]
     n_rounds_use = len(nbp_basic.use_rounds)
     n_channels_use = len(nbp_basic.use_channels)
-    first_tile = nbp_basic.use_tiles
     spot_shape_size_z = config["shape_max_size"][2]
     tile_shape: Tuple[int] = nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)
     bled_codes_ge = nbp_call_spots.bled_codes_ge[range(n_genes), np.ix_(nbp_basic.use_rounds, nbp_basic.use_channels)]
@@ -82,21 +82,35 @@ def call_spots_omp(
         # Step 1: Load every registered sequencing round/channel image into memory
         log.info(f"Tile {t}")
         yxz_all_pixels = np.array(np.ones(tile_shape, dtype=bool).nonzero(), dtype=np.int16).T
-        colour_image = spot_colors.get_spot_colors(
-            yxz_all_pixels, t, transform, nbp_filter.bg_scale, nbp_extract.file_type, nbp_file, nbp_basic
-        )[0].astype(np.float32)
+        # Load the colour image in batches so that we do not run out of RAM since the output is int32 and we want to
+        # convert it down to float16
+        maximum_batch_size = 100_000_000
+        n_batches = np.ceil(yxz_all_pixels.shape[0] / maximum_batch_size)
+        colour_image = np.zeros((yxz_all_pixels.shape[0], n_rounds_use, n_channels_use), dtype=np.float16)
+        for i in range(n_batches):
+            index_min, index_max = i * maximum_batch_size, min([yxz_all_pixels.shape[0], (i + 1) * maximum_batch_size])
+            colour_image[index_min, index_max] = spot_colors.get_spot_colors(
+                yxz_all_pixels[index_min, index_max],
+                t,
+                transform,
+                nbp_filter.bg_scale,
+                nbp_extract.file_type,
+                nbp_file,
+                nbp_basic,
+            )[0].astype(np.float16)
         # Divide every colour by the colour normalisation factors to equalise intensities.
-        colour_image /= colour_norm_factor[[t]]
+        colour_image /= colour_norm_factor[[t]].astype(np.float16)
         assert colour_image.shape == (yxz_all_pixels.shape[0], n_rounds_use, n_channels_use)
         colour_image = colour_image.reshape(tile_shape + (n_rounds_use, n_channels_use))
-        first_z_chunk = True
 
         while True:
             # Step 2: Compute OMP coefficients for spot_shape_size_z * 3 z planes (zeros when out of bounds)
             z_min: int = -spot_shape_size_z  # Inclusive
             z_max: int = z_min + 3 * spot_shape_size_z  # Exclusive
             compute_on_z_planes = [z for z in range(z_min, z_max) if z >= 0 and z <= np.max(nbp_basic.use_z)]
-            compute_colours_image = colour_image[:, :, compute_on_z_planes].reshape((-1, n_rounds_use, n_channels_use))
+            compute_colours_image = (
+                colour_image[:, :, compute_on_z_planes].astype(np.float32).reshape((-1, n_rounds_use, n_channels_use))
+            )
             # Fit and subtract the "background genes" off every spot colour.
             log.debug("Fitting background")
             compute_colours_image, bg_coefficients, bg_codes = call_spots.fit_background(compute_colours_image)
@@ -122,12 +136,13 @@ def call_spots_omp(
             log.debug("Computing OMP coefficients complete")
             del bled_codes_ge, compute_colours_image, bg_coefficients, bg_codes
 
-            # If this is the first OMP z chunk and first tile, compute the OMP spot shape using the results
-
-            # Step 3: Detect spots on the middle spot_shape_size_z z planes
             detect_z_min: int = (z_max - z_min) // 3 + z_min
             detect_z_max: int = detect_z_min + spot_shape_size_z
+            # If this is the first OMP z chunk and first tile, compute the OMP spot shape using the results
+            for g in range(n_genes):
+                # Step 3: Detect spots on the middle spot_shape_size_z z planes
+                pass
 
-            # Step 4: Score the detections using the coefficients.
+                # Step 4: Score the detections using the coefficients.
 
             # Step 5: Repeat steps 2 to 4 after shifting z planes up by spot_shape_size_z, stopping once beyond the z stack
