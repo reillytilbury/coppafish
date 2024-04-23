@@ -372,8 +372,9 @@ def optical_flow_single(
     target = target.astype(np.float32)
     # First, correct for a yx shift in the images
     mid_z = int(target.shape[2] / 2)
+    window_yx = skimage.filters.window("hann", target.shape[:2])
     shift = skimage.registration.phase_cross_correlation(
-        reference_image=target[:, :, mid_z], moving_image=base[:, :, mid_z], upsample_factor=10
+        reference_image=target[:, :, mid_z] * window_yx, moving_image=base[:, :, mid_z] * window_yx, upsample_factor=10
     )[0]
     shift = np.array([shift[0], shift[1], 0])
     base = preprocessing.custom_shift(base, shift.astype(int))
