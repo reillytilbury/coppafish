@@ -184,14 +184,15 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
     z_image, y_image, x_image = image.shape
 
     # Allow 0.5 of a box either side and then split the middle with subvols evenly spaced points, ie into subvols - 1
-    # intervals. Then use integer division. e.g actual unit distance is 12.5, this gives a unit distance of 12 so
-    # should never overshoot
-    y_unit = (y_image - y_box) // (y_subvolumes - 1)
-    x_unit = (x_image - x_box) // (x_subvolumes - 1)
+    # intervals.
     while (y_image - y_box) % (y_subvolumes - 1) != 0 or y_box % 2 != 0:
         y_box += 1
     while (x_image - x_box) % (x_subvolumes - 1) != 0 or x_box % 2 != 0:
         x_box += 1
+    # define the unit spacing between centres for y and x
+    y_unit = (y_image - y_box) // (y_subvolumes - 1)
+    x_unit = (x_image - x_box) // (x_subvolumes - 1)
+
 
     # 2 cases for z, if z_subvolumes = 1, then z_box = z_image and z_unit = 0, else, deal with z_box and z_unit
     if z_subvolumes == 1:
