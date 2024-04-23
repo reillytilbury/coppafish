@@ -1,3 +1,7 @@
+2024/04/23 Alpha Update (v0.10.4):
+ * Bug in Register which was causing large shifts not to be detected has been fixed. A global shift is now computed
+    between the two images and the shift is applied to the second image before computing the local shifts.
+
 2024/04/18 Alpha Update (v0.10.3):
  * OMP crash on empty coef_image bug fix.
 
