@@ -256,7 +256,7 @@ def optical_flow_register(
     window_radius: int = 5,
     smooth_threshold: float = 0.9,
     smooth_sigma: float = 10,
-    clip_val: np.ndarray = np.ndarray([40, 40, 15]),
+    clip_val: np.ndarray = np.array([40, 40, 15]),
     output_dir: str = "",
     file_name: str = "",
     n_cores: Optional[int] = None,
@@ -299,9 +299,10 @@ def optical_flow_register(
     # down-sample the images
     target = target[::sample_factor_yx, ::sample_factor_yx]
     base = base[::sample_factor_yx, ::sample_factor_yx]
-    # normalise each z-plane to have the mean 1
-    target = target / np.mean(target, axis=(0, 1))[None, None, :]
-    base = base / np.mean(base, axis=(0, 1))[None, None, :]
+    # match historams of the images
+    # target = skimage.exposure.match_histograms(target, base)
+    target = target / np.median(target)
+    base = base / np.median(base)
     # update clip_val based on down-sampling
     clip_val = np.array(clip_val, dtype=np.float32)
     clip_val[:2] = clip_val[:2] / sample_factor_yx
@@ -369,6 +370,14 @@ def optical_flow_single(
     # start by ensuring images are float32
     base = base.astype(np.float32)
     target = target.astype(np.float32)
+    # First, correct for a yx shift in the images
+    mid_z = int(target.shape[2] / 2)
+    window_yx = skimage.filters.window("hann", target.shape[:2])
+    shift = skimage.registration.phase_cross_correlation(
+        reference_image=target[:, :, mid_z] * window_yx, moving_image=base[:, :, mid_z] * window_yx, upsample_factor=10
+    )[0]
+    shift = np.array([shift[0], shift[1], 0])
+    base = preprocessing.custom_shift(base, shift.astype(int))
     ny, nx, nz = target.shape
     yx_sub = int((ny / chunks_yx) * 1.25)
     while (ny - yx_sub) % (chunks_yx - 1) != 0 or yx_sub % 2 != 0:
@@ -409,6 +418,8 @@ def optical_flow_single(
     flow = preprocessing.flow_zyx_to_yxz(flow)
     # clip the flow
     flow = np.array([np.clip(flow[i], -clip_val[i], clip_val[i]) for i in range(3)])
+    # add back the shift
+    flow = np.array([flow[i] - shift[i] for i in range(3)])
     # upsample the flow
     upsample_factor = (upsample_factor_yx, upsample_factor_yx, 1)
     flow_up = np.array(
@@ -491,7 +502,8 @@ def flow_correlation(
     )
     # upsample
     correlation_up = upsample_yx(correlation, upsample_factor_yx, order=0).astype(np.float16)
-
+    # make sure every z-plane has the same mean correlation
+    correlation /= np.mean(correlation, axis=(0, 1))[None, None, :]
     # save the correlation
     if loc:
         # save in yxz format
