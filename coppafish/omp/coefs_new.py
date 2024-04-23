@@ -22,7 +22,7 @@ def compute_omp_coefficients(
     weight_coefficient_fit: bool,
     alpha: float,
     beta: float,
-):
+) -> scipy.sparse.csr_matrix:
     """
     Find OMP coefficients on all pixels.
 
@@ -109,18 +109,17 @@ def compute_omp_coefficients(
             weight=np.sqrt(inverse_variance) if weight_coefficient_fit else None,
         )
 
+        # FIXME: This is unoptimised.
         # Populate sparse matrix with the updated coefficient results
-        # FIXME: This is a horribly unoptimised piece of code.
-        n_pixels = coefficient_image.shape[0]
-        print(f"{coefficient_image.shape=}")
-        print(f"{genes_added_coefficients.shape=}")
-        print(f"{genes_added.shape=}")
-        print(f"{genes_added.max()=}")
-        print(f"{genes_added.min()=}")
-        for p in range(n_pixels):
-            coefficient_image[p, genes_added.reshape(-1, i + 1)[p]] = genes_added_coefficients.reshape(-1, i + 1)[p, i]
+        genes_added_flattened = genes_added.reshape((-1, i + 1))
+        genes_added_coefficients_flattened = genes_added_coefficients.reshape((-1, i + 1))
+        for p in np.where(genes_added_flattened[:, i] != NO_GENE_SELECTION)[0]:
+            p_gene = genes_added_flattened[p, i]
+            coefficient_image[p, p_gene] = genes_added_coefficients_flattened[p, i]
 
-    log.info(f"Pixels iterated on: {pixels_iterated}")
+    if verbose:
+        log.info(f"Pixels iterated on: {pixels_iterated}")
+
     return coefficient_image
 
 
@@ -195,9 +194,13 @@ def get_next_best_gene(
     all_bled_codes /= np.linalg.norm(all_bled_codes, axis=0, keepdims=True)
 
     # See Josh's OMP documentation for details about this exact equation
-    inverse_variances_flattened = np.reciprocal(
-        np.matmul((coefficients_flattened**2)[:, None], all_bled_codes.T[genes_added_flattened] ** 2 * alpha)[:, 0]
-        + background_variance_flattened
+    inverse_variances_flattened = np.zeros((n_pixels, n_rounds_channels), dtype=np.float32)
+    inverse_variances_flattened[consider_pixels_flattened] = np.reciprocal(
+        np.matmul(
+            (coefficients_flattened[consider_pixels_flattened] ** 2)[:, None],
+            all_bled_codes.T[genes_added_flattened[consider_pixels_flattened]] ** 2 * alpha,
+        )[:, 0]
+        + background_variance_flattened[consider_pixels_flattened]
     )
     # Do not assign any pixels to background genes or to already added genes. If this happens, then gene assignment
     # failed.
@@ -280,11 +283,11 @@ def weight_selected_genes(
 
     genes_flattened = genes.reshape((np.prod(image_shape), n_genes_added))
     # Flatten to be n_pixels x (n_rounds * n_channels).
-    weight_flattened = weight.reshape((-1, n_rounds_channels))
+    weight_flattened = weight.reshape((np.prod(image_shape), n_rounds_channels))
     # Flatten to be n_pixels x (n_rounds * n_channels).
-    pixel_colours_flattened = pixel_colours.reshape((-1, n_rounds_channels))
+    pixel_colours_flattened = pixel_colours.reshape((np.prod(image_shape), n_rounds_channels))
     pixel_colours_flattened = pixel_colours_flattened * weight_flattened
-    consider_pixels_flattened = consider_pixels.reshape(-1)
+    consider_pixels_flattened = consider_pixels.reshape(np.prod(image_shape))
     # Flatten and weight the bled codes, becomes shape n_pixels x n_rounds_channels x n_genes_added.
     bled_codes_weighted = (
         bled_codes[:, genes_flattened[consider_pixels_flattened]].swapaxes(0, 1)
@@ -297,7 +300,7 @@ def weight_selected_genes(
     coefficients[:] = 0
     for p in np.where(consider_pixels_flattened)[0]:
         pixel_colour = pixel_colours_flattened[p]
-        gene = genes[p]
+        gene = genes_flattened[p]
         w = weight_flattened[p]
         coefficients[p] = np.linalg.lstsq(bled_codes[:, gene] * w[:, np.newaxis], pixel_colour * w, rcond=-1)[0]
     residuals[consider_pixels_flattened] = (

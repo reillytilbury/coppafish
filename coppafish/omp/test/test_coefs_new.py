@@ -1,4 +1,6 @@
+import scipy
 import numpy as np
+from typing_extensions import assert_type
 
 from coppafish.omp import coefs_new
 
@@ -37,7 +39,9 @@ def test_compute_omp_coefficients() -> None:
             weight,
             alpha,
             beta,
-        ).toarray()
+        )
+        assert_type(pixel_coefficients, scipy.sparse.csr_matrix)
+        assert pixel_coefficients.shape == (im_y * im_x * im_z, n_genes)
 
 
 def test_get_next_best_gene() -> None:
@@ -87,9 +91,9 @@ def test_get_next_best_gene() -> None:
 
 
 def test_weight_selected_genes() -> None:
-    im_y, im_x, im_z = 3, 4, 5
+    im_y, im_x, im_z = 4, 5, 6
     n_rounds_channels = 2
-    n_genes = 2
+    n_genes = 3
     n_genes_added = 2
     consider_pixels = np.ones((im_y, im_x, im_z), dtype=bool)
     consider_pixels[0, 0, 0] = False
@@ -124,6 +128,6 @@ def test_weight_selected_genes() -> None:
 
 
 if __name__ == "__main__":
-    # test_compute_omp_coefficients()
-    # test_get_next_best_gene()
+    test_compute_omp_coefficients()
+    test_get_next_best_gene()
     test_weight_selected_genes()
