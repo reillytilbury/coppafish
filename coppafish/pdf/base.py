@@ -633,7 +633,7 @@ class BuildPDF:
     def get_omp_text_info(self, omp_page: NotebookPage) -> str:
         output = "OMP\n \n"
         output += self.get_version_from_page(omp_page)
-        output += f"computed spot shape size: {omp_page.spot_shape.shape}\n"
+        output += f"computed spot shape size: {omp_page.spot.shape}\n"
         return output
 
     def create_omp_score_distribution_fig(
@@ -712,7 +712,7 @@ class BuildPDF:
             for row in range(axes.shape[0])
         ]
         z_offsets = [-2, 0, +2]
-        mean_spot_shape = omp_page.spot_shape_float
+        mean_spot_shape = omp_page.mean_spot
         if mean_spot_shape is not None:
             mid_z = mean_spot_shape.shape[2] // 2
             max_z = mean_spot_shape.shape[2] - 1
@@ -733,7 +733,7 @@ class BuildPDF:
                     show_right_frame=True,
                 )
 
-        spot_shape = omp_page.spot_shape
+        spot_shape = omp_page.spot
         mid_z = spot_shape.shape[2] // 2
         max_z = spot_shape.shape[2] - 1
         for column, z_offset in enumerate(z_offsets):

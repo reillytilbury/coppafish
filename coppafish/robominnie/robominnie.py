@@ -18,6 +18,7 @@ from tqdm import tqdm
 import numpy.typing as npt
 from typing import Dict, List, Any, Tuple, Optional
 
+from ..omp import scores as omp_scores
 from .. import utils
 from ..pipeline import run
 
@@ -1071,7 +1072,8 @@ class RoboMinnie:
         assert nb.has_page("omp"), f"OMP not found in notebook at {config_filepath}"
         # Keep the OMP spot intensities, assigned gene, assigned tile number and the spot positions in the class
         # instance
-        self.omp_spot_intensities = nb.omp.intensity
+        self.omp_spot_intensities = np.ones_like(nb.omp.gene_no)
+        self.omp_spot_scores = omp_scores.omp_scores_int_to_float(nb.omp.scores)
         self.omp_gene_numbers = nb.omp.gene_no
         self.omp_tile_number = nb.omp.tile
         self.omp_spot_local_positions = nb.omp.local_yxz  # yxz position of each gene found
@@ -1142,7 +1144,7 @@ class RoboMinnie:
             coppafish_spot_positions_yxz = self.omp_spot_local_positions.astype(np.float64)
             coppafish_spots_gene_indices = self.omp_gene_numbers
             coppafish_spots_intensities = self.omp_spot_intensities
-            coppafish_spots_scores = np.ones(coppafish_spots_gene_indices.size) * np.inf
+            coppafish_spots_scores = self.omp_spot_scores
             coppafish_spots_tiles = self.omp_tile_number
 
         # Convert local spot positions into coordinates using coppafish-calculated global tile positions

@@ -100,15 +100,11 @@ def quality_threshold(
             score_thresh = config["score_ref"]
         elif method_prob:
             score_thresh = config["score_prob"]
-        score_multiplier = config["score_omp_multiplier"] if method_omp else None
         # if thresholds page exists, use those values to override config file
         if nb.has_page("thresholds"):
             score_thresh = nb.thresholds.score_omp if method_omp else nb.thresholds.score_ref
-            score_multiplier = nb.thresholds.score_omp_multiplier if method_omp else None
-    else:
-        score_multiplier = 1
 
-    intensity = nb.omp.intensity if method_omp else nb.ref_spots.intensity
+    intensity = np.ones_like(nb.omp.gene_no, dtype=np.float32) if method_omp else nb.ref_spots.intensity
     if method_omp:
         score = omp_spot_score(nb.omp)
     elif method_anchor:

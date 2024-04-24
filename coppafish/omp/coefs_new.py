@@ -5,6 +5,7 @@ import numpy.typing as npt
 from typing_extensions import assert_type
 from typing import Tuple, Optional, List
 
+from . import spots_new
 from .. import log, call_spots
 
 
@@ -22,7 +23,7 @@ def compute_omp_coefficients(
     weight_coefficient_fit: bool,
     alpha: float,
     beta: float,
-) -> scipy.sparse.csr_matrix:
+) -> scipy.sparse.lil_matrix:
     """
     Find OMP coefficients on all pixels.
 
@@ -44,7 +45,7 @@ def compute_omp_coefficients(
         beta (float): OMP weighting parameter. Applied if weight_coefficient_fit is true.
 
     Returns:
-        - (`((im_y * im_x * im_z) x n_genes) sparse csr_matrix`) pixel_coefficients: OMP
+        - (`((im_y * im_x * im_z) x n_genes) sparse lil_matrix`) pixel_coefficients: OMP
             coefficients for every pixel. Since most coefficients are zero, the results are stored as a sparse matrix.
             Flattening the image dimensions is done using numpy's reshape method for consistency.
     """
@@ -80,7 +81,7 @@ def compute_omp_coefficients(
     pixels_iterated: List[int] = []
     genes_added = np.full(image_shape + (0,), fill_value=NO_GENE_SELECTION, dtype=np.int16)
     genes_added_coefficients = np.zeros_like(genes_added, dtype=np.float32)
-    coefficient_image = scipy.sparse.csr_matrix(np.zeros((np.prod(image_shape), n_genes), dtype=np.float32))
+    coefficient_image = scipy.sparse.lil_matrix(np.zeros((np.prod(image_shape), n_genes), dtype=np.float32))
 
     for i in tqdm.trange(maximum_iterations, desc="Computing OMP coefficients", unit="iteration", disable=not verbose):
         pixels_iterated.append(iterate_on_pixels.sum())

@@ -17,6 +17,7 @@ from . import register
 from . import stitch
 from . import get_reference_spots
 from . import call_reference_spots
+from . import omp_new
 from . import omp
 
 
@@ -347,7 +348,7 @@ def run_omp(nb: Notebook) -> None:
         # Use tile with most spots on to find spot shape in omp
         spots_tile = np.sum(nb.find_spots.spot_no, axis=(1, 2))
         tile_most_spots = nb.basic_info.use_tiles[np.argmax(spots_tile[nb.basic_info.use_tiles])]
-        nbp = omp.call_spots_omp(
+        nbp = omp_new.run_omp(
             config["omp"],
             nb.file_names,
             nb.basic_info,
@@ -356,7 +357,6 @@ def run_omp(nb: Notebook) -> None:
             nb.call_spots,
             nb.stitch.tile_origin,
             nb.register.icp_correction,
-            tile_most_spots,
         )
         nb += nbp
 
@@ -365,15 +365,15 @@ def run_omp(nb: Notebook) -> None:
         # which can deal with case where duplicates removed from spot_coefs but not spot_info.
         # After re-saving here, spot_coefs[s] should be the coefficients for gene at nb.omp.local_yxz[s]
         # i.e. indices should match up.
-        spot_info = np.load(nb.file_names.omp_spot_info)
-        not_duplicate = call_spots_base.get_non_duplicate(
-            nb.stitch.tile_origin, nb.basic_info.use_tiles, nb.basic_info.tile_centre, spot_info[:, :3], spot_info[:, 5]
-        )
-        spot_coefs = sparse.load_npz(nb.file_names.omp_spot_coef)
-        sparse.save_npz(nb.file_names.omp_spot_coef, spot_coefs[not_duplicate])
-        np.save(nb.file_names.omp_spot_info, spot_info[not_duplicate])
+        # spot_info = np.load(nb.file_names.omp_spot_info)
+        # not_duplicate = call_spots_base.get_non_duplicate(
+        #     nb.stitch.tile_origin, nb.basic_info.use_tiles, nb.basic_info.tile_centre, spot_info[:, :3], spot_info[:, 5]
+        # )
+        # spot_coefs = sparse.load_npz(nb.file_names.omp_spot_coef)
+        # sparse.save_npz(nb.file_names.omp_spot_coef, spot_coefs[not_duplicate])
+        # np.save(nb.file_names.omp_spot_info, spot_info[not_duplicate])
 
         # only raise error after saving to notebook if spot_colors have nan in wrong places.
-        utils.errors.check_color_nan(nbp.colors, nb.basic_info)
+        # utils.errors.check_color_nan(nbp.colors, nb.basic_info)
     else:
         log.warn(utils.warnings.NotebookPageWarning("omp"))
