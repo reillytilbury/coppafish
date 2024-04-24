@@ -5,7 +5,6 @@ import numpy.typing as npt
 from typing_extensions import assert_type
 from typing import Tuple, Optional, List
 
-from . import spots_new
 from .. import log, call_spots
 
 
