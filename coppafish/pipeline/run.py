@@ -17,7 +17,6 @@ from . import register
 from . import stitch
 from . import get_reference_spots
 from . import call_reference_spots
-from . import omp_new
 from . import omp
 
 
@@ -348,7 +347,7 @@ def run_omp(nb: Notebook) -> None:
         # Use tile with most spots on to find spot shape in omp
         spots_tile = np.sum(nb.find_spots.spot_no, axis=(1, 2))
         tile_most_spots = nb.basic_info.use_tiles[np.argmax(spots_tile[nb.basic_info.use_tiles])]
-        nbp = omp_new.run_omp(
+        nbp = omp.run_omp(
             config["omp"],
             nb.file_names,
             nb.basic_info,
