@@ -92,9 +92,10 @@ def run_omp(
         maximum_batch_size = 100_000_000
         n_batches = maths.ceil(yxz_all_pixels.shape[0] / maximum_batch_size)
         colour_image = np.zeros((yxz_all_pixels.shape[0], n_rounds_use, n_channels_use), dtype=np.float16)
+        log.info(f"{(colour_image.nbytes / 1e9)=}")
         for i in range(n_batches):
             index_min, index_max = i * maximum_batch_size, min([yxz_all_pixels.shape[0], (i + 1) * maximum_batch_size])
-            colour_image[index_min:index_max] = spot_colors.get_spot_colors(
+            colour_image[index_min:index_max], _, _, _ = spot_colors.get_spot_colors(
                 yxz_all_pixels[index_min:index_max],
                 t,
                 transform,
@@ -102,7 +103,8 @@ def run_omp(
                 nbp_extract.file_type,
                 nbp_file,
                 nbp_basic,
-            )[0].astype(np.float16)
+                output_dtype=np.float16,
+            )
         # Set any "invalid" (i.e. out of bounds) colours to zero.
         colour_image[colour_image <= -nbp_basic.tile_pixel_value_shift] = 0.0
         # Divide every colour by the colour normalisation factors to equalise intensities.
