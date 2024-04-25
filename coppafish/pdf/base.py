@@ -347,16 +347,20 @@ class BuildPDF:
                 axes[0, 0].set_title(info, fontdict=INFO_FONTDICT, y=0.5)
                 self.empty_plot_ticks(axes[0, 0])
                 pdf.savefig(fig)
+                plt.close(fig)
 
                 fig = self.create_omp_score_distribution_fig(nb.basic_info, nb.omp)
                 pdf.savefig(fig)
+                plt.close(fig)
 
                 fig = self.create_omp_spot_shape_fig(nb.omp)
                 pdf.savefig(fig)
+                plt.close(fig)
 
                 for i in range(10):
                     fig = self.create_omp_gene_counts_fig(nb.file_names, nb.ref_spots, nb.omp, score_threshold=i * 0.1)
                     pdf.savefig(fig)
+                    plt.close(fig)
 
                 for t in nb.basic_info.use_tiles:
                     keep = nb.omp.tile == t
@@ -368,6 +372,7 @@ class BuildPDF:
                         use_z=nb.basic_info.use_z,
                     )
                     pdf.savefig(fig)
+                    plt.close(fig)
             plt.close(fig)
         pbar.update()
         pbar.close()

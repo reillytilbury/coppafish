@@ -343,20 +343,17 @@ def load_image(
         elif isinstance(yxz, (np.ndarray, jnp.ndarray)):
             if nbp_basic.is_3d:
                 if yxz.shape[1] != 3:
-                    log.error(
-                        ValueError(f"Loading in a 3D tile but dimension of coordinates given is {yxz.shape[1]}.")
-                    )
+                    log.error(ValueError(f"Loading in a 3D tile but dimension of coordinates given is {yxz.shape[1]}."))
                 coord_index_zyx = tuple([yxz[:, j] for j in [2, 0, 1]])
-                if np.allclose(coord_index_zyx[0], coord_index_zyx[0][0]) and coord_index_zyx[0].size > 100_000:
-                    image = _load_image(file_path, file_type, indices=coord_index_zyx[0][0].item())
-                    image = image[coord_index_zyx[1:]]
-                else:
-                    image = _load_image(file_path, file_type, indices=coord_index_zyx, mmap_mode="r")
+                image = _load_image(file_path, file_type)[coord_index_zyx]
+                # if np.allclose(coord_index_zyx[0], coord_index_zyx[0][0]) and coord_index_zyx[0].size > 100_000:
+                #     image = _load_image(file_path, file_type, indices=coord_index_zyx[0][0].item())
+                #     image = image[coord_index_zyx[1:]]
+                # else:
+                #     image = _load_image(file_path, file_type, indices=coord_index_zyx, mmap_mode="r")
             else:
                 if yxz.shape[1] != 2:
-                    log.error(
-                        ValueError(f"Loading in a 2D tile but dimension of coordinates given is {yxz.shape[1]}.")
-                    )
+                    log.error(ValueError(f"Loading in a 2D tile but dimension of coordinates given is {yxz.shape[1]}."))
                 coord_index = tuple(np.asarray(yxz[:, i]) for i in range(2))
                 coord_index = (np.full(yxz.shape[0], c, int),) + coord_index  # add channel as first coordinate in 2D.
                 # image = np.load(nbp_file.tile[t][r], mmap_mode='r')[coord_index]

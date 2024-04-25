@@ -918,7 +918,7 @@
         ],
         "mean_spot": [
             "",
-            "Numpy float32 array [shape_max_size[0] x shape_max_size[1] x shape_max_size[2]] or None",
+            "Numpy float16 array [shape_max_size[0] x shape_max_size[1] x shape_max_size[2]] or None",
             "Mean of *OMP* coefficient sign in neighbourhood centred on detected isolated spot."
         ],
         "spot": [

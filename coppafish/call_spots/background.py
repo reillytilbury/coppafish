@@ -27,17 +27,26 @@ def fit_background(spot_colors: np.ndarray, weight_shift: float = 0) -> Tuple[np
         - background_vectors `float [n_channels x n_rounds x n_channels]`.
             background_vectors[c] is the background vector for channel c.
     """
-    weight_shift = np.clip(weight_shift, 1e-20, np.inf)  # ensure weight_shift > 1e-20 to avoid blow up to infinity.
+    # Preserve the spot colours datatype throughout.
+    dtype = spot_colors.dtype
+    weight_shift = np.clip(
+        weight_shift, 1e-20, np.inf, dtype=dtype
+    )  # ensure weight_shift > 1e-20 to avoid blow up to infinity.
 
     n_rounds, n_channels = spot_colors[0].shape
-    background_vectors = np.repeat(np.expand_dims(np.eye(n_channels), axis=1), n_rounds, axis=1)
+    background_vectors = np.repeat(np.expand_dims(np.eye(n_channels), axis=1), n_rounds, axis=1).astype(dtype)
     # give background_vectors an L2 norm of 1 so can compare coefficients with other genes.
     background_vectors = background_vectors / np.linalg.norm(background_vectors, axis=(1, 2), keepdims=True)
 
     weight_factor = 1 / (np.abs(spot_colors) + weight_shift)
     spot_weight = spot_colors * weight_factor
-    background_weight = np.ones((1, n_rounds, n_channels)) * background_vectors[0, 0, 0] * weight_factor
+    background_weight = np.ones((1, n_rounds, n_channels), dtype=dtype) * background_vectors[0, 0, 0] * weight_factor
+    # Avoid overflow from squaring the background_weight.
+    background_weight = np.clip(background_weight, None, np.sqrt(np.finfo(dtype).max))
     coef = np.sum(spot_weight * background_weight, axis=1) / np.sum(background_weight**2, axis=1)
-    residual = spot_colors - np.expand_dims(coef, 1) * np.ones((1, n_rounds, n_channels)) * background_vectors[0, 0, 0]
+    residual = (
+        spot_colors
+        - np.expand_dims(coef, 1) * np.ones((1, n_rounds, n_channels), dtype=dtype) * background_vectors[0, 0, 0]
+    )
 
     return residual, coef, background_vectors

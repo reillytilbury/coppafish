@@ -68,10 +68,10 @@ def run_omp(
     spot_shape_size_z = config["spot_shape"][2]
     tile_shape: Tuple[int] = nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)
     bled_codes_ge = nbp_call_spots.bled_codes_ge[np.ix_(range(n_genes), nbp_basic.use_rounds, nbp_basic.use_channels)]
-    bled_codes_ge = bled_codes_ge.astype(np.float32)
     assert (~np.isnan(bled_codes_ge)).all(), "bled codes GE cannot contain nan values"
     assert np.allclose(np.linalg.norm(bled_codes_ge, axis=(1, 2)), 1), "bled codes GE must be L2 normalised"
-    colour_norm_factor = np.array(nbp_call_spots.color_norm_factor, dtype=np.float32)
+    bled_codes_ge = bled_codes_ge.astype(np.float16)
+    colour_norm_factor = np.array(nbp_call_spots.color_norm_factor, dtype=np.float16)
     colour_norm_factor = colour_norm_factor[
         np.ix_(range(colour_norm_factor.shape[0]), nbp_basic.use_rounds, nbp_basic.use_channels)
     ]
@@ -92,7 +92,6 @@ def run_omp(
         maximum_batch_size = 100_000_000
         n_batches = maths.ceil(yxz_all_pixels.shape[0] / maximum_batch_size)
         colour_image = np.zeros((yxz_all_pixels.shape[0], n_rounds_use, n_channels_use), dtype=np.float16)
-        log.info(f"{(colour_image.nbytes / 1e9)=}")
         for i in range(n_batches):
             index_min, index_max = i * maximum_batch_size, min([yxz_all_pixels.shape[0], (i + 1) * maximum_batch_size])
             colour_image[index_min:index_max], _, _, _ = spot_colors.get_spot_colors(
@@ -133,21 +132,19 @@ def run_omp(
             ]
             log.info(f"{compute_on_z_planes=}")
             compute_image_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(compute_on_z_planes))
-            compute_colours_image = (
-                colour_image[:, :, compute_on_z_planes].astype(np.float32).reshape((-1, n_rounds_use, n_channels_use))
-            )
+            compute_colours_image = colour_image[:, :, compute_on_z_planes].reshape((-1, n_rounds_use, n_channels_use))
             # Fit and subtract the "background genes" off every spot colour.
             log.debug("Fitting background")
             compute_colours_image, bg_coefficients, bg_codes = call_spots.fit_background(compute_colours_image)
-            log.debug("Fitting background complete")
             compute_colours_image = compute_colours_image.reshape(compute_image_shape + (n_rounds_use, n_channels_use))
             bg_coefficients = bg_coefficients.reshape(compute_image_shape + (n_channels_use,))
-            coefficient_image = scipy.sparse.lil_matrix(np.zeros((np.prod(subset_shape), n_genes), dtype=np.float32))
+            log.debug("Fitting background complete")
+            coefficient_image = scipy.sparse.lil_matrix((np.prod(subset_shape), n_genes), dtype=np.float32)
             # Populate coefficient_image with the coefficients that can be computed in the subset (all others remain zeros).
             in_compute_on_z_planes = np.zeros(subset_shape, dtype=bool)
             in_compute_on_z_planes[:, :, compute_on_z_planes_subset] = True
-            log.info(f"Computing OMP coefficients for z={compute_on_z_planes}")
-            coefficient_image[in_compute_on_z_planes.reshape(-1)] = coefs_new.compute_omp_coefficients(
+            in_compute_on_z_planes = in_compute_on_z_planes.reshape(-1)
+            coefficient_image[in_compute_on_z_planes] = coefs_new.compute_omp_coefficients(
                 compute_colours_image,
                 bled_codes_ge,
                 maximum_iterations=config["max_genes"],
@@ -166,7 +163,7 @@ def run_omp(
             if first_computation:
                 log.info("Computing spot shape")
                 n_isolated_spots = 0
-                mean_spot = np.zeros(tuple(config["spot_shape"]), dtype=np.float32)
+                mean_spot = np.zeros(tuple(config["spot_shape"]), dtype=np.float16)
                 for g in tqdm.trange(n_genes, desc="Computing spot shape", unit="gene"):
                     g_coefficient_image = coefficient_image[:, g].toarray().reshape(subset_shape)
                     shape_isolation_distance_z = config["shape_isolation_distance_z"]
