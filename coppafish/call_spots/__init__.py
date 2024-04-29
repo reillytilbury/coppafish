@@ -9,4 +9,4 @@ from .qual_check import omp_spot_score, quality_threshold, get_intensity_thresh
 from .dot_product import dot_product_score, gene_prob_score
 
 # Needed for working non-jax, non-pytorch software
-from . import background
+from . import background, background_pytorch

@@ -1,22 +1,23 @@
 import tqdm
+import torch
 import scipy
 import numpy as np
-import numpy.typing as npt
 from typing_extensions import assert_type
 from typing import Tuple, Optional, List
 
-from .. import log, call_spots
+from .. import log
+from ..call_spots import dot_product_pytorch
 
 
 NO_GENE_SELECTION = -32768
 
 
 def compute_omp_coefficients(
-    pixel_colours: npt.NDArray[np.float32],
-    bled_codes: npt.NDArray[np.float32],
+    pixel_colours: torch.Tensor,
+    bled_codes: torch.Tensor,
     maximum_iterations: int,
-    background_coefficients: npt.NDArray[np.float32],
-    background_codes: npt.NDArray[np.float32],
+    background_coefficients: torch.Tensor,
+    background_codes: torch.Tensor,
     dot_product_threshold: float,
     dot_product_norm_shift: float,
     weight_coefficient_fit: bool,
@@ -48,6 +49,11 @@ def compute_omp_coefficients(
             coefficients for every pixel. Since most coefficients are zero, the results are stored as a sparse matrix.
             Flattening the image dimensions is done using numpy's reshape method for consistency.
     """
+    assert_type(pixel_colours, torch.Tensor)
+    assert_type(bled_codes, torch.Tensor)
+    assert_type(background_coefficients, torch.Tensor)
+    assert_type(background_codes, torch.Tensor)
+
     assert pixel_colours.ndim == 5
     assert bled_codes.ndim == 3
     assert maximum_iterations >= 1
@@ -63,23 +69,23 @@ def compute_omp_coefficients(
     image_shape = pixel_colours.shape[:3]
 
     # Convert all n_rounds_use x n_channels_use shapes to n_rounds_use * n_channels_use
-    pixel_colours = pixel_colours.reshape(image_shape + (n_rounds_use * n_channels_use,))
-    bled_codes = bled_codes.reshape((n_genes, -1))
-    background_codes = background_codes.reshape((n_channels_use, -1))
+    pixel_colours = torch.reshape(pixel_colours, image_shape + (n_rounds_use * n_channels_use,))
+    bled_codes = torch.reshape(bled_codes, (n_genes, -1))
+    background_codes = torch.reshape(background_codes, (n_channels_use, -1))
 
-    all_bled_codes = np.concatenate((bled_codes, background_codes))
+    all_bled_codes = torch.concatenate((bled_codes, background_codes))
     # Background genes are placed at the end of the other gene bled codes
-    background_genes = np.arange(n_genes, n_genes + n_channels_use)
+    background_genes = torch.arange(n_genes, n_genes + n_channels_use)
     # Background variance will not change between iterations
     background_variance = (
-        np.square(background_coefficients) @ np.square(all_bled_codes[background_genes]) * alpha + beta**2
+        torch.square(background_coefficients) @ torch.square(all_bled_codes[background_genes]) * alpha + beta**2
     )
 
-    iterate_on_pixels = np.ones(image_shape, dtype=bool)
+    iterate_on_pixels = torch.ones(image_shape, dtype=bool)
     verbose = iterate_on_pixels.sum() > 1_000
     pixels_iterated: List[int] = []
-    genes_added = np.full(image_shape + (0,), fill_value=NO_GENE_SELECTION, dtype=np.int16)
-    genes_added_coefficients = np.zeros_like(genes_added, dtype=np.float32)
+    genes_added = torch.full(image_shape + (0,), fill_value=NO_GENE_SELECTION, dtype=torch.int16)
+    genes_added_coefficients = torch.zeros_like(genes_added).float()
     coefficient_image = scipy.sparse.lil_matrix(np.zeros((np.prod(image_shape), n_genes), dtype=np.float32))
 
     for i in tqdm.trange(maximum_iterations, desc="Computing OMP coefficients", unit="iteration", disable=not verbose):
@@ -97,8 +103,8 @@ def compute_omp_coefficients(
             background_variance,
         )
         # Update what pixels to continue iterating on
-        iterate_on_pixels = np.logical_and(iterate_on_pixels, pass_threshold)
-        genes_added = np.append(genes_added, best_genes[:, :, :, np.newaxis], axis=3)
+        iterate_on_pixels = torch.logical_and(iterate_on_pixels, pass_threshold)
+        genes_added = torch.cat((genes_added, best_genes[:, :, :, np.newaxis]), dim=3)
 
         # Update coefficients for pixels with new a gene assignment and keep the residual pixel colour
         genes_added_coefficients, pixel_colours = weight_selected_genes(
@@ -106,16 +112,18 @@ def compute_omp_coefficients(
             bled_codes.T,
             pixel_colours,
             genes_added,
-            weight=np.sqrt(inverse_variance) if weight_coefficient_fit else None,
+            weight=torch.sqrt(inverse_variance) if weight_coefficient_fit else None,
         )
 
         # FIXME: This is unoptimised.
         # Populate sparse matrix with the updated coefficient results
-        genes_added_flattened = genes_added.reshape((-1, i + 1))
-        genes_added_coefficients_flattened = genes_added_coefficients.reshape((-1, i + 1))
-        for p in np.where(genes_added_flattened[:, i] != NO_GENE_SELECTION)[0]:
+        genes_added_flattened = torch.reshape(genes_added, (-1, i + 1))
+        genes_added_coefficients_flattened = torch.reshape(genes_added_coefficients, (-1, i + 1))
+        log.debug("For loop over pixels started")
+        for p in torch.where(genes_added_flattened[:, i] != NO_GENE_SELECTION)[0]:
             p_gene = genes_added_flattened[p, i]
-            coefficient_image[p, p_gene] = genes_added_coefficients_flattened[p, i]
+            coefficient_image[p, p_gene.int()] = genes_added_coefficients_flattened[p, i].numpy()
+        log.debug("For loop over pixels complete")
 
     if verbose:
         log.info(f"Pixels iterated on: {pixels_iterated}")
@@ -124,17 +132,17 @@ def compute_omp_coefficients(
 
 
 def get_next_best_gene(
-    consider_pixels: npt.NDArray[np.bool_],
-    residual_pixel_colours: npt.NDArray[np.float32],
-    all_bled_codes: npt.NDArray[np.float32],
-    coefficients: npt.NDArray[np.float32],
-    genes_added: npt.NDArray[np.int16],
+    consider_pixels: torch.Tensor,
+    residual_pixel_colours: torch.Tensor,
+    all_bled_codes: torch.Tensor,
+    coefficients: torch.Tensor,
+    genes_added: torch.Tensor,
     norm_shift: float,
     score_threshold: float,
     alpha: float,
-    background_genes: npt.NDArray[np.int16],
-    background_variance: npt.NDArray[np.float32],
-) -> Tuple[npt.NDArray[np.int16], npt.NDArray[np.bool_], npt.NDArray[np.float32]]:
+    background_genes: torch.Tensor,
+    background_variance: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Find the next "best gene" to add to each pixel based on their dot product scores with the bled code. If the next
     best gene is a background gene, already added to the pixel, or a score below the score threshold, then it has
@@ -167,147 +175,168 @@ def get_next_best_gene(
         - (`(im_y x im_x x im_z x (n_rounds * n_channels)) ndarray`) inverse_variance: the reciprocal of the variance
             for each round/channel based on the genes fit to the pixel.
     """
-    assert consider_pixels.ndim == 3
-    assert residual_pixel_colours.ndim == 4
-    assert all_bled_codes.ndim == 2
-    assert coefficients.ndim == 4
-    assert genes_added.ndim == 4
-    assert coefficients.ndim == genes_added.ndim
+    assert_type(consider_pixels, torch.Tensor)
+    assert_type(residual_pixel_colours, torch.Tensor)
+    assert_type(all_bled_codes, torch.Tensor)
+    assert_type(coefficients, torch.Tensor)
+    assert_type(genes_added, torch.Tensor)
+    assert_type(background_genes, torch.Tensor)
+    assert_type(background_variance, torch.Tensor)
+
+    assert consider_pixels.dim() == 3
+    assert residual_pixel_colours.dim() == 4
+    assert all_bled_codes.dim() == 2
+    assert coefficients.dim() == 4
+    assert genes_added.dim() == 4
+    assert coefficients.dim() == genes_added.dim()
     assert score_threshold >= 0
     assert alpha >= 0
-    assert background_genes.ndim == 1
-    assert background_variance.ndim == 4
+    assert background_genes.dim() == 1
+    assert background_variance.dim() == 4
 
-    image_shape = residual_pixel_colours.shape[:3]
+    image_shape = tuple(residual_pixel_colours.shape[:3])
     n_pixels = residual_pixel_colours.shape[0] * residual_pixel_colours.shape[1] * residual_pixel_colours.shape[2]
     n_rounds_channels = residual_pixel_colours.shape[3]
     n_genes_added = coefficients.shape[3]
     n_genes = all_bled_codes.shape[1]
 
     # Flatten all shapes of type im_y x im_x x im_z into n_pixels
-    consider_pixels_flattened = consider_pixels.reshape((n_pixels))
-    residual_pixel_colours_flattened = residual_pixel_colours.reshape((n_pixels, n_rounds_channels))
-    coefficients_flattened = coefficients.reshape((n_pixels, n_genes_added))
-    genes_added_flattened = genes_added.reshape((n_pixels, n_genes_added))
-    background_variance_flattened = background_variance.reshape((n_pixels, n_rounds_channels))
+    consider_pixels_flattened = torch.reshape(consider_pixels, (n_pixels,))
+    residual_pixel_colours_flattened = torch.reshape(residual_pixel_colours, (n_pixels, n_rounds_channels))
+    coefficients_flattened = torch.reshape(coefficients, (n_pixels, n_genes_added))
+    genes_added_flattened = torch.reshape(genes_added, (n_pixels, n_genes_added))
+    background_variance_flattened = torch.reshape(background_variance, (n_pixels, n_rounds_channels))
     # Ensure bled_codes are normalised for each gene
-    all_bled_codes /= np.linalg.norm(all_bled_codes, axis=0, keepdims=True)
+    all_bled_codes /= torch.linalg.norm(all_bled_codes, dim=0, keepdim=True)
 
     # See Josh's OMP documentation for details about this exact equation
-    inverse_variances_flattened = np.zeros((n_pixels, n_rounds_channels), dtype=np.float32)
-    inverse_variances_flattened[consider_pixels_flattened] = np.reciprocal(
-        np.matmul(
+    inverse_variances_flattened = torch.zeros((n_pixels, n_rounds_channels)).float()
+    inverse_variances_flattened[consider_pixels_flattened] = torch.reciprocal(
+        torch.matmul(
             (coefficients_flattened[consider_pixels_flattened] ** 2)[:, None],
-            all_bled_codes.T[genes_added_flattened[consider_pixels_flattened]] ** 2 * alpha,
+            all_bled_codes.T[genes_added_flattened[consider_pixels_flattened].int()] ** 2 * alpha,
         )[:, 0]
         + background_variance_flattened[consider_pixels_flattened]
     )
     # Do not assign any pixels to background genes or to already added genes. If this happens, then gene assignment
     # failed.
-    ignore_genes = background_genes[np.newaxis].repeat(n_pixels, axis=0)
-    ignore_genes = np.append(ignore_genes, genes_added_flattened, axis=1)
+    ignore_genes = background_genes[np.newaxis].repeat_interleave(n_pixels, dim=0)
+    ignore_genes = torch.cat((ignore_genes, genes_added_flattened), dim=1)
     n_genes_ignore = ignore_genes.shape[1]
     # Pick the best scoring one for each pixel
-    all_gene_scores = np.full((n_pixels, n_genes), fill_value=np.nan, dtype=np.float32)
-    all_gene_scores[consider_pixels_flattened] = call_spots.dot_product_score(
+    all_gene_scores = torch.full((n_pixels, n_genes), fill_value=np.nan, dtype=torch.float32)
+    all_gene_scores[consider_pixels_flattened] = dot_product_pytorch.dot_product_score(
         residual_pixel_colours_flattened[consider_pixels_flattened],
         all_bled_codes.T,
         inverse_variances_flattened[consider_pixels_flattened],
         norm_shift,
     )[3]
-    best_genes = np.full(n_pixels, fill_value=NO_GENE_SELECTION, dtype=np.int16)
-    best_genes[consider_pixels_flattened] = np.argmax(np.abs(all_gene_scores[consider_pixels_flattened]), axis=1)
-    best_scores = np.full(n_pixels, fill_value=np.nan, dtype=np.float32)
+    best_genes = torch.full((n_pixels,), fill_value=NO_GENE_SELECTION, dtype=torch.int16)
+    best_genes[consider_pixels_flattened] = torch.argmax(torch.abs(all_gene_scores[consider_pixels_flattened]), dim=1)
+    best_scores = torch.full(n_pixels, fill_value=np.nan).float()
     best_scores[consider_pixels_flattened] = all_gene_scores[
-        consider_pixels_flattened, best_genes[consider_pixels_flattened]
+        consider_pixels_flattened, best_genes[consider_pixels_flattened].int()
     ]
-    consider_pixels_flattened[consider_pixels_flattened] *= np.logical_not(
-        (
-            best_genes[consider_pixels_flattened][:, None].repeat(n_genes_ignore, axis=1)
-            == ignore_genes[consider_pixels_flattened]
-        ).any(1)
+    consider_pixels_flattened[consider_pixels_flattened] *= torch.any(
+        torch.logical_not(
+            (
+                best_genes[consider_pixels_flattened][:, None].repeat(n_genes_ignore, axis=1)
+                == ignore_genes[consider_pixels_flattened]
+            ),
+            1,
+        )
     )
     # The score is considered zero if the assigned gene is in ignore_genes
     best_scores[~consider_pixels_flattened] = 0
     best_genes[~consider_pixels_flattened] = NO_GENE_SELECTION
-    genes_passing_score = np.zeros(n_pixels, dtype=bool)
-    genes_passing_score[consider_pixels_flattened] = np.abs(best_scores[consider_pixels_flattened]) > score_threshold
+    genes_passing_score = torch.zeros(n_pixels).bool()
+    genes_passing_score[consider_pixels_flattened] = torch.abs(best_scores[consider_pixels_flattened]) > score_threshold
     del best_scores, all_gene_scores
 
-    best_genes = best_genes.reshape(image_shape)
-    genes_passing_score = genes_passing_score.reshape(image_shape)
-    inverse_variances_flattened = inverse_variances_flattened.reshape(image_shape + (n_rounds_channels,))
+    best_genes = torch.reshape(best_genes, image_shape)
+    genes_passing_score = torch.reshape(genes_passing_score, image_shape)
+    inverse_variances_flattened = torch.reshape(inverse_variances_flattened, image_shape + (n_rounds_channels,))
 
     return (best_genes, genes_passing_score, inverse_variances_flattened)
 
 
 def weight_selected_genes(
-    consider_pixels: npt.NDArray[np.bool_],
-    bled_codes: npt.NDArray[np.float32],
-    pixel_colours: npt.NDArray[np.float32],
-    genes: npt.NDArray[np.int16],
-    weight: Optional[npt.NDArray[np.float32]] = None,
-) -> Tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
+    consider_pixels: torch.Tensor,
+    bled_codes: torch.Tensor,
+    pixel_colours: torch.Tensor,
+    genes: torch.Tensor,
+    weight: Optional[torch.Tensor] = None,
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Finds how to best weight the given genes to describe the pixel colours. Done for every given pixel individually.
 
     Args:
-        consider_pixels (`(im_y x im_x x im_z) ndarray`): true for pixels to compute on.
-        bled_codes (`((n_rounds * n_channels) x n_genes) ndarray`): bled code for every gene in every sequencing
+        consider_pixels (`(im_y x im_x x im_z) tensor`): true for pixels to compute on.
+        bled_codes (`((n_rounds * n_channels) x n_genes) tensor`): bled code for every gene in every sequencing
             round/channel.
-        pixel_colours (`(im_y x im_x x im_z x (n_rounds * n_channels)) ndarray`): pixel colour for every sequencing
+        pixel_colours (`(im_y x im_x x im_z x (n_rounds * n_channels)) tensor`): pixel colour for every sequencing
             round/channel.
-        genes (`(im_y x im_x x im_z x n_genes_added) ndarray`): the indices of the genes selected for each image pixel.
-        weight (`(im_y x im_x x im_z x (n_rounds * n_channels)) ndarray`, optional): the weight is applied to every
+        genes (`(im_y x im_x x im_z x n_genes_added) tensor`): the indices of the genes selected for each image pixel.
+        weight (`(im_y x im_x x im_z x (n_rounds * n_channels)) tensor`, optional): the weight is applied to every
             round/channel when computing coefficients. Default: no weighting.
 
     Returns:
-        - (`(im_y x im_x x im_z x n_genes_added) ndarray`) coefficients: OMP coefficients computed through
+        - (`(im_y x im_x x im_z x n_genes_added) tensor`) coefficients: OMP coefficients computed through
             least squares. Set to 0 for any pixel that is not computed on.
-        - (`(im_y x im_x x im_z x (n_rounds * n_channels)) ndarray`) residuals: pixel colours left after removing
+        - (`(im_y x im_x x im_z x (n_rounds * n_channels)) tensor`) residuals: pixel colours left after removing
             bled codes with computed coefficients. Remains pixel colour for any pixel that is not computed on.
     """
     # This function used to be called fit_coefs and fit_coefs_weight
-    assert bled_codes.ndim == 2
-    assert pixel_colours.ndim == 4
-    assert genes.ndim == 4
+    assert_type(consider_pixels, torch.Tensor)
+    assert_type(bled_codes, torch.Tensor)
+    assert_type(pixel_colours, torch.Tensor)
+    assert_type(genes, torch.Tensor)
+    assert_type(weight, torch.Tensor)
+
+    assert bled_codes.dim() == 2
+    assert pixel_colours.dim() == 4
+    assert genes.dim() == 4
     if weight is None:
-        weight = np.ones_like(pixel_colours, dtype=np.float32)
-    assert weight.ndim == 4
+        weight = torch.ones_like(pixel_colours).float()
+    assert weight.dim() == 4
     assert pixel_colours.shape == weight.shape
 
     n_pixels = pixel_colours.shape[0] * pixel_colours.shape[1] * pixel_colours.shape[2]
     n_rounds_channels = pixel_colours.shape[3]
     n_genes_added = genes.shape[3]
-    image_shape = pixel_colours.shape[:3]
+    image_shape = tuple(pixel_colours.shape[:3])
 
-    genes_flattened = genes.reshape((np.prod(image_shape), n_genes_added))
+    genes_flattened = torch.reshape(genes, (np.prod(image_shape).item(), n_genes_added))
     # Flatten to be n_pixels x (n_rounds * n_channels).
-    weight_flattened = weight.reshape((np.prod(image_shape), n_rounds_channels))
+    weight_flattened = torch.reshape(weight, (np.prod(image_shape).item(), n_rounds_channels))
     # Flatten to be n_pixels x (n_rounds * n_channels).
-    pixel_colours_flattened = pixel_colours.reshape((np.prod(image_shape), n_rounds_channels))
+    pixel_colours_flattened = torch.reshape(pixel_colours, (np.prod(image_shape).item(), n_rounds_channels))
     pixel_colours_flattened = pixel_colours_flattened * weight_flattened
-    consider_pixels_flattened = consider_pixels.reshape(np.prod(image_shape))
+    consider_pixels_flattened = torch.reshape(consider_pixels, (np.prod(image_shape).item(),))
     # Flatten and weight the bled codes, becomes shape n_pixels x n_rounds_channels x n_genes_added.
     bled_codes_weighted = (
-        bled_codes[:, genes_flattened[consider_pixels_flattened]].swapaxes(0, 1)
+        bled_codes[:, genes_flattened[consider_pixels_flattened].int()].swapaxes(0, 1)
         * weight_flattened[consider_pixels_flattened, :, np.newaxis]
     )
 
-    coefficients = np.zeros((n_pixels, n_genes_added), dtype=np.float32)
-    residuals = pixel_colours_flattened
+    coefficients = torch.zeros((n_pixels, n_genes_added), dtype=torch.float32)
     coefficients[:] = 0
-    for p in np.where(consider_pixels_flattened)[0]:
-        pixel_colour = pixel_colours_flattened[p]
-        gene = genes_flattened[p]
-        w = weight_flattened[p]
-        coefficients[p] = np.linalg.lstsq((bled_codes[:, gene] * w[:, np.newaxis]), (pixel_colour * w), rcond=-1)[0]
+
+    coefficients[consider_pixels_flattened] = torch.linalg.lstsq(
+        bled_codes[:, genes_flattened[consider_pixels_flattened].int()].swapaxes(0, 1)
+        * weight_flattened[consider_pixels_flattened, :, np.newaxis],
+        pixel_colours_flattened[consider_pixels_flattened] * weight_flattened[consider_pixels_flattened],
+        rcond=-1,
+    )[0]
+
+    residuals = pixel_colours_flattened
     residuals[consider_pixels_flattened] = (
         pixel_colours_flattened[consider_pixels_flattened]
-        - np.matmul(bled_codes_weighted, coefficients[consider_pixels_flattened, :, np.newaxis])[..., 0]
+        - torch.matmul(bled_codes_weighted, coefficients[consider_pixels_flattened, :, np.newaxis])[..., 0]
     )
     residuals[consider_pixels_flattened] /= weight_flattened[consider_pixels_flattened]
-    coefficients = coefficients.reshape(image_shape + (n_genes_added,))
-    residuals = residuals.reshape(image_shape + (n_rounds_channels,))
 
-    return coefficients.astype(np.float32), residuals.astype(np.float32)
+    coefficients = torch.reshape(coefficients, image_shape + (n_genes_added,))
+    residuals = torch.reshape(residuals, image_shape + (n_rounds_channels,))
+
+    return coefficients.float(), residuals.float()

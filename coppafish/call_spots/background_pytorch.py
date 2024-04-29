@@ -41,7 +41,7 @@ def fit_background(
     weight_factor = 1 / (torch.abs(spot_colors) + weight_shift)
     spot_weight = spot_colors * weight_factor
     background_weight = torch.ones((1, n_rounds, n_channels)) * background_vectors[0, 0, 0] * weight_factor
-    coef = torch.sum(spot_weight * background_weight, dim=1) / torch.sum(background_weight ** 2, dim=1)
+    coef = torch.sum(spot_weight * background_weight, dim=1) / torch.sum(background_weight**2, dim=1)
     residual = spot_colors - coef[:, None] * torch.ones((1, n_rounds, n_channels)) * background_vectors[0, 0, 0]
 
-    return residual.type(torch.float32), coef.type(torch.float32), background_vectors.type(torch.float32)
+    return residual.float(), coef.float(), background_vectors.float()

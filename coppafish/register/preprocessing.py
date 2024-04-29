@@ -2,12 +2,15 @@ import os
 import pickle
 import skimage
 import numpy as np
-import numpy.typing as npt
 from scipy import signal
 from scipy.ndimage import affine_transform
 from skimage.transform import warp
 from itertools import product
 from tqdm import tqdm
+import numpy.typing as npt
+from typing import Union
+
+from .. import log
 from ..setup import NotebookPage, Notebook
 from ..utils import tiles_io
 
@@ -401,12 +404,18 @@ def generate_reg_images(nb: Notebook):
     Args:
         nb: notebook.
     """
-    use_tiles, use_rounds, use_channels = (nb.basic_info.use_tiles.copy(), nb.basic_info.use_rounds.copy(),
-                                           nb.basic_info.use_channels.copy())
+    use_tiles, use_rounds, use_channels = (
+        nb.basic_info.use_tiles.copy(),
+        nb.basic_info.use_rounds.copy(),
+        nb.basic_info.use_channels.copy(),
+    )
     if nb.basic_info.pre_seq_round is not None:
         use_rounds += [nb.basic_info.pre_seq_round]
-    anchor_round, anchor_channel, dapi_channel = (nb.basic_info.anchor_round, nb.basic_info.anchor_channel,
-                                                  nb.basic_info.dapi_channel)
+    anchor_round, anchor_channel, dapi_channel = (
+        nb.basic_info.anchor_round,
+        nb.basic_info.anchor_channel,
+        nb.basic_info.dapi_channel,
+    )
     yx_centre = nb.basic_info.tile_centre.astype(int)[:2]
     yx_radius = np.min([250, nb.basic_info.tile_sz // 2])
     z_central_index = int(np.median(np.arange(len(nb.basic_info.use_z))))
@@ -416,59 +425,154 @@ def generate_reg_images(nb: Notebook):
         z_planes = np.arange(z_central_index - 5, z_central_index + 5)
 
     tile_centre = np.array([yx_centre[0], yx_centre[1]])
-    yxz = [np.arange(tile_centre[0] - yx_radius, tile_centre[0] + yx_radius),
-                                      np.arange(tile_centre[1] - yx_radius, tile_centre[1] + yx_radius), z_planes]
+    yxz = [
+        np.arange(tile_centre[0] - yx_radius, tile_centre[0] + yx_radius),
+        np.arange(tile_centre[1] - yx_radius, tile_centre[1] + yx_radius),
+        z_planes,
+    ]
 
     # Create the reg_images directory if it doesn't exist
-    reg_images_dir = os.path.join(nb.file_names.output_dir, 'reg_images')
-    if not os.path.isdir(os.path.join(nb.file_names.output_dir, 'reg_images')):
+    reg_images_dir = os.path.join(nb.file_names.output_dir, "reg_images")
+    if not os.path.isdir(os.path.join(nb.file_names.output_dir, "reg_images")):
         os.makedirs(reg_images_dir)
     # Create the t directories if they don't exist, within these create the round reg and channel reg directories
     for t in use_tiles:
-        if not os.path.isdir(os.path.join(reg_images_dir, f't{t}')):
-            os.makedirs(os.path.join(reg_images_dir, f't{t}'))
-        if not os.path.isdir(os.path.join(reg_images_dir, f't{t}', 'round')):
-            os.makedirs(os.path.join(reg_images_dir, f't{t}', 'round'))
-        if not os.path.isdir(os.path.join(reg_images_dir, f't{t}', 'channel')):
-            os.makedirs(os.path.join(reg_images_dir, f't{t}', 'channel'))
+        if not os.path.isdir(os.path.join(reg_images_dir, f"t{t}")):
+            os.makedirs(os.path.join(reg_images_dir, f"t{t}"))
+        if not os.path.isdir(os.path.join(reg_images_dir, f"t{t}", "round")):
+            os.makedirs(os.path.join(reg_images_dir, f"t{t}", "round"))
+        if not os.path.isdir(os.path.join(reg_images_dir, f"t{t}", "channel")):
+            os.makedirs(os.path.join(reg_images_dir, f"t{t}", "channel"))
 
     # Get the anchor round and active channels
     anchor_round_active_channels = [dapi_channel, anchor_channel]
-    for t, c in tqdm(product(use_tiles, anchor_round_active_channels), desc='Anchor Images', total=len(use_tiles) * 2):
-        im = load_transformed_image(nb=nb, t=t, r=anchor_round, c=c, yxz=yxz, reg_type='none')
-        sub_dir = 'round' if c == dapi_channel else 'channel'
-        file_name = os.path.join(reg_images_dir, f't{t}', sub_dir, 'anchor.npy')
+    for t, c in tqdm(product(use_tiles, anchor_round_active_channels), desc="Anchor Images", total=len(use_tiles) * 2):
+        im = load_transformed_image(
+            nb.basic_info,
+            nb.file_names,
+            nb.extract,
+            nb.register,
+            nb.register_debug,
+            t=t,
+            r=anchor_round,
+            c=c,
+            yxz=yxz,
+            reg_type="none",
+        )
+        sub_dir = "round" if c == dapi_channel else "channel"
+        file_name = os.path.join(reg_images_dir, f"t{t}", sub_dir, "anchor.npy")
         save_reg_image(im=im, file_path=file_name)
 
     # get the round images, apply optical flow, apply icp + optical flow, concatenate and save
-    for t, r in tqdm(product(use_tiles, use_rounds), desc='Round Images', total=len(use_tiles) * len(use_rounds)):
-        im = load_transformed_image(nb=nb, t=t, r=r, c=dapi_channel, yxz=yxz, reg_type='none')
-        im_flow = load_transformed_image(nb=nb, t=t, r=r, c=dapi_channel, yxz=yxz, reg_type='flow')
-        im_flow_icp = load_transformed_image(nb=nb, t=t, r=r, c=dapi_channel, yxz=yxz, reg_type='flow_icp')
+    for t, r in tqdm(product(use_tiles, use_rounds), desc="Round Images", total=len(use_tiles) * len(use_rounds)):
+        im = load_transformed_image(
+            nb.basic_info,
+            nb.file_names,
+            nb.extract,
+            nb.register,
+            nb.register_debug,
+            t=t,
+            r=r,
+            c=dapi_channel,
+            yxz=yxz,
+            reg_type="none",
+        )
+        im_flow = load_transformed_image(
+            nb.basic_info,
+            nb.file_names,
+            nb.extract,
+            nb.register,
+            nb.register_debug,
+            t=t,
+            r=r,
+            c=dapi_channel,
+            yxz=yxz,
+            reg_type="flow",
+        )
+        im_flow_icp = load_transformed_image(
+            nb.basic_info,
+            nb.file_names,
+            nb.extract,
+            nb.register,
+            nb.register_debug,
+            t=t,
+            r=r,
+            c=dapi_channel,
+            yxz=yxz,
+            reg_type="flow_icp",
+        )
         im_concat = np.concatenate([im[None], im_flow[None], im_flow_icp[None]], axis=0)
-        file_name = os.path.join(reg_images_dir, f't{t}', 'round', f'r{r}.npy')
+        file_name = os.path.join(reg_images_dir, f"t{t}", "round", f"r{r}.npy")
         save_reg_image(im=im_concat, file_path=file_name)
 
     # get the channel images, save, apply optical flow, save, apply icp, save
     r_mid = 3
-    for t, c in tqdm(product(use_tiles, use_channels), desc='Channel Images', total=len(use_tiles) * len(use_channels)):
-        im = load_transformed_image(nb=nb, t=t, r=r_mid, c=c, yxz=yxz, reg_type='none')
-        im_flow = load_transformed_image(nb=nb, t=t, r=r_mid, c=c, yxz=yxz, reg_type='flow')
-        im_flow_icp = load_transformed_image(nb=nb, t=t, r=r_mid, c=c, yxz=yxz, reg_type='flow_icp')
+    for t, c in tqdm(product(use_tiles, use_channels), desc="Channel Images", total=len(use_tiles) * len(use_channels)):
+        im = load_transformed_image(
+            nb.basic_info,
+            nb.file_names,
+            nb.extract,
+            nb.register,
+            nb.register_debug,
+            t=t,
+            r=r_mid,
+            c=c,
+            yxz=yxz,
+            reg_type="none",
+        )
+        im_flow = load_transformed_image(
+            nb.basic_info,
+            nb.file_names,
+            nb.extract,
+            nb.register,
+            nb.register_debug,
+            t=t,
+            r=r_mid,
+            c=c,
+            yxz=yxz,
+            reg_type="flow",
+        )
+        im_flow_icp = load_transformed_image(
+            nb.basic_info,
+            nb.file_names,
+            nb.extract,
+            nb.register,
+            nb.register_debug,
+            t=t,
+            r=r_mid,
+            c=c,
+            yxz=yxz,
+            reg_type="flow_icp",
+        )
         im_concat = np.concatenate([im[None], im_flow[None], im_flow_icp[None]], axis=0)
-        file_name = os.path.join(reg_images_dir, f't{t}', 'channel', f'c{c}.npy')
+        file_name = os.path.join(reg_images_dir, f"t{t}", "channel", f"c{c}.npy")
         save_reg_image(im=im_concat, file_path=file_name)
 
 
-def load_transformed_image(nb: Notebook, t: int, r: int, c: int, yxz: list, reg_type: str = 'none') -> np.ndarray:
+def load_transformed_image(
+    nbp_basic_info: NotebookPage,
+    nbp_file: NotebookPage,
+    nbp_extract: NotebookPage,
+    nbp_register: NotebookPage,
+    nbp_register_debug: NotebookPage,
+    t: int,
+    r: int,
+    c: int,
+    yxz: Union[list, None] = None,
+    reg_type: str = "none",
+) -> np.ndarray:
     """
     Load the image from tile t, round r, channel c, apply the relevant registration and return the image.
     Args:
+        nbp_basic_info (NotebookPage)
+        nbp_file_names (NotebookPage)
+        nbp_register (NotebookPage)
+        nbp_register_debug (NotebookPage)
         nb: Notebook (must have register and register_debug page)
         t: tile (int)
         r: round (int)
         c: channel (int)
-        yxz: [np.arange(y), np.arange(x), np.arange(z)] (list)
+        yxz: [np.arange(y), np.arange(x), np.arange(z)] (list). If None, load the entire transformed image.
         reg_type: str, 'none', 'flow' or 'flow_icp'
             - none: no registration
             - flow: apply channel correction (due to fluorescent beads) followed by optical flow
@@ -477,31 +581,42 @@ def load_transformed_image(nb: Notebook, t: int, r: int, c: int, yxz: list, reg_
     Returns:
         im: np.ndarray, image
     """
-    assert reg_type in ['none', 'flow', 'flow_icp'], "reg_type must be 'none', 'flow' or 'flow_icp'"
-    suffix = "_raw" if r == nb.basic_info.pre_seq_round else ""
-    im = tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t, r, c, yxz=yxz,
-                             suffix=suffix).astype(np.float32)
+    assert reg_type in ["none", "flow", "flow_icp"], "reg_type must be 'none', 'flow' or 'flow_icp'"
+    suffix = "_raw" if r == nbp_basic_info.pre_seq_round else ""
+    im = tiles_io.load_image(nbp_file, nbp_basic_info, nbp_extract.file_type, t, r, c, yxz=yxz, suffix=suffix).astype(
+        np.float32
+    )
     # anchor round has no flow or affine correction so can return early
-    if reg_type == 'none' or r == nb.basic_info.anchor_round:
+    if reg_type == "none" or r == nbp_basic_info.anchor_round:
         return im
 
     # If we get this far, we will either be doing flow or flow icp, and we will not be in the anchor round.
     # These differ only by the affine correction we apply before.
-    new_origin = np.array([yxz[0][0], yxz[1][0], yxz[2][0]])
+    if yxz is not None:
+        new_origin = np.array([yxz[0][0], yxz[1][0], yxz[2][0]])
+    else:
+        new_origin = np.zeros(3, dtype=int)
     affine_correction = np.eye(4, 3)
-    if 'reg_type' == 'flow':
-        if c != nb.basic_info.dapi_channel:
-            affine_correction = nb.register_debug.channel_correction[t, c].copy()
-    elif reg_type == 'flow_icp':
-        if c == nb.basic_info.dapi_channel:
-            affine_correction = nb.register.icp_correction[t, r, nb.basic_info.anchor_channel].copy()
-        if c != nb.basic_info.dapi_channel:
-            affine_correction = nb.register.icp_correction[t, r, c].copy()
+    if "reg_type" == "flow":
+        if c != nbp_basic_info.dapi_channel:
+            affine_correction = nbp_register_debug.channel_correction[t, c].copy()
+    elif reg_type == "flow_icp":
+        if c == nbp_basic_info.dapi_channel:
+            affine_correction = nbp_register.icp_correction[t, r, nbp_basic_info.anchor_channel].copy()
+        if c != nbp_basic_info.dapi_channel:
+            affine_correction = nbp_register.icp_correction[t, r, c].copy()
     # adjust the affine correction for the new origin
     affine_correction = adjust_affine(affine=affine_correction, new_origin=new_origin)
-    flow_indices = np.ix_(np.arange(3), np.arange(yxz[0][0], yxz[0][-1] + 1), np.arange(yxz[1][0], yxz[1][-1] + 1),
-                          np.arange(yxz[2][0], yxz[2][-1] + 1))
-    flow_dir = os.path.join(nb.register.flow_dir, 'smooth', f't{t}_r{r}.npy')
+    if yxz is not None:
+        flow_indices = np.ix_(
+            np.arange(3),
+            np.arange(yxz[0][0], yxz[0][-1] + 1),
+            np.arange(yxz[1][0], yxz[1][-1] + 1),
+            np.arange(yxz[2][0], yxz[2][-1] + 1),
+        )
+    else:
+        flow_indices = None
+    flow_dir = os.path.join(nbp_register.flow_dir, "smooth", f"t{t}_r{r}.npy")
     im = transform_im(im=im, affine=affine_correction, flow_dir=flow_dir, flow_ind=flow_indices)
 
     return im
@@ -514,16 +629,26 @@ def transform_im(im: np.ndarray, affine: np.ndarray, flow_dir: str, flow_ind: tu
         im: image to transform
         affine: 3 x 4 affine transform
         flow_dir: directory containing the flow file
-        flow_ind: indices to take from the flow file
+        flow_ind: indices to take from the flow file. If None, return the entire flow file.
     """
     # Apply the affine transform
-    im = affine_transform(im, affine, order=1, mode='constant', cval=0)
+    im = affine_transform(im, affine, order=1, mode="constant", cval=0)
     # Apply the flow transform
-    flow = np.load(flow_dir, mmap_mode='r')
-    flow = -(flow[flow_ind].astype(np.float32))
-    coords = np.meshgrid(np.arange(im.shape[0], dtype=np.float32), np.arange(im.shape[1], dtype=np.float32),
-                         np.arange(im.shape[2], dtype=np.float32), indexing='ij')
-    im = warp(im, coords + flow, order=1, mode='constant', cval=0, preserve_range=True)
+    if flow_ind is None:
+        flow = np.load(flow_dir, mmap_mode=None)
+    else:
+        flow = np.load(flow_dir, mmap_mode="r")
+        flow = -(flow[flow_ind].astype(np.float32))
+    coords = np.meshgrid(
+        np.arange(im.shape[0], dtype=np.float32),
+        np.arange(im.shape[1], dtype=np.float32),
+        np.arange(im.shape[2], dtype=np.float32),
+        indexing="ij",
+    )
+    # NOTE: This is slow! On an entire tile shaped image, it takes 20s.
+    log.debug(f"Warping")
+    im = warp(im, coords + flow, order=1, mode="constant", cval=0, preserve_range=True)
+    log.debug(f"Warping complete")
     return im
 
 

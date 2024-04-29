@@ -212,6 +212,7 @@ _options = {
         "dp_thresh": "number",
         "alpha": "number",
         "beta": "number",
+        "subset_size_xy": "int",
         "coefficient_threshold": "number",
         "radius_xy": "int",
         "radius_z": "int",

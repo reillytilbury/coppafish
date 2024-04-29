@@ -353,6 +353,8 @@ def run_omp(nb: Notebook) -> None:
             nb.basic_info,
             nb.extract,
             nb.filter,
+            nb.register,
+            nb.register_debug,
             nb.call_spots,
             nb.stitch.tile_origin,
             nb.register.icp_correction,

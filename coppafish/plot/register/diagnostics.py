@@ -209,9 +209,11 @@ class RegistrationViewer:
         button_name = ["r", "c"]
         text_buttons = TextButtonCreator(button_name, button_loc, size=(50, 28))
         # connect the view button to the appropriate function
-        text_buttons.button.clicked.connect(lambda _: view_bg_scale(self.nb, self.t,
-                                                                    r=int(text_buttons.text_box[0].text()),
-                                                                    c=int(text_buttons.text_box[1].text())))
+        text_buttons.button.clicked.connect(
+            lambda _: view_bg_scale(
+                self.nb, self.t, r=int(text_buttons.text_box[0].text()), c=int(text_buttons.text_box[1].text())
+            )
+        )
         self.viewer.window.add_dock_widget(text_buttons, area="left", name="bg scale")
 
     def add_overlay_buttons(self):
@@ -219,13 +221,17 @@ class RegistrationViewer:
         button_loc = generate_button_positions(n_buttons=7, n_cols=2, x_offset=50, x_spacing=100)
         button_name = ["r1", "c1", "r2", "c2", "z_s", "z_e"]
         text_buttons = TextButtonCreator(button_name, button_loc, size=(50, 28))
-        text_buttons.button.clicked.connect(lambda _: view_overlay(self.nb, self.t,
-                                                                 rc=[(int(text_buttons.text_box[0].text()),
-                                                                      int(text_buttons.text_box[1].text())),
-                                                                     (int(text_buttons.text_box[2].text()),
-                                                                      int(text_buttons.text_box[3].text()))],
-                                                                 use_z=np.arange(int(text_buttons.text_box[4].text()),
-                                                                                 int(text_buttons.text_box[5].text()))))
+        text_buttons.button.clicked.connect(
+            lambda _: view_overlay(
+                self.nb,
+                self.t,
+                rc=[
+                    (int(text_buttons.text_box[0].text()), int(text_buttons.text_box[1].text())),
+                    (int(text_buttons.text_box[2].text()), int(text_buttons.text_box[3].text())),
+                ],
+                use_z=np.arange(int(text_buttons.text_box[4].text()), int(text_buttons.text_box[5].text())),
+            )
+        )
         self.viewer.window.add_dock_widget(text_buttons, area="left", name="overlay")
 
     def add_icp_buttons(self):
@@ -344,7 +350,7 @@ class TextButtonCreator(QMainWindow):
             label.setGeometry(position[i][0] - 30, position[i][1], size[0], size[1])
             self.text_box.append(QLineEdit(name, self))
             self.text_box[-1].setGeometry(position[i][0], position[i][1], size[0], size[1])
-            self.text_box[-1].setText('0')
+            self.text_box[-1].setText("0")
         self.button = QPushButton("view", self)
         self.button.setGeometry(position[-1][0], position[-1][1], size[0], size[1])
 
@@ -839,14 +845,39 @@ def view_bg_scale(nb: Notebook, t: int, r: int, c: int):
     tile_sz = nb.basic_info.tile_sz
     tile_center = tile_sz // 2
     yx_rad = 250
-    yxz = [np.arange(tile_center - yx_rad, tile_center + yx_rad), np.arange(tile_center - yx_rad, tile_center + yx_rad),
-           np.arange(mid_z - z_rad, mid_z + z_rad)]
+    yxz = [
+        np.arange(tile_center - yx_rad, tile_center + yx_rad),
+        np.arange(tile_center - yx_rad, tile_center + yx_rad),
+        np.arange(mid_z - z_rad, mid_z + z_rad),
+    ]
     r_pre = nb.basic_info.pre_seq_round
     # get the images
-    base = preprocessing.load_transformed_image(nb=nb, t=t, r=r, c=c, yxz=yxz, reg_type='flow_icp').astype(np.float32)
-    pre = preprocessing.load_transformed_image(nb=nb, t=t, r=r_pre, c=c, yxz=yxz, reg_type='flow_icp').astype(np.float32)
-    base = base[:, :, z_rad-1:z_rad+1]
-    pre = pre[:, :, z_rad-1:z_rad+1]
+    base = preprocessing.load_transformed_image(
+        nb.basic_info,
+        nb.file_names,
+        nb.extract,
+        nb.register,
+        nb.register_debug,
+        t=t,
+        r=r,
+        c=c,
+        yxz=yxz,
+        reg_type="flow_icp",
+    ).astype(np.float32)
+    pre = preprocessing.load_transformed_image(
+        nb.basic_info,
+        nb.file_names,
+        nb.extract,
+        nb.register,
+        nb.register_debug,
+        t=t,
+        r=r_pre,
+        c=c,
+        yxz=yxz,
+        reg_type="flow_icp",
+    ).astype(np.float32)
+    base = base[:, :, z_rad - 1 : z_rad + 1]
+    pre = pre[:, :, z_rad - 1 : z_rad + 1]
     # get the bright mask
     bright = pre > np.percentile(pre, 99)
     base_values = base[bright]
@@ -865,8 +896,11 @@ def view_bg_scale(nb: Notebook, t: int, r: int, c: int):
     plt.subplot(1, 2, 1)
     plt.scatter(x=pre_values, y=base_values, s=1, alpha=0.25)
     col = ["red", "green", "blue"]
-    title = [f"25th percentile: {bg_scale[0]:.2f}", f"50th percentile: {bg_scale[1]:.2f}",
-             f"75th percentile: {bg_scale[2]:.2f}"]
+    title = [
+        f"25th percentile: {bg_scale[0]:.2f}",
+        f"50th percentile: {bg_scale[1]:.2f}",
+        f"75th percentile: {bg_scale[2]:.2f}",
+    ]
     for i in range(3):
         plt.plot(pre_values, bg_scale[i] * pre_values, color=col[i], label=title[i])
     plt.legend()
@@ -905,21 +939,46 @@ def view_overlay(nb: Notebook, t: int = None, rc: list = None, use_z: np.ndarray
     for i, rc_pair in tqdm(enumerate(rc), total=len(rc), desc="Loading images"):
         # LOAD IMAGE
         r, c = rc_pair
-        im_none[i] = preprocessing.load_transformed_image(nb=nb, t=t, r=r, c=c, yxz=yxz, reg_type='none')
-        im[i] = preprocessing.load_transformed_image(nb=nb, t=t, r=r, c=c, yxz=yxz, reg_type='flow_icp')
+        im_none[i] = preprocessing.load_transformed_image(
+            nb.basic_info,
+            nb.file_names,
+            nb.extract,
+            nb.register,
+            nb.register_debug,
+            t=t,
+            r=r,
+            c=c,
+            yxz=yxz,
+            reg_type="none",
+        )
+        im[i] = preprocessing.load_transformed_image(
+            nb.basic_info,
+            nb.file_names,
+            nb.extract,
+            nb.register,
+            nb.register_debug,
+            t=t,
+            r=r,
+            c=c,
+            yxz=yxz,
+            reg_type="flow_icp",
+        )
 
     # create viewer
     viewer = napari.Viewer()
     colours = ["red", "green", "blue", "yellow"]
     for i, rc_pair in enumerate(rc):
         r, c = rc_pair
-        viewer.add_image(im_none[i], name=f"t{t}_r{r}_c{c}_none", colormap=colours[i], blending="additive",
-                         visible=False)
+        viewer.add_image(
+            im_none[i], name=f"t{t}_r{r}_c{c}_none", colormap=colours[i], blending="additive", visible=False
+        )
         viewer.add_image(im[i], name=f"t{t}_r{r}_c{c}", colormap=colours[i], blending="additive")
     viewer.dims.axis_labels = ["y", "x", "z"]
     viewer.dims.order = (2, 0, 1)
     napari.run()
 
+
 # nb_file = '/home/reilly/local_datasets/dante_bad_trc_test/notebook.npz'
 # nb = Notebook(nb_file)
 # view_overlay(nb, t=4, rc=[(7, 27), (3, 18)], use_z=np.arange(19, 29))
+

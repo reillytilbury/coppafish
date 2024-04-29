@@ -4,7 +4,7 @@ from typing import Tuple, Dict
 
 def dot_product_score_one_param(parameters: Dict) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Same as the `dot_product_score` function, except all the parameters are wrapped in a single dictionary. Useful for 
+    Same as the `dot_product_score` function, except all the parameters are wrapped in a single dictionary. Useful for
     use in `utils/multiprocess_pytorch.py`.
 
     Args:
@@ -17,10 +17,7 @@ def dot_product_score_one_param(parameters: Dict) -> Tuple[torch.Tensor, torch.T
         return dot_product_score(parameters["spot_colours"], parameters["bled_codes"], parameters["weight_squared"])
     else:
         return dot_product_score(
-            parameters["spot_colours"], 
-            parameters["bled_codes"], 
-            parameters["weight_squared"], 
-            parameters["norm_shift"]
+            parameters["spot_colours"], parameters["bled_codes"], parameters["weight_squared"], parameters["norm_shift"]
         )
 
 
@@ -48,7 +45,7 @@ def dot_product_score(
     n_spots, n_rounds_channels_use = spot_colours.shape
     # If no weighting is given, use equal weighting
     if weight_squared is None:
-        weight_squared = torch.ones((n_spots, n_rounds_channels_use))
+        weight_squared = torch.ones((n_spots, n_rounds_channels_use), device=spot_colours.device)
 
     weight_squared = weight_squared / torch.sum(weight_squared, dim=1)[:, None]
     spot_colours = spot_colours / (torch.linalg.norm(spot_colours, dim=1)[:, None] + norm_shift)
