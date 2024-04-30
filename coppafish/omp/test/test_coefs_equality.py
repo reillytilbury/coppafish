@@ -1,14 +1,13 @@
-import pytest
 import scipy
+import pytest
 import numpy as np
 from typing_extensions import assert_type
-
-from coppafish.omp import coefs_new, coefs_torch
 
 
 @pytest.mark.pytorch
 def test_compute_omp_coefficients() -> None:
     import torch
+    from coppafish.omp import coefs_new, coefs_torch
 
     rng = np.random.RandomState(0)
     im_y, im_x, im_z = 7, 8, 9
@@ -68,6 +67,7 @@ def test_compute_omp_coefficients() -> None:
 @pytest.mark.pytorch
 def test_get_next_best_gene_equality() -> None:
     import torch
+    from coppafish.omp import coefs_new, coefs_torch
 
     im_y, im_x, im_z = 3, 4, 5
     n_rounds_channels = 2
@@ -129,6 +129,7 @@ def test_get_next_best_gene_equality() -> None:
 @pytest.mark.pytorch
 def test_weight_selected_genes_equality() -> None:
     import torch
+    from coppafish.omp import coefs_new, coefs_torch
 
     im_y, im_x, im_z = 4, 5, 6
     n_rounds_channels = 2
@@ -178,9 +179,3 @@ def test_weight_selected_genes_equality() -> None:
 
     assert np.allclose(coefficients, coefficients_torch)
     assert np.allclose(residuals, residuals_torch)
-
-
-if __name__ == "__main__":
-    test_compute_omp_coefficients()
-    test_get_next_best_gene_equality()
-    test_weight_selected_genes_equality()
