@@ -1,3 +1,9 @@
+2024/05/dd Alpha Update (v0.11.0):
+ * OMP computed spot is now computed on a subset on one tile, not the full tile.
+ * OMP code has been overhauled.
+ * OMP is faster and the entire tile is loaded into memory before running each tile.
+
+
 2024/04/23 Alpha Update (v0.10.4):
  * Bug in Register which was causing large shifts not to be detected has been fixed. A global shift is now computed
     between the two images and the shift is applied to the second image before computing the local shifts.
