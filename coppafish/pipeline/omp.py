@@ -248,7 +248,7 @@ def run_omp(
                         f"OMP Failed to find any isolated spots. Consider reducing shape_isolation_distance_yx or "
                         + "shape_coefficient_threshold in the omp config then re-run",
                     )
-                mean_spot = np.average(mean_spots, axis=0, weights=n_isolated_spots, dtype=np.float32)
+                mean_spot = np.average(mean_spots, axis=0, weights=n_isolated_spots).astype(np.float32)
                 log.debug(f"{n_isolated_spots=}")
                 log.debug(f"{mean_spot.shape=}")
                 log.debug(f"{mean_spot.max()=}")
@@ -265,7 +265,7 @@ def run_omp(
                 log.info("Computing spot shape complete")
 
             for g in tqdm.trange(n_genes, desc="Detecting and scoring spots", unit="gene"):
-                # STEP 3: Detect spots on the entire subset except too close to the x and y edges.
+                # STEP 3: Detect spots on the subset except at the x and y edges.
                 g_coefficient_image = coefficient_image[:, g].toarray().reshape(subset_shape + (1,))
                 g_spots_yxz, _ = find_spots.detect_spots(
                     image=g_coefficient_image[..., 0],
