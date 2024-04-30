@@ -1,84 +1,60 @@
+import tqdm
 import numpy as np
-from typing import Tuple
+from typing_extensions import assert_type
+import numpy.typing as npt
 
-from ..setup import NotebookPage
-from .. import utils, spot_colors
+from ..register import preprocessing
+from ..setup.notebook import NotebookPage
 
 
-def get_pixel_colours(
+def load_spot_colours(
     nbp_basic: NotebookPage,
     nbp_file: NotebookPage,
     nbp_extract: NotebookPage,
-    nbp_filter: NotebookPage,
+    nbp_register: NotebookPage,
+    nbp_register_debug: NotebookPage,
     tile: int,
-    z_chunk: int,
-    z_chunk_size: int,
-    transform: np.ndarray,
-    colour_norm_factor: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray]:
+    dtype: np.dtype = np.uint16,
+) -> npt.NDArray:
     """
-    Get the normalised pixel colours and their pixel positions for one z chunk.
-
-    Args:
-        nbp_basic (NotebookPage): 'basic_info' notebook page.
-        nbp_file (NotebookPage): 'file_names' notebook page.
-        nbp_filter (NotebookPage): 'filter' notebook page.
-        nbp_extract (NotebookPage): 'extract' notebook page.
-        tile (int): tile index.
-        z_chunk (int): z chunk index.
-        z_chunk_size (int): z chunk size
-        transform (`[n_tiles x n_rounds x n_channels x 4 x 3] ndarray[float]`): `transform[t, r, c]` is the affine
-            transform to get from tile `t`, `ref_round`, `ref_channel` to tile `t`, round `r`, channel `c`.
-        colour_norm_factor (`[n_rounds x n_channels] ndarray[float]`): Normalisation factors to divide colours by to
-            equalise channel intensities.
+    Load the full registered image for every sequencing round/channel for the given tile. No post-processing is
+    applied, including tile_pixel_value_shift subtraction, background subtraction, and colour normalisation.
 
     Returns:
-        - (`[n_pixels x 3] ndarray[int16]`): `pixel_yxz_tz` is the y, x and z pixel positions of the pixel colours
-            found.
-        - (`[n_pixels x n_rounds x n_channels] ndarray[float32]`): `pixel_colours_tz` contains the colours for each
-            pixel.
+        (`(im_y x im_x x im_z x n_rounds_use x n_channels_use) ndarray`) spot_colours: tile loaded spot colours.
     """
-    n_rounds, n_channels = colour_norm_factor.shape
-    z_min, z_max = z_chunk * z_chunk_size, min((z_chunk + 1) * z_chunk_size, len(nbp_basic.use_z))
-    pixel_yxz_tz = np.zeros((0, 3), dtype=np.int16)
-    pixel_colours_tz = np.zeros((0, n_rounds, n_channels), dtype=np.float32)
-    pixel_colours_t1, pixel_yxz_t1 = spot_colors.base.get_spot_colors(
-        yxz_base=spot_colors.base.all_pixel_yxz(nbp_basic.tile_sz, nbp_basic.tile_sz, np.arange(z_min, z_max)),
-        t=tile, transform=transform, bg_scale=nbp_filter.bg_scale, file_type=nbp_extract.file_type, nbp_file=nbp_file,
-        nbp_basic=nbp_basic, return_in_bounds=True,
-    )[:2]
-    pixel_colours_t1 = pixel_colours_t1.astype(np.float32) / colour_norm_factor
-    pixel_yxz_tz = np.append(pixel_yxz_tz, pixel_yxz_t1, axis=0)
-    pixel_colours_tz = np.append(pixel_colours_tz, pixel_colours_t1, axis=0)
+    assert_type(nbp_basic, NotebookPage)
+    assert_type(nbp_file, NotebookPage)
+    assert_type(nbp_extract, NotebookPage)
+    assert_type(nbp_register, NotebookPage)
+    assert_type(nbp_register_debug, NotebookPage)
+    assert_type(tile, int)
+    assert_type(dtype, np.dtype)
 
-    return pixel_yxz_tz.astype(np.int16), pixel_colours_tz.astype(np.float32)
+    image_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
+    colours = np.zeros(image_shape + (len(nbp_basic.use_rounds), len(nbp_basic.use_channels)), dtype=dtype)
 
+    with tqdm.tqdm(
+        total=len(nbp_basic.use_channels) * len(nbp_basic.use_rounds), desc=f"Loading spot colours, {tile=}"
+    ) as pbar:
+        for i, r in enumerate(nbp_basic.use_rounds):
+            for j, c in enumerate(nbp_basic.use_channels):
+                image_rc = preprocessing.load_transformed_image(
+                    nbp_basic,
+                    nbp_file,
+                    nbp_extract,
+                    nbp_register,
+                    nbp_register_debug,
+                    tile,
+                    r,
+                    c,
+                    reg_type="flow_icp",
+                )
+                # In the preprocessing function, the images are shifted by -15_000 to centre the zero in the correct
+                # place. We are undoing this here so the images can be stored as uint's in memory.
+                image_rc = (image_rc + nbp_basic.tile_pixel_value_shift).astype(dtype)
+                colours[:, :, :, i, j] = image_rc
+                del image_rc
+                pbar.update()
 
-def get_initial_intensity_thresh(config: dict, nbp: NotebookPage) -> float:
-    """
-    Gets absolute intensity threshold from config file. OMP will only be run on
-    pixels with absolute intensity greater than this.
-
-    Args:
-        config: `omp` section of config file.
-        nbp: `call_spots` *NotebookPage*
-
-    Returns:
-        Either `config['initial_intensity_thresh']` or
-            `nbp.abs_intensity_percentile[config['initial_intensity_thresh_percentile']]`.
-
-    """
-    initial_intensity_thresh = config["initial_intensity_thresh"]
-    if initial_intensity_thresh is None:
-        config["initial_intensity_thresh"] = utils.base.round_any(
-            nbp.abs_intensity_percentile[config["initial_intensity_thresh_percentile"]],
-            config["initial_intensity_precision"],
-        )
-    initial_intensity_thresh = float(
-        np.clip(
-            config["initial_intensity_thresh"],
-            config["initial_intensity_thresh_min"],
-            config["initial_intensity_thresh_max"],
-        )
-    )
-    return initial_intensity_thresh
+    return colours.astype(dtype)

@@ -8,8 +8,8 @@ from .. import log
 # TODO: Optimise this function with pytorch
 def score_coefficient_image(
     coefs_image: np.ndarray,
-    spot_shape: np.ndarray,
-    spot_shape_mean: np.ndarray,
+    spot: np.ndarray,
+    mean_spot: np.ndarray,
     high_coef_bias: float,
 ) -> npt.NDArray[np.float32]:
     """
@@ -19,9 +19,9 @@ def score_coefficient_image(
     Args:
         coefs_image (`(im_y x im_x x im_z x n_genes) ndarray[float32]`): OMP coefficients in 3D shape. Any non-computed
             or out of bounds coefficients will be zero.
-        spot_shape (`(size_y x size_x x size_z) ndarray[int]`): OMP spot shape. It is a made up of only zeros and ones.
+        spot (`(size_y x size_x x size_z) ndarray[int]`): OMP spot shape. It is a made up of only zeros and ones.
             Ones indicate where the spot coefficient is likely to be positive.
-        spot_shape_mean (`(size_y x size_x x size_z) ndarray[float]`): OMP mean spot shape. This can range from -1 and
+        mean_spot (`(size_y x size_x x size_z) ndarray[float]`): OMP mean spot shape. This can range from -1 and
             1.
         high_coef_bias (float): specifies the constant used in the function applied to every coefficient. The function
             applied is `c / (c + high_coef_bias)` if c >= 0, 0 otherwise, where c is a coefficient value. This places
@@ -31,24 +31,26 @@ def score_coefficient_image(
         `(im_y x im_x x im_z x n_genes) ndarray[float]`: score for each coefficient pixel.
     """
     assert coefs_image.ndim == 4, "coefs_image must be four-dimensional"
-    assert spot_shape.ndim == 3, "spot_shape must be three-dimensional"
-    assert np.isin(spot_shape, [-1, 0, 1]).all(), "OMP spot shape should only contain -1, 0, and 1"
-    assert spot_shape.shape == spot_shape_mean.shape, "spot_shape and spot_shape_mean should have the same shape"
-    assert np.logical_and(-1 <= spot_shape_mean, spot_shape_mean <= 1).all(), "spot_shape_mean must range -1 to 1"
+    assert spot.ndim == 3, "spot must be three-dimensional"
+    assert np.isin(spot, [-1, 0, 1]).all(), "spot can only contain -1, 0, and 1"
+    assert spot.shape == mean_spot.shape, "spot and mean_spot must have the same shape"
+    assert np.logical_and(-1 <= mean_spot, mean_spot <= 1).all(), "mean_spot must range -1 to 1"
     assert high_coef_bias >= 0, "high_coef_bias cannot be negative"
 
     n_genes = coefs_image.shape[3]
 
     # Step 1: Retrieve the spot shape kernel. The kernel is zero where the spot shape is -1 or 0. The kernel is equal
     # to the spot shape mean where the spot shape is 1.
-    spot_shape_kernel = np.zeros_like(spot_shape, dtype=np.float32)
-    spot_shape_kernel[spot_shape == 1] = spot_shape_mean[spot_shape == 1]
+    spot_shape_kernel = np.zeros_like(spot, dtype=np.float32)
+    spot_shape_kernel[spot == 1] = mean_spot[spot == 1]
     # Normalised like this s.t. all scores range from 0 to 1.
     spot_shape_kernel /= spot_shape_kernel.sum()
-    n_shifts = (spot_shape == 1).sum()
+    n_shifts = (spot == 1).sum()
     message = f"OMP gene scores are being computed with {n_shifts} local coefficients for each spot."
-    if n_shifts < 25:
-        message += f" Consider reducing the shape_sign_thresh in OMP config"
+    if n_shifts < 20:
+        message += f" You may need to reduce shape_sign_thresh in OMP config"
+        if n_shifts == 0:
+            raise ValueError(message)
         log.warn(message)
     else:
         log.debug(message)
