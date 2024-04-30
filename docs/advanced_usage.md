@@ -82,3 +82,16 @@ nb.save()
 
 Now coppafish can be re-run and it will continue from OMP. This is particularly useful for many tile datasets. If you 
 are unsure what must be re-run, then it is suggested to start from an empty output directory.
+
+## Skipping bad microscope images
+
+You may have one or more images that are taken which are corrupted, empty, or not as bright as expected. When this
+happens, the user can manually tell coppafish to run without these images. To do this, specify each tile (`t`), round
+(`r`), channel (`c`) image by going to your custom config file and add the line
+
+```
+bad_trc = (t1, r1, c1), (t2, r2, c2), ...
+```
+
+under the `basic_info` section. Each set of brackets represents one image to ignore.
+
