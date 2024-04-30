@@ -249,10 +249,6 @@ def run_omp(
                         + "shape_coefficient_threshold in the omp config then re-run",
                     )
                 mean_spot = np.average(mean_spots, axis=0, weights=n_isolated_spots).astype(np.float32)
-                log.debug(f"{n_isolated_spots=}")
-                log.debug(f"{mean_spot.shape=}")
-                log.debug(f"{mean_spot.max()=}")
-                log.debug(f"{mean_spot.min()=}")
                 log.info(f"OMP spot and mean spot computed using {np.sum(n_isolated_spots)} detected spots")
                 del mean_spots, n_isolated_spots
 
