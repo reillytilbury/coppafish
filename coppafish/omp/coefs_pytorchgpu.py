@@ -408,6 +408,10 @@ def get_all_coefs(
                 )
                 inverse_var = 1 / background_variance
                 pixel_colors = pixel_colors.T
+                i_added_genes = None
+                fail_score_thresh = None
+                i_coefs = None
+                residual_pixel_colors = None
             else:
                 # only continue with pixels for which dot product score exceeds threshold
                 i_added_genes, pass_score_thresh, inverse_var = get_best_gene(
