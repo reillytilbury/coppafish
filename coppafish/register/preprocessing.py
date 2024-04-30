@@ -161,10 +161,16 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
         The number of subvolumes to split the image into in the x dimension.
     z_subvolumes : int
         The number of subvolumes to split the image into in the z dimension.
+    z_box : int
+        The size of the subvolume in the z dimension.
+    y_box : int
+        The size of the subvolume in the y dimension.
+    x_box : int
+        The size of the subvolume in the x dimension.
 
     Returns
     -------
-    subvolume : (z_subvols, y_subvols, x_subvols x z_box x y_box x z_box) ndarray
+    subvolume : ((z_subvols * y_subvols * x_subvols) x z_box x y_box x z_box) ndarray
         An array of subvolumes. The first three dimensions index the subvolume, the rest store the actual data.
     position: ndarray
         (y_subvolumes * x_subvolumes * z_sub_volumes) x 3 The middle coord of each subtile
@@ -175,21 +181,27 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
 
     # Make sure that box dims are even
     assert y_box % 2 == 0 and x_box % 2 == 0, "Box dimensions must be even numbers!"
-    assert z_subvolumes == 1
     z_image, y_image, x_image = image.shape
 
     # Allow 0.5 of a box either side and then split the middle with subvols evenly spaced points, ie into subvols - 1
-    # intervals. Then use integer division. e.g actual unit distance is 12.5, this gives a unit distance of 12 so
-    # should never overshoot
-    if z_subvolumes > 1:
-        z_unit = min(z_box, (z_image - z_box) // (z_subvolumes - 1))
-    else:
-        z_unit = 0
+    # intervals.
+    while (y_image - y_box) % (y_subvolumes - 1) != 0 or y_box % 2 != 0:
+        y_box += 1
+    while (x_image - x_box) % (x_subvolumes - 1) != 0 or x_box % 2 != 0:
+        x_box += 1
+    # define the unit spacing between centres for y and x
     y_unit = (y_image - y_box) // (y_subvolumes - 1)
     x_unit = (x_image - x_box) // (x_subvolumes - 1)
 
-    assert (y_image - y_box) % (y_subvolumes - 1) == 0, "y_box and y_subvolumes do not match"
-    assert (x_image - x_box) % (x_subvolumes - 1) == 0, "x_box and x_subvolumes do not match"
+
+    # 2 cases for z, if z_subvolumes = 1, then z_box = z_image and z_unit = 0, else, deal with z_box and z_unit
+    if z_subvolumes == 1:
+        z_box = z_image
+        z_unit = 0
+    else:
+        z_unit = (z_image - z_box) // (z_subvolumes - 1)
+        while (z_image - z_box) % (z_subvolumes - 1) != 0 or z_box % 2 != 0:
+            z_box += 1
 
     # Create an array to store the subvolumes in
     subvolume = np.zeros((z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box, x_box))
@@ -200,9 +212,12 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
     # Split the image into subvolumes and store them in the array
     for z, y, x in np.ndindex(z_subvolumes, y_subvolumes, x_subvolumes):
         z_centre, y_centre, x_centre = z_box // 2 + z * z_unit, y_box // 2 + y * y_unit, x_box // 2 + x * x_unit
-        z_start, z_end = 0, image.shape[0] + 1
         y_start, y_end = y_centre - y_box // 2, y_centre + y_box // 2
         x_start, x_end = x_centre - x_box // 2, x_centre + x_box // 2
+        if z_subvolumes == 1:
+            z_start, z_end = 0, z_image + 1
+        else:
+            z_start, z_end = z_centre - z_box // 2, z_centre + z_box // 2
 
         subvolume[z, y, x] = image[z_start:z_end, y_start:y_end, x_start:x_end]
         position[z, y, x] = np.array([(z_start + z_end) // 2, (y_start + y_end) // 2, (x_start + x_end) // 2])

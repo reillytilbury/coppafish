@@ -395,6 +395,10 @@ class Notebook:
                 if section not in self._no_compare_config_sections and section in page_names:
                     if config[section] != config_2[section]:
                         log.info(f"The {section} section of the two config files differ.")
+                        for param in config[section].keys():
+                            if config[section][param] != config_2[section][param]:
+                                log.info(f"The notebook config has {param} = {config[section][param]} and "
+                                         f"the passed config has {param} = {config_2[section][param]}.")
                         is_equal = False
         return is_equal
 
