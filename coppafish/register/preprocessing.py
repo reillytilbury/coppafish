@@ -646,9 +646,7 @@ def transform_im(im: np.ndarray, affine: np.ndarray, flow_dir: str, flow_ind: tu
         indexing="ij",
     )
     # NOTE: This is slow! On an entire tile shaped image, it takes 20s.
-    log.debug(f"Warping")
     im = warp(im, coords + flow, order=1, mode="constant", cval=0, preserve_range=True)
-    log.debug(f"Warping complete")
     return im
 
 

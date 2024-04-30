@@ -22,6 +22,7 @@ def compute_omp_coefficients(
     weight_coefficient_fit: bool,
     alpha: float,
     beta: float,
+    force_cpu: bool = False,
 ) -> scipy.sparse.lil_matrix:
     """
     Find OMP coefficients on all pixels.
@@ -42,6 +43,8 @@ def compute_omp_coefficients(
             after subtracting a gene assignment.
         alpha (float): OMP weighting parameter. Applied if weight_coefficient_fit is true.
         beta (float): OMP weighting parameter. Applied if weight_coefficient_fit is true.
+        force_cpu (bool): this parameter has no meaning in this function. It is just to make the function identical to
+            the pytorch version.
 
     Returns:
         - (`((im_y * im_x * im_z) x n_genes) sparse lil_matrix`) pixel_coefficients: OMP
@@ -67,7 +70,7 @@ def compute_omp_coefficients(
     bled_codes = bled_codes.reshape((n_genes, -1))
     background_codes = background_codes.reshape((n_channels_use, -1))
 
-    all_bled_codes = np.concatenate((bled_codes, background_codes))
+    all_bled_codes = np.concatenate((bled_codes, background_codes), axis=0)
     # Background genes are placed at the end of the other gene bled codes
     background_genes = np.arange(n_genes, n_genes + n_channels_use)
     # Background variance will not change between iterations
@@ -96,6 +99,7 @@ def compute_omp_coefficients(
             background_genes,
             background_variance,
         )
+
         # Update what pixels to continue iterating on
         iterate_on_pixels = np.logical_and(iterate_on_pixels, pass_threshold)
         genes_added = np.append(genes_added, best_genes[:, :, :, np.newaxis], axis=3)

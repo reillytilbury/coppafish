@@ -213,6 +213,7 @@ _options = {
         "alpha": "number",
         "beta": "number",
         "subset_size_xy": "int",
+        "force_cpu": "bool",
         "coefficient_threshold": "number",
         "radius_xy": "int",
         "radius_z": "int",

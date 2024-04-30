@@ -57,6 +57,7 @@ def test_compute_omp_coefficients() -> None:
             weight,
             alpha,
             beta,
+            force_cpu=True,
         )
         assert_type(pixel_coefficients_torch, scipy.sparse.csr_matrix)
         assert pixel_coefficients_torch.shape == (im_y * im_x * im_z, n_genes)
