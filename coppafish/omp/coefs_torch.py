@@ -123,8 +123,8 @@ def compute_omp_coefficients(
         )
 
         # Update what pixels to continue iterating on
-        torch.logical_and(iterate_on_pixels, pass_threshold, out=iterate_on_pixels)
-        genes_added = torch.cat((genes_added, best_genes[:, :, :, np.newaxis]), dim=3)
+        iterate_on_pixels = torch.logical_and(iterate_on_pixels, pass_threshold).to(device=run_on_device)
+        genes_added = torch.cat((genes_added, best_genes[:, :, :, np.newaxis]), dim=3).to(device=run_on_device)
 
         # Update coefficients for pixels with new a gene assignment and keep the residual pixel colour
         genes_added_coefficients, pixel_colours = weight_selected_genes(
