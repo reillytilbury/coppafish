@@ -1,0 +1,65 @@
+import torch
+import numpy as np
+
+from .. import log
+
+
+def score_coefficient_image(
+    coefficient_image: torch.Tensor,
+    spot: torch.Tensor,
+    mean_spot: torch.Tensor,
+    high_coefficient_bias: float,
+    force_cpu: bool = True,
+):
+    """
+    See omp/scores.py for a docstring description.
+    """
+    assert coefficient_image.dim() == 4
+    assert spot.dim() == 3
+    assert torch.isin(spot, torch.asarray([-1, 0, 1], device=coefficient_image.device)).all()
+    assert spot.shape == mean_spot.shape
+    assert torch.logical_and(-1 <= mean_spot, mean_spot <= 1).all()
+    assert high_coefficient_bias >= 0
+
+    cpu_device = torch.device("cpu")
+    run_on_device = cpu_device
+    if not force_cpu and torch.cuda.is_available():
+        run_on_device = torch.device("cuda")
+
+    n_genes = coefficient_image.shape[3]
+
+    coefficient_image = coefficient_image.to(device=run_on_device)
+    spot = spot.to(device=run_on_device)
+    mean_spot = mean_spot.to(device=run_on_device)
+
+    spot_shape_kernel = torch.zeros_like(spot, dtype=mean_spot.dtype, device=run_on_device)
+    spot_shape_kernel[spot == 1] = mean_spot[spot == 1]
+    spot_shape_kernel /= spot_shape_kernel.sum()
+    n_shifts = (spot == 1).sum()
+    message = f"OMP gene scores are being computed with {n_shifts} local coefficients for each spot."
+    if n_shifts < 20:
+        message += f" You may need to reduce shape_sign_thresh in OMP config"
+        if n_shifts == 0:
+            raise ValueError(message)
+        log.warn(message)
+    else:
+        log.debug(message)
+
+    coefficient_image_function = coefficient_image.detach().clone()
+    positive = coefficient_image > 0
+    coefficient_image_function[~positive] = 0
+    coefficient_image_function[positive] = coefficient_image_function[positive] / (
+        coefficient_image_function[positive] + high_coefficient_bias
+    )
+
+    result = torch.zeros_like(
+        coefficient_image_function, dtype=coefficient_image.dtype, device=coefficient_image.device
+    )
+    for g in range(n_genes):
+        result[:, :, :, g] = torch.nn.functional.conv3d(
+            coefficient_image_function[np.newaxis, np.newaxis, :, :, :, g],
+            spot_shape_kernel[np.newaxis, np.newaxis],
+            padding="same",
+            bias=None,
+        )[0, 0]
+    return torch.clip(result, 0, 1).to(device=cpu_device, dtype=coefficient_image.dtype)

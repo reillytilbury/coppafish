@@ -3,20 +3,25 @@ import scipy
 import math as maths
 import numpy as np
 
+using_torch = False
 try:
     import torch
     from ..omp import coefs_torch as coefs
+    from ..omp import scores_torch as scores
+
+    using_torch = True
 except ImportError:
     import numpy as torch
     from ..omp import coefs_new as coefs
+    from ..omp import scores
 
 from typing_extensions import assert_type
 import numpy.typing as npt
 from typing import Tuple
 
-from ..omp import base, spots_new, scores
+from ..omp import base, spots_new
 from ..setup.notebook import NotebookPage
-from .. import utils, call_spots, find_spots, log
+from .. import utils, call_spots, find_spots, log, omp
 
 
 def run_omp(
@@ -298,12 +303,18 @@ def run_omp(
 
                 # STEP 4: Score the detections using the coefficients.
                 log.debug(f"Scoring gene {g} image")
+                g_coefficient_image = torch.asarray(g_coefficient_image)
+                spot = torch.asarray(spot)
+                mean_spot = torch.asarray(mean_spot)
                 g_spots_score = scores.score_coefficient_image(
-                    coefs_image=g_coefficient_image,
+                    coefficient_image=g_coefficient_image,
                     spot=spot,
                     mean_spot=mean_spot,
-                    high_coef_bias=config["high_coef_bias"],
+                    high_coefficient_bias=config["high_coef_bias"],
+                    force_cpu=config["force_cpu"],
                 )[..., 0]
+                if using_torch:
+                    g_spots_score = g_spots_score.numpy()
                 log.debug(f"Scoring gene {g} image complete")
                 g_spots_score = g_spots_score[tuple(g_spots_yxz.T)]
 
@@ -315,9 +326,8 @@ def run_omp(
 
                 n_g_spots = g_spots_local_yxz.shape[0]
                 if n_g_spots == 0:
-                    log.warn(f"No spots found in subset {i} for gene {g}")
                     continue
-                g_spots_score = scores.omp_scores_float_to_int(g_spots_score)
+                g_spots_score = omp.scores.omp_scores_float_to_int(g_spots_score)
                 g_spots_tile = np.ones(n_g_spots, dtype=np.int16) * t
                 g_spots_gene_no = np.ones(n_g_spots, dtype=np.int16) * g
 

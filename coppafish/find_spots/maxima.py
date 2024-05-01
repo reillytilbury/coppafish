@@ -7,6 +7,7 @@ def get_local_maxima(
     pad_sizes: np.ndarray,
     consider_yxz: np.ndarray,
     consider_intensity: np.ndarray,
+    force_cpu: bool = True,
 ) -> np.ndarray:
     """
     Finds the local maxima from a given set of pixels to consider.
@@ -21,6 +22,7 @@ def get_local_maxima(
         consider_yxz (`(image.ndim x n_consider) ndarray[int]`): all yxz coordinates where value in image is greater
             than an intensity threshold.
         consider_intensity (`[n_consider] ndarray[float]`): value of image at coordinates given by `consider_yxz`.
+        force_cpu (bool)
 
     Returns:
         `[n_consider] ndarray[bool]`: whether each point in `consider_yxz` is a local maxima or not.

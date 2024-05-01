@@ -5,12 +5,12 @@ import numpy.typing as npt
 from .. import log
 
 
-# TODO: Optimise this function with pytorch
 def score_coefficient_image(
-    coefs_image: np.ndarray,
+    coefficient_image: np.ndarray,
     spot: np.ndarray,
     mean_spot: np.ndarray,
-    high_coef_bias: float,
+    high_coefficient_bias: float,
+    force_cpu: bool = True,
 ) -> npt.NDArray[np.float32]:
     """
     Computes OMP score(s) for the coefficient image. This is a weighted average of spot_shape_mean at spot_shape's == 1
@@ -30,18 +30,18 @@ def score_coefficient_image(
     Returns:
         `(im_y x im_x x im_z x n_genes) ndarray[float]`: score for each coefficient pixel.
     """
-    assert coefs_image.ndim == 4, "coefs_image must be four-dimensional"
+    assert coefficient_image.ndim == 4, "coefs_image must be four-dimensional"
     assert spot.ndim == 3, "spot must be three-dimensional"
     assert np.isin(spot, [-1, 0, 1]).all(), "spot can only contain -1, 0, and 1"
     assert spot.shape == mean_spot.shape, "spot and mean_spot must have the same shape"
     assert np.logical_and(-1 <= mean_spot, mean_spot <= 1).all(), "mean_spot must range -1 to 1"
-    assert high_coef_bias >= 0, "high_coef_bias cannot be negative"
+    assert high_coefficient_bias >= 0, "high_coef_bias cannot be negative"
 
-    n_genes = coefs_image.shape[3]
+    n_genes = coefficient_image.shape[3]
 
     # Step 1: Retrieve the spot shape kernel. The kernel is zero where the spot shape is -1 or 0. The kernel is equal
     # to the spot shape mean where the spot shape is 1.
-    spot_shape_kernel = np.zeros_like(spot, dtype=np.float32)
+    spot_shape_kernel = np.zeros_like(spot, dtype=coefficient_image.dtype)
     spot_shape_kernel[spot == 1] = mean_spot[spot == 1]
     # Normalised like this s.t. all scores range from 0 to 1.
     spot_shape_kernel /= spot_shape_kernel.sum()
@@ -57,17 +57,19 @@ def score_coefficient_image(
 
     # Step 2: Apply the non-linear function x / (x + high_coef_bias) to every positive coefficient element-wise, where
     # x is the coefficient. All negative coefficients are set to zero.
-    coefs_image_function = coefs_image.copy()
-    positive = coefs_image > 0
+    coefs_image_function = coefficient_image.copy()
+    positive = coefficient_image > 0
     coefs_image_function[~positive] = 0
-    coefs_image_function[positive] = coefs_image_function[positive] / (coefs_image_function[positive] + high_coef_bias)
+    coefs_image_function[positive] = coefs_image_function[positive] / (
+        coefs_image_function[positive] + high_coefficient_bias
+    )
 
     # Step 3: 3D Convolve the functioned coefficients with the spot shape kernel
-    result = np.zeros_like(coefs_image_function, dtype=np.float32)
+    result = np.zeros_like(coefs_image_function, dtype=coefficient_image.dtype)
     for g in range(n_genes):
         # This scipy convolve will automatically use zeroes when on the edge of the image
         result[:, :, :, g] = scipy.signal.convolve(coefs_image_function[:, :, :, g], spot_shape_kernel, mode="same")
-    return np.clip(result, 0, 1, dtype=np.float32)
+    return np.clip(result, 0, 1, dtype=coefficient_image.dtype)
 
 
 def omp_scores_float_to_int(scores: npt.NDArray[np.float_]) -> npt.NDArray[np.int16]:

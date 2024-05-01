@@ -17,6 +17,7 @@ def detect_spots(
     radius_z: Optional[int] = None,
     remove_duplicates: bool = False,
     se: Optional[np.ndarray] = None,
+    force_cpu: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Finds local maxima in image exceeding `intensity_thresh`.
@@ -36,6 +37,7 @@ def detect_spots(
         se: `int [se_sz_y x se_sz_x x se_sz_z]`.
             Can give structuring element manually rather than using a cuboid element.
             Must only contain zeros and ones.
+        force_cpu (bool): use only the CPU for computation in pytorch.
 
     Returns:
         - `peak_yxz` - `int [n_peaks x image.ndim]`.
@@ -63,9 +65,7 @@ def detect_spots(
             pad_size_z = 0
     if image.ndim == 2 and se.ndim == 3:
         mid_z = int(np.floor((se.shape[2] - 1) / 2))
-        log.warn(
-            f"2D image provided but 3D filter asked for.\n" f"Using the middle plane ({mid_z}) of this filter."
-        )
+        log.warn(f"2D image provided but 3D filter asked for.\n" f"Using the middle plane ({mid_z}) of this filter.")
         se = se[:, :, mid_z]
 
     # set central pixel to 0
@@ -85,13 +85,11 @@ def detect_spots(
 
     consider_intensity = image[consider_yxz]
     consider_yxz = np.array(consider_yxz)
-    log.debug(f"{consider_yxz.shape=}")
     if consider_yxz.max() <= np.iinfo(np.int32).max:
         consider_yxz = consider_yxz.astype(np.int32)
     # Sometimes consider_yxz can have too many spots in it to be run all at once through get_local_maxima without
     # running out of memory, so it is separated into smaller batches and then recombined after.
     max_batch_size = np.floor(5_000_000 * utils.system.get_available_memory() / 64.5).astype(int)
-    log.debug(f"{max_batch_size=}")
     paddings = np.array([pad_size_y, pad_size_x, pad_size_z])[: image.ndim]
     keep = np.zeros(n_consider, dtype=bool)
     final_i = np.ceil(n_consider / max_batch_size) - 1
@@ -104,7 +102,7 @@ def detect_spots(
         consider_yxz_batch = consider_yxz[:, index_start:index_end]
         consider_intensity_batch = consider_intensity[index_start:index_end]
         keep[index_start:index_end] = get_local_maxima(
-            image, se_shifts, paddings, consider_yxz_batch, consider_intensity_batch
+            image, se_shifts, paddings, consider_yxz_batch, consider_intensity_batch, force_cpu=force_cpu
         )
     if remove_duplicates:
         peak_intensity = np.round(consider_intensity[keep]).astype(int)

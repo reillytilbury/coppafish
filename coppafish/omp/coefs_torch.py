@@ -51,9 +51,6 @@ def compute_omp_coefficients(
             coefficients for every pixel. Since most coefficients are zero, the results are stored as a sparse matrix.
             Flattening the image dimensions is done using numpy's reshape method for consistency.
     """
-    device = torch.device("cpu")
-    if not force_cpu and torch.cuda.is_available():
-        device = torch.device("cuda")
     assert_type(pixel_colours, torch.Tensor)
     assert_type(bled_codes, torch.Tensor)
     assert_type(background_coefficients, torch.Tensor)
@@ -69,6 +66,13 @@ def compute_omp_coefficients(
     assert_type(weight_coefficient_fit, bool)
     assert alpha >= 0
     assert beta >= 0
+
+    # We want exact, reproducible results in coppafish.
+    torch.backends.cudnn.deterministic = True
+
+    device = torch.device("cpu")
+    if not force_cpu and torch.cuda.is_available():
+        device = torch.device("cuda")
 
     n_genes, n_rounds_use, n_channels_use = bled_codes.shape
     image_shape = pixel_colours.shape[:3]
@@ -103,7 +107,7 @@ def compute_omp_coefficients(
     background_variance = background_variance.to(device=device)
 
     for i in tqdm.trange(maximum_iterations, desc="Computing OMP coefficients", unit="iteration", disable=not verbose):
-        pixels_iterated.append(iterate_on_pixels.sum())
+        pixels_iterated.append(int(iterate_on_pixels.sum()))
         best_genes, pass_threshold, inverse_variance = get_next_best_gene(
             iterate_on_pixels,
             pixel_colours,
