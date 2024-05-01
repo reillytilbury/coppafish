@@ -143,7 +143,7 @@ def compute_omp_coefficients(
         log.debug("For loop over pixels started")
         for p in torch.where(genes_added_flattened[:, i] != NO_GENE_SELECTION)[0]:
             p_gene = genes_added_flattened[p, i]
-            coefficient_image[p, p_gene.int()] = genes_added_coefficients_flattened[p, i].numpy()
+            coefficient_image[p, p_gene.int()] = genes_added_coefficients_flattened[p, i].cpu().numpy()
         log.debug("For loop over pixels complete")
 
     iterate_on_pixels = iterate_on_pixels.cpu()
