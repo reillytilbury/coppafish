@@ -238,7 +238,6 @@ def run_omp(
                     del g_coefficient_image, isolated_spots_yxz_g, n_g_isolated_spots
                 # Make sure that every spot is truly isolated, even from other genes.
                 isolated_spots_yxz_normalised = isolated_spots_yxz.copy().astype(np.float32)
-                log.info(f"{shape_isolation_distance_z=}")
                 isolated_spots_yxz_normalised[:, 2] *= (
                     config["shape_isolation_distance_yx"] / shape_isolation_distance_z
                 )
@@ -247,9 +246,7 @@ def run_omp(
                 closest_distances = np.array(kd_tree.query(tuple(isolated_spots_yxz_normalised), k=2, workers=-1)[0])[
                     :, 1
                 ]
-                log.info(f"{closest_distances.shape=}")
                 keep = closest_distances > config["shape_isolation_distance_yx"]
-                log.info(f"{keep.sum()} out of {keep.size} were truly isolated")
                 isolated_spots_yxz = isolated_spots_yxz[keep]
                 isolated_gene_numbers = isolated_gene_numbers[keep]
                 del closest_distances, isolated_spots_yxz_normalised, keep
@@ -285,12 +282,14 @@ def run_omp(
             for g in tqdm.trange(n_genes, desc="Detecting and scoring spots", unit="gene"):
                 # STEP 3: Detect spots on the subset except at the x and y edges.
                 g_coefficient_image = coefficient_image[:, g].toarray().reshape(subset_shape + (1,))
+                log.debug(f"Detecting spots for gene {g}")
                 g_spots_yxz, _ = find_spots.detect_spots(
                     image=g_coefficient_image[..., 0],
                     intensity_thresh=config["coefficient_threshold"],
                     radius_xy=config["radius_xy"],
                     radius_z=config["radius_z"],
                 )
+                log.debug(f"Detecting spots for gene {g} complete")
                 # Convert spot positions in the subset image to positions on the tile.
                 g_spots_local_yxz = subset_positions_to_tile_positions(g_spots_yxz)
                 valid_positions = get_valid_subset_positions(g_spots_yxz)
@@ -298,12 +297,14 @@ def run_omp(
                 g_spots_local_yxz = g_spots_local_yxz[valid_positions]
 
                 # STEP 4: Score the detections using the coefficients.
+                log.debug(f"Scoring gene {g} image")
                 g_spots_score = scores.score_coefficient_image(
                     coefs_image=g_coefficient_image,
                     spot=spot,
                     mean_spot=mean_spot,
                     high_coef_bias=config["high_coef_bias"],
                 )[..., 0]
+                log.debug(f"Scoring gene {g} image complete")
                 g_spots_score = g_spots_score[tuple(g_spots_yxz.T)]
 
                 # Remove bad scoring spots (i.e. false gene reads)

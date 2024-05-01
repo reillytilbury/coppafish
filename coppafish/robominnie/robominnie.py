@@ -998,8 +998,6 @@ class RoboMinnie:
 
         [omp]
         max_genes = {omp_iterations}
-        initial_intensity_thresh_percentile = {omp_initial_intensity_thresh_percentile}
-        ; shape_isolation_distance_yx = 3
         """
         # Remove any large spaces in the config contents
         config_file_contents = config_file_contents.replace("  ", "")

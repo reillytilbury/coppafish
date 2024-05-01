@@ -203,11 +203,6 @@ _options = {
     "omp": {
         "use_z": "maybe_list_int",
         "weight_coef_fit": "bool",
-        "initial_intensity_thresh": "maybe_number",
-        "initial_intensity_thresh_percentile": "int",
-        "initial_intensity_thresh_min": "number",
-        "initial_intensity_thresh_max": "number",
-        "initial_intensity_precision": "number",
         "max_genes": "int",
         "dp_thresh": "number",
         "alpha": "number",
