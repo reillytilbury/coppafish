@@ -101,6 +101,7 @@ def compute_omp_coefficients(
     # Move all variables used in computation to the selected device.
     iterate_on_pixels = iterate_on_pixels.to(device=run_on_device)
     pixel_colours = pixel_colours.to(device=run_on_device)
+    bled_codes = bled_codes.to(device=run_on_device)
     all_bled_codes = all_bled_codes.to(device=run_on_device)
     genes_added_coefficients = genes_added_coefficients.to(device=run_on_device)
     genes_added = genes_added.to(device=run_on_device)
