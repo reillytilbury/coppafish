@@ -219,7 +219,7 @@ def run_omp(
 
             # STEP 2.5: On the first OMP z-chunk/tile, compute the OMP spot shape using the found coefficients.
             if first_computation:
-                log.info("Computing spot shape")
+                log.debug("Computing spot shape")
                 isolated_spots_yxz = np.zeros((0, 3), dtype=np.int16)
                 isolated_gene_numbers = np.zeros(0, dtype=np.int16)
                 for g in tqdm.trange(n_genes, desc="Computing spot shape", unit="gene"):
@@ -241,26 +241,11 @@ def run_omp(
                     isolated_spots_yxz = np.append(isolated_spots_yxz, isolated_spots_yxz_g, axis=0)
                     isolated_gene_numbers = np.append(isolated_gene_numbers, np.ones(n_g_isolated_spots) * g, axis=0)
                     del g_coefficient_image, isolated_spots_yxz_g, n_g_isolated_spots
-                # Make sure that every spot is truly isolated, even from other genes.
-                isolated_spots_yxz_normalised = isolated_spots_yxz.copy().astype(np.float32)
-                isolated_spots_yxz_normalised[:, 2] *= (
-                    config["shape_isolation_distance_yx"] / shape_isolation_distance_z
-                )
-                kd_tree = scipy.spatial.KDTree(isolated_spots_yxz_normalised)
-                keep = np.ones_like(isolated_gene_numbers, dtype=bool)
-                closest_distances = np.array(kd_tree.query(tuple(isolated_spots_yxz_normalised), k=2, workers=-1)[0])[
-                    :, 1
-                ]
-                keep = closest_distances > config["shape_isolation_distance_yx"]
-                isolated_spots_yxz = isolated_spots_yxz[keep]
-                isolated_gene_numbers = isolated_gene_numbers[keep]
-                del closest_distances, isolated_spots_yxz_normalised, keep
                 mean_spots = []
                 weights = []
                 for g in range(n_genes):
                     g_coefficient_image = coefficient_image[:, g].toarray().reshape(subset_shape)
                     if (isolated_gene_numbers == g).sum() == 0:
-                        log.debug(f"No isolated spots found for gene {g}")
                         continue
                     g_mean_spot = spots_new.compute_mean_spot_from(
                         g_coefficient_image, isolated_spots_yxz[isolated_gene_numbers == g], config["spot_shape"]
@@ -282,7 +267,7 @@ def run_omp(
                 nbp.spot_tile = t
                 nbp.mean_spot = mean_spot
                 nbp.spot = spot
-                log.info("Computing spot shape complete")
+                log.debug("Computing spot shape complete")
 
             for g in tqdm.trange(n_genes, desc="Detecting and scoring spots", unit="gene"):
                 # STEP 3: Detect spots on the subset except at the x and y edges.

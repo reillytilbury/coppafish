@@ -213,7 +213,6 @@ _options = {
         "radius_xy": "int",
         "radius_z": "int",
         "spot_shape": "list_int",
-        "shape_pos_neighbour_thresh": "int",
         "shape_isolation_distance_yx": "int",
         "shape_isolation_distance_z": "maybe_int",
         "shape_coefficient_threshold": "number",
