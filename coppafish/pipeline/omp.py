@@ -118,6 +118,8 @@ def run_omp(
             subset_origin_new[1] = 0
             subset_origin_new[0] += subset_size_xy - 2 * spot_radius_xy
 
+    log.info(f"Running {len(subset_origins_yxz)} subsets for each tile")
+
     # Results are appended to these arrays
     spots_local_yxz = np.zeros((0, 3), dtype=np.int16)
     spots_tile = np.zeros(0, dtype=np.int16)
