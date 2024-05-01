@@ -53,7 +53,7 @@ def compute_omp_coefficients(
     """
     device = torch.device("cpu")
     if not force_cpu and torch.cuda.is_available():
-        device = torch.device("gpu")
+        device = torch.device("cuda")
     assert_type(pixel_colours, torch.Tensor)
     assert_type(bled_codes, torch.Tensor)
     assert_type(background_coefficients, torch.Tensor)

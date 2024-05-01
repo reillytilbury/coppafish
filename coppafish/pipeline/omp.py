@@ -330,11 +330,16 @@ def run_omp(
 
             # STEP 5: Repeat steps 2 to 4 on every mini-tile subset.
             first_computation = False
+        if (spots_tile == t).sum() == 0:
+            raise ValueError(
+                f"No OMP spots were found on tile {t}. Please check that registration and call spots is working. "
+                + "If so, consider adjusting OMP config parameters."
+            )
 
     if spots_score.size == 0:
         raise ValueError(
-            "OMP failed to find any spots. Please check that registration and call spots is working. If so, consider "
-            + "adjusting OMP config parameters."
+            "OMP failed to find any spots. Please check that registration and call spots is working. "
+            + "If so, consider adjusting OMP config parameters."
         )
 
     nbp.local_yxz = spots_local_yxz
