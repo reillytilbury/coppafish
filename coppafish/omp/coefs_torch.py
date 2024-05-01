@@ -70,9 +70,10 @@ def compute_omp_coefficients(
     # We want exact, reproducible results in coppafish.
     torch.backends.cudnn.deterministic = True
 
-    device = torch.device("cpu")
+    cpu_device = torch.device("cpu")
+    run_on_device = cpu_device
     if not force_cpu and torch.cuda.is_available():
-        device = torch.device("cuda")
+        run_on_device = torch.device("cuda")
 
     n_genes, n_rounds_use, n_channels_use = bled_codes.shape
     image_shape = pixel_colours.shape[:3]
@@ -98,13 +99,13 @@ def compute_omp_coefficients(
     coefficient_image = scipy.sparse.lil_matrix(np.zeros((np.prod(image_shape), n_genes), dtype=np.float32))
 
     # Move all variables used in computation to the selected device.
-    iterate_on_pixels = iterate_on_pixels.to(device=device)
-    pixel_colours = pixel_colours.to(device=device)
-    all_bled_codes = all_bled_codes.to(device=device)
-    genes_added_coefficients = genes_added_coefficients.to(device=device)
-    genes_added = genes_added.to(device=device)
-    background_genes = background_genes.to(device=device)
-    background_variance = background_variance.to(device=device)
+    iterate_on_pixels = iterate_on_pixels.to(device=run_on_device)
+    pixel_colours = pixel_colours.to(device=run_on_device)
+    all_bled_codes = all_bled_codes.to(device=run_on_device)
+    genes_added_coefficients = genes_added_coefficients.to(device=run_on_device)
+    genes_added = genes_added.to(device=run_on_device)
+    background_genes = background_genes.to(device=run_on_device)
+    background_variance = background_variance.to(device=run_on_device)
 
     for i in tqdm.trange(maximum_iterations, desc="Computing OMP coefficients", unit="iteration", disable=not verbose):
         pixels_iterated.append(int(iterate_on_pixels.sum()))
@@ -236,7 +237,7 @@ def get_next_best_gene(
     all_bled_codes /= torch.linalg.norm(all_bled_codes, dim=0, keepdim=True)
 
     # See Josh's OMP documentation for details about this exact equation
-    inverse_variances_flattened = torch.zeros((n_pixels, n_rounds_channels)).float()
+    inverse_variances_flattened = torch.zeros((n_pixels, n_rounds_channels), device=coefficients.device).float()
     inverse_variances_flattened[consider_pixels_flattened] = torch.reciprocal(
         torch.matmul(
             (coefficients_flattened[consider_pixels_flattened] ** 2)[:, None],
@@ -250,18 +251,20 @@ def get_next_best_gene(
     ignore_genes = torch.cat((ignore_genes, genes_added_flattened), dim=1)
     n_genes_ignore = ignore_genes.shape[1]
     # Pick the best scoring one for each pixel
-    all_gene_scores = torch.full((n_pixels, n_genes), fill_value=np.nan, dtype=torch.float32)
+    all_gene_scores = torch.full(
+        (n_pixels, n_genes), fill_value=np.nan, device=coefficients.device, dtype=torch.float32
+    )
     all_gene_scores[consider_pixels_flattened] = dot_product_pytorch.dot_product_score(
         residual_pixel_colours_flattened[consider_pixels_flattened],
         all_bled_codes.T,
         inverse_variances_flattened[consider_pixels_flattened],
         norm_shift,
     )[3]
-    best_genes = torch.full((n_pixels,), fill_value=NO_GENE_SELECTION, dtype=torch.int16)
+    best_genes = torch.full((n_pixels,), fill_value=NO_GENE_SELECTION, device=coefficients.device, dtype=torch.int16)
     best_genes[consider_pixels_flattened] = torch.argmax(
         torch.abs(all_gene_scores[consider_pixels_flattened]), dim=1
     ).type(torch.int16)
-    best_scores = torch.full((n_pixels,), fill_value=np.nan).float()
+    best_scores = torch.full((n_pixels,), fill_value=np.nan, device=coefficients.device, dtype=torch.float32)
     best_scores[consider_pixels_flattened] = all_gene_scores[
         consider_pixels_flattened, best_genes[consider_pixels_flattened].int()
     ]
@@ -277,7 +280,7 @@ def get_next_best_gene(
     # The score is considered zero if the assigned gene is in ignore_genes
     best_scores[~consider_pixels_flattened] = 0
     best_genes[~consider_pixels_flattened] = NO_GENE_SELECTION
-    genes_passing_score = torch.zeros((n_pixels,)).bool()
+    genes_passing_score = torch.zeros((n_pixels,), device=coefficients.device, dtype=torch.bool)
     genes_passing_score[consider_pixels_flattened] = torch.abs(best_scores[consider_pixels_flattened]) > score_threshold
     del best_scores, all_gene_scores
 
@@ -347,7 +350,7 @@ def weight_selected_genes(
         * weight_flattened[consider_pixels_flattened, :, np.newaxis]
     )
 
-    coefficients = torch.zeros((n_pixels, n_genes_added), dtype=torch.float32)
+    coefficients = torch.zeros((n_pixels, n_genes_added), device=consider_pixels.device, dtype=torch.float32)
     coefficients[:] = 0
 
     coefficients[consider_pixels_flattened] = torch.linalg.lstsq(

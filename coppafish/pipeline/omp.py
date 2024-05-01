@@ -1,5 +1,4 @@
 import tqdm
-import scipy
 import math as maths
 import numpy as np
 
