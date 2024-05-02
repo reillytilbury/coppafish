@@ -77,6 +77,9 @@ _options = {
         "channel_laser": "maybe_list_int",
         "ref_round": "maybe_int",
         "ref_channel": "maybe_int",
+        "sender_email": "maybe_str",
+        "sender_email_password": "maybe_str",
+        "email_me": "maybe_str",
     },
     "file_names": {
         "notebook_name": "str",
@@ -213,6 +216,7 @@ _options = {
         "radius_xy": "int",
         "radius_z": "int",
         "spot_shape": "list_int",
+        "spot_shape_max_spots": "int",
         "shape_isolation_distance_yx": "int",
         "shape_isolation_distance_z": "maybe_int",
         "shape_coefficient_threshold": "number",

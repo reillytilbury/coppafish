@@ -17,7 +17,7 @@ from . import register
 from . import stitch
 from . import get_reference_spots
 from . import call_reference_spots
-from . import omp
+from . import omp_torch
 
 
 def run_pipeline(
@@ -92,6 +92,9 @@ def initialize_nb(config_file: str) -> Notebook:
     log.base.set_log_config(
         config["basic_info"]["minimum_print_severity"],
         os.path.join(config_file["output_dir"], config_file["log_name"]),
+        config["basic_info"]["email_me"],
+        config["basic_info"]["sender_email"],
+        config["basic_info"]["sender_email_password"],
     )
     log.info(
         f" COPPAFISH v{utils.system.get_software_version()} ".center(utils.system.current_terminal_size_xy(-33)[0], "=")
@@ -347,7 +350,7 @@ def run_omp(nb: Notebook) -> None:
         # Use tile with most spots on to find spot shape in omp
         spots_tile = np.sum(nb.find_spots.spot_no, axis=(1, 2))
         tile_most_spots = nb.basic_info.use_tiles[np.argmax(spots_tile[nb.basic_info.use_tiles])]
-        nbp = omp.run_omp(
+        nbp = omp_torch.run_omp(
             config["omp"],
             nb.file_names,
             nb.basic_info,

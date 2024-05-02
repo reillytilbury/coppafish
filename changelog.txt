@@ -1,7 +1,8 @@
 2024/05/dd Alpha Update (v0.11.0):
- * OMP computed spot is now computed on a subset on one tile, not the full tile.
- * OMP code has been overhauled.
+ * Pytorch is now a default dependency.
+ * The OMP computed spot is now computed on a subset on one tile, not the full tile.
  * OMP is faster and the entire tile is loaded into memory before running each tile.
+ * OMP code has been overhauled.
 
 
 2024/04/23 Alpha Update (v0.10.4):

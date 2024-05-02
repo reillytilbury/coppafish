@@ -63,3 +63,15 @@ def score_coefficient_image(
             bias=None,
         )[0, 0]
     return torch.clip(result, 0, 1).to(device=cpu_device, dtype=coefficient_image.dtype)
+
+
+def omp_scores_float_to_int(scores: torch.Tensor) -> torch.Tensor:
+    assert (0 <= scores).all() and (scores <= 1).all(), "scores should be between 0 and 1 inclusive"
+
+    return torch.round(scores * np.iinfo(np.int16).max, decimals=0).to(torch.int16)
+
+
+def omp_scores_int_to_float(scores: torch.Tensor) -> torch.Tensor:
+    assert (0 <= scores).all() and (scores <= np.iinfo(np.int16).max).all()
+
+    return (scores.float() / np.iinfo(np.int16).max).float()

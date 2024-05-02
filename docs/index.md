@@ -59,7 +59,7 @@ to install the optimised, [pytorch](https://github.com/pytorch) GPU code
 ```console
 cd coppafish
 python -m pip install --upgrade pip
-python -m pip install -r requirements-pytorchgpu.txt
+python -m pip install -r requirements-gpu.txt
 python -m pip install -e .
 ```
 
@@ -67,20 +67,9 @@ or for the optimised, [pytorch](https://github.com/pytorch) CPU code
 ```console
 cd coppafish
 python -m pip install --upgrade pip
-python -m pip install -r requirements-pytorch.txt
-python -m pip install -e .
-```
-
-or for the slower, numpy-only code
-```console
-cd coppafish
-python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python -m pip install -e .
 ```
-
-this can be useful for people with limited disk space for large packages like pytorch who do not mind sacrificing
-some computation speed.
 
 If you do not wish to keep a local copy of coppafish (i.e. not interested in `git pull`ing higher coppafish versions
 later) then remove the `-e` option. The source code can then be deleted after installing.

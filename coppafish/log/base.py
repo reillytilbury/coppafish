@@ -3,11 +3,14 @@ import traceback
 from datetime import datetime
 from typing import Union, Callable, Any
 
+from ..utils import email
+
 
 DEBUG = 10
 INFO = 20
 WARNING = 30
 ERROR = 40
+EMAIL_ON = ERROR
 CRASH_ON = ERROR
 severity_to_name = {
     DEBUG: "DEBUG",
@@ -36,7 +39,13 @@ def error_catch(func: Callable, *args, **kwargs) -> Any:
     return result
 
 
-def set_log_config(minimum_print_severity: int = INFO, log_file_path: str = None) -> None:
+def set_log_config(
+    minimum_print_severity: int = INFO,
+    log_file_path: str = None,
+    email_recipient: str = None,
+    email_sender: str = None,
+    email_sender_password: str = None,
+) -> None:
     """
     Set the required information before logging.
 
@@ -48,6 +57,12 @@ def set_log_config(minimum_print_severity: int = INFO, log_file_path: str = None
     _minimum_print_severity = minimum_print_severity
     global _log_file
     _log_file = log_file_path
+    global _email_recipient
+    _email_recipient = email_recipient
+    global _email_sender
+    _email_sender = email_sender
+    global _email_sender_password
+    _email_sender_password = email_sender_password
     logging.basicConfig(format="%(message)s", level=logging.ERROR)
     logging.getLogger("coppafish").setLevel(logging.DEBUG)
 
@@ -68,13 +83,14 @@ def error(msg: Union[str, Exception]) -> None:
     log(msg, ERROR)
 
 
-def log(msg: Union[str, Exception], severity: int) -> None:
+def log(msg: Union[str, Exception], severity: int, force_email: bool = False) -> None:
     """
     Log a message to the log file. The message is printed to the terminal if the message is severe enough.
 
     Args:
         msg (str or str like or Exception): message to log. Either a str or something that can be converted into a str.
         severity (int): severity of message.
+        force_email (bool): force send an email to the recipient, no matter the severity.
     """
     message = datetime_string()
     message += f":{severity_to_name[severity]}: "
@@ -84,6 +100,15 @@ def log(msg: Union[str, Exception], severity: int) -> None:
         append_to_log_file(message)
     if severity >= _minimum_print_severity:
         logging.getLogger("coppafish").log(severity, message)
+    if (
+        (severity >= EMAIL_ON or force_email)
+        and _email_sender is not None
+        and _email_sender_password is not None
+        and _email_recipient is not None
+    ):
+        email.send_email(
+            f"COPPAFISH: {severity_to_name[severity]}", message, _email_sender, _email_recipient, _email_sender_password
+        )
     if severity >= CRASH_ON:
         # Crash on high severity
         if isinstance(msg, Exception):
