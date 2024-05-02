@@ -188,7 +188,7 @@ def register(
         # for preseq round, compute the correction between a high background channel in r_pre and the same channel in
         # round r. Then we can compose this correction with the correction for round r.
         if nbp_basic.use_preseq:
-            c_bg = 15
+            c_bg = 15 if 15 in use_channels else 2
             r_pre, r_mid = nbp_basic.pre_seq_round, 3
             rounds_preseq_reg = [r_pre, r_mid]
             spots_preseq_req = []
