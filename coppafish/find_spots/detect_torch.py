@@ -13,6 +13,7 @@ def detect_spots(
     radius_z: Optional[int] = None,
     remove_duplicates: bool = False,
     se: Optional[torch.Tensor] = None,
+    force_cpu: bool = True,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Finds local maxima in image exceeding `intensity_thresh`.
@@ -67,6 +68,11 @@ def detect_spots(
     se[np.ix_(*[(np.floor((se.shape[i] - 1) / 2).astype(int),) for i in range(se.ndim)])] = 0
     se_shifts = torch.asarray(np.array(utils.morphology.filter.get_shifts_from_kernel(se)))
 
+    cpu = torch.device("cpu")
+    run_on = cpu
+    if torch.cuda.is_available() and not force_cpu:
+        run_on = torch.device("gpu")
+
     consider_yxz = (image > intensity_thresh).nonzero(as_tuple=True)
     n_consider = consider_yxz[0].shape[0]
     if remove_duplicates:
@@ -75,7 +81,7 @@ def detect_spots(
         rng = np.random.default_rng(0)  # So shift is always the same.
         # rand_shift must be larger than small to detect a single spot.
         rand_im_shift = torch.asarray(rng.uniform(low=2e-6, high=0.2, size=n_consider).astype(np.float32))
-        image = image.float()
+        image = image.float().to(run_on)
         image[consider_yxz] = image[consider_yxz] + rand_im_shift
 
     consider_intensity = image[consider_yxz]
@@ -83,13 +89,20 @@ def detect_spots(
     if consider_yxz.max() <= np.iinfo(np.int32).max:
         consider_yxz = consider_yxz.to(torch.int32)
 
+    image = image.to(run_on)
+    consider_intensity = consider_intensity.to(run_on)
+    consider_yxz = consider_yxz.to(run_on)
+    se_shifts = se_shifts.to(run_on)
+
     n_consider = consider_yxz.shape[1]
     n_shifts = se_shifts.shape[1]
     paddings = (pad_size_z, pad_size_z, pad_size_x, pad_size_x, pad_size_y, pad_size_y)
 
     image = torch.nn.functional.pad(image, paddings, mode="constant", value=0)
     # Local pixel positions of spots must change after padding is added
-    consider_yxz_se_shifted = consider_yxz + torch.asarray([pad_size_y, pad_size_x, pad_size_z])[:, np.newaxis]
+    consider_yxz_se_shifted = (
+        consider_yxz + torch.asarray([pad_size_y, pad_size_x, pad_size_z], device=run_on)[:, np.newaxis]
+    )
     # (image.ndim, n_consider, n_shifts) shape
     consider_yxz_se_shifted = torch.repeat_interleave(
         consider_yxz_se_shifted[..., np.newaxis], se_shifts.shape[1], dim=2
@@ -105,4 +118,4 @@ def detect_spots(
     else:
         peak_intensity = consider_intensity[keep]
     peak_yxz = consider_yxz.T[keep]
-    return peak_yxz.to(int), peak_intensity
+    return peak_yxz.to(int, device=cpu), peak_intensity.to(device=cpu)

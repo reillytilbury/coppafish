@@ -10,6 +10,7 @@ def compute_mean_spot_from(
     image: torch.Tensor,
     spot_positions_yxz: torch.Tensor,
     spot_shape: Tuple[int, int, int],
+    force_cpu: bool = True,
 ) -> torch.Tensor:
     """
     Compute the mean spot from the given positions on the given image in a cuboid local region around each spot.
@@ -19,22 +20,31 @@ def compute_mean_spot_from(
         spot_positions_yxz (`(n_spots x 3) tensor`): every spot position to use to compute the spot.
         spot_shape (`tuple of three ints`): spot size in y, x, and z respectively.
         mean_sign_threshold (float): any mean spot shape value above this threshold is set to one in the spot shape.
+        force_cpu (bool): only use the CPU to run computations.
 
     Returns:
         (`spot_shape tensor`) mean_spot: the mean of the signs of the coefficient.
     """
     assert_type(image, torch.Tensor)
-    assert image.dim() == 3
     assert_type(spot_positions_yxz, torch.Tensor)
+
+    assert image.dim() == 3
     assert spot_positions_yxz.dim() == 2
     assert spot_positions_yxz.shape[0] > 0, "require at least one spot position to compute the spot shape from"
     assert len(spot_shape) == 3, "spot_shape must be a tuple with 3 integer numbers"
     assert (torch.asarray(spot_shape) % 2 != 0).all(), "spot_shape must be all odd numbers"
 
+    cpu = torch.device("cpu")
+    run_on = cpu
+    if not force_cpu and torch.cuda.is_available():
+        run_on = torch.device("cuda")
+
+    spot_positions_yxz = spot_positions_yxz.to(run_on)
+
     n_spots = spot_positions_yxz.shape[0]
 
     # Pad the image with zeros on one edge for every dimension so out of bounds retrievals are all zeros.
-    image_padded = torch.nn.functional.pad(image, (0, spot_shape[2], 0, spot_shape[1], 0, spot_shape[0]))
+    image_padded = torch.nn.functional.pad(image, (0, spot_shape[2], 0, spot_shape[1], 0, spot_shape[0])).to(run_on)
 
     mean_spot = torch.zeros(spot_shape, dtype=torch.float32)
 
@@ -55,4 +65,4 @@ def compute_mean_spot_from(
 
     mean_spot[tuple(spot_shift_positions)] = spot_image_values.reshape((n_shifts, n_spots)).mean(dim=1)
 
-    return mean_spot
+    return mean_spot.to(cpu)

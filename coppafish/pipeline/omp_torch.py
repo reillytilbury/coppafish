@@ -61,6 +61,7 @@ def run_omp(
     assert_type(nbp_register, NotebookPage)
     assert_type(nbp_register_debug, NotebookPage)
     assert_type(nbp_call_spots, NotebookPage)
+
     assert tile_origin.ndim == 2
     assert transform.shape[3:5] == (4, 3)
     assert transform.ndim == 5
@@ -224,6 +225,7 @@ def run_omp(
                         intensity_thresh=config["shape_coefficient_threshold"],
                         radius_xy=config["shape_isolation_distance_yx"],
                         radius_z=shape_isolation_distance_z,
+                        force_cpu=config["force_cpu"],
                     )
                     valid_positions = get_valid_subset_positions(isolated_spots_yxz_g)
                     isolated_spots_yxz_g = isolated_spots_yxz_g[valid_positions]
@@ -240,7 +242,10 @@ def run_omp(
                         continue
                     g_coefficient_image = torch.asarray(coefficient_image[:, g].toarray().reshape(subset_shape)).float()
                     g_mean_spot = spots_torch.compute_mean_spot_from(
-                        g_coefficient_image, isolated_spots_yxz[isolated_gene_numbers == g], config["spot_shape"]
+                        g_coefficient_image,
+                        isolated_spots_yxz[isolated_gene_numbers == g],
+                        config["spot_shape"],
+                        config["force_cpu"],
                     )
                     mean_spots[g] = g_mean_spot
                     weights[g] = (isolated_gene_numbers == g).sum()
@@ -251,7 +256,7 @@ def run_omp(
                         + "omp config then re-running.",
                     )
                 mean_spot = torch.mean(mean_spots * weights[:, np.newaxis, np.newaxis, np.newaxis], dim=0).float()
-                mean_spot /= weights.sum()
+                mean_spot *= n_genes / weights.sum()
                 log.info(f"OMP spot and mean spot computed using {weights.sum().item()} detected spots")
                 del mean_spots, weights
 

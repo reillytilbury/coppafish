@@ -21,18 +21,18 @@ def score_coefficient_image(
     assert torch.logical_and(-1 <= mean_spot, mean_spot <= 1).all()
     assert high_coefficient_bias >= 0
 
-    cpu_device = torch.device("cpu")
-    run_on_device = cpu_device
+    cpu = torch.device("cpu")
+    run_on = cpu
     if not force_cpu and torch.cuda.is_available():
-        run_on_device = torch.device("cuda")
+        run_on = torch.device("cuda")
 
     n_genes = coefficient_image.shape[3]
 
-    coefficient_image = coefficient_image.to(device=run_on_device)
-    spot = spot.to(device=run_on_device)
-    mean_spot = mean_spot.to(device=run_on_device)
+    coefficient_image = coefficient_image.to(device=run_on)
+    spot = spot.to(device=run_on)
+    mean_spot = mean_spot.to(device=run_on)
 
-    spot_shape_kernel = torch.zeros_like(spot, dtype=mean_spot.dtype, device=run_on_device)
+    spot_shape_kernel = torch.zeros_like(spot, dtype=mean_spot.dtype, device=run_on)
     spot_shape_kernel[spot == 1] = mean_spot[spot == 1]
     spot_shape_kernel /= spot_shape_kernel.sum()
     n_shifts = (spot == 1).sum()
@@ -62,7 +62,7 @@ def score_coefficient_image(
             padding="same",
             bias=None,
         )[0, 0]
-    return torch.clip(result, 0, 1).to(device=cpu_device, dtype=coefficient_image.dtype)
+    return torch.clip(result, 0, 1).to(device=cpu, dtype=coefficient_image.dtype)
 
 
 def omp_scores_float_to_int(scores: torch.Tensor) -> torch.Tensor:
