@@ -1,15 +1,15 @@
 import os
+from typing_extensions import assert_type
 import torch
 import pickle
 import skimage
 import numpy as np
 from scipy import signal
 from scipy.ndimage import affine_transform
-from skimage.transform import warp
 from itertools import product
 from tqdm import tqdm
 import numpy.typing as npt
-from typing import Union
+from typing import Union, List
 
 from .. import log
 from ..setup import NotebookPage, Notebook
@@ -564,6 +564,42 @@ def generate_reg_images(nb: Notebook):
         save_reg_image(im=im_concat, file_path=file_name)
 
 
+def load_icp_corrected_images(
+    nbp_basic_info: NotebookPage,
+    nbp_file: NotebookPage,
+    nbp_extract: NotebookPage,
+    nbp_register: NotebookPage,
+    t: int,
+    r: int,
+    channels: List[int],
+    reg_type: str = "none",
+):
+    """
+    Load all ICP and optical flow registered images with the given channels. This function is faster than calling
+    load_transformed_image `len(channels)` times.
+    """
+    assert_type(channels, list)
+    assert reg_type in ["none", "flow", "flow_icp"], "reg_type must be 'none', 'flow' or 'flow_icp'"
+    assert r != nbp_basic_info.anchor_round
+    assert nbp_basic_info.dapi_channel not in channels
+
+    suffix = "_raw" if r == nbp_basic_info.pre_seq_round else ""
+    im = []
+    for c in channels:
+        im_c = tiles_io.load_image(
+            nbp_file, nbp_basic_info, nbp_extract.file_type, t, r, c, yxz=None, suffix=suffix
+        ).astype(np.float32)
+        im.append(im_c)
+        del im_c
+    im = np.array(im)
+    new_origin = np.zeros(3, dtype=int)
+    affine_correction = nbp_register.icp_correction[t, r, c].copy()
+    affine_correction = adjust_affine(affine=affine_correction, new_origin=new_origin)
+    flow_dir = os.path.join(nbp_register.flow_dir, "smooth", f"t{t}_r{r}.npy")
+    im = transform_im(im=im, affine=affine_correction, flow_dir=flow_dir, flow_ind=None, contains_channel_index=True)
+    return im
+
+
 def load_transformed_image(
     nbp_basic_info: NotebookPage,
     nbp_file: NotebookPage,
@@ -637,7 +673,9 @@ def load_transformed_image(
     return im
 
 
-def transform_im(im: np.ndarray, affine: np.ndarray, flow_dir: str, flow_ind: tuple) -> np.ndarray:
+def transform_im(
+    im: np.ndarray, affine: np.ndarray, flow_dir: str, flow_ind: tuple, contains_channel_index: bool = False
+) -> np.ndarray:
     """
     Function to apply affine and flow transformations to an image.
     Args:
@@ -645,9 +683,15 @@ def transform_im(im: np.ndarray, affine: np.ndarray, flow_dir: str, flow_ind: tu
         affine: 3 x 4 affine transform
         flow_dir: directory containing the flow file
         flow_ind: indices to take from the flow file. If None, return the entire flow file.
+        contains_channel_index (bool): true if the first axis of im is the channel axis. All channels have the same
+            transformation applied to them.
     """
     # Apply the affine transform
-    im = affine_transform(im, affine, order=1, mode="constant", cval=0)
+    if contains_channel_index:
+        for c in range(im.shape[0]):
+            im[c] = affine_transform(im[c], affine, order=1, mode="constant", cval=0)
+    else:
+        im = affine_transform(im, affine, order=1, mode="constant", cval=0)
     # Apply the flow transform
     if flow_ind is None:
         flow = -np.load(flow_dir, mmap_mode=None)
@@ -656,21 +700,25 @@ def transform_im(im: np.ndarray, affine: np.ndarray, flow_dir: str, flow_ind: tu
         flow = -(flow[flow_ind].astype(np.float32))
     # Flow's shape changes (3, im_y, im_x, im_z) -> (im_y, im_x, im_z, 3).
     flow = flow.transpose((1, 2, 3, 0))
-    norm_half_pixel_0, norm_half_pixel_1, norm_half_pixel_2 = [1 / im.shape[i] for i in range(3)]
-    flow[..., 0] *= norm_half_pixel_0 / 2
-    flow[..., 1] *= norm_half_pixel_1 / 2
-    flow[..., 2] *= norm_half_pixel_2 / 2
+    half_pixel_0, half_pixel_1, half_pixel_2 = [1 / im.shape[i + contains_channel_index] for i in range(3)]
+    flow[..., 0] *= half_pixel_0 / 2
+    flow[..., 1] *= half_pixel_1 / 2
+    flow[..., 2] *= half_pixel_2 / 2
     grid_0, grid_1, grid_2 = torch.meshgrid(
-        torch.linspace(norm_half_pixel_0 - 1, 1 - norm_half_pixel_0, im.shape[0]),
-        torch.linspace(norm_half_pixel_1 - 1, 1 - norm_half_pixel_1, im.shape[1]),
-        torch.linspace(norm_half_pixel_2 - 1, 1 - norm_half_pixel_2, im.shape[2]),
+        torch.linspace(half_pixel_0 - 1, 1 - half_pixel_0, im.shape[0 + contains_channel_index]),
+        torch.linspace(half_pixel_1 - 1, 1 - half_pixel_1, im.shape[1 + contains_channel_index]),
+        torch.linspace(half_pixel_2 - 1, 1 - half_pixel_2, im.shape[2 + contains_channel_index]),
         indexing="ij",
     )
     grid = torch.cat((grid_2[None, :, :, :, None], grid_1[None, :, :, :, None], grid_0[None, :, :, :, None]), dim=4)
     im_warped = torch.asarray(im).float()[np.newaxis, np.newaxis]
+    if contains_channel_index:
+        im_warped = im_warped[0]
     im_warped = torch.nn.functional.grid_sample(
         im_warped, grid + flow[np.newaxis], mode="bilinear", align_corners=False
-    )[0, 0]
+    )[0]
+    if not contains_channel_index:
+        im_warped = im_warped[0]
     return im_warped.numpy()
 
 

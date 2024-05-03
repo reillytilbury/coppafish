@@ -34,27 +34,12 @@ def load_spot_colours(
     image_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
     colours = np.zeros(image_shape + (len(nbp_basic.use_rounds), len(nbp_basic.use_channels)), dtype=dtype)
 
-    with tqdm.tqdm(
-        total=len(nbp_basic.use_channels) * len(nbp_basic.use_rounds), desc=f"Loading spot colours, {tile=}"
-    ) as pbar:
-        for i, r in enumerate(nbp_basic.use_rounds):
-            for j, c in enumerate(nbp_basic.use_channels):
-                image_rc = preprocessing.load_transformed_image(
-                    nbp_basic,
-                    nbp_file,
-                    nbp_extract,
-                    nbp_register,
-                    nbp_register_debug,
-                    tile,
-                    r,
-                    c,
-                    reg_type="flow_icp",
-                )
-                # In the preprocessing function, the images are shifted by -15_000 to centre the zero in the correct
-                # place. We are undoing this here so the images can be stored as uint's in memory.
-                image_rc = (image_rc + nbp_basic.tile_pixel_value_shift).astype(dtype)
-                colours[:, :, :, i, j] = image_rc
-                del image_rc
-                pbar.update()
+    for i, r in tqdm.tqdm(enumerate(nbp_basic.use_rounds), desc="Loading spot colours", unit="round"):
+        image_r = preprocessing.load_icp_corrected_images(
+            nbp_basic, nbp_file, nbp_extract, nbp_register, tile, r, nbp_basic.use_channels
+        )
+        image_r = (image_r + nbp_basic.tile_pixel_value_shift).astype(dtype)
+        image_r = image_r.transpose((1, 2, 3, 0))
+        colours[:, :, :, i] = image_r
 
     return colours.astype(dtype)
