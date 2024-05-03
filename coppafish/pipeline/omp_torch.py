@@ -212,7 +212,7 @@ def run_omp(
                 isolated_spots_yxz = torch.zeros((0, 3), dtype=torch.int16)
                 isolated_gene_numbers = torch.zeros(0, dtype=torch.int16)
                 for g in tqdm.trange(n_genes, desc="Computing spot shape", unit="gene"):
-                    if isolated_spots_yxz.size(0) > config["spot_shape_max_spots"]:
+                    if isolated_spots_yxz.size(0) >= config["spot_shape_max_spots"]:
                         isolated_spots_yxz = isolated_spots_yxz[: config["spot_shape_max_spots"]]
                         isolated_gene_numbers = isolated_gene_numbers[: config["spot_shape_max_spots"]]
                         continue

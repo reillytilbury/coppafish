@@ -246,7 +246,6 @@ def get_next_best_gene(
     all_gene_scores = torch.full(
         (n_pixels, n_genes), fill_value=np.nan, device=coefficients.device, dtype=torch.float32
     )
-    log.debug(f"{residual_pixel_colours[consider_pixels].shape=}")
     # Sometimes, not all pixels can be dot product scored at once due to RAM limitations, so adding a for loop.
     batch_pixels = int((2.1e8 * utils.system.get_available_memory()) // (n_genes * n_rounds_channels))
     n_batches = maths.ceil(consider_pixels.sum().item() / batch_pixels)
@@ -259,7 +258,6 @@ def get_next_best_gene(
             inverse_variances[index_min:index_max][consider_batch],
             norm_shift,
         )[3]
-    log.debug(f"Got here 5")
     best_genes = torch.full((n_pixels,), fill_value=NO_GENE_SELECTION, device=coefficients.device, dtype=torch.int16)
     best_genes[consider_pixels] = torch.argmax(torch.abs(all_gene_scores[consider_pixels]), dim=1).type(torch.int16)
     best_scores = torch.full((n_pixels,), fill_value=np.nan, device=coefficients.device, dtype=torch.float32)
@@ -273,13 +271,10 @@ def get_next_best_gene(
             dim=1,
         ),
     )
-    log.debug(f"Got here 6")
     # The score is considered zero if the assigned gene is in ignore_genes
     best_scores[~consider_pixels] = 0
     best_genes[~consider_pixels] = NO_GENE_SELECTION
-    log.debug(f"Got here 7")
     genes_passing_score = torch.zeros((n_pixels,), device=coefficients.device, dtype=torch.bool)
-    log.debug(f"Got here 8")
     genes_passing_score[consider_pixels] = torch.abs(best_scores[consider_pixels]) > score_threshold
     del best_scores, all_gene_scores
 
