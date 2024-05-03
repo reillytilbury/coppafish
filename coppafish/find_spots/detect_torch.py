@@ -86,7 +86,7 @@ def detect_spots(
 
     consider_intensity = image[consider_yxz]
     consider_yxz = torch.vstack(consider_yxz)
-    if consider_yxz.max() <= np.iinfo(np.int32).max:
+    if (consider_yxz <= np.iinfo(np.int32).max).all():
         consider_yxz = consider_yxz.to(torch.int32)
 
     image = image.to(run_on)

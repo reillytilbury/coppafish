@@ -24,6 +24,7 @@ def compute_omp_coefficients(
     weight_coefficient_fit: bool,
     alpha: float,
     beta: float,
+    pixel_intensity_threshold: float,
     force_cpu: bool = False,
 ) -> scipy.sparse.lil_matrix:
     """
@@ -45,6 +46,9 @@ def compute_omp_coefficients(
             after subtracting a gene assignment.
         alpha (float): OMP weighting parameter. Applied if weight_coefficient_fit is true.
         beta (float): OMP weighting parameter. Applied if weight_coefficient_fit is true.
+        pixel_intensity_threshold (float): a pixel's intensity is definied as the maximum of the absolute values
+            across rounds and channels. If the pixel's intensity is below this threshold, then it is not computed and
+            all coefficients remain zeroes.
         force_cpu (bool): force the computation to run on a CPU, even if a GPU is available.
 
     Returns:
@@ -56,6 +60,7 @@ def compute_omp_coefficients(
     assert_type(bled_codes, torch.Tensor)
     assert_type(background_coefficients, torch.Tensor)
     assert_type(background_codes, torch.Tensor)
+    assert_type(weight_coefficient_fit, bool)
 
     assert pixel_colours.ndim == 2
     assert bled_codes.ndim == 2
@@ -64,17 +69,17 @@ def compute_omp_coefficients(
     assert background_codes.ndim == 2
     assert dot_product_threshold >= 0
     assert dot_product_norm_shift >= 0
-    assert_type(weight_coefficient_fit, bool)
     assert alpha >= 0
     assert beta >= 0
+    assert pixel_intensity_threshold >= 0
 
     # We want exact, reproducible results in coppafish.
     torch.backends.cudnn.deterministic = True
 
     cpu = torch.device("cpu")
-    compute_on_device = cpu
+    run_on = cpu
     if not force_cpu and torch.cuda.is_available():
-        compute_on_device = torch.device("cuda")
+        run_on = torch.device("cuda")
 
     n_genes = bled_codes.shape[0]
     n_pixels = pixel_colours.shape[0]
@@ -88,23 +93,24 @@ def compute_omp_coefficients(
         torch.square(background_coefficients) @ torch.square(all_bled_codes[background_genes]) * alpha + beta**2
     )
 
-    # Run on every non-zero pixel colour.
-    iterate_on_pixels = torch.logical_not(torch.isclose(pixel_colours, torch.asarray(0).float()).all(dim=1))
-    verbose = iterate_on_pixels.sum() > 1_000
-    pixels_iterated: List[int] = []
     genes_added = torch.full((n_pixels, 0), fill_value=NO_GENE_SELECTION, dtype=torch.int16)
-    genes_added_coefficients = torch.zeros_like(genes_added).float()
-    coefficient_image = scipy.sparse.lil_matrix(np.zeros((n_pixels, n_genes), dtype=np.float32))
 
     # Move all variables used in computation to the selected device.
-    iterate_on_pixels = iterate_on_pixels.to(device=compute_on_device)
-    pixel_colours = pixel_colours.to(device=compute_on_device)
-    bled_codes = bled_codes.to(device=compute_on_device)
-    all_bled_codes = all_bled_codes.to(device=compute_on_device)
-    genes_added_coefficients = genes_added_coefficients.to(device=compute_on_device)
-    genes_added = genes_added.to(device=compute_on_device)
-    background_genes = background_genes.to(device=compute_on_device)
-    background_variance = background_variance.to(device=compute_on_device)
+    pixel_colours = pixel_colours.to(device=run_on)
+    bled_codes = bled_codes.to(device=run_on)
+    all_bled_codes = all_bled_codes.to(device=run_on)
+    genes_added_coefficients = torch.zeros_like(genes_added).float().to(device=run_on)
+    genes_added = genes_added.to(device=run_on)
+    background_genes = background_genes.to(device=run_on)
+    background_variance = background_variance.to(device=run_on)
+
+    # Run on every non-zero pixel colour.
+    iterate_on_pixels = torch.logical_not(torch.isclose(pixel_colours, torch.asarray(0).float()).all(dim=1))
+    # Threshold pixel intensities to run on
+    iterate_on_pixels = torch.logical_and(iterate_on_pixels, pixel_colours.abs().max(1)[0] >= pixel_intensity_threshold)
+    verbose = iterate_on_pixels.sum() > 1_000
+    pixels_iterated: List[int] = []
+    coefficient_image = scipy.sparse.lil_matrix(np.zeros((n_pixels, n_genes), dtype=np.float32))
 
     for i in tqdm.trange(maximum_iterations, desc="Computing OMP coefficients", unit="iteration", disable=not verbose):
         pixels_iterated.append(int(iterate_on_pixels.sum()))
@@ -124,8 +130,8 @@ def compute_omp_coefficients(
         log.debug(f"Getting next best gene complete")
 
         # Update what pixels to continue iterating on
-        iterate_on_pixels = torch.logical_and(iterate_on_pixels, pass_threshold).to(device=compute_on_device)
-        genes_added = torch.cat((genes_added, best_genes[:, np.newaxis]), dim=1).to(device=compute_on_device)
+        iterate_on_pixels = torch.logical_and(iterate_on_pixels, pass_threshold).to(device=run_on)
+        genes_added = torch.cat((genes_added, best_genes[:, np.newaxis]), dim=1).to(device=run_on)
 
         # Update coefficients for pixels with new a gene assignment and keep the residual pixel colour
         log.debug(f"Weight selected genes")

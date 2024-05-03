@@ -196,11 +196,6 @@ class RoboMinnie:
         self.presequence_image = np.zeros(self.presequence_shape, dtype=self.image_dtype)
         if self.n_tile_yx[0] != self.n_tile_yx[1]:
             raise NotImplementedError("Coppafish does not support non-square tiles")
-        if self.n_tile_yx[0] < 2_000 or self.n_tile_yx[1] < 2_000:
-            warnings.warn(
-                "Coppafish may not support tile sizes that are too small due to implicit assumptions about a tile "
-                + "size of 2048 in the x and y directions"
-            )
         if self.n_planes < 4:
             warnings.warn("Coppafish may break with fewer than four z planes")
 
@@ -999,6 +994,7 @@ class RoboMinnie:
         [omp]
         max_genes = {omp_iterations}
         shape_isolation_distance_yx = 8
+        pixel_max_percentile = 0
         """
         # Remove any large spaces in the config contents
         config_file_contents = config_file_contents.replace("  ", "")

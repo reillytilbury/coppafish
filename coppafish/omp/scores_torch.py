@@ -18,7 +18,7 @@ def score_coefficient_image(
     assert spot.dim() == 3
     assert torch.isin(spot, torch.asarray([-1, 0, 1], device=coefficient_image.device)).all()
     assert spot.shape == mean_spot.shape
-    assert torch.logical_and(-1 <= mean_spot, mean_spot <= 1).all()
+    assert torch.logical_and(mean_spot >= -1, mean_spot <= 1).all()
     assert high_coefficient_bias >= 0
 
     cpu = torch.device("cpu")

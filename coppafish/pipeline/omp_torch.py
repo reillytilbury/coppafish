@@ -119,8 +119,20 @@ def run_omp(
 
     for t in nbp_basic.use_tiles:
         # STEP 1: Load every registered sequencing round/channel image into memory
+        log.debug(f"Loading tile {t} colours")
         colour_image = base.load_spot_colours(nbp_basic, nbp_file, nbp_extract, nbp_register, nbp_register_debug, t)
-        assert colour_image.shape == tile_shape + (n_rounds_use, n_channels_use)
+        log.debug(f"Loading tile {t} colours complete")
+
+        colour_image_maximums = np.abs(
+            colour_image.max(axis=(3, 4)).astype(np.float32) - nbp_basic.tile_pixel_value_shift
+        )[np.newaxis]
+        colour_image_minimums = np.abs(
+            colour_image.min(axis=(3, 4)).astype(np.float32) - nbp_basic.tile_pixel_value_shift
+        )[np.newaxis]
+        pixel_intensities = np.append(colour_image_maximums, colour_image_minimums, axis=0).max(axis=0)
+        del colour_image_minimums, colour_image_maximums
+        pixel_intensity_threshold = np.percentile(pixel_intensities, config["pixel_max_percentile"])
+        del pixel_intensities
 
         for i, subset_yxz in enumerate(subset_origins_yxz):
             # STEP 2: Compute OMP coefficients on a subset of the tile which is a mini tile with the same number of z
@@ -128,7 +140,7 @@ def run_omp(
             log.debug(f"Subset {i}, Subset origin {subset_yxz}")
 
             def subset_positions_to_tile_positions(positions_yxz: torch.Tensor) -> torch.Tensor:
-                return positions_yxz.detach().detach().clone() + torch.asarray(subset_yxz)[np.newaxis]
+                return positions_yxz.detach().clone() + torch.asarray(subset_yxz)[np.newaxis]
 
             def get_valid_subset_positions(positions_yxz: torch.Tensor) -> torch.Tensor:
                 valid = (
@@ -201,6 +213,7 @@ def run_omp(
                 weight_coefficient_fit=config["weight_coef_fit"],
                 alpha=config["alpha"],
                 beta=config["beta"],
+                pixel_intensity_threshold=pixel_intensity_threshold,
                 force_cpu=config["force_cpu"],
             )
             log.debug("Computing OMP coefficients complete")
@@ -253,7 +266,7 @@ def run_omp(
                     weights[g] = (isolated_gene_numbers == g).sum()
                 if weights.sum() == 0:
                     raise ValueError(
-                        f"OMP Failed to find any isolated spots. Make sure that regstration is working as expected. "
+                        f"OMP Failed to find any isolated spots. Make sure that registration is working as expected. "
                         + "If so, Consider reducing shape_isolation_distance_yx or shape_coefficient_threshold in the "
                         + "omp config then re-running.",
                     )
