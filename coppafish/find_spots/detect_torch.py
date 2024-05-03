@@ -81,7 +81,6 @@ def detect_spots(
         rng = np.random.default_rng(0)  # So shift is always the same.
         # rand_shift must be larger than small to detect a single spot.
         rand_im_shift = torch.asarray(rng.uniform(low=2e-6, high=0.2, size=n_consider).astype(np.float32))
-        image = image.float().to(run_on)
         image[consider_yxz] = image[consider_yxz] + rand_im_shift
 
     consider_intensity = image[consider_yxz]

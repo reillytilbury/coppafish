@@ -1,4 +1,5 @@
 import os
+import torch
 import pickle
 import skimage
 import numpy as np
@@ -195,7 +196,6 @@ def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box
     # define the unit spacing between centres for y and x
     y_unit = (y_image - y_box) // (y_subvolumes - 1)
     x_unit = (x_image - x_box) // (x_subvolumes - 1)
-
 
     # 2 cases for z, if z_subvolumes = 1, then z_box = z_image and z_unit = 0, else, deal with z_box and z_unit
     if z_subvolumes == 1:
@@ -650,19 +650,28 @@ def transform_im(im: np.ndarray, affine: np.ndarray, flow_dir: str, flow_ind: tu
     im = affine_transform(im, affine, order=1, mode="constant", cval=0)
     # Apply the flow transform
     if flow_ind is None:
-        flow = np.load(flow_dir, mmap_mode=None)
+        flow = -np.load(flow_dir, mmap_mode=None)
     else:
         flow = np.load(flow_dir, mmap_mode="r")
         flow = -(flow[flow_ind].astype(np.float32))
-    coords = np.meshgrid(
-        np.arange(im.shape[0], dtype=np.float32),
-        np.arange(im.shape[1], dtype=np.float32),
-        np.arange(im.shape[2], dtype=np.float32),
+    # Flow's shape changes (3, im_y, im_x, im_z) -> (im_y, im_x, im_z, 3).
+    flow = flow.transpose((1, 2, 3, 0))
+    norm_half_pixel_0, norm_half_pixel_1, norm_half_pixel_2 = [1 / im.shape[i] for i in range(3)]
+    flow[..., 0] *= norm_half_pixel_0 / 2
+    flow[..., 1] *= norm_half_pixel_1 / 2
+    flow[..., 2] *= norm_half_pixel_2 / 2
+    grid_0, grid_1, grid_2 = torch.meshgrid(
+        torch.linspace(norm_half_pixel_0 - 1, 1 - norm_half_pixel_0, im.shape[0]),
+        torch.linspace(norm_half_pixel_1 - 1, 1 - norm_half_pixel_1, im.shape[1]),
+        torch.linspace(norm_half_pixel_2 - 1, 1 - norm_half_pixel_2, im.shape[2]),
         indexing="ij",
     )
-    # NOTE: This is slow! On an entire tile shaped image, it takes 20s.
-    im = warp(im, coords + flow, order=1, mode="constant", cval=0, preserve_range=True)
-    return im
+    grid = torch.cat((grid_2[None, :, :, :, None], grid_1[None, :, :, :, None], grid_0[None, :, :, :, None]), dim=4)
+    im_warped = torch.asarray(im).float()[np.newaxis, np.newaxis]
+    im_warped = torch.nn.functional.grid_sample(
+        im_warped, grid + flow[np.newaxis], mode="bilinear", align_corners=False
+    )[0, 0]
+    return im_warped.numpy()
 
 
 def adjust_affine(affine: np.ndarray, new_origin: np.ndarray) -> np.ndarray:
