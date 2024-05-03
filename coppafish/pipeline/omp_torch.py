@@ -87,7 +87,7 @@ def run_omp(
     first_computation = True
 
     subset_z_size: int = len(nbp_basic.use_z) + 2 * spot_radius_z
-    subset_size_xy = config["subset_size_xy"]
+    subset_size_xy: int = config["subset_size_xy"]
 
     assert subset_z_size > spot_radius_z * 2
     if subset_size_xy <= spot_radius_xy * 2:
@@ -277,6 +277,16 @@ def run_omp(
 
                 spot = torch.zeros_like(mean_spot, dtype=torch.int16)
                 spot[mean_spot >= config["shape_sign_thresh"]] = 1
+
+                n_positives = (spot == 1).sum()
+                message = f"OMP computed spot contains {n_positives} strongly positive values."
+                if n_positives < 20:
+                    message += f" You may need to reduce shape_sign_thresh in OMP config"
+                    if n_positives == 0:
+                        raise ValueError(message)
+                    log.warn(message)
+                else:
+                    log.debug(message)
 
                 nbp.spot_tile = t
                 nbp.mean_spot = np.array(mean_spot)

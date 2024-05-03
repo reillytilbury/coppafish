@@ -35,15 +35,6 @@ def score_coefficient_image(
     spot_shape_kernel = torch.zeros_like(spot, dtype=mean_spot.dtype, device=run_on)
     spot_shape_kernel[spot == 1] = mean_spot[spot == 1]
     spot_shape_kernel /= spot_shape_kernel.sum()
-    n_shifts = (spot == 1).sum()
-    message = f"OMP gene scores are being computed with {n_shifts} local coefficients for each spot."
-    if n_shifts < 20:
-        message += f" You may need to reduce shape_sign_thresh in OMP config"
-        if n_shifts == 0:
-            raise ValueError(message)
-        log.warn(message)
-    else:
-        log.debug(message)
 
     coefficient_image_function = coefficient_image.detach().clone()
     positive = coefficient_image > 0
