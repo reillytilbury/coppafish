@@ -1,3 +1,4 @@
+import time
 import logging
 import traceback
 from datetime import datetime
@@ -53,6 +54,8 @@ def set_log_config(
         minimum_print_severity (int): the minimum severity of message to be printed to the terminal.
         log_file_path (str, optional): the file path to the file to place all messages inside of. Default: do not save.
     """
+    global _start_time
+    _start_time = time.time()
     global _minimum_print_severity
     _minimum_print_severity = minimum_print_severity
     global _log_file
@@ -67,20 +70,20 @@ def set_log_config(
     logging.getLogger("coppafish").setLevel(logging.DEBUG)
 
 
-def debug(msg: Union[str, Exception]) -> None:
-    log(msg, DEBUG)
+def debug(msg: Union[str, Exception], force_email: bool = False) -> None:
+    log(msg, DEBUG, force_email=force_email)
 
 
-def info(msg: Union[str, Exception]) -> None:
-    log(msg, INFO)
+def info(msg: Union[str, Exception], force_email: bool = False) -> None:
+    log(msg, INFO, force_email=force_email)
 
 
-def warn(msg: Union[str, Exception]) -> None:
-    log(msg, WARNING)
+def warn(msg: Union[str, Exception], force_email: bool = False) -> None:
+    log(msg, WARNING, force_email=force_email)
 
 
-def error(msg: Union[str, Exception]) -> None:
-    log(msg, ERROR)
+def error(msg: Union[str, Exception], force_email: bool = False) -> None:
+    log(msg, ERROR, force_email=force_email)
 
 
 def log(msg: Union[str, Exception], severity: int, force_email: bool = False) -> None:
@@ -106,8 +109,14 @@ def log(msg: Union[str, Exception], severity: int, force_email: bool = False) ->
         and _email_sender_password is not None
         and _email_recipient is not None
     ):
+        delta_time = (time.time() - _start_time) / 60
+        email_message = f"After {delta_time // 60}hrs and {round(delta_time % 60)}mins\n" + message
         email.send_email(
-            f"COPPAFISH: {severity_to_name[severity]}", message, _email_sender, _email_recipient, _email_sender_password
+            f"COPPAFISH: {severity_to_name[severity]}",
+            email_message,
+            _email_sender,
+            _email_recipient,
+            _email_sender_password,
         )
     if severity >= CRASH_ON:
         # Crash on high severity

@@ -1,12 +1,10 @@
 import os
 import sys
 import numpy as np
-from scipy import sparse
 
 from .. import utils
 from ..setup import Notebook
 from ..find_spots import check_spots
-from ..call_spots import base as call_spots_base
 from ..pdf.base import BuildPDF
 from .. import log
 from . import basic_info
@@ -50,6 +48,7 @@ def run_pipeline(
     log.error_catch(BuildPDF, nb)
     log.error_catch(run_omp, nb)
     log.error_catch(BuildPDF, nb, auto_open=True)
+    log.info(f"Pipeline complete", force_email=True)
     return nb
 
 

@@ -248,7 +248,7 @@ def get_next_best_gene(
     )
     log.debug(f"{residual_pixel_colours[consider_pixels].shape=}")
     # Sometimes, not all pixels can be dot product scored at once due to RAM limitations, so adding a for loop.
-    batch_pixels = int((2e8 * utils.system.get_available_memory()) // (n_genes * n_rounds_channels))
+    batch_pixels = int((2.1e8 * utils.system.get_available_memory()) // (n_genes * n_rounds_channels))
     n_batches = maths.ceil(consider_pixels.sum().item() / batch_pixels)
     for i in range(n_batches):
         index_min, index_max = (i * batch_pixels), min((i + 1) * batch_pixels, consider_pixels.size(0))

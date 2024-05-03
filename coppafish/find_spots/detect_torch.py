@@ -118,4 +118,4 @@ def detect_spots(
     else:
         peak_intensity = consider_intensity[keep]
     peak_yxz = consider_yxz.T[keep]
-    return peak_yxz.to(int, device=cpu), peak_intensity.to(device=cpu)
+    return peak_yxz.to(dtype=torch.int32, device=cpu), peak_intensity.to(device=cpu)
