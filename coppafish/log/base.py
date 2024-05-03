@@ -110,7 +110,7 @@ def log(msg: Union[str, Exception], severity: int, force_email: bool = False) ->
         and _email_recipient is not None
     ):
         delta_time = (time.time() - _start_time) / 60
-        email_message = f"After {round(delta_time // 60)}hrs and {round(delta_time % 60)}mins\n" + message
+        email_message = f"After {round(delta_time // 60)}hrs and {round(delta_time % 60)}mins:\n\n" + message
         email.send_email(
             f"COPPAFISH: {severity_to_name[severity]}",
             email_message,

@@ -258,7 +258,7 @@ def run_omp(
                         + "omp config then re-running.",
                     )
                 mean_spot = torch.mean(mean_spots * weights[:, np.newaxis, np.newaxis, np.newaxis], dim=0).float()
-                mean_spot *= n_genes / weights.sum()
+                mean_spot = torch.clip(mean_spot * n_genes / weights.sum(), -1, 1).float()
                 log.info(f"OMP spot and mean spot computed using {weights.sum().item()} detected spots")
                 del mean_spots, weights
 
