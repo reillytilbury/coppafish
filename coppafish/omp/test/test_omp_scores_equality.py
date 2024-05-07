@@ -1,36 +1,30 @@
-import numpy as np
 import pytest
 
 
 @pytest.mark.pytorch
-def test_score_coefficient_image_equality() -> None:
+def test_score_coefficient_image() -> None:
     import torch
-    from coppafish.omp import scores, scores_torch
+    from coppafish.omp import scores_torch
 
-    rng = np.random.RandomState(0)
-    spot_shape_shape = (7, 9, 11)
-    spot_shape_mean = rng.rand(*spot_shape_shape).astype(np.float32)
-    spot_shape_mean[3, 4, 5] = 1
-    spot_shape = np.asarray(spot_shape_mean > 0.3, dtype=int)
-    spot_shape[spot_shape_mean < 0.1] = -1
-    n_genes = 5
-    coefs_image_shape = (18, 16, 4, n_genes)
-    coefs_image = (100 * (rng.rand(*coefs_image_shape) - 0.5)).astype(np.float32)
-    high_coef_bias = 0.2
+    im_y, im_x, im_z = 4, 5, 6
+    spot_shape = 3, 5, 3
 
-    scores = scores.score_coefficient_image(coefs_image, spot_shape, spot_shape_mean, high_coef_bias)
-    scores_torch = scores_torch.score_coefficient_image(
-        torch.asarray(coefs_image),
-        torch.asarray(spot_shape),
-        torch.asarray(spot_shape_mean),
-        high_coef_bias,
-        force_cpu=True,
-    )
-    scores_torch = scores_torch.numpy()
+    coefficient_image = torch.zeros((im_y, im_x, im_z), dtype=torch.float32)
+    coefficient_image[1, 3, 2] = 5
+    points = torch.zeros((2, 3), dtype=int)
+    points[0, 0] = 1
+    points[0, 1] = 3
+    points[0, 2] = 2
+    spot = torch.zeros(spot_shape, dtype=torch.int16)
+    mean_spot = torch.zeros(spot_shape, dtype=torch.float32)
+    spot[1, 2, 1] = 1
+    mean_spot[1, 2, 1] = 0.5
+    spot[1, 3, 2] = 1
+    mean_spot[1, 3, 2] = 0.9
+    high_bias = 2
 
-    assert scores.shape == scores_torch.shape
-    assert np.allclose(scores, scores_torch, atol=0.075)
+    scores = scores_torch.score_coefficient_image(coefficient_image, points, spot, mean_spot, high_bias)
 
-
-if __name__ == "__main__":
-    test_score_coefficient_image_equality()
+    assert scores.shape == (points.shape[0],)
+    assert torch.isclose(scores[0], 5 * 0.5 / ((5 + high_bias) * mean_spot.sum()))
+    assert torch.isclose(scores[1], torch.asarray([0], dtype=torch.float32))

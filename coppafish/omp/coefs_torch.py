@@ -114,7 +114,6 @@ def compute_omp_coefficients(
 
     for i in tqdm.trange(maximum_iterations, desc="Computing OMP coefficients", unit="iteration", disable=not verbose):
         pixels_iterated.append(int(iterate_on_pixels.sum()))
-        log.debug(f"Getting next best gene")
         best_genes, pass_threshold, inverse_variance = get_next_best_gene(
             iterate_on_pixels,
             pixel_colours,
@@ -127,14 +126,12 @@ def compute_omp_coefficients(
             background_genes,
             background_variance,
         )
-        log.debug(f"Getting next best gene complete")
 
         # Update what pixels to continue iterating on
         iterate_on_pixels = torch.logical_and(iterate_on_pixels, pass_threshold).to(device=run_on)
         genes_added = torch.cat((genes_added, best_genes[:, np.newaxis]), dim=1).to(device=run_on)
 
         # Update coefficients for pixels with new a gene assignment and keep the residual pixel colour
-        log.debug(f"Weight selected genes")
         genes_added_coefficients, pixel_colours = weight_selected_genes(
             iterate_on_pixels,
             bled_codes.T,
@@ -142,15 +139,11 @@ def compute_omp_coefficients(
             genes_added,
             weight=torch.sqrt(inverse_variance) if weight_coefficient_fit else None,
         )
-        log.debug(f"Weight selected genes complete")
 
-        # TODO: This is unoptimised.
         # Populate sparse matrix with the updated coefficient results
-        log.debug("For loop over pixels started")
         for p in torch.where(genes_added[:, i] != NO_GENE_SELECTION)[0]:
             p_gene = genes_added[p, i]
             coefficient_image[p, p_gene.int()] = genes_added_coefficients[p, i].numpy()
-        log.debug("For loop over pixels complete")
 
     iterate_on_pixels = iterate_on_pixels.cpu()
     pixel_colours = pixel_colours.cpu()

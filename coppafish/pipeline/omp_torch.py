@@ -222,10 +222,10 @@ def run_omp(
 
             # STEP 2.5: On the first OMP z-chunk/tile, compute the OMP spot shape using the found coefficients.
             if first_computation:
-                log.debug("Computing spot shape")
+                log.info("Computing spot shape")
                 isolated_spots_yxz = torch.zeros((0, 3), dtype=torch.int16)
                 isolated_gene_numbers = torch.zeros(0, dtype=torch.int16)
-                for g in tqdm.trange(n_genes, desc="Computing spot shape", unit="gene"):
+                for g in tqdm.trange(n_genes, desc="Detecting isolated spots", unit="gene"):
                     if isolated_spots_yxz.size(0) >= config["spot_shape_max_spots"]:
                         isolated_spots_yxz = isolated_spots_yxz[: config["spot_shape_max_spots"]]
                         isolated_gene_numbers = isolated_gene_numbers[: config["spot_shape_max_spots"]]
@@ -253,7 +253,7 @@ def run_omp(
                     del g_coefficient_image, isolated_spots_yxz_g, n_g_isolated_spots
                 mean_spots = torch.zeros((n_genes,) + tuple(config["spot_shape"]), dtype=torch.float32)
                 weights = torch.zeros(n_genes, dtype=torch.float32)
-                for g in range(n_genes):
+                for g in tqdm.trange(n_genes, desc="Averaging spots"):
                     if (isolated_gene_numbers == g).sum() == 0:
                         continue
                     g_coefficient_image = torch.asarray(coefficient_image[:, g].toarray().reshape(subset_shape)).float()
@@ -279,7 +279,6 @@ def run_omp(
                 spot = torch.zeros_like(mean_spot, dtype=torch.int16)
                 spot[mean_spot >= config["shape_sign_thresh"]] = 1
 
-                print(f"{spot.shape=}")
                 edge_counts = spots_torch.count_edge_ones(spot)
                 if edge_counts > 0:
                     log.warn(
@@ -300,7 +299,7 @@ def run_omp(
                 nbp.spot_tile = t
                 nbp.mean_spot = np.array(mean_spot)
                 nbp.spot = np.array(spot)
-                log.debug("Computing spot shape complete")
+                log.info("Computing spot shape complete")
 
             for g in tqdm.trange(n_genes, desc="Detecting and scoring spots", unit="gene"):
                 # STEP 3: Detect spots on the subset except at the x and y edges.
