@@ -1,8 +1,6 @@
 import torch
 import numpy as np
 
-from .. import log
-
 
 def score_coefficient_image(
     coefficient_image: torch.Tensor,

@@ -25,7 +25,7 @@ def compute_omp_coefficients(
     alpha: float,
     beta: float,
     pixel_intensity_threshold: float,
-    force_cpu: bool = False,
+    force_cpu: bool = True,
 ) -> scipy.sparse.lil_matrix:
     """
     Find OMP coefficients on all pixels.
