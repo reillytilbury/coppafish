@@ -78,9 +78,7 @@ def run_omp(
     n_rounds_use = len(nbp_basic.use_rounds)
     n_channels_use = len(nbp_basic.use_channels)
     spot_shape_size_xy: int = config["spot_shape"][0]
-    spot_shape_size_z: int = config["spot_shape"][2]
     spot_radius_xy: int = maths.ceil(spot_shape_size_xy / 2)
-    spot_radius_z: int = maths.ceil(spot_shape_size_z / 2)
     tile_shape: Tuple[int] = nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)
     colour_norm_factor = np.array(nbp_call_spots.color_norm_factor, dtype=np.float32)
     colour_norm_factor = colour_norm_factor[
@@ -89,10 +87,9 @@ def run_omp(
     colour_norm_factor = torch.asarray(colour_norm_factor).float()
     first_computation = True
 
-    subset_z_size: int = len(nbp_basic.use_z) + 2 * spot_radius_z
+    subset_z_size: int = len(nbp_basic.use_z)
     subset_size_xy: int = config["subset_size_xy"]
 
-    assert subset_z_size > spot_radius_z * 2
     if subset_size_xy <= spot_radius_xy * 2:
         raise ValueError(
             "The subset size is too small for the given spot size. Reduce spot_shape in x and y directions or increase"
@@ -101,7 +98,7 @@ def run_omp(
 
     subset_shape = (subset_size_xy, subset_size_xy, subset_z_size)
     # Find the bottom-left position of every subset to break the entire tile up into.
-    subset_origin_new = [-spot_radius_xy, -spot_radius_xy, -spot_radius_z]
+    subset_origin_new = [-spot_radius_xy, -spot_radius_xy, 0]
     subset_origins_yxz = []
     while True:
         if subset_origin_new[0] >= nbp_basic.tile_sz:
@@ -112,6 +109,7 @@ def run_omp(
             subset_origin_new[1] = 0
             subset_origin_new[0] += subset_size_xy - 2 * spot_radius_xy
 
+    log.debug(f"Subset shape: {subset_shape}")
     log.info(f"Running {len(subset_origins_yxz)} subsets for each tile")
 
     # Results are appended to these arrays
@@ -149,10 +147,10 @@ def run_omp(
                 valid = (
                     (positions_yxz[:, 0] >= spot_radius_xy)
                     * (positions_yxz[:, 1] >= spot_radius_xy)
-                    * (positions_yxz[:, 2] >= spot_radius_z)
+                    * (positions_yxz[:, 2] >= 0)
                     * (positions_yxz[:, 0] < (subset_shape[0] - spot_radius_xy))
                     * (positions_yxz[:, 1] < (subset_shape[1] - spot_radius_xy))
-                    * (positions_yxz[:, 2] < (subset_shape[2] - spot_radius_z))
+                    * (positions_yxz[:, 2] < (subset_shape[2]))
                 )
                 tile_positions_yxz = subset_positions_to_tile_positions(positions_yxz)
                 valid *= (
