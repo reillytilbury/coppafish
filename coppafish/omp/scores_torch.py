@@ -81,7 +81,7 @@ def score_coefficient_image(
         padding="same",
         bias=None,
     )[0, 0]
-    results = results[tuple((points + point_min[np.newaxis]).T)]
+    results = results[tuple((points - point_min[np.newaxis]).T)]
 
     return torch.clip(results, 0, 1).to(device=cpu, dtype=coefficient_image.dtype)
 
