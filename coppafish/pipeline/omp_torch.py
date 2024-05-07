@@ -1,7 +1,8 @@
+import os
 import tqdm
+import torch
 import math as maths
 import numpy as np
-import torch
 from typing_extensions import assert_type
 from typing import Tuple
 
@@ -65,6 +66,8 @@ def run_omp(
     assert tile_origin.ndim == 2
     assert transform.shape[3:5] == (4, 3)
     assert transform.ndim == 5
+
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
     log.info("OMP started")
     nbp = NotebookPage("omp")
@@ -302,6 +305,7 @@ def run_omp(
                     intensity_thresh=config["coefficient_threshold"],
                     radius_xy=config["radius_xy"],
                     radius_z=config["radius_z"],
+                    force_cpu=config["force_cpu"],
                 )
                 log.debug(f"Detecting spots for gene {g} complete")
                 # Convert spot positions in the subset image to positions on the tile.
