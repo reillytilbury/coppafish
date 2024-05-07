@@ -40,7 +40,7 @@ def score_coefficient_image(
     assert points.shape[0] > 0
     assert points.shape[1] == 3
     assert spot.dim() == 3
-    assert torch.isin(spot, torch.asarray([-1, 0, 1], device=coefficient_image.device)).all()
+    assert torch.isin(spot, torch.asarray([0, 1], device=coefficient_image.device)).all()
     assert spot.shape == mean_spot.shape
     assert torch.logical_and(mean_spot >= -1, mean_spot <= 1).all()
     assert high_coefficient_bias >= 0

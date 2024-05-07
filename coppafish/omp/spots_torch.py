@@ -66,3 +66,23 @@ def compute_mean_spot_from(
     mean_spot[tuple(spot_shift_positions)] = spot_image_values.reshape((n_shifts, n_spots)).mean(dim=1)
 
     return mean_spot.to(cpu)
+
+
+def count_edge_ones(
+    spot: torch.Tensor,
+) -> int:
+    """
+    Counts the number of ones on the x and y edges for all z planes.
+
+    Args:
+        spot (`(size_y x size_x x size_z) tensor[int]`): OMP spot shape. It is a made up of only zeros and ones.
+            Ones indicate where the spot coefficient is likely to be positive.
+    """
+    assert_type(spot, torch.Tensor)
+    assert spot.dim() == 3
+    assert torch.isin(spot, torch.asarray([0, 1], device=spot.device)).all()
+
+    count = 0
+    for z in range(spot.shape[2]):
+        count += spot[:, :, z].sum() - spot[1 : spot.shape[0] - 1, 1 : spot.shape[1] - 1, z].sum()
+    return int(count)

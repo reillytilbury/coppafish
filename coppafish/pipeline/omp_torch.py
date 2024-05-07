@@ -279,6 +279,14 @@ def run_omp(
                 spot = torch.zeros_like(mean_spot, dtype=torch.int16)
                 spot[mean_spot >= config["shape_sign_thresh"]] = 1
 
+                print(f"{spot.shape=}")
+                edge_counts = spots_torch.count_edge_ones(spot)
+                if edge_counts > 0:
+                    log.warn(
+                        f"The spot contains {edge_counts} ones on the x/y edges. You may need to increase spot_shape in"
+                        + " the OMP config to avoid cropping the spot. Check _omp.pdf to see the spot image."
+                    )
+
                 n_positives = (spot == 1).sum()
                 message = f"Computed spot contains {n_positives} strongly positive values."
                 if n_positives < 20:
