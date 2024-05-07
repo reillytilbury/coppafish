@@ -128,7 +128,7 @@ threadpoolctl==3.2.0
 tifffile==2023.12.9
 tomli_w==1.0.0
 toolz==0.12.0
--f https://download.pytorch.org/whl/torch_stable.html
+--find-links https://download.pytorch.org/whl/torch_stable.html
 torch==2.2.0+cu121
 tornado==6.4
 tqdm==4.66.1

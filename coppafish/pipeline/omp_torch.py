@@ -296,10 +296,10 @@ def run_omp(
 
             for g in tqdm.trange(n_genes, desc="Detecting and scoring spots", unit="gene"):
                 # STEP 3: Detect spots on the subset except at the x and y edges.
-                g_coefficient_image = torch.asarray(coefficient_image[:, g].toarray()).reshape(subset_shape + (1,))
+                g_coefficient_image = torch.asarray(coefficient_image[:, g].toarray()).reshape(subset_shape)
                 log.debug(f"Detecting spots for gene {g}")
                 g_spots_yxz, _ = detect_torch.detect_spots(
-                    image=g_coefficient_image[..., 0],
+                    image=g_coefficient_image,
                     intensity_thresh=config["coefficient_threshold"],
                     radius_xy=config["radius_xy"],
                     radius_z=config["radius_z"],
@@ -309,6 +309,9 @@ def run_omp(
                 # Convert spot positions in the subset image to positions on the tile.
                 g_spots_local_yxz = subset_positions_to_tile_positions(g_spots_yxz)
                 valid_positions = get_valid_subset_positions(g_spots_yxz)
+                if valid_positions.sum() == 0:
+                    continue
+
                 g_spots_yxz = g_spots_yxz[valid_positions]
                 g_spots_local_yxz = g_spots_local_yxz[valid_positions]
 
@@ -316,23 +319,23 @@ def run_omp(
                 log.debug(f"Scoring gene {g} image")
                 g_spots_score = scores_torch.score_coefficient_image(
                     coefficient_image=g_coefficient_image,
+                    points=g_spots_yxz,
                     spot=spot,
                     mean_spot=mean_spot,
                     high_coefficient_bias=config["high_coef_bias"],
                     force_cpu=config["force_cpu"],
-                )[..., 0]
+                )
                 log.debug(f"Scoring gene {g} image complete")
-                g_spots_score = g_spots_score[tuple(g_spots_yxz.T)]
 
                 # Remove bad scoring spots (i.e. false gene reads)
                 keep_scores = g_spots_score >= config["score_threshold"]
                 g_spots_local_yxz = g_spots_local_yxz[keep_scores]
                 g_spots_yxz = g_spots_yxz[keep_scores]
                 g_spots_score = g_spots_score[keep_scores]
-
                 n_g_spots = g_spots_local_yxz.shape[0]
                 if n_g_spots == 0:
                     continue
+
                 g_spots_score = scores_torch.omp_scores_float_to_int(g_spots_score)
                 g_spots_tile = torch.ones(n_g_spots, dtype=torch.int16) * t
                 g_spots_gene_no = torch.ones(n_g_spots, dtype=torch.int16) * g
