@@ -65,7 +65,7 @@ def test_integration_small_two_tile():
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
-    robominnie = RoboMinnie(n_channels=4, n_planes=4, n_tile_yx=(128, 128), n_tiles_y=2)
+    robominnie = RoboMinnie(n_channels=5, n_planes=4, n_tile_yx=(128, 128), n_tiles_y=2)
     robominnie.generate_gene_codes(4)
     robominnie.generate_pink_noise()
     robominnie.add_spots(500)

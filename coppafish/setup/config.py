@@ -109,6 +109,7 @@ _options = {
     "extract": {
         "file_type": "str",
         "wait_time": "int",
+        "z_plane_mean_warning": "number",
     },
     "filter": {
         "r_dapi": "maybe_int",
@@ -204,7 +205,6 @@ _options = {
         "beta": "number",
     },
     "omp": {
-        "use_z": "maybe_list_int",
         "weight_coef_fit": "bool",
         "max_genes": "int",
         "dp_thresh": "number",

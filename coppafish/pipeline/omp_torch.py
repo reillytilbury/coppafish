@@ -124,17 +124,6 @@ def run_omp(
         colour_image = base.load_spot_colours(nbp_basic, nbp_file, nbp_extract, nbp_register, nbp_register_debug, t)
         log.debug(f"Loading tile {t} colours complete")
 
-        colour_image_maximums = np.abs(
-            colour_image.max(axis=(3, 4)).astype(np.float32) - nbp_basic.tile_pixel_value_shift
-        )[np.newaxis]
-        colour_image_minimums = np.abs(
-            colour_image.min(axis=(3, 4)).astype(np.float32) - nbp_basic.tile_pixel_value_shift
-        )[np.newaxis]
-        pixel_intensities = np.append(colour_image_maximums, colour_image_minimums, axis=0).max(axis=0)
-        del colour_image_minimums, colour_image_maximums
-        pixel_intensity_threshold = np.percentile(pixel_intensities, config["pixel_max_percentile"])
-        del pixel_intensities
-
         for i, subset_yxz in enumerate(subset_origins_yxz):
             # STEP 2: Compute OMP coefficients on a subset of the tile which is a mini tile with the same number of z
             # planes.
@@ -190,19 +179,20 @@ def run_omp(
             # Divide all colours by the colour normalisation factors.
             subset_colours /= colour_norm_factor[[t]]
             # Fit and subtract the "background genes" off every spot colour.
-            log.debug("Fitting background")
             subset_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(subset_colours)
-            log.debug("Fitting background complete")
             bled_codes_ge = nbp_call_spots.bled_codes_ge
             bled_codes_ge = bled_codes_ge[np.ix_(range(n_genes), nbp_basic.use_rounds, nbp_basic.use_channels)]
             assert (~np.isnan(bled_codes_ge)).all(), "bled codes GE cannot contain nan values"
             assert np.allclose(np.linalg.norm(bled_codes_ge, axis=(1, 2)), 1), "bled codes GE must be L2 normalised"
             bled_codes_ge = torch.asarray(bled_codes_ge.astype(np.float32))
             # Populate coefficient_image with the coefficients that can be computed in the subset.
-            log.debug("Computing OMP coefficients started")
             subset_colours = subset_colours.reshape((-1, n_rounds_use * n_channels_use))
             bled_codes_ge = bled_codes_ge.reshape((n_genes, n_rounds_use * n_channels_use))
             bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
+            pixel_intensity_threshold = torch.quantile(
+                subset_colours.abs().max(dim=1)[0], q=config["pixel_max_percentile"] / 100
+            )
+            log.debug("Computing OMP coefficients started")
             coefficient_image = coefs_torch.compute_omp_coefficients(
                 subset_colours,
                 bled_codes_ge,
@@ -214,28 +204,28 @@ def run_omp(
                 weight_coefficient_fit=config["weight_coef_fit"],
                 alpha=config["alpha"],
                 beta=config["beta"],
-                pixel_intensity_threshold=pixel_intensity_threshold,
+                pixel_intensity_threshold=pixel_intensity_threshold.item(),
                 force_cpu=config["force_cpu"],
             )
             log.debug("Computing OMP coefficients complete")
-            del subset_colours, bg_coefficients, bg_codes, bled_codes_ge
+            del subset_colours, bg_coefficients, bg_codes, bled_codes_ge, pixel_intensity_threshold
 
             # STEP 2.5: On the first OMP z-chunk/tile, compute the OMP spot shape using the found coefficients.
             if first_computation:
                 log.info("Computing spot shape")
                 isolated_spots_yxz = torch.zeros((0, 3), dtype=torch.int16)
                 isolated_gene_numbers = torch.zeros(0, dtype=torch.int16)
+                shape_isolation_distance_z = config["shape_isolation_distance_z"]
+                if shape_isolation_distance_z is None:
+                    shape_isolation_distance_z = maths.ceil(
+                        config["shape_isolation_distance_yx"] * nbp_basic.pixel_size_xy / nbp_basic.pixel_size_z
+                    )
                 for g in tqdm.trange(n_genes, desc="Detecting isolated spots", unit="gene"):
                     if isolated_spots_yxz.size(0) >= config["spot_shape_max_spots"]:
                         isolated_spots_yxz = isolated_spots_yxz[: config["spot_shape_max_spots"]]
                         isolated_gene_numbers = isolated_gene_numbers[: config["spot_shape_max_spots"]]
                         continue
                     g_coefficient_image = torch.asarray(coefficient_image[:, g].toarray().reshape(subset_shape)).float()
-                    shape_isolation_distance_z = config["shape_isolation_distance_z"]
-                    if shape_isolation_distance_z is None:
-                        shape_isolation_distance_z = maths.ceil(
-                            config["shape_isolation_distance_yx"] * nbp_basic.pixel_size_xy / nbp_basic.pixel_size_z
-                        )
                     isolated_spots_yxz_g, _ = detect_torch.detect_spots(
                         image=g_coefficient_image,
                         intensity_thresh=config["shape_coefficient_threshold"],
@@ -273,7 +263,7 @@ def run_omp(
                     )
                 mean_spot = torch.mean(mean_spots * weights[:, np.newaxis, np.newaxis, np.newaxis], dim=0).float()
                 mean_spot = torch.clip(mean_spot * n_genes / weights.sum(), -1, 1).float()
-                log.info(f"OMP spot and mean spot computed using {weights.sum().item()} detected spots")
+                log.info(f"OMP spot and mean spot computed using {int(weights.sum().item())} detected spots")
                 del mean_spots, weights
 
                 spot = torch.zeros_like(mean_spot, dtype=torch.int16)
@@ -303,7 +293,9 @@ def run_omp(
 
             for g in tqdm.trange(n_genes, desc="Detecting and scoring spots", unit="gene"):
                 # STEP 3: Detect spots on the subset except at the x and y edges.
+                log.debug(f"loading coefficient_image {g=}")
                 g_coefficient_image = torch.asarray(coefficient_image[:, g].toarray()).reshape(subset_shape)
+                log.debug(f"loading coefficient_image {g=} complete")
                 log.debug(f"Detecting spots for gene {g}")
                 g_spots_yxz, _ = detect_torch.detect_spots(
                     image=g_coefficient_image,
@@ -314,6 +306,7 @@ def run_omp(
                 )
                 log.debug(f"Detecting spots for gene {g} complete")
                 # Convert spot positions in the subset image to positions on the tile.
+                log.debug("Finding valid_positions")
                 g_spots_local_yxz = subset_positions_to_tile_positions(g_spots_yxz)
                 valid_positions = get_valid_subset_positions(g_spots_yxz)
                 if valid_positions.sum() == 0:
@@ -321,6 +314,7 @@ def run_omp(
 
                 g_spots_yxz = g_spots_yxz[valid_positions]
                 g_spots_local_yxz = g_spots_local_yxz[valid_positions]
+                log.debug("Finding valid_positions complete")
 
                 # STEP 4: Score the detections using the coefficients.
                 log.debug(f"Scoring gene {g} image")
@@ -335,6 +329,7 @@ def run_omp(
                 log.debug(f"Scoring gene {g} image complete")
 
                 # Remove bad scoring spots (i.e. false gene reads)
+                log.debug(f"Concating results")
                 keep_scores = g_spots_score >= config["score_threshold"]
                 g_spots_local_yxz = g_spots_local_yxz[keep_scores]
                 g_spots_yxz = g_spots_yxz[keep_scores]
@@ -354,6 +349,7 @@ def run_omp(
 
                 del g_spots_yxz, g_spots_local_yxz, g_spots_score, g_spots_tile, g_spots_gene_no
                 del g_coefficient_image
+                log.debug(f"Concating results complete")
 
             # STEP 5: Repeat steps 2 to 4 on every mini-tile subset.
             first_computation = False

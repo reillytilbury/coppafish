@@ -87,14 +87,13 @@ def detect_spots(
 
     image = np.pad(image, [(p, p) for p in paddings], mode="constant", constant_values=0)
     # Local pixel positions of spots must change after padding is added
-    consider_yxz_se_shifted = consider_yxz + paddings[:, np.newaxis]
+    consider_yxz_se_shifted = consider_yxz.copy() + paddings[:, np.newaxis]
     # (image.ndim, n_consider, n_shifts) shape
     consider_yxz_se_shifted = np.repeat(consider_yxz_se_shifted[..., np.newaxis], se_shifts.shape[1], axis=2)
     consider_yxz_se_shifted += se_shifts[None].transpose((1, 0, 2))
     # image.ndim items in tuple of `(n_consider * n_shifts) ndarray[int]`
     consider_yxz_se_shifted = tuple(consider_yxz_se_shifted.reshape((image.ndim, -1)))
-    consider_intensity = np.repeat(consider_intensity[:, np.newaxis], n_shifts, axis=1)
-    keep = (image[consider_yxz_se_shifted].reshape((n_consider, n_shifts)) <= consider_intensity).all(1)
+    keep = (image[consider_yxz_se_shifted].reshape((n_consider, n_shifts)) <= consider_intensity[:, np.newaxis]).all(1)
 
     if remove_duplicates:
         peak_intensity = np.round(consider_intensity[keep]).astype(int)

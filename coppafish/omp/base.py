@@ -1,8 +1,12 @@
+import os
 import tqdm
+import torch
+import scipy
 import numpy as np
 from typing_extensions import assert_type
 import numpy.typing as npt
 
+from .. import utils, log
 from ..register import preprocessing
 from ..setup.notebook import NotebookPage
 
@@ -34,12 +38,61 @@ def load_spot_colours(
     image_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
     colours = np.zeros(image_shape + (len(nbp_basic.use_rounds), len(nbp_basic.use_channels)), dtype=dtype)
 
-    for i, r in tqdm.tqdm(enumerate(nbp_basic.use_rounds), desc="Loading spot colours", unit="round"):
-        image_r = preprocessing.load_icp_corrected_images(
-            nbp_basic, nbp_file, nbp_extract, nbp_register, tile, r, nbp_basic.use_channels
-        )
-        image_r = (image_r + nbp_basic.tile_pixel_value_shift).astype(dtype)
-        image_r = image_r.transpose((1, 2, 3, 0))
-        colours[:, :, :, i] = image_r
+    n_rounds_batch = 2
+    final_round = nbp_basic.use_rounds[-1]
+    half_pixel_0, half_pixel_1, half_pixel_2 = [1 / image_shape[i] for i in range(3)]
+    image_batch = torch.zeros((0, len(nbp_basic.use_channels)) + image_shape, dtype=torch.float32)
+    grid_0, grid_1, grid_2 = torch.meshgrid(
+        torch.linspace(half_pixel_0 - 1, 1 - half_pixel_0, image_shape[0]),
+        torch.linspace(half_pixel_1 - 1, 1 - half_pixel_1, image_shape[1]),
+        torch.linspace(half_pixel_2 - 1, 1 - half_pixel_2, image_shape[2]),
+        indexing="ij",
+    )
+    base_grid = torch.cat(
+        (grid_2[None, :, :, :, None], grid_1[None, :, :, :, None], grid_0[None, :, :, :, None]), dim=4
+    )
+    grids = torch.zeros((0,) + image_shape + (3,), dtype=torch.float32)
+    for i, r in enumerate(tqdm.tqdm(nbp_basic.use_rounds, desc="Loading spot colours", unit="round")):
+        suffix = "_raw" if r == nbp_basic.pre_seq_round else ""
+        image_r = tuple()
+        for c in nbp_basic.use_channels:
+            im_c = utils.tiles_io.load_image(
+                nbp_file, nbp_basic, nbp_extract.file_type, tile, r, c, yxz=None, suffix=suffix
+            ).astype(np.float32)
+            new_origin = np.zeros(3, dtype=int)
+            affine = nbp_register.icp_correction[tile, r, c].copy()
+            affine = preprocessing.adjust_affine(affine=affine, new_origin=new_origin)
+            im_c = scipy.ndimage.affine_transform(im_c, affine, order=1, mode="constant", cval=0)
+            image_r += (im_c[np.newaxis],)
+            del im_c, affine, new_origin
+        image_r = torch.asarray(np.concatenate(image_r, axis=0, dtype=np.float32))
+        image_batch = torch.cat((image_batch, image_r[np.newaxis]), dim=0)
+        del image_r
+        flow_dir = os.path.join(nbp_register.flow_dir, "smooth", f"t{tile}_r{r}.npy")
+        flow_field_r = -np.load(flow_dir, mmap_mode=None)
+        # Flow's shape changes (3, im_y, im_x, im_z) -> (1, im_y, im_x, im_z, 3).
+        flow_field_r = torch.asarray(flow_field_r.transpose((1, 2, 3, 0)))[np.newaxis]
+        # A one in the flow field represents a shift of one pixel on the grid.
+        flow_field_r[..., 0] *= half_pixel_2 * 2
+        flow_field_r[..., 1] *= half_pixel_1 * 2
+        flow_field_r[..., 2] *= half_pixel_0 * 2
+        flow_field_r = base_grid.clone() + flow_field_r
+        grids = torch.cat((grids, flow_field_r), dim=0)
+        del flow_field_r
+        if (i + 1) % n_rounds_batch == 0 or r == final_round:
+            i_min, i_max = max(i + 1 - grids.shape[0], 0), i + 1
+            log.info(f"{i_min=}")
+            log.info(f"{i_max=}")
+            registered_image_batch = torch.nn.functional.grid_sample(
+                image_batch, grids, mode="bilinear", padding_mode="zeros", align_corners=False
+            )
+            registered_image_batch = registered_image_batch.numpy().astype(dtype).transpose((2, 3, 4, 0, 1))
+            log.info(f"{registered_image_batch.shape=}")
+            log.info(f"{colours[:, :, :, i_min:i_max, :].shape=}")
+            colours[:, :, :, i_min:i_max, :] = registered_image_batch
 
-    return colours.astype(dtype)
+            image_batch = image_batch[[]]
+            grids = grids[[]]
+
+    log.info(f"{(colours == 0).sum()}")
+    return colours
