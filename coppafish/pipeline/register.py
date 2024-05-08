@@ -185,8 +185,38 @@ def register(
                 )
             )
             log.info(f"Tile: {t}, Round: {r}, Converged: {converged_round[t, r]}")
-        # don't do icp for the pre-seq round as we will not have spots in the anchor channel
-        round_correction[t, -1] = np.eye(4, 3)
+        # for preseq round, compute the correction between a high background channel in r_pre and the same channel in
+        # round r. Then we can compose this correction with the correction for round r.
+        if nbp_basic.use_preseq:
+            c_bg = 15 if 15 in use_channels else 2
+            r_pre, r_mid = nbp_basic.pre_seq_round, 3
+            rounds_preseq_reg = [r_pre, r_mid]
+            spots_preseq_req = []
+            for r in rounds_preseq_reg:
+                spots_preseq_req.append(
+                    find_spots.spot_yxz(nbp_find_spots.spot_yxz, t, r, c_bg, nbp_find_spots.spot_no)
+                )
+                # apply flow to put these in anchor frame of ref
+                # load in flow
+                flow_loc = os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy")
+                flow_tr = np.load(flow_loc, mmap_mode="r")
+                spots_preseq_req[-1] = preprocessing.apply_flow(flow=-flow_tr, points=spots_preseq_req[-1],
+                                                                round_to_int=False)
+            # Now compute the bg correction
+            r_pre_correction = register_base.icp(
+                yxz_base=spots_preseq_req[1],
+                yxz_target=spots_preseq_req[0],
+                dist_thresh_yx=neighb_dist_thresh_yx,
+                dist_thresh_z=neighb_dist_thresh_z,
+                start_transform=np.eye(4, 3),
+                n_iters=config["icp_max_iter"],
+                robust=False,
+            )[0]
+            # r7 -> r_pre = r7 -> r3 -> r_pre
+            r_pre_correction = np.hstack((r_pre_correction, np.array([0, 0, 0, 1])[:, None]))
+            r_mid_correction = np.hstack((round_correction[t, r_mid], np.array([0, 0, 0, 1])[:, None]))
+            round_correction[t, r_pre] = (r_pre_correction @ r_mid_correction)[:, :3]
+
         # compute an affine correction to the channel transforms. This is done by finding the best affine map that
         # takes the anchor channel (post application of optical flow and round correction) to the other channels.
         for c in use_channels:
