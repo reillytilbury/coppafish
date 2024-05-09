@@ -26,7 +26,7 @@ def get_spot_intensity(spot_colors: npt.NDArray[np.float_]) -> npt.NDArray[np.fl
     if (spot_colors <= -15_000).sum() > 0:
         log.warn(f"Found spot colors <= -15000")
     # Max over all channels, then median over all rounds
-    return np.median(np.max(spot_colors, axis=2), axis=1)
+    return np.median(np.max(np.abs(spot_colors), axis=2), axis=1)
 
 
 def omp_spot_score(

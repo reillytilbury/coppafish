@@ -6,8 +6,8 @@ import numpy as np
 from typing_extensions import assert_type
 from typing import Tuple, Optional, List
 
-from .. import log, utils
-from ..call_spots import dot_product_pytorch
+from .. import utils
+from ..call_spots import dot_product_pytorch, qual_check_torch
 
 
 NO_GENE_SELECTION = -32768
@@ -24,20 +24,20 @@ def compute_omp_coefficients(
     weight_coefficient_fit: bool,
     alpha: float,
     beta: float,
-    pixel_intensity_threshold: float,
+    do_not_compute_on: Optional[torch.Tensor] = None,
     force_cpu: bool = True,
 ) -> scipy.sparse.csr_matrix:
     """
     Find OMP coefficients on all pixels.
 
     Args:
-        pixel_colours (`(n_pixels x (n_rounds_use * n_channels_use)) ndarray`): pixel colours with all
+        pixel_colours (`(n_pixels x (n_rounds_use * n_channels_use)) tensor`): pixel colours with all
             processing done already, like background gene fitting and pre-sequence subtraction.
-        bled_codes (`(n_genes x n_rounds_use * n_channels_use) ndarray`): gene bled codes.
+        bled_codes (`(n_genes x n_rounds_use * n_channels_use) tensor`): gene bled codes.
         maximum_iterations (int): the maximum number of unique genes that can be assigned to each pixel.
-        background_coefficients (`(n_pixels x n_channels_use) ndarray`): background coefficients for each
+        background_coefficients (`(n_pixels x n_channels_use) tensor`): background coefficients for each
             pixel.
-        background_codes (`(n_channels_use x (n_rounds_use * n_channels_use)) ndarray`): each background gene code.
+        background_codes (`(n_channels_use x (n_rounds_use * n_channels_use)) tensor`): each background gene code.
         dot_product_threshold (float): any dot product below this threshold is a failed gene assignment and the
             iterations stop for that pixel.
         dot_product_norm_shift (float): a shift applied during the dot product calculations to limit the boost of weak
@@ -46,21 +46,25 @@ def compute_omp_coefficients(
             after subtracting a gene assignment.
         alpha (float): OMP weighting parameter. Applied if weight_coefficient_fit is true.
         beta (float): OMP weighting parameter. Applied if weight_coefficient_fit is true.
-        pixel_intensity_threshold (float): a pixel's intensity is definied as the maximum of the absolute values
-            across rounds and channels. If the pixel's intensity is below this threshold, then it is not computed and
-            all coefficients remain zeroes.
+        do_not_compute_on (`(n_pixels) tensor[bool]`): if true on a pixel, the pixel is not computed on, every
+            coefficient remains zero.
         force_cpu (bool): force the computation to run on a CPU, even if a GPU is available.
 
     Returns:
         - (`(n_pixels x n_genes) sparse csr_matrix`) pixel_coefficients: OMP
             coefficients for every pixel. Since most coefficients are zero, the results are stored as a sparse matrix.
             Flattening the image dimensions is done using numpy's reshape method for consistency.
+
+    Notes:
+        - A csr matrix is fast at row slicing, which is why we use it. I.e. it is fast at pixel_coefficients[:, [g]]
+            for a gene g.
     """
     assert_type(pixel_colours, torch.Tensor)
     assert_type(bled_codes, torch.Tensor)
     assert_type(background_coefficients, torch.Tensor)
     assert_type(background_codes, torch.Tensor)
     assert_type(weight_coefficient_fit, bool)
+    assert_type(do_not_compute_on, torch.Tensor)
 
     assert pixel_colours.ndim == 2
     assert bled_codes.ndim == 2
@@ -71,7 +75,8 @@ def compute_omp_coefficients(
     assert dot_product_norm_shift >= 0
     assert alpha >= 0
     assert beta >= 0
-    assert pixel_intensity_threshold >= 0
+    assert do_not_compute_on.dim() == 1
+    assert do_not_compute_on.shape[0] == pixel_colours.shape[0]
 
     # We want exact, reproducible results in coppafish.
     torch.backends.cudnn.deterministic = True
@@ -107,9 +112,11 @@ def compute_omp_coefficients(
     # Run on every non-zero pixel colour.
     iterate_on_pixels = torch.logical_not(torch.isclose(pixel_colours, torch.asarray(0).float()).all(dim=1))
     # Threshold pixel intensities to run on
-    iterate_on_pixels = torch.logical_and(iterate_on_pixels, pixel_colours.abs().max(1)[0] >= pixel_intensity_threshold)
+    if do_not_compute_on is not None:
+        iterate_on_pixels = torch.logical_and(iterate_on_pixels, do_not_compute_on.logical_not_())
     verbose = iterate_on_pixels.sum() > 1_000
     pixels_iterated: List[int] = []
+    # Start with a lil_matrix when populating results as this is faster than the csr matrix.
     coefficient_image = scipy.sparse.lil_matrix(np.zeros((n_pixels, n_genes), dtype=np.float32))
 
     for i in tqdm.trange(maximum_iterations, desc="Computing OMP coefficients", unit="iteration", disable=not verbose):
@@ -152,9 +159,6 @@ def compute_omp_coefficients(
     genes_added = genes_added.cpu()
     background_genes = background_variance.cpu()
 
-    if verbose:
-        log.info(f"Pixels iterated on: {pixels_iterated}")
-
     return coefficient_image.tocsr()
 
 
@@ -176,30 +180,30 @@ def get_next_best_gene(
     failed the passing and the pixel is not iterated through OMP any more.
 
     Args:
-        consider_pixels (`(n_pixels) ndarray`): true for a pixel to compute on.
-        residual_pixel_colours (`(n_pixels x (n_rounds * n_channels)) ndarray`): residual pixel colours, left
+        consider_pixels (`(n_pixels) tensor`): true for a pixel to compute on.
+        residual_pixel_colours (`(n_pixels x (n_rounds * n_channels)) tensor`): residual pixel colours, left
             over from any previous OMP iteration.
-        all_bled_codes (`((n_rounds * n_channels) x n_genes) ndarray`): bled codes for each gene in the dataset. Each
+        all_bled_codes (`((n_rounds * n_channels) x n_genes) tensor`): bled codes for each gene in the dataset. Each
             pixel should be made up of a superposition of the different bled codes.
-        coefficients (`(n_pixels x n_genes_added) ndarray`): OMP coefficients (weights) computed from the
+        coefficients (`(n_pixels x n_genes_added) tensor`): OMP coefficients (weights) computed from the
             previous iteration of OMP.
-        genes_added (`(n_pixels x n_genes_added) ndarray`): the genes that have already been assigned to the
+        genes_added (`(n_pixels x n_genes_added) tensor`): the genes that have already been assigned to the
             pixels.
         norm_shift (float): shift to apply to normalisation of spot colours to limit the boost of weak spots.
         score_threshold (float): a gene assignment with a dot product score below this value is not assigned to the
             pixel and OMP iterations will stop for the pixel.
         alpha (float): an OMP weighting parameter.
-        background_genes (`(n_channels) ndarray`): indices of bled codes that correspond to background genes. If a
+        background_genes (`(n_channels) tensor`): indices of bled codes that correspond to background genes. If a
             pixel is assigned a background gene, then OMP iterations stop.
-        background_variance(`(n_pixels x (n_rounds * n_channels)) ndarray`): background genes contribute to
+        background_variance(`(n_pixels x (n_rounds * n_channels)) tensor`): background genes contribute to
             variance, this is given here for each pixel.
 
     Returns:
-        - (`(n_pixels) ndarray`) best_gene: the best gene to add for each pixel. A pixel is given a value of
+        - (`(n_pixels) tensor`) best_gene: the best gene to add for each pixel. A pixel is given a value of
             np.iinfo(np.int16).min if consider_pixels is false for the given pixel.
-        - (`(n_pixels) ndarray`) pass_threshold: true if the next gene given passes the thresholds. This is
+        - (`(n_pixels) tensor`) pass_threshold: true if the next gene given passes the thresholds. This is
             false if consider_pixels is false for the given pixel.
-        - (`(n_pixels x (n_rounds * n_channels)) ndarray`) inverse_variance: the reciprocal of the variance
+        - (`(n_pixels x (n_rounds * n_channels)) tensor`) inverse_variance: the reciprocal of the variance
             for each round/channel based on the genes fit to the pixel.
     """
     assert_type(consider_pixels, torch.Tensor)

@@ -7,7 +7,7 @@ from typing_extensions import assert_type
 from typing import Tuple
 
 from ..omp import base, coefs_torch, spots_torch, scores_torch
-from ..call_spots import background_pytorch
+from ..call_spots import background_pytorch, qual_check_torch
 from ..find_spots import detect_torch
 from .. import utils, log
 from ..setup.notebook import NotebookPage
@@ -180,18 +180,18 @@ def run_omp(
             subset_colours /= colour_norm_factor[[t]]
             # Fit and subtract the "background genes" off every spot colour.
             subset_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(subset_colours)
+            subset_intensities = qual_check_torch.get_spot_intensity(subset_colours)
+            pixel_intensity_threshold = torch.quantile(subset_intensities, q=config["pixel_max_percentile"] / 100)
+            do_not_compute_on = subset_intensities < pixel_intensity_threshold
+            del subset_intensities, pixel_intensity_threshold
             bled_codes_ge = nbp_call_spots.bled_codes_ge
             bled_codes_ge = bled_codes_ge[np.ix_(range(n_genes), nbp_basic.use_rounds, nbp_basic.use_channels)]
             assert (~np.isnan(bled_codes_ge)).all(), "bled codes GE cannot contain nan values"
             assert np.allclose(np.linalg.norm(bled_codes_ge, axis=(1, 2)), 1), "bled codes GE must be L2 normalised"
             bled_codes_ge = torch.asarray(bled_codes_ge.astype(np.float32))
-            # Populate coefficient_image with the coefficients that can be computed in the subset.
             subset_colours = subset_colours.reshape((-1, n_rounds_use * n_channels_use))
             bled_codes_ge = bled_codes_ge.reshape((n_genes, n_rounds_use * n_channels_use))
             bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
-            pixel_intensity_threshold = torch.quantile(
-                subset_colours.abs().max(dim=1)[0], q=config["pixel_max_percentile"] / 100
-            )
             log.debug("Computing OMP coefficients started")
             coefficient_image = coefs_torch.compute_omp_coefficients(
                 subset_colours,
@@ -204,11 +204,11 @@ def run_omp(
                 weight_coefficient_fit=config["weight_coef_fit"],
                 alpha=config["alpha"],
                 beta=config["beta"],
-                pixel_intensity_threshold=pixel_intensity_threshold.item(),
+                do_not_compute_on=do_not_compute_on,
                 force_cpu=config["force_cpu"],
             )
             log.debug("Computing OMP coefficients complete")
-            del subset_colours, bg_coefficients, bg_codes, bled_codes_ge, pixel_intensity_threshold
+            del subset_colours, bg_coefficients, bg_codes, bled_codes_ge, do_not_compute_on
 
             # STEP 2.5: On the first OMP z-chunk/tile, compute the OMP spot shape using the found coefficients.
             if first_computation:
@@ -253,8 +253,11 @@ def run_omp(
                         config["spot_shape"],
                         config["force_cpu"],
                     )
+                    del g_coefficient_image
                     mean_spots[g] = g_mean_spot
                     weights[g] = (isolated_gene_numbers == g).sum()
+                    del g_mean_spot
+                del isolated_gene_numbers, isolated_spots_yxz
                 if weights.sum() == 0:
                     raise ValueError(
                         f"OMP Failed to find any isolated spots. Make sure that registration is working as expected. "
@@ -348,12 +351,7 @@ def run_omp(
                 f"No OMP spots were found on tile {t}. Please check that registration and call spots is working. "
                 + "If so, consider adjusting OMP config parameters."
             )
-
-    if spots_score.size == 0:
-        raise ValueError(
-            "OMP failed to find any spots. Please check that registration and call spots is working. "
-            + "If so, consider adjusting OMP config parameters."
-        )
+        del colour_image
 
     nbp.local_yxz = np.array(spots_local_yxz)
     nbp.scores = np.array(spots_score)

@@ -994,7 +994,7 @@ class RoboMinnie:
         [omp]
         max_genes = {omp_iterations}
         shape_isolation_distance_yx = 8
-        pixel_max_percentile = 0
+        pixel_max_percentile = 5
         """
         # Remove any large spaces in the config contents
         config_file_contents = config_file_contents.replace("  ", "")
