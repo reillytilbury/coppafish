@@ -1,0 +1,46 @@
+name: default CI
+
+# Trigger on any push or pull requests
+on:
+  push:
+  pull_request:
+
+jobs:
+  run-tests:
+    strategy:
+      # Do not fail fast, so we can see all errors from the unit/integration tests
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version:
+          - "3.9"
+          - "3.10"
+    name: Tests
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Update pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install pytest
+        run: python -m pip install -r requirements-development.txt
+
+      - name: Install default dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install .
+
+      - name: Run default unit tests
+        run: pytest -m 'not slow and not optimised and not integration and not pytorch'
+
+      - name: Run default integration tests
+        run: pytest -m 'integration and not slow and not optimised and not pytorch'
