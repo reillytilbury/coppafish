@@ -75,8 +75,9 @@ def compute_omp_coefficients(
     assert dot_product_norm_shift >= 0
     assert alpha >= 0
     assert beta >= 0
-    assert do_not_compute_on.dim() == 1
-    assert do_not_compute_on.shape[0] == pixel_colours.shape[0]
+    if do_not_compute_on is not None:
+        assert do_not_compute_on.dim() == 1
+        assert do_not_compute_on.shape[0] == pixel_colours.shape[0]
 
     # We want exact, reproducible results in coppafish.
     torch.backends.cudnn.deterministic = True
