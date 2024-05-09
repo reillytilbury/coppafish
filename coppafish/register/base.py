@@ -599,7 +599,7 @@ def gaussian_kernel(sigma: float, size: int) -> np.ndarray:
 
 
 def channel_registration(
-    fluorescent_bead_path: str = None, anchor_cam_idx: int = 2, n_cams: int = 4, bead_radii: list = [10, 11, 12]
+    fluorescent_bead_path: str = None, anchor_cam_idx: int = 3, n_cams: int = 4, bead_radii: list = [10, 11, 12]
 ) -> np.ndarray:
     """
     Function to carry out channel registration using fluorescent beads. This function assumes that the fluorescent
@@ -652,6 +652,13 @@ def channel_registration(
         accums, cx, cy, radii = skimage.transform.hough_circle_peaks(
             hough_res, bead_radii, min_xdistance=10, min_ydistance=10
         )
+        cy, cx = cy.astype(int), cx.astype(int)
+        values = fluorescent_beads[i][cy, cx]
+        cy_rand, cx_rand = (np.random.randint(0, fluorescent_beads[i].shape[0]-1, 100),
+                            np.random.randint(0, fluorescent_beads[i].shape[1]-1, 100))
+        noise = np.mean(fluorescent_beads[i][cy_rand, cx_rand])
+        keep = values > noise
+        cy, cx = cy[keep], cx[keep]
         bead_point_clouds.append(np.vstack((cy, cx)).T)
 
     # Now convert the point clouds from yx to yxz. This is because our ICP algorithm assumes that the point clouds
@@ -690,7 +697,7 @@ def channel_registration(
 
     # Convert transforms from yxz to zyx
     transform_zyx = np.zeros((4, 3, 4))
-    for i in range(4):
+    for i in range(n_cams):
         transform_zyx[i] = preprocessing.yxz_to_zyx_affine(transform[i])
 
     return transform_zyx
