@@ -3,6 +3,7 @@ import tqdm
 import torch
 import scipy
 import numpy as np
+import math as maths
 from typing_extensions import assert_type
 import numpy.typing as npt
 
@@ -36,9 +37,12 @@ def load_spot_colours(
     assert_type(dtype, np.dtype)
 
     image_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
-    colours = np.zeros(image_shape + (len(nbp_basic.use_rounds), len(nbp_basic.use_channels)), dtype=dtype)
+    n_channels_use = len(nbp_basic.use_channels)
+    colours = np.zeros(image_shape + (len(nbp_basic.use_rounds), n_channels_use), dtype=dtype)
 
-    n_rounds_batch = 2
+    n_rounds_batch = max(
+        1, maths.floor(4.4e7 * utils.system.get_available_memory() / (n_channels_use * np.prod(image_shape)))
+    )
     final_round = nbp_basic.use_rounds[-1]
     half_pixel_0, half_pixel_1, half_pixel_2 = [1 / image_shape[i] for i in range(3)]
     image_batch = torch.zeros((0, len(nbp_basic.use_channels)) + image_shape, dtype=torch.float32)
@@ -48,9 +52,7 @@ def load_spot_colours(
         torch.linspace(half_pixel_2 - 1, 1 - half_pixel_2, image_shape[2]),
         indexing="ij",
     )
-    base_grid = torch.cat(
-        (grid_2[None, :, :, :, None], grid_1[None, :, :, :, None], grid_0[None, :, :, :, None]), dim=4
-    )
+    base_grid = torch.cat((grid_2[:, :, :, None], grid_1[:, :, :, None], grid_0[:, :, :, None]), dim=3)[None]
     grids = torch.zeros((0,) + image_shape + (3,), dtype=torch.float32)
     for i, r in enumerate(tqdm.tqdm(nbp_basic.use_rounds, desc="Loading spot colours", unit="round")):
         suffix = "_raw" if r == nbp_basic.pre_seq_round else ""
@@ -63,32 +65,31 @@ def load_spot_colours(
             affine = nbp_register.icp_correction[tile, r, c].copy()
             affine = preprocessing.adjust_affine(affine=affine, new_origin=new_origin)
             im_c = scipy.ndimage.affine_transform(im_c, affine, order=1, mode="constant", cval=0)
-            image_r += (im_c[np.newaxis],)
+            image_r += (im_c[np.newaxis].copy(),)
             del im_c, affine, new_origin
         image_r = torch.asarray(np.concatenate(image_r, axis=0, dtype=np.float32))
         image_batch = torch.cat((image_batch, image_r[np.newaxis]), dim=0)
         del image_r
         flow_dir = os.path.join(nbp_register.flow_dir, "smooth", f"t{tile}_r{r}.npy")
+        # Flow_field_r[0] are y shifts, flow_field_r[2] are z shifts.
         flow_field_r = -np.load(flow_dir, mmap_mode=None)
+        flow_field_r[[0, 1, 2]] = flow_field_r[[2, 1, 0]]
         # Flow's shape changes (3, im_y, im_x, im_z) -> (1, im_y, im_x, im_z, 3).
         flow_field_r = torch.asarray(flow_field_r.transpose((1, 2, 3, 0)))[np.newaxis]
         # A one in the flow field represents a shift of one pixel on the grid.
         flow_field_r[..., 0] *= half_pixel_2 * 2
         flow_field_r[..., 1] *= half_pixel_1 * 2
         flow_field_r[..., 2] *= half_pixel_0 * 2
-        flow_field_r = base_grid.clone() + flow_field_r
+        flow_field_r = base_grid.detach().clone() + flow_field_r
         grids = torch.cat((grids, flow_field_r), dim=0)
-        del flow_field_r
+        del flow_dir, flow_field_r
         if (i + 1) % n_rounds_batch == 0 or r == final_round:
             i_min, i_max = max(i + 1 - grids.shape[0], 0), i + 1
-            log.info(f"{i_min=}")
-            log.info(f"{i_max=}")
             registered_image_batch = torch.nn.functional.grid_sample(
                 image_batch, grids, mode="bilinear", padding_mode="zeros", align_corners=False
             )
+            registered_image_batch += nbp_basic.tile_pixel_value_shift
             registered_image_batch = registered_image_batch.numpy().astype(dtype).transpose((2, 3, 4, 0, 1))
-            log.info(f"{registered_image_batch.shape=}")
-            log.info(f"{colours[:, :, :, i_min:i_max, :].shape=}")
             colours[:, :, :, i_min:i_max, :] = registered_image_batch
 
             image_batch = image_batch[[]]

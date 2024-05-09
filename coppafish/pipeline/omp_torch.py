@@ -225,7 +225,7 @@ def run_omp(
                         isolated_spots_yxz = isolated_spots_yxz[: config["spot_shape_max_spots"]]
                         isolated_gene_numbers = isolated_gene_numbers[: config["spot_shape_max_spots"]]
                         continue
-                    g_coefficient_image = torch.asarray(coefficient_image[:, g].toarray().reshape(subset_shape)).float()
+                    g_coefficient_image = torch.asarray(coefficient_image[:, [g]].toarray()).reshape(subset_shape)
                     isolated_spots_yxz_g, _ = detect_torch.detect_spots(
                         image=g_coefficient_image,
                         intensity_thresh=config["shape_coefficient_threshold"],
@@ -246,7 +246,7 @@ def run_omp(
                 for g in tqdm.trange(n_genes, desc="Averaging spots"):
                     if (isolated_gene_numbers == g).sum() == 0:
                         continue
-                    g_coefficient_image = torch.asarray(coefficient_image[:, g].toarray().reshape(subset_shape)).float()
+                    g_coefficient_image = torch.asarray(coefficient_image[:, [g]].toarray().reshape(subset_shape))
                     g_mean_spot = spots_torch.compute_mean_spot_from(
                         g_coefficient_image,
                         isolated_spots_yxz[isolated_gene_numbers == g],
@@ -293,10 +293,7 @@ def run_omp(
 
             for g in tqdm.trange(n_genes, desc="Detecting and scoring spots", unit="gene"):
                 # STEP 3: Detect spots on the subset except at the x and y edges.
-                log.debug(f"loading coefficient_image {g=}")
-                g_coefficient_image = torch.asarray(coefficient_image[:, g].toarray()).reshape(subset_shape)
-                log.debug(f"loading coefficient_image {g=} complete")
-                log.debug(f"Detecting spots for gene {g}")
+                g_coefficient_image = torch.asarray(coefficient_image[:, [g]].toarray().reshape(subset_shape))
                 g_spots_yxz, _ = detect_torch.detect_spots(
                     image=g_coefficient_image,
                     intensity_thresh=config["coefficient_threshold"],
@@ -304,9 +301,7 @@ def run_omp(
                     radius_z=config["radius_z"],
                     force_cpu=config["force_cpu"],
                 )
-                log.debug(f"Detecting spots for gene {g} complete")
                 # Convert spot positions in the subset image to positions on the tile.
-                log.debug("Finding valid_positions")
                 g_spots_local_yxz = subset_positions_to_tile_positions(g_spots_yxz)
                 valid_positions = get_valid_subset_positions(g_spots_yxz)
                 if valid_positions.sum() == 0:
@@ -314,10 +309,8 @@ def run_omp(
 
                 g_spots_yxz = g_spots_yxz[valid_positions]
                 g_spots_local_yxz = g_spots_local_yxz[valid_positions]
-                log.debug("Finding valid_positions complete")
 
                 # STEP 4: Score the detections using the coefficients.
-                log.debug(f"Scoring gene {g} image")
                 g_spots_score = scores_torch.score_coefficient_image(
                     coefficient_image=g_coefficient_image,
                     points=g_spots_yxz,
@@ -326,10 +319,8 @@ def run_omp(
                     high_coefficient_bias=config["high_coef_bias"],
                     force_cpu=config["force_cpu"],
                 )
-                log.debug(f"Scoring gene {g} image complete")
 
                 # Remove bad scoring spots (i.e. false gene reads)
-                log.debug(f"Concating results")
                 keep_scores = g_spots_score >= config["score_threshold"]
                 g_spots_local_yxz = g_spots_local_yxz[keep_scores]
                 g_spots_yxz = g_spots_yxz[keep_scores]
@@ -349,7 +340,6 @@ def run_omp(
 
                 del g_spots_yxz, g_spots_local_yxz, g_spots_score, g_spots_tile, g_spots_gene_no
                 del g_coefficient_image
-                log.debug(f"Concating results complete")
 
             # STEP 5: Repeat steps 2 to 4 on every mini-tile subset.
             first_computation = False

@@ -26,7 +26,7 @@ def compute_omp_coefficients(
     beta: float,
     pixel_intensity_threshold: float,
     force_cpu: bool = True,
-) -> scipy.sparse.lil_matrix:
+) -> scipy.sparse.csr_matrix:
     """
     Find OMP coefficients on all pixels.
 
@@ -52,7 +52,7 @@ def compute_omp_coefficients(
         force_cpu (bool): force the computation to run on a CPU, even if a GPU is available.
 
     Returns:
-        - (`(n_pixels x n_genes) sparse lil_matrix`) pixel_coefficients: OMP
+        - (`(n_pixels x n_genes) sparse csr_matrix`) pixel_coefficients: OMP
             coefficients for every pixel. Since most coefficients are zero, the results are stored as a sparse matrix.
             Flattening the image dimensions is done using numpy's reshape method for consistency.
     """
@@ -155,7 +155,7 @@ def compute_omp_coefficients(
     if verbose:
         log.info(f"Pixels iterated on: {pixels_iterated}")
 
-    return coefficient_image
+    return coefficient_image.tocsr()
 
 
 def get_next_best_gene(
