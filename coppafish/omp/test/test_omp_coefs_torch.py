@@ -45,7 +45,6 @@ def test_compute_omp_coefficients() -> None:
             weight,
             alpha,
             beta,
-            0,
         )
         assert_type(pixel_coefficients, scipy.sparse.csr_matrix)
         assert pixel_coefficients.shape == (n_pixels, n_genes)

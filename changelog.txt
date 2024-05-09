@@ -3,6 +3,7 @@
  * The OMP computed spot is now computed on a subset on one tile, not the full tile.
  * OMP is faster and the entire tile is loaded into memory before running each tile.
  * OMP code has been overhauled.
+ * Coppafish can email notifications on completed pipelines and crashes.
 
 
 2024/04/23 Alpha Update (v0.10.4):
