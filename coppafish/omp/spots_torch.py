@@ -40,19 +40,19 @@ def compute_mean_spot_from(
         run_on = torch.device("cuda")
 
     spot_positions_yxz = spot_positions_yxz.to(run_on)
-
-    n_spots = spot_positions_yxz.shape[0]
-
     # Pad the image with zeros on one edge for every dimension so out of bounds retrievals are all zeros.
     image_padded = torch.nn.functional.pad(image, (0, spot_shape[2], 0, spot_shape[1], 0, spot_shape[0])).to(run_on)
 
-    mean_spot = torch.zeros(spot_shape, dtype=torch.float32)
+    n_spots = spot_positions_yxz.shape[0]
+    mean_spot = torch.zeros(spot_shape, dtype=torch.float32, device=run_on)
 
     # (3, n_shifts)
-    spot_shifts = torch.asarray(np.array(filter.get_shifts_from_kernel(np.ones(spot_shape))), dtype=torch.int16)
+    spot_shifts = torch.asarray(
+        np.array(filter.get_shifts_from_kernel(np.ones(spot_shape))), dtype=torch.int16, device=run_on
+    )
     n_shifts = spot_shifts.shape[1]
     # (3, n_shifts)
-    spot_shift_positions = spot_shifts.int() + (torch.asarray(spot_shape, dtype=int) // 2)[:, np.newaxis]
+    spot_shift_positions = spot_shifts.int() + (torch.asarray(spot_shape, dtype=int, device=run_on) // 2)[:, np.newaxis]
     # (3, 1, n_spots)
     spot_positions_yxz = spot_positions_yxz.T[:, np.newaxis].repeat_interleave(n_shifts, dim=1)
     # (3, n_shifts, n_spots)
