@@ -280,8 +280,8 @@ def run_omp(
                     )
 
                 n_positives = (spot == 1).sum()
-                message = f"Computed spot contains {n_positives} strongly positive values."
-                if n_positives < 20:
+                message = f"Computed spot contains only {n_positives} strongly positive values."
+                if n_positives < 5:
                     message += f" You may need to reduce shape_sign_thresh in OMP config"
                     if n_positives == 0:
                         raise ValueError(message)

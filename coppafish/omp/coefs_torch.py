@@ -7,7 +7,7 @@ from typing_extensions import assert_type
 from typing import Tuple, Optional, List
 
 from .. import utils
-from ..call_spots import dot_product_pytorch, qual_check_torch
+from ..call_spots import dot_product_pytorch
 
 
 NO_GENE_SELECTION = -32768
@@ -103,6 +103,7 @@ def compute_omp_coefficients(
 
     # Move all variables used in computation to the selected device.
     pixel_colours = pixel_colours.to(device=run_on)
+    do_not_compute_on = do_not_compute_on.to(device=run_on)
     bled_codes = bled_codes.to(device=run_on)
     all_bled_codes = all_bled_codes.to(device=run_on)
     genes_added_coefficients = torch.zeros_like(genes_added).float().to(device=run_on)
@@ -159,6 +160,7 @@ def compute_omp_coefficients(
     genes_added_coefficients = genes_added_coefficients.cpu()
     genes_added = genes_added.cpu()
     background_genes = background_variance.cpu()
+    do_not_compute_on = do_not_compute_on.cpu()
 
     return coefficient_image.tocsr()
 
