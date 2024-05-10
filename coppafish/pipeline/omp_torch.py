@@ -67,6 +67,8 @@ def run_omp(
     assert transform.shape[3:5] == (4, 3)
     assert transform.ndim == 5
 
+    # We want exact, reproducible results in coppafish.
+    torch.backends.cudnn.deterministic = True
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
     log.info("OMP started")

@@ -79,9 +79,6 @@ def compute_omp_coefficients(
         assert do_not_compute_on.dim() == 1
         assert do_not_compute_on.shape[0] == pixel_colours.shape[0]
 
-    # We want exact, reproducible results in coppafish.
-    torch.backends.cudnn.deterministic = True
-
     cpu = torch.device("cpu")
     run_on = cpu
     if not force_cpu and torch.cuda.is_available():
