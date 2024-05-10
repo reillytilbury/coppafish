@@ -22,7 +22,7 @@ from typing import Optional
 from . import legend
 from .hotkeys import KeyBinds, ViewHotkeys
 from ..call_spots import view_codes, view_bleed_matrix, view_bled_codes, view_spot, view_intensity, gene_counts
-from ..call_spots import qual_check
+from ...call_spots import qual_check
 from .. import call_spots as call_spots_plot
 from ..call_spots_new import GEViewer, ViewBleedCalc, ViewAllGeneScores, BGNormViewer
 from ..omp import view_omp, view_omp_score, histogram_score
