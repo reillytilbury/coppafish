@@ -6,7 +6,7 @@ import numpy as np
 from typing_extensions import assert_type
 from typing import Tuple, Optional, List
 
-from .. import utils, log
+from .. import utils
 from ..call_spots import dot_product_pytorch
 
 
@@ -75,9 +75,10 @@ def compute_omp_coefficients(
     assert dot_product_norm_shift >= 0
     assert alpha >= 0
     assert beta >= 0
-    if do_not_compute_on is not None:
-        assert do_not_compute_on.dim() == 1
-        assert do_not_compute_on.shape[0] == pixel_colours.shape[0]
+    if do_not_compute_on is None:
+        do_not_compute_on = torch.zeros(pixel_colours.shape[0], dtype=bool)
+    assert do_not_compute_on.dim() == 1
+    assert do_not_compute_on.shape[0] == pixel_colours.shape[0]
 
     cpu = torch.device("cpu")
     run_on = cpu
@@ -111,8 +112,7 @@ def compute_omp_coefficients(
     # Run on every non-zero pixel colour.
     iterate_on_pixels = torch.logical_not(torch.isclose(pixel_colours, torch.asarray(0).float()).all(dim=1))
     # Threshold pixel intensities to run on
-    if do_not_compute_on is not None:
-        iterate_on_pixels = torch.logical_and(iterate_on_pixels, do_not_compute_on.logical_not_())
+    iterate_on_pixels = torch.logical_and(iterate_on_pixels, do_not_compute_on.logical_not_())
     verbose = iterate_on_pixels.sum() > 1_000
     pixels_iterated: List[int] = []
     # Start with a lil_matrix when populating results as this is faster than the csr matrix.
@@ -147,12 +147,10 @@ def compute_omp_coefficients(
         )
 
         # Populate sparse matrix with the updated coefficient results
-        log.debug(f"For loop started")
         selected_pixels = torch.nonzero(genes_added[:, i] != NO_GENE_SELECTION, as_tuple=True)[0].cpu().tolist()
         selected_genes = genes_added[:, i][selected_pixels].cpu().int().tolist()
         selected_coefficients = genes_added_coefficients[:, i][selected_pixels].cpu().tolist()
         coefficient_image[selected_pixels, selected_genes] = selected_coefficients
-        log.debug(f"For loop complete")
 
     return coefficient_image.tocsr()
 
