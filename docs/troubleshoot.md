@@ -43,3 +43,8 @@ issue:
    pixels. You can then restart the pipeline without deleting any files. If you wish to ignore warnings too, increase
    `percent_clip_warn`.
 
+## Memory crash at OMP
+
+Try lowering subset_size_xy in the OMP config. This will cause OMP to compute on fewer pixels at time. It has a 
+minimal effect on compute times, but can lower the RAM/VRAM usage.
+

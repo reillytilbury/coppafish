@@ -22,6 +22,7 @@ from typing import Optional
 from . import legend
 from .hotkeys import KeyBinds, ViewHotkeys
 from ..call_spots import view_codes, view_bleed_matrix, view_bled_codes, view_spot, view_intensity, gene_counts
+from ..call_spots import qual_check
 from .. import call_spots as call_spots_plot
 from ..call_spots_new import GEViewer, ViewBleedCalc, ViewAllGeneScores, BGNormViewer
 from ..omp import view_omp, view_omp_score, histogram_score
@@ -319,7 +320,7 @@ class Viewer:
         # method.
         self.intensity_thresh_slider = QDoubleSlider(Qt.Orientation.Horizontal)
         self.intensity_thresh_slider.setRange(0, 1)
-        intensity_thresh = call_spots.qual_check.get_intensity_thresh(nb)
+        intensity_thresh = qual_check.get_intensity_thresh(nb)
         self.intensity_thresh_slider.setValue(intensity_thresh)
         # When dragging, status will show thresh.
         self.intensity_thresh_slider.valueChanged.connect(lambda x: self.show_intensity_thresh(x))
