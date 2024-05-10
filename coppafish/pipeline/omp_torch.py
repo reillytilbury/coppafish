@@ -131,7 +131,7 @@ def run_omp(
             # planes.
             log.debug(f"Subset {i}, Subset origin {subset_yxz}")
 
-            def subset_positions_to_tile_positions(positions_yxz: torch.Tensor) -> torch.Tensor:
+            def subset_to_tile_positions(positions_yxz: torch.Tensor) -> torch.Tensor:
                 return positions_yxz.detach().clone() + torch.asarray(subset_yxz)[np.newaxis]
 
             def get_valid_subset_positions(positions_yxz: torch.Tensor) -> torch.Tensor:
@@ -143,7 +143,7 @@ def run_omp(
                     * (positions_yxz[:, 1] < (subset_shape[1] - spot_radius_xy))
                     * (positions_yxz[:, 2] < (subset_shape[2]))
                 )
-                tile_positions_yxz = subset_positions_to_tile_positions(positions_yxz)
+                tile_positions_yxz = subset_to_tile_positions(positions_yxz)
                 valid *= (
                     (tile_positions_yxz[:, 0] >= 0)
                     * (tile_positions_yxz[:, 1] >= 0)
@@ -214,7 +214,7 @@ def run_omp(
 
             # STEP 2.5: On the first OMP z-chunk/tile, compute the OMP spot shape using the found coefficients.
             if first_computation:
-                log.info("Computing spot shape")
+                log.info("Computing spot and mean spot")
                 isolated_spots_yxz = torch.zeros((0, 3), dtype=torch.int16)
                 isolated_gene_numbers = torch.zeros(0, dtype=torch.int16)
                 shape_isolation_distance_z = config["shape_isolation_distance_z"]
@@ -294,7 +294,7 @@ def run_omp(
                 nbp.spot_tile = t
                 nbp.mean_spot = np.array(mean_spot)
                 nbp.spot = np.array(spot)
-                log.info("Computing spot shape complete")
+                log.info("Computing spot and mean spot complete")
 
             for g in tqdm.trange(n_genes, desc="Detecting and scoring spots", unit="gene"):
                 # STEP 3: Detect spots on the subset except at the x and y edges.
@@ -307,7 +307,7 @@ def run_omp(
                     force_cpu=config["force_cpu"],
                 )
                 # Convert spot positions in the subset image to positions on the tile.
-                g_spots_local_yxz = subset_positions_to_tile_positions(g_spots_yxz)
+                g_spots_local_yxz = subset_to_tile_positions(g_spots_yxz)
                 valid_positions = get_valid_subset_positions(g_spots_yxz)
                 if valid_positions.sum() == 0:
                     continue
@@ -350,7 +350,7 @@ def run_omp(
             first_computation = False
         if (spots_tile == t).sum() == 0:
             raise ValueError(
-                f"No OMP spots were found on tile {t}. Please check that registration and call spots is working. "
+                f"No OMP spots found on tile {t}. Please check that registration and call spots is working. "
                 + "If so, consider adjusting OMP config parameters."
             )
         del colour_image

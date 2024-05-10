@@ -43,6 +43,7 @@ def load_spot_colours(
     n_rounds_batch = max(
         1, maths.floor(4.4e7 * utils.system.get_available_memory() / (n_channels_use * np.prod(image_shape)))
     )
+    log.debug(f"{n_rounds_batch=}")
     final_round = nbp_basic.use_rounds[-1]
     half_pixel_0, half_pixel_1, half_pixel_2 = [1 / image_shape[i] for i in range(3)]
     image_batch = torch.zeros((0, len(nbp_basic.use_channels)) + image_shape, dtype=torch.float32)
@@ -95,5 +96,4 @@ def load_spot_colours(
             image_batch = image_batch[[]]
             grids = grids[[]]
 
-    log.info(f"{(colours == 0).sum()}")
     return colours
