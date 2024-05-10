@@ -6,7 +6,7 @@ import numpy as np
 from typing_extensions import assert_type
 from typing import Tuple, Optional, List
 
-from .. import utils
+from .. import utils, log
 from ..call_spots import dot_product_pytorch
 
 
@@ -147,17 +147,13 @@ def compute_omp_coefficients(
         )
 
         # Populate sparse matrix with the updated coefficient results
+        log.debug(f"For loop started")
         for p in torch.where(genes_added[:, i] != NO_GENE_SELECTION)[0]:
-            p_gene = genes_added[p, i]
-            coefficient_image[p, p_gene.int()] = genes_added_coefficients[p, i].cpu().numpy()
-
-    iterate_on_pixels = iterate_on_pixels.cpu()
-    pixel_colours = pixel_colours.cpu()
-    all_bled_codes = all_bled_codes.cpu()
-    genes_added_coefficients = genes_added_coefficients.cpu()
-    genes_added = genes_added.cpu()
-    background_genes = background_variance.cpu()
-    do_not_compute_on = do_not_compute_on.cpu()
+            p_gene = genes_added[p, i].int().cpu()
+            new_coefficient = genes_added_coefficients[p, i].cpu()
+            new_coefficient.numpy()
+            coefficient_image[p.cpu(), p_gene.int()] = new_coefficient
+        log.debug(f"For loop complete")
 
     return coefficient_image.tocsr()
 
