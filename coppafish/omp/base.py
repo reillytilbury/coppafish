@@ -5,6 +5,7 @@ import scipy
 import numpy as np
 import math as maths
 from typing_extensions import assert_type
+from concurrent.futures import ProcessPoolExecutor
 import numpy.typing as npt
 
 from .. import utils, log
@@ -58,16 +59,22 @@ def load_spot_colours(
     for i, r in enumerate(tqdm.tqdm(nbp_basic.use_rounds, desc="Loading spot colours", unit="round")):
         suffix = "_raw" if r == nbp_basic.pre_seq_round else ""
         image_r = tuple()
-        for c in nbp_basic.use_channels:
-            im_c = utils.tiles_io.load_image(
-                nbp_file, nbp_basic, nbp_extract.file_type, tile, r, c, yxz=None, suffix=suffix
-            ).astype(np.float32)
-            new_origin = np.zeros(3, dtype=int)
-            affine = nbp_register.icp_correction[tile, r, c].copy()
-            affine = preprocessing.adjust_affine(affine=affine, new_origin=new_origin)
-            im_c = scipy.ndimage.affine_transform(im_c, affine, order=1, mode="constant", cval=0)
-            image_r += (im_c[np.newaxis].copy(),)
-            del im_c, affine, new_origin
+        # While each image is being affine transformed, we are disk loading the next image at the same time.
+        with ProcessPoolExecutor(max_workers=len(nbp_basic.use_channels)) as executor:
+            futures = []
+            for c in nbp_basic.use_channels:
+                im_c = utils.tiles_io.load_image(
+                    nbp_file, nbp_basic, nbp_extract.file_type, tile, r, c, yxz=None, suffix=suffix
+                ).astype(np.float32)
+                new_origin = np.zeros(3, dtype=int)
+                affine = nbp_register.icp_correction[tile, r, c].copy()
+                affine = preprocessing.adjust_affine(affine=affine, new_origin=new_origin)
+                futures.append(
+                    executor.submit(scipy.ndimage.affine_transform, im_c, affine, order=1, mode="constant", cval=0)
+                )
+            for future in futures:
+                image_r += (future.result(timeout=300)[np.newaxis].copy(),)
+            del futures
         image_r = torch.asarray(np.concatenate(image_r, axis=0, dtype=np.float32))
         image_batch = torch.cat((image_batch, image_r[np.newaxis]), dim=0)
         del image_r
