@@ -401,7 +401,7 @@ class Viewer:
         if self.method_buttons.method == "OMP":
             score = call_spots.qual_check.omp_spot_score(self.nb.omp)
             method_ind = np.arange(self.omp_0_ind * 2, self.n_spots)
-            intensity_ok = self.nb.omp.intensity > self.intensity_thresh_slider.value()
+            intensity_ok = np.full_like(score, True, dtype=bool)
         elif self.method_buttons.method == "Anchor":
             score = self.nb.ref_spots.score
             method_ind = np.arange(self.omp_0_ind)
