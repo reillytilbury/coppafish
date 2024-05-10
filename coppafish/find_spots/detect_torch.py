@@ -90,7 +90,7 @@ def detect_spots(
     cpu = torch.device("cpu")
     run_on = cpu
     if torch.cuda.is_available() and not force_cpu:
-        run_on = torch.device("gpu")
+        run_on = torch.device("cuda")
 
     image = image.to(run_on)
     consider_intensity = consider_intensity.to(run_on)
@@ -120,4 +120,5 @@ def detect_spots(
     else:
         peak_intensity = consider_intensity[keep]
     peak_yxz = consider_yxz.T[keep]
+
     return peak_yxz.to(dtype=torch.int32, device=cpu), peak_intensity.to(device=cpu)
