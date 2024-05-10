@@ -150,11 +150,11 @@ def compute_omp_coefficients(
         )
 
         # Populate sparse matrix with the updated coefficient results
-        genes_added_coefficients = genes_added_coefficients.cpu()
+        genes_added_coefficients = genes_added_coefficients.to(device=cpu)
         for p in torch.where(genes_added[:, i] != NO_GENE_SELECTION)[0]:
             p_gene = genes_added[p, i]
             coefficient_image[p, p_gene.int()] = genes_added_coefficients[p, i].numpy()
-        genes_added_coefficients.to(device=run_on)
+        genes_added_coefficients = genes_added_coefficients.to(device=run_on)
 
     iterate_on_pixels = iterate_on_pixels.cpu()
     pixel_colours = pixel_colours.cpu()
