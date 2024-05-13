@@ -62,13 +62,13 @@ class Viewer:
                 If it is not provided, then the default file *coppafish/plot/results_viewer/legend.gene_color.csv*
                 will be used.
         """
-        # TODO: Make this more modular, write a function for preprocessing gene marker file
-        self.is_3d = nb.basic_info.is_3d
+        # declare variables needed from the notebook
+        self.is_3d, self.nz, self.abs_intensity_thresh = (nb.basic_info.is_3d, nb.basic_info.nz,
+                                                          nb.call_spots.abs_intensity_thresh[50])
         self.method_names = ["anchor", "prob"] + (["omp"] if nb.has_page("omp") else [])
         self.relevant_pages = ["ref_spots", "ref_spots", "omp"] if nb.has_page("omp") else ["ref_spots", "ref_spots"]
 
-        # load in genes, spots and background images
-        # declare variables
+        # declare derived variables
         self.genes = np.zeros((len(nb.call_spots.gene_names), 0)).tolist()
         self.spots = np.zeros((len(self.method_names), len(nb.call_spots.gene_names), 0)).tolist()
         self.background_image, self.background_image_colour, self.background_image_name = [], [], []
@@ -79,10 +79,20 @@ class Viewer:
 
         # create napari viewer
         self.viewer = napari.Viewer()
+        if self.is_3d:
+            self.z_thick = 1
+            self.z_thick_slider = None
+        self.score_thresh_slider, self.intensity_thresh_slider, self.method_buttons = None, None, None
         self.format_napari_viewer()
 
-        self.viewer_status_on_select()
+        # add derived variables to viewer
+        self.active_method = 2 if nb.has_page("omp") else 0     # default to omp if it exists, else anchor
+        self.active_genes = np.arange(len(nb.call_spots.gene_names))    # start with all genes shown
+        self.add_bg_images_to_viewer()
+        self.add_spots_to_viewer()
 
+        self.viewer_status_on_select()
+        self.key_call_functions()
         napari.run()
 
     # function to create the napari viewer
@@ -90,85 +100,61 @@ class Viewer:
         """
         Create the napari viewer.
         """
-        # Set up napari viewer
-
+        # turn off layer list and layer controls
         self.viewer.window.qt_viewer.dockLayerList.setVisible(False)
         self.viewer.window.qt_viewer.dockLayerControls.setVisible(False)
-        self.z_thick = 1  # show +/- 1 plane initially
-        self.nz = nb.basic_info.nz
 
-
-
-        # Add all spots in layer as transparent white spots.
-        self.point_size = [self.z_thick, 10, 10]  # with size=4, spots are too small to see
-        self.viewer.add_points(
-            self.spot_zyx,
-            name="Diagnostic",
-            face_color="w",
-            size=np.array(self.point_size) + np.array([0, 2, 2]),
-            opacity=0,
-            shown=show_spots,
-            out_of_slice_display=True,
-        )
-
+        # Z-thickness slider
         if self.is_3d:
             self.z_thick_slider = QSlider(Qt.Orientation.Horizontal)
             self.z_thick_slider.setRange(0, self.nz)
             self.z_thick_slider.setValue(self.z_thick)
-            self.z_thick_slider.valueChanged.connect(lambda x: self.change_z_thick(x))
+            self.z_thick_slider.valueChanged.connect(self.update_plot)
             self.viewer.window.add_dock_widget(self.z_thick_slider, area="left", name="Z Thickness")
-        config = self.nb.get_config()["thresholds"]
-        self.score_omp_multiplier = config["score_omp_multiplier"]
-        self.score_thresh_slider = QDoubleRangeSlider(Qt.Orientation.Horizontal)  # Slider to change score_thresh
-        # Scores for anchor/omp are different so reset score range when change method
-        # Max possible score is that found for ref_spots, as this can be more than 1.
-        # Max possible omp score is 1.
-        max_score = np.around(utils.round_any(nb.ref_spots.score.max(), 0.1, "ceil"), 2)
-        max_score = float(np.clip(max_score, 1, np.inf))
-        self.score_range = {"anchor": [config["score_ref"], max_score], "prob": [config["score_ref"], max_score]}
-        if self.nb.has_page("omp"):
-            self.score_range["omp"] = [config["score_omp"], max_score]
-            self.score_thresh_slider.setValue(self.score_range["omp"])
-        else:
-            self.score_thresh_slider.setValue(self.score_range["anchor"])
-        self.score_thresh_slider.setRange(0, max_score)
-        # When dragging, status will show thresh.
-        self.score_thresh_slider.valueChanged.connect(lambda x: self.show_score_thresh(x[0], x[1]))
-        # On release of slider, genes shown will change
-        self.score_thresh_slider.sliderReleased.connect(self.update_plot)
-        self.viewer.window.add_dock_widget(self.score_thresh_slider, area="left", name="Score Range")
-
-        # intensity is calculated same way for anchor / omp method so do not reset intensity threshold when change
-        # method.
-        self.intensity_thresh_slider = QDoubleSlider(Qt.Orientation.Horizontal)
-        self.intensity_thresh_slider.setRange(0, 1)
-        intensity_thresh = call_spots.qual_check.get_intensity_thresh(nb)
-        self.intensity_thresh_slider.setValue(intensity_thresh)
-        # When dragging, status will show thresh.
-        self.intensity_thresh_slider.valueChanged.connect(lambda x: self.show_intensity_thresh(x))
-        # On release of slider, genes shown will change
-        self.intensity_thresh_slider.sliderReleased.connect(self.update_plot)
-        self.viewer.window.add_dock_widget(self.intensity_thresh_slider, area="left", name="Intensity Threshold")
-
-        if self.nb.has_page("omp"):
-            self.method_buttons = ButtonMethodWindow("OMP")  # Buttons to change between Anchor and OMP spots showing.
-            self.method_buttons.button_omp.clicked.connect(self.button_omp_clicked)
-        else:
-            self.method_buttons = ButtonMethodWindow("Anchor", has_omp=False)
-        # What does the below do?
-        # This part of the code makes each button call a different function
-        self.method_buttons.button_anchor.clicked.connect(self.button_anchor_clicked)
-        self.method_buttons.button_prob.clicked.connect(self.button_prob_clicked)
+        # Slider to change score_thresh
+        self.add_slider("range", "Score Range", (0, 1), 0, 1)
+        # Slider to change intensity_thresh
+        self.add_slider("single", "Intensity Threshold", self.abs_intensity_thresh, 0, 100)
+        # Buttons to change method
+        self.method_buttons = Method(active_button=self.method_names[self.active_method],
+                                     has_omp=self.method_names[-1] == "omp")
+        for i in range(len(self.method_names)):
+            self.method_buttons.button[i].clicked.connect(lambda x=i: self.method_button_clicked(method=x))
+            self.method_buttons.button[i].clicked.connect(self.update_plot)
         self.viewer.window.add_dock_widget(self.method_buttons, area="left", name="Method")
 
-        self.key_call_functions()
-        if self.nb.basic_info.is_3d:
+        if self.is_3d:
             self.viewer.dims.axis_labels = ["z", "y", "x"]
         else:
             self.viewer.dims.axis_labels = ["y", "x"]
 
+    # function to automate the creation of sliders
+    def add_slider(self, mode: str, name: str, value: tuple, range_min: float, range_max: float) -> None:
+        """
+        Create a slider and add it to the napari viewer.
+        Args:
+            mode: str, either "range" or "single" depending on whether the slider is a range slider or a single slider.
+            name: str, name of the slider.
+            value: float, value of the slider. (if mode is "range", value should be a tuple of floats)
+            range_min: float, minimum value of the slider.
+            range_max: float, maximum value of the slider.
+        """
+        if mode == "range":
+            slider = QDoubleRangeSlider(Qt.Orientation.Horizontal)
+        else:
+            slider = QDoubleSlider(Qt.Orientation.Horizontal)
+        slider.setRange(range_min, range_max)
+        slider.setValue(value)
+        # connect to show_slider_value to show user the new value of the slider
+        slider.valueChanged.connect(lambda x: self.show_slider_value(
+            string=f'{self.method_names[self.active_method]} {name}', value=np.array(x)))
+        # connect to update_plot to update the plot when the slider is released
+        slider.sliderReleased.connect(self.update_plot)
+        self.__setattr__(f"{name}_slider", slider)
+        self.viewer.window.add_dock_widget(slider, area="left", name=name)
+
     # legend functions
-    def add_legend(self, gene_legend_info: pd.DataFrame, cell_legend_info: pd.DataFrame) -> None:
+    def add_legend(self, gene_legend_info: pd.DataFrame) -> None:
         # Add legend indicating genes plotted
         self.legend = {"fig": None, "ax": None}
         self.legend["fig"], self.legend["ax"], n_gene_label_letters = legend.add_legend(
@@ -190,7 +176,7 @@ class Viewer:
         self.viewer.window.add_dock_widget(self.legend["fig"], area="left", name="Genes")
         self.active_genes = np.arange(len(self.gene_names))  # start with all genes shown
 
-    # add some functions to load the data for the __init__ function
+    # functions to load the data for the __init__ function
     def load_genes(self, gene_marker_file: str, nb_gene_names: list) -> None:
         """
         Load genes from the legend into the Viewer Object.
@@ -300,7 +286,7 @@ class Viewer:
         """
         # define frequently used variables
         n_methods = len(self.method_names)
-        n_genes = len(self.gene_names)
+        n_genes = len(nb.gene_names)
         tile_origin = nb.stitch.tile_origin
         # initialise list of spots and load relevant information
         spots = np.zeros((len(self.method_names), len(self.gene_names), 0)).tolist()
@@ -333,7 +319,6 @@ class Viewer:
 
         # Loop through all background images and add them to the viewer.
         for i, b in enumerate(self.background_image):
-
             self.viewer.add_image(b, blending="additive", colormap=self.background_image_colour[i],
                                   name=self.background_image_name[i])
             self.viewer.layers[i].contrast_limits_range = [b.min(), b.max()]
@@ -346,13 +331,20 @@ class Viewer:
             self.image_contrast_slider[i].setValue(start_contrast)
             self.change_image_contrast(i)
             # When dragging, status will show contrast values.
-            self.image_contrast_slider[i].valueChanged.connect(lambda x: self.show_image_contrast(x[0], x[1]))
+            self.image_contrast_slider[i].valueChanged.connect(lambda x:
+                                                               self.show_slider_value(
+                                                                   string=f"{self.background_image_name[i]} Contrast",
+                                                                   value=x))
             # On release of slider, genes shown will change
             self.image_contrast_slider[i].sliderReleased.connect(lambda j=i: self.change_image_contrast(i=j))
             # add slider to viewer
             self.viewer.window.add_dock_widget(self.image_contrast_slider[i],
-                                               area="left", name=f"{self.background_image_name} Contrast")
+                                               area="left", name=f"{self.background_image_name[i]} Contrast")
 
+    def add_spots_to_viewer(self) -> None:
+        print("Adding spots to viewer")
+
+    # TODO: Understand this function
     def viewer_status_on_select(self):
         # indicate selected data in viewer status.
 
@@ -385,12 +377,11 @@ class Viewer:
                 elif n_selected > 1:
                     self.viewer.status = f"{n_selected} spots selected"
 
-        """
-        Listen to selected data changes
-        """
-
         @napari.qt.thread_worker(connect={"yielded": indicate_selected})
         def _watchSelectedData(pointsLayer):
+            """
+                Listen to selected data changes
+            """
             selectedData = None
             while True:
                 time.sleep(1 / 10)
@@ -402,6 +393,7 @@ class Viewer:
 
         return _watchSelectedData(self.viewer.layers[self.transparent_spots_ind])
 
+    # TODO: refactor this function
     def update_plot(self):
         # This updates the spots plotted to reflect score_range and intensity threshold selected by sliders,
         # method selected by button and genes selected through clicking on the legend.
@@ -484,17 +476,14 @@ class Viewer:
         self.legend["fig"].draw()
         self.update_plot()
 
-    def show_score_thresh(self, low_value, high_value):
-        self.viewer.status = self.method_buttons.method + ": Score Range = [{:.2f}, {:.2f}]".format(
-            low_value, high_value
-        )
-
-    def show_intensity_thresh(self, value):
-        self.viewer.status = "Intensity Threshold = {:.3f}".format(value)
-
-    def show_image_contrast(self, low_value, high_value):
-        # Show contrast of background image while dragging
-        self.viewer.status = "Image Contrast Limits: [{:.0f}, {:.0f}]".format(low_value, high_value)
+    def show_slider_value(self, string, value):
+        """
+        Show the value of a slider in the viewer status.
+        Args:
+            string: String to show before the value.
+            value: np.ndarray, value of the slider.
+        """
+        self.viewer.status = f"{string}: {np.round(value, 2)}"
 
     def change_image_contrast(self, i):
         # Change contrast of background image
@@ -503,45 +492,10 @@ class Viewer:
             self.image_contrast_slider[i].value()[1],
         ]
 
-    def change_z_thick(self, z_thick):
-        # Show spots from different z-planes
-        self.viewer.status = f"Z-thickness = {z_thick}"
-        for i in range(len(self.viewer.layers)):
-            self.viewer.layers[i].size = [z_thick, 10, 10]
-
-    def button_anchor_clicked(self):
-        self.method_buttons.button_anchor.setChecked(True)
-        self.method_buttons.button_prob.setChecked(False)
-        self.method_buttons.button_omp.setChecked(False)
-
-        if self.method_buttons.method != "Anchor":
-            self.method_buttons.method = "Anchor"
-            # Because method has changed, also need to change score range
-            self.score_thresh_slider.setValue(self.score_range["anchor"])
-            self.update_plot()
-
-    def button_prob_clicked(self):
-        self.method_buttons.button_anchor.setChecked(False)
-        self.method_buttons.button_prob.setChecked(True)
-        self.method_buttons.button_omp.setChecked(False)
-
-        if self.method_buttons.method != "Prob":
-            self.method_buttons.method = "Prob"
-            # Because method has changed, also need to change score range
-            self.score_thresh_slider.setValue(self.score_range["prob"])
-            self.update_plot()
-
-    def button_omp_clicked(self):
-        self.method_buttons.button_anchor.setChecked(False)
-        self.method_buttons.button_prob.setChecked(False)
-        self.method_buttons.button_omp.setChecked(True)
-
-        if self.method_buttons.method != "OMP":
-            # Logic on OMP button switch
-            self.method_buttons.method = "OMP"
-            # Because method has changed, also need to change score range
-            self.score_thresh_slider.setValue(self.score_range["omp"])
-            self.update_plot()
+    def method_button_clicked(self, method: int):
+        for i in range(3):
+            self.method_buttons.button[i].setChecked(method == i)
+        self.active_method = method
 
     def get_selected_spot(self):
         # Returns spot_no selected if only one selected (this is the spot_no relavent to the Notebook i.e.
@@ -677,35 +631,47 @@ class Viewer:
                 view_omp_score(self.nb, spot_no, self.method_buttons.method, self.omp_score_multiplier_slider.value())
 
 
-class ButtonMethodWindow(QMainWindow):
-    def __init__(self, active_button: str = "Anchor", has_omp: bool = True):
+class Method(QMainWindow):
+    def __init__(self, active_button: str = "anchor", has_omp: bool = True):
+        """
+        Create a window with buttons to change between anchor, prob and omp spots. Will have the attributes:
+        button_prob, button_anchor, button_omp (if has_omp is True), active_method.
+        Args:
+            active_button: (str) name of the button that should be active initially. Must be one of "anchor", "prob" or
+                "omp" (if has_omp is True).
+            has_omp: (bool) whether the notebook has an OMP page.
+        """
+        assert active_button in ["anchor", "prob", "omp"]
+        assert has_omp or active_button != "omp"
+
         super().__init__()
-        self.button_prob = QPushButton("Prob", self)
-        self.button_prob.setCheckable(True)
-        self.button_prob.setGeometry(50, 2, 50, 28)  # left, top, width, height
+        self.button = []
 
-        self.button_anchor = QPushButton("Anchor", self)
-        self.button_anchor.setCheckable(True)
-        self.button_anchor.setGeometry(105, 2, 50, 28)  # left, top, width, height
+        self.button.append(QPushButton("anchor", self))
+        self.button[-1].setCheckable(True)
+        self.button[-1].setGeometry(50, 2, 50, 28)  # left, top, width, height
 
-        self.button_omp = QPushButton("OMP", self)
-        self.button_omp.setCheckable(has_omp)
-        self.button_omp.setGeometry(160, 2, 50, 28)  # left, top, width, height
+        self.button.append(QPushButton("prob", self))
+        self.button[-1].setCheckable(True)
+        self.button[-1].setGeometry(105, 2, 50, 28)  # left, top, width, height
 
-        if active_button.lower() == "omp" and has_omp:
-            # Initially, show OMP spots
-            self.button_omp.setChecked(True)
-            self.method = "OMP"
-        elif active_button.lower() == "anchor":
+        if has_omp:
+            self.button.append(QPushButton("omp", self))
+            self.button[-1].setCheckable(True)
+            self.button[-1].setGeometry(160, 2, 50, 28)
+
+        if active_button == "anchor":
             # Initially, show Anchor spots
-            self.button_anchor.setChecked(True)
-            self.method = "Anchor"
-        elif active_button.lower() == "prob":
+            self.button[0].setChecked(True)
+            self.active_method = 0
+        elif active_button == "prob":
             # Show gene probabilities
-            self.button_prob.setChecked(True)
-            self.method = "Prob"
-        else:
-            raise ValueError(f"Unexpected active_button, {active_button}, was given.")
+            self.button[1].setChecked(True)
+            self.active_method = 1
+        elif active_button == "omp" and has_omp:
+            # Initially, show OMP spots
+            self.button[2].setChecked(True)
+            self.active_method = 2
 
 
 class Spots:
