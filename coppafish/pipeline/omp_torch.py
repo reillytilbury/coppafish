@@ -117,8 +117,7 @@ def run_omp(
         log.debug(f"Loading tile {t} colours complete")
 
         for i, subset_yxz in enumerate(tqdm.tqdm(subset_origins_yxz, desc=f"Computing OMP on tile {t}", unit="subset")):
-            # STEP 2: Compute OMP coefficients on a subset of the tile which is a mini tile with the same number of z
-            # planes.
+            # STEP 2: Compute OMP coefficients on a subset of the tile: a mini tile with the same number of z planes.
             log.debug(f"Subset {i}, Subset origin {subset_yxz}")
 
             def subset_to_tile_positions(positions_yxz: torch.Tensor) -> torch.Tensor:
@@ -168,9 +167,7 @@ def run_omp(
             subset_colours -= nbp_basic.tile_pixel_value_shift
             # Set any out of bounds colours to zero.
             subset_colours[subset_colours <= -nbp_basic.tile_pixel_value_shift] = 0.0
-            # Divide all colours by the colour normalisation factors.
             subset_colours /= colour_norm_factor[[t]]
-            # Fit and subtract the "background genes" off every spot colour.
             subset_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(subset_colours)
             subset_intensities = qual_check_torch.get_spot_intensity(subset_colours)
             pixel_intensity_threshold = torch.quantile(subset_intensities, q=config["pixel_max_percentile"] / 100)
@@ -202,7 +199,7 @@ def run_omp(
             log.debug("Computing OMP coefficients complete")
             del subset_colours, bg_coefficients, bg_codes, bled_codes_ge, do_not_compute_on
 
-            # STEP 2.5: On the first OMP z-chunk/tile, compute the OMP spot shape using the found coefficients.
+            # STEP 2.5: On the first OMP subset/tile, compute the OMP spot shape using the found coefficients.
             if first_computation:
                 log.debug("Computing spot and mean spot")
                 isolated_spots_yxz = torch.zeros((0, 3), dtype=torch.int16)
@@ -336,7 +333,7 @@ def run_omp(
                 del g_spots_yxz, g_spots_local_yxz, g_spots_score, g_spots_tile, g_spots_gene_no
                 del g_coefficient_image
 
-            # STEP 5: Repeat steps 2 to 4 on every mini-tile subset.
+            # STEP 5: Repeat steps 2 to 4 on every subset.
             first_computation = False
         if (spots_tile == t).sum() == 0:
             raise ValueError(
