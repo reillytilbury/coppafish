@@ -1,4 +1,3 @@
-import tqdm
 import torch
 import scipy
 import math as maths
@@ -113,12 +112,11 @@ def compute_omp_coefficients(
     iterate_on_pixels = torch.logical_not(torch.isclose(pixel_colours, torch.asarray(0).float()).all(dim=1))
     # Threshold pixel intensities to run on
     iterate_on_pixels = torch.logical_and(iterate_on_pixels, do_not_compute_on.logical_not_())
-    verbose = iterate_on_pixels.sum() > 1_000
     pixels_iterated: List[int] = []
     # Start with a lil_matrix when populating results as this is faster than the csr matrix.
     coefficient_image = scipy.sparse.lil_matrix(np.zeros((n_pixels, n_genes), dtype=np.float32))
 
-    for i in tqdm.trange(maximum_iterations, desc="Computing OMP coefficients", unit="iteration", disable=not verbose):
+    for i in range(maximum_iterations):
         pixels_iterated.append(int(iterate_on_pixels.sum()))
         best_genes, pass_threshold, inverse_variance = get_next_best_gene(
             iterate_on_pixels,

@@ -22,8 +22,6 @@ def run_omp(
     nbp_register: NotebookPage,
     nbp_register_debug: NotebookPage,
     nbp_call_spots: NotebookPage,
-    tile_origin: np.ndarray,
-    transform: np.ndarray,
 ) -> NotebookPage:
     """
     Run orthogonal matching pursuit (omp) on every pixel to determine a coefficient for each gene at each pixel.
@@ -42,14 +40,6 @@ def run_omp(
         nbp_call_spots: `call_spots` notebook page.
         nbp_register: `register` notebook page.
         nbp_register_debug: `register_debug` notebook page.
-        tile_origin: `float [n_tiles x 3]`.
-            `tile_origin[t,:]` is the bottom left yxz coordinate of tile `t`.
-            yx coordinates in `yx_pixels` and z coordinate in `z_pixels`.
-            This is saved in the `stitch` notebook page i.e. `nb.stitch.tile_origin`.
-        transform: `float [n_tiles x n_rounds x n_channels x 4 x 3]`.
-            `transform[t, r, c]` is the affine transform to get from tile `t`, `ref_round`, `ref_channel` to
-            tile `t`, round `r`, channel `c`.
-            This is saved in the register notebook page i.e. `nb.register.icp_correction`.
 
     Returns:
         `NotebookPage[omp]` - Page contains gene assignments and info for spots using omp.
@@ -63,18 +53,17 @@ def run_omp(
     assert_type(nbp_register_debug, NotebookPage)
     assert_type(nbp_call_spots, NotebookPage)
 
-    assert tile_origin.ndim == 2
-    assert transform.shape[3:5] == (4, 3)
-    assert transform.ndim == 5
+    log.info("OMP started")
+    log.debug(f"{torch.cuda.is_available()=}")
+    log.debug(f"{config['force_cpu']=}")
+
+    nbp = NotebookPage("omp")
+    nbp.software_version = utils.system.get_software_version()
+    nbp.revision_hash = utils.system.get_software_hash()
 
     # We want exact, reproducible results in coppafish.
     torch.backends.cudnn.deterministic = True
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-
-    log.info("OMP started")
-    nbp = NotebookPage("omp")
-    nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_software_hash()
 
     n_genes = nbp_call_spots.bled_codes_ge.shape[0]
     n_rounds_use = len(nbp_basic.use_rounds)
@@ -89,7 +78,7 @@ def run_omp(
     colour_norm_factor = torch.asarray(colour_norm_factor).float()
     first_computation = True
 
-    subset_z_size: int = len(nbp_basic.use_z)
+    subset_z_size: int = max(nbp_basic.use_z.copy())
     subset_size_xy: int = config["subset_size_xy"]
 
     if subset_size_xy <= spot_radius_xy * 2:
@@ -100,7 +89,8 @@ def run_omp(
 
     subset_shape = (subset_size_xy, subset_size_xy, subset_z_size)
     # Find the bottom-left position of every subset to break the entire tile up into.
-    subset_origin_new = [-spot_radius_xy, -spot_radius_xy, 0]
+    subset_origin_start = (-spot_radius_xy, -spot_radius_xy, 0)
+    subset_origin_new = list(subset_origin_start)
     subset_origins_yxz = []
     while True:
         if subset_origin_new[0] >= nbp_basic.tile_sz:
@@ -108,7 +98,7 @@ def run_omp(
         subset_origins_yxz.append(subset_origin_new.copy())
         subset_origin_new[1] += subset_size_xy - 2 * spot_radius_xy
         if subset_origin_new[1] >= nbp_basic.tile_sz:
-            subset_origin_new[1] = 0
+            subset_origin_new[1] = subset_origin_start[1]
             subset_origin_new[0] += subset_size_xy - 2 * spot_radius_xy
 
     log.debug(f"Subset shape: {subset_shape}")
@@ -126,7 +116,7 @@ def run_omp(
         colour_image = base.load_spot_colours(nbp_basic, nbp_file, nbp_extract, nbp_register, nbp_register_debug, t)
         log.debug(f"Loading tile {t} colours complete")
 
-        for i, subset_yxz in enumerate(subset_origins_yxz):
+        for i, subset_yxz in enumerate(tqdm.tqdm(subset_origins_yxz, desc=f"Computing OMP on tile {t}", unit="subset")):
             # STEP 2: Compute OMP coefficients on a subset of the tile which is a mini tile with the same number of z
             # planes.
             log.debug(f"Subset {i}, Subset origin {subset_yxz}")
@@ -214,7 +204,7 @@ def run_omp(
 
             # STEP 2.5: On the first OMP z-chunk/tile, compute the OMP spot shape using the found coefficients.
             if first_computation:
-                log.info("Computing spot and mean spot")
+                log.debug("Computing spot and mean spot")
                 isolated_spots_yxz = torch.zeros((0, 3), dtype=torch.int16)
                 isolated_gene_numbers = torch.zeros(0, dtype=torch.int16)
                 shape_isolation_distance_z = config["shape_isolation_distance_z"]
@@ -222,7 +212,7 @@ def run_omp(
                     shape_isolation_distance_z = maths.ceil(
                         config["shape_isolation_distance_yx"] * nbp_basic.pixel_size_xy / nbp_basic.pixel_size_z
                     )
-                for g in tqdm.trange(n_genes, desc="Detecting isolated spots", unit="gene"):
+                for g in range(n_genes):
                     if isolated_spots_yxz.size(0) >= config["spot_shape_max_spots"]:
                         isolated_spots_yxz = isolated_spots_yxz[: config["spot_shape_max_spots"]]
                         isolated_gene_numbers = isolated_gene_numbers[: config["spot_shape_max_spots"]]
@@ -245,7 +235,7 @@ def run_omp(
                     del g_coefficient_image, isolated_spots_yxz_g, n_g_isolated_spots
                 mean_spots = torch.zeros((n_genes,) + tuple(config["spot_shape"]), dtype=torch.float32)
                 weights = torch.zeros(n_genes, dtype=torch.float32)
-                for g in tqdm.trange(n_genes, desc="Averaging spots"):
+                for g in range(n_genes):
                     if (isolated_gene_numbers == g).sum() == 0:
                         continue
                     g_coefficient_image = torch.asarray(coefficient_image[:, [g]].toarray().reshape(subset_shape))
@@ -268,7 +258,7 @@ def run_omp(
                     )
                 mean_spot = torch.mean(mean_spots * weights[:, np.newaxis, np.newaxis, np.newaxis], dim=0).float()
                 mean_spot = torch.clip(mean_spot * n_genes / weights.sum(), -1, 1).float()
-                log.info(f"OMP spot and mean spot computed using {int(weights.sum().item())} detected spots")
+                log.debug(f"OMP spot and mean spot computed using {int(weights.sum().item())} detected spots")
                 del mean_spots, weights
 
                 spot = torch.zeros_like(mean_spot, dtype=torch.int16)
@@ -294,9 +284,9 @@ def run_omp(
                 nbp.spot_tile = t
                 nbp.mean_spot = np.array(mean_spot)
                 nbp.spot = np.array(spot)
-                log.info("Computing spot and mean spot complete")
+                log.debug("Computing spot and mean spot complete")
 
-            for g in tqdm.trange(n_genes, desc="Detecting and scoring spots", unit="gene"):
+            for g in range(n_genes):
                 # STEP 3: Detect spots on the subset except at the x and y edges.
                 g_coefficient_image = torch.asarray(coefficient_image[:, [g]].toarray().reshape(subset_shape))
                 g_spots_yxz, _ = detect_torch.detect_spots(

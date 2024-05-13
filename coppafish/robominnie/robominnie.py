@@ -163,9 +163,6 @@ class RoboMinnie:
             assert (
                 self.dapi_channel != self.anchor_channel
             ), "Cannot have DAPI and anchor channel identical because they are both saved in the same anchor round"
-        if bool(self.include_dapi) != bool(self.include_presequence):
-            # XOR operation
-            warnings.warn(f"DAPI and presequence images are not included together. Will likely crash coppafish")
         # Ordering for data matrices is round x channel x Y x X x Z, like the nd2 raw files for coppafish
         # Extra channel is added for DAPI channel support, if needed
         self.shape = (
