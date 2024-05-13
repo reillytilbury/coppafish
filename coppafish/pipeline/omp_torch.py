@@ -61,7 +61,7 @@ def run_omp(
     nbp.software_version = utils.system.get_software_version()
     nbp.revision_hash = utils.system.get_software_hash()
 
-    # We want exact, reproducible results in coppafish.
+    # We want exact, reproducible results.
     torch.backends.cudnn.deterministic = True
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
