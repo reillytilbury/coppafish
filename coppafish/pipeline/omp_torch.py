@@ -102,13 +102,14 @@ def run_omp(
             subset_origin_new[0] += subset_size_xy - 2 * spot_radius_xy
 
     log.debug(f"Subset shape: {subset_shape}")
-    log.info(f"Running {len(subset_origins_yxz)} subsets for each tile")
+    log.debug(f"Running {len(subset_origins_yxz)} subsets for each tile")
 
     # Results are appended to these arrays
     spots_local_yxz = torch.zeros((0, 3), dtype=torch.int16)
     spots_tile = torch.zeros(0, dtype=torch.int16)
     spots_gene_no = torch.zeros(0, dtype=torch.int16)
     spots_score = torch.zeros(0, dtype=torch.int16)
+    spots_colours = torch.zeros((0, n_rounds_use, n_channels_use), dtype=torch.int32)
 
     for t in nbp_basic.use_tiles:
         # STEP 1: Load every registered sequencing round/channel image into memory
@@ -116,7 +117,9 @@ def run_omp(
         colour_image = base.load_spot_colours(nbp_basic, nbp_file, nbp_extract, nbp_register, nbp_register_debug, t)
         log.debug(f"Loading tile {t} colours complete")
 
-        for i, subset_yxz in enumerate(tqdm.tqdm(subset_origins_yxz, desc=f"Computing OMP on tile {t}", unit="subset")):
+        description = f"Computing OMP on tile {t} using the "
+        description += "gpu" if (not config["force_cpu"] and torch.cuda.is_available()) else "cpu"
+        for i, subset_yxz in enumerate(tqdm.tqdm(subset_origins_yxz, desc=description, unit="subset")):
             # STEP 2: Compute OMP coefficients on a subset of the tile: a mini tile with the same number of z planes.
             log.debug(f"Subset {i}, Subset origin {subset_yxz}")
 
@@ -335,16 +338,24 @@ def run_omp(
 
             # STEP 5: Repeat steps 2 to 4 on every subset.
             first_computation = False
-        if (spots_tile == t).sum() == 0:
+
+        t_spots = spots_tile == t
+        if t_spots.sum() == 0:
             raise ValueError(
                 f"No OMP spots found on tile {t}. Please check that registration and call spots is working. "
                 + "If so, consider adjusting OMP config parameters."
             )
-        del colour_image
+        # For each detected spot, save the image intensity at its location.
+        t_local_yxzs = tuple(spots_local_yxz[t_spots].int().T)
+        t_spots_colours = torch.asarray(colour_image[t_local_yxzs].astype(np.int32))
+        spots_colours = torch.cat((spots_colours, t_spots_colours), dim=0)
+
+        del colour_image, t_spots, t_local_yxzs, t_spots_colours
 
     nbp.local_yxz = np.array(spots_local_yxz)
     nbp.scores = np.array(spots_score)
     nbp.tile = np.array(spots_tile)
     nbp.gene_no = np.array(spots_gene_no)
+    nbp.colours = np.array(spots_colours)
     log.info("OMP complete")
     return nbp

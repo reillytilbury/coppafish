@@ -952,6 +952,11 @@
             "Numpy int16 array [n_spots]",
             "`gene_no[s]` is the index of the gene assigned to spot $s$."
         ],
+        "colours": [
+            "",
+            "Numpy int32 `(n_spots x len(use_rounds) x len(use_channels))`",
+            "Each spot's intensity in every sequencing round/channel before colour normalisation."
+        ],
         "software_version": [
             "",
             "String",

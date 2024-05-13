@@ -56,7 +56,7 @@ def load_spot_colours(
     )
     base_grid = torch.cat((grid_2[:, :, :, None], grid_1[:, :, :, None], grid_0[:, :, :, None]), dim=3)[None]
     grids = torch.zeros((0,) + image_shape + (3,), dtype=torch.float32)
-    for i, r in enumerate(tqdm.tqdm(nbp_basic.use_rounds, desc="Loading spot colours", unit="round")):
+    for i, r in enumerate(tqdm.tqdm(nbp_basic.use_rounds, desc=f"Loading tile {tile} colours", unit="round")):
         suffix = "_raw" if r == nbp_basic.pre_seq_round else ""
         image_r = tuple()
         # While each image is being affine transformed, we are disk loading the next image at the same time.
