@@ -1,16 +1,18 @@
 import os
-import nd2
-import scipy
-import numpy as np
-import skimage
 import time
-import joblib
-from scipy.ndimage import gaussian_filter, zoom
-from tqdm import tqdm
-from sklearn.linear_model import HuberRegressor
 from typing import Optional, Tuple
-from .. import log
-from .. import utils
+
+import joblib
+import nd2
+import numpy as np
+import scipy
+from scipy.ndimage import gaussian_filter
+import skimage
+from sklearn.linear_model import HuberRegressor
+from tqdm import tqdm
+import zarr
+
+from .. import log, utils
 from ..register import preprocessing
 
 
@@ -362,7 +364,7 @@ def optical_flow_single(
     """
     if os.path.exists(loc):
         # load the flow if it exists. As it is saved in the upsampled format, we need to downsample it
-        flow = np.load(loc, mmap_mode="r")[:, ::upsample_factor_yx, ::upsample_factor_yx]
+        flow = zarr.load(loc)[:][:, ::upsample_factor_yx, ::upsample_factor_yx]
         flow = flow.astype(np.float32)
         flow[:-1] = flow[:-1] / upsample_factor_yx
         return flow
@@ -378,7 +380,7 @@ def optical_flow_single(
     )[0]
     shift = np.array([shift[0], shift[1], 0])
     base = preprocessing.custom_shift(base, shift.astype(int))
-    ny, nx, nz = target.shape
+    ny, _, nz = target.shape
     yx_sub = int((ny / chunks_yx) * 1.25)
     while (ny - yx_sub) % (chunks_yx - 1) != 0 or yx_sub % 2 != 0:
         yx_sub += 1
@@ -432,7 +434,19 @@ def optical_flow_single(
     # save the flow
     if loc:
         # save in yxz format
-        np.save(loc, flow_up)
+        compressor, chunks = utils.tiles_io.get_compressor_and_chunks(
+            utils.tiles_io.OptimisedFor.Z_PLANE_READ, flow_up.shape, image_z_index=3
+        )
+        zarray = zarr.open(
+            store=loc,
+            shape=flow_up.shape,
+            mode="w",
+            zarr_version=2,
+            chunks=chunks,
+            dtype="|f2",
+            compressor=compressor,
+        )
+        zarray[:] = flow_up
     t_end = time.time()
     log.info("Optical flow computation took " + str(t_end - t_start) + " seconds")
 
@@ -468,7 +482,7 @@ def flow_correlation(
     """
     t_start = time.time()
     if os.path.exists(loc):
-        corr = np.load(loc, mmap_mode="r")[::upsample_factor_yx, ::upsample_factor_yx]
+        corr = zarr.load(loc)[:][::upsample_factor_yx, ::upsample_factor_yx]
         return corr.astype(np.float32), None
     ny, nx, nz = target.shape
     # apply the flow to the base image and compute the correlation between th shifted base and the target image
@@ -507,7 +521,19 @@ def flow_correlation(
     # save the correlation
     if loc:
         # save in yxz format
-        np.save(loc, correlation_up)
+        compressor, chunks = utils.tiles_io.get_compressor_and_chunks(
+            utils.tiles_io.OptimisedFor.Z_PLANE_READ, correlation_up.shape, image_z_index=2
+        )
+        zarray = zarr.open(
+            store=loc,
+            shape=correlation_up.shape,
+            mode="w",
+            zarr_version=2,
+            chunks=chunks,
+            dtype="|f2",
+            compressor=compressor,
+        )
+        zarray[:] = correlation_up
     t_end = time.time()
     log.info("Computing correlation took " + str(t_end - t_start) + " seconds")
     return correlation, correlation_up
@@ -557,7 +583,19 @@ def interpolate_flow(
     # save the flow
     if loc:
         # save in yxz format
-        np.save(loc, flow)
+        compressor, chunks = utils.tiles_io.get_compressor_and_chunks(
+            utils.tiles_io.OptimisedFor.Z_PLANE_READ, flow.shape, image_z_index=3
+        )
+        zarray = zarr.open(
+            store=loc,
+            shape=flow.shape,
+            mode="w",
+            zarr_version=2,
+            chunks=chunks,
+            dtype="|f2",
+            compressor=compressor,
+        )
+        zarray[:] = flow
     time_end = time.time()
     log.info("Interpolating flow took " + str(time_end - time_start) + " seconds")
     return flow
@@ -647,9 +685,7 @@ def channel_registration(
     for i in range(n_cams):
         edges = skimage.feature.canny(fluorescent_beads[i], sigma=3, low_threshold=10, high_threshold=50)
         hough_res = skimage.transform.hough_circle(edges, bead_radii)
-        accums, cx, cy, radii = skimage.transform.hough_circle_peaks(
-            hough_res, bead_radii, min_xdistance=10, min_ydistance=10
-        )
+        _, cx, cy, _ = skimage.transform.hough_circle_peaks(hough_res, bead_radii, min_xdistance=10, min_ydistance=10)
         bead_point_clouds.append(np.vstack((cy, cx)).T)
 
     # Now convert the point clouds from yx to yxz. This is because our ICP algorithm assumes that the point clouds

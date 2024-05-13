@@ -1,4 +1,5 @@
 import os
+import zarr
 import tqdm
 import torch
 import scipy
@@ -80,7 +81,7 @@ def load_spot_colours(
         del image_r
         flow_dir = os.path.join(nbp_register.flow_dir, "smooth", f"t{tile}_r{r}.npy")
         # Flow_field_r[0] are y shifts, flow_field_r[2] are z shifts.
-        flow_field_r = -np.load(flow_dir, mmap_mode=None)
+        flow_field_r = -zarr.load(flow_dir)[:]
         flow_field_r[[0, 1, 2]] = flow_field_r[[2, 1, 0]]
         # Flow's shape changes (3, im_y, im_x, im_z) -> (1, im_y, im_x, im_z, 3).
         flow_field_r = torch.asarray(flow_field_r.transpose((1, 2, 3, 0)))[np.newaxis]

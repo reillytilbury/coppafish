@@ -1,19 +1,18 @@
+from itertools import product
 import os
-from skimage.transform import warp
-from typing_extensions import assert_type
-import torch
 import pickle
-import skimage
+from typing import Union
+
 import numpy as np
+import numpy.typing as npt
 from scipy import signal
 from scipy.ndimage import affine_transform
-from itertools import product
+import skimage
+from skimage.transform import warp
 from tqdm import tqdm
-import numpy.typing as npt
-from typing import Union, List
+import zarr
 
-from .. import log
-from ..setup import NotebookPage, Notebook
+from ..setup import Notebook, NotebookPage
 from ..utils import tiles_io
 
 
@@ -51,7 +50,7 @@ def load_reg_data(nbp_file: NotebookPage, nbp_basic: NotebookPage):
         with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "rb") as f:
             registration_data = pickle.load(f)
     else:
-        n_tiles, n_rounds, n_channels = (
+        _, _, n_channels = (
             nbp_basic.n_tiles,
             nbp_basic.n_rounds + nbp_basic.n_extra_rounds,
             nbp_basic.n_channels,
@@ -651,7 +650,7 @@ def transform_im(im: np.ndarray, affine: np.ndarray, flow_dir: str, flow_ind: tu
             transformation applied to them.
     """
     im = affine_transform(im, affine, order=1, mode="constant", cval=0)
-    flow = np.load(flow_dir, mmap_mode="r")
+    flow = zarr.load(flow_dir)[:]
     flow = -(flow[flow_ind].astype(np.float32))
     coords = np.meshgrid(
         np.arange(im.shape[0], dtype=np.float32),

@@ -1,21 +1,24 @@
-from PyQt5.QtWidgets import QPushButton, QMainWindow, QSlider, QLineEdit, QLabel
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from coppafish.spot_colors import apply_transform
-from coppafish.utils.tiles_io import load_image
-from scipy.ndimage import affine_transform
-from coppafish.register import preprocessing
-from coppafish.find_spots import spot_yxz
-from coppafish.setup import Notebook
-from scipy.spatial import KDTree
-from superqt import QRangeSlider
-from qtpy.QtCore import Qt
-from tqdm import tqdm
+import os
+
+from PyQt5.QtWidgets import QLabel, QLineEdit, QMainWindow, QPushButton, QSlider
 import matplotlib.pyplot as plt
-import numpy as np
-import skimage
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import napari
 import nd2
-import os
+import zarr
+import numpy as np
+from qtpy.QtCore import Qt
+from scipy.ndimage import affine_transform
+from scipy.spatial import KDTree
+import skimage
+from superqt import QRangeSlider
+from tqdm import tqdm
+
+from coppafish.find_spots import spot_yxz
+from coppafish.register import preprocessing
+from coppafish.setup import Notebook
+from coppafish.spot_colors import apply_transform
+from coppafish.utils.tiles_io import load_image
 
 
 class RegistrationViewer:
@@ -52,15 +55,15 @@ class RegistrationViewer:
         # load round images
         round_im, channel_im = {}, {}
         for r in self.nb.basic_info.use_rounds + [self.nb.basic_info.pre_seq_round] * self.nb.basic_info.use_preseq:
-            round_im[f"r{r}"] = np.load(os.path.join(self.reg_data_dir, "round", f"r{r}.npy"))
+            round_im[f"r{r}"] = zarr.load(os.path.join(self.reg_data_dir, "round", f"r{r}.npy"))[:]
         # repeat anchor image 3 times along new 0 axis
-        im_anchor = np.load(os.path.join(self.reg_data_dir, "round", "anchor.npy"))
+        im_anchor = zarr.load(os.path.join(self.reg_data_dir, "round", "anchor.npy"))[:]
         round_im["anchor"] = np.repeat(im_anchor[None], 3, axis=0)
         # load channel images
         for c in self.nb.basic_info.use_channels:
-            channel_im[f"c{c}"] = np.load(os.path.join(self.reg_data_dir, "channel", f"c{c}.npy"))
+            channel_im[f"c{c}"] = zarr.load(os.path.join(self.reg_data_dir, "channel", f"c{c}.npy"))[:]
         # repeat anchor image 3 times along new 0 axis
-        im_anchor = np.load(os.path.join(self.reg_data_dir, "channel", "anchor.npy"))
+        im_anchor = zarr.load(os.path.join(self.reg_data_dir, "channel", "anchor.npy"))[:]
         channel_im["anchor"] = np.repeat(im_anchor[None], 3, axis=0)
 
         # clear previous images
@@ -408,7 +411,7 @@ class ICPPointCloudViewer:
             # in round mode, apply the flow only and set the round to the selected round
             r = self.r
             affine_round_correction = np.eye(4, 3)
-        flow = np.load(os.path.join(self.nb.register.flow_dir, "smooth", f"t{self.t}_r{r}.npy"), mmap_mode="r")
+        flow = zarr.load(os.path.join(self.nb.register.flow_dir, "smooth", f"t{self.t}_r{r}.npy"))[:]
         base_1, in_bounds = apply_transform(
             yxz=base, flow=flow, icp_correction=affine_round_correction, tile_sz=self.nb.basic_info.tile_sz
         )
@@ -590,13 +593,13 @@ def view_optical_flow(nb: Notebook, t: int, r: int):
     # load the warps
     output_dir = nb.file_names.output_dir + "/flow"
     name = ["raw", "smooth"]
-    flow = [np.load(os.path.join(output_dir, f, f"t{t}_r{r}.npy")).astype(np.float32) for f in name]
+    flow = [zarr.load(os.path.join(output_dir, f, f"t{t}_r{r}.npy"))[:].astype(np.float32) for f in name]
     # warp the base image using the flows
     base_warped = [skimage.transform.warp(base, f + coords, order=0) for f in flow]
     print("Base image warped.")
     del coords
     # load the correlation
-    corr = np.load(os.path.join(output_dir, "corr", f"t{t}_r{r}.npy"))
+    corr = zarr.load(os.path.join(output_dir, "corr", f"t{t}_r{r}.npy"))[:]
     print("Correlation loaded.")
     mask = corr > np.percentile(corr, 97.5)
 
@@ -647,7 +650,7 @@ def view_optical_flow(nb: Notebook, t: int, r: int):
 #     """
 #     # load the flow
 #     output_dir = nb.file_names.output_dir + '/flow'
-#     flow = np.load(os.path.join(output_dir, 'smooth', f't{t}_r{r}.npy'), mmap_mode='r')[:, ::100, ::100, ::5]
+#     flow = zarr.load(os.path.join(output_dir, 'smooth', f't{t}_r{r}.npy'))[:, ::100, ::100, ::5]
 #     flow = flow.astype(np.float32)
 #     ny, nx, nz = flow.shape[1:]
 #     start_points = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing='ij'))
@@ -981,4 +984,3 @@ def view_overlay(nb: Notebook, t: int = None, rc: list = None, use_z: np.ndarray
 # nb_file = '/home/reilly/local_datasets/dante_bad_trc_test/notebook.npz'
 # nb = Notebook(nb_file)
 # view_overlay(nb, t=4, rc=[(7, 27), (3, 18)], use_z=np.arange(19, 29))
-

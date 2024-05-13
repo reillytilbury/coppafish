@@ -115,6 +115,8 @@ def log(msg: Union[str, Exception], severity: int, force_email: bool = False) ->
             f"On device {socket.gethostname()}"
             + f"After {round(delta_time // 60)}hrs and {round(delta_time % 60)}mins:\n\n"
             + message
+            + f"\n\nfor any errors, please refer to our troubleshoot page "
+            + f"(https://reillytilbury.github.io/coppafish/troubleshoot/)"
         )
         email.send_email(
             f"COPPAFISH: {severity_to_name[severity]}",

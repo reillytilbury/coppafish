@@ -1,15 +1,16 @@
 import os
-import tqdm
-import torch
 import math as maths
-import numpy as np
-from typing_extensions import assert_type
 from typing import Tuple
 
-from ..omp import base, coefs_torch, spots_torch, scores_torch
+import tqdm
+import torch
+import numpy as np
+from typing_extensions import assert_type
+
+from .. import log, utils
 from ..call_spots import background_pytorch, qual_check_torch
 from ..find_spots import detect_torch
-from .. import utils, log
+from ..omp import base, coefs_torch, scores_torch, spots_torch
 from ..setup.notebook import NotebookPage
 
 

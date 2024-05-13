@@ -37,7 +37,6 @@ imagesize==1.4.1
 importlib-metadata==7.0.1
 in-n-out==0.1.9
 iniconfig==2.0.0
-inputimeout==1.0.4
 ipykernel==6.29.0
 ipython==8.18.1
 jedi==0.19.1

@@ -1,11 +1,11 @@
-from typing import Optional, List, Union, Tuple
+import os
+import zarr
 import numpy as np
 from tqdm import tqdm
-import os
+from typing import Optional, List, Union, Tuple
 
 from ..setup import NotebookPage
 from ..utils import tiles_io
-from .. import log
 
 
 def apply_transform(
@@ -120,7 +120,7 @@ def get_spot_colors(
     with tqdm(total=n_use_rounds * n_use_channels, disable=no_verbose) as pbar:
         pbar.set_description(f"Reading {n_spots} spot_colors from {file_type} files")
         for i, r in enumerate(use_rounds):
-            flow_r = np.load(os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy"))
+            flow_r = zarr.load(os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy"))[:]
             for j, c in enumerate(use_channels):
                 transform_rc = transform[t, r, c]
                 pbar.set_postfix({"round": r, "channel": c})
