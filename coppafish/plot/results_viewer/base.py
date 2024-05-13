@@ -1,7 +1,6 @@
 import os
 import pandas as pd
 import numpy as np
-import yaml
 import napari
 import time
 import skimage
@@ -51,7 +50,7 @@ class Viewer:
                 If images, z dimensions need to be first i.e. `n_z x n_y x n_x` if 3D or `n_y x n_x` if 2D.
                 If pass *2D* image for *3D* data, will show same image as background on each z-plane.
             background_image_colour: list of names of background colours. Must be same length as background_image
-            gene_marker_file: Path to csv file containing marker and color for each gene. There must be 6 columns
+            gene_marker_file: Path to csv file containing marker and color for each gene. There must be 7 columns
                 in the csv file with the following headers (comma separated):
                 * ID - int, unique number for each gene, in ascending order
                 * GeneNames - str, name of gene with first letter capital
@@ -63,185 +62,42 @@ class Viewer:
                 If it is not provided, then the default file *coppafish/plot/results_viewer/legend.gene_color.csv*
                 will be used.
         """
-        self.nb = nb
+        # TODO: Make this more modular, write a function for preprocessing gene marker file
         self.is_3d = nb.basic_info.is_3d
-        if gene_marker_file is None:
-            gene_marker_file = importlib_resources.files("coppafish.plot.results_viewer").joinpath("gene_color.csv")
-        gene_legend_info = pd.read_csv(gene_marker_file)
+        self.method_names = ["anchor", "prob"] + (["omp"] if nb.has_page("omp") else [])
+        self.relevant_pages = ["ref_spots", "ref_spots", "omp"] if nb.has_page("omp") else ["ref_spots", "ref_spots"]
 
-        # Remove any genes from the legend which were not used in this experiment
-        n_legend_genes = len(gene_legend_info["GeneNames"])
-        unused_genes = []
-        for i in range(n_legend_genes):
-            if gene_legend_info["GeneNames"][i] not in nb.call_spots.gene_names:
-                unused_genes.append(i)
-        gene_legend_info = gene_legend_info.drop(unused_genes)
-        # We want the data frame to be indexed from 0 to n_legend_genes-1
-        gene_legend_info = gene_legend_info.reset_index(drop=True)
+        # load in genes, spots and background images
+        # declare variables
+        self.genes = np.zeros((len(nb.call_spots.gene_names), 0)).tolist()
+        self.spots = np.zeros((len(self.method_names), len(nb.call_spots.gene_names), 0)).tolist()
+        self.background_image, self.background_image_colour, self.background_image_name = [], [], []
+        # populate variables
+        self.load_genes(gene_marker_file=gene_marker_file, nb_gene_names=nb.call_spots.gene_names)
+        self.load_spots(nb=nb)
+        self.load_bg_images(nb=nb, background_image=background_image, background_image_colour=background_image_colour)
 
-        n_legend_genes = len(gene_legend_info["GeneNames"])
-        self.legend_gene_symbol = np.asarray(gene_legend_info["mpl_symbol"])  # of length n_legend_genes
-        self.legend_gene_no = np.ones(n_legend_genes, dtype=int)  # of length n_legend_genes
-
-        # Now gene_legend_info only contains genes used in this experiment, so it is a subset of the genes used in the
-        # notebook. ie: n_legend_genes <= n_genes_in_nb. If genes in the notebook are not in the legend, we won't plot
-        # them.
-        napari_symbols = np.unique(np.array(gene_legend_info["napari_symbol"]))
-        n_nb_genes = len(nb.call_spots.gene_names)
-        self.gene_names = nb.call_spots.gene_names  # of length n_genes_in_nb
-        self.gene_color = np.zeros((n_nb_genes, 3))  # of length n_genes_in_nb
-        self.gene_symbol = np.zeros((n_nb_genes, 0)).tolist()  # of length n_genes_in_nb (list so can have diff lengths)
-        # Populate gene_color and gene_symbol with info from legend. Only do this for genes in the legend and in the
-        # notebook. Since we have already removed all legend genes not in the notebook, this intersection is just the
-        # legend genes.
-        for i in range(n_legend_genes):
-            self.legend_gene_no[i] = np.where(self.gene_names == gene_legend_info["GeneNames"][i])[0][0]
-            self.gene_color[self.legend_gene_no[i]] = [
-                gene_legend_info.loc[i, "ColorR"],
-                gene_legend_info.loc[i, "ColorG"],
-                gene_legend_info.loc[i, "ColorB"],
-            ]
-            self.gene_symbol[self.legend_gene_no[i]] = gene_legend_info["napari_symbol"][i]
-        # Go through and replace any empty strings with 'nan'
-        for i in range(n_nb_genes):
-            if len(self.gene_symbol[i]) == 0:
-                self.gene_symbol[i] = "nan"
-        self.gene_symbol = np.asarray(self.gene_symbol)
-        tile_origin = self.nb.stitch.tile_origin
-
-        # concatenate anchor and omp spots so can use button to switch between them.
-        self.omp_0_ind = self.nb.ref_spots.tile.size  # number of anchor spots
-        if self.nb.has_page("omp"):
-            # number of anchor * 2 (anchor and gene probabilities) + number of omp spots
-            self.n_spots = self.omp_0_ind * 2 + self.nb.omp.tile.size
-        else:
-            self.n_spots = self.omp_0_ind * 2
-        self.spot_zyx = np.zeros((self.n_spots, 3))
-        # Anchor and gene probabilities are in the same positions
-        self.spot_zyx[: self.omp_0_ind] = (self.nb.ref_spots.local_yxz + tile_origin[self.nb.ref_spots.tile])[
-            :, [2, 0, 1]
-        ]
-        self.spot_zyx[self.omp_0_ind : self.omp_0_ind * 2] = (
-            self.nb.ref_spots.local_yxz + tile_origin[self.nb.ref_spots.tile]
-        )[:, [2, 0, 1]]
-        if self.nb.has_page("omp"):
-            self.spot_zyx[self.omp_0_ind * 2 :] = (self.nb.omp.local_yxz + tile_origin[self.nb.omp.tile])[:, [2, 0, 1]]
-        if not self.nb.basic_info.is_3d:
-            self.spot_zyx = self.spot_zyx[:, 1:]
-
-        # indicate spots shown when plot first opened - omp if exists, else anchor
-        if self.nb.has_page("omp"):
-            show_spots = np.zeros(self.n_spots, dtype=bool)
-            show_spots[self.omp_0_ind * 2 :] = call_spots.quality_threshold(self.nb, "omp")
-        else:
-            show_spots = call_spots.quality_threshold(self.nb, "anchor")
-            # Do not show gene probabilities at first
-            show_spots = np.append(show_spots, np.zeros(show_spots.size, dtype=bool))
-
+        # create napari viewer
         self.viewer = napari.Viewer()
+        self.format_napari_viewer()
+
+        self.viewer_status_on_select()
+
+        napari.run()
+
+    # function to create the napari viewer
+    def format_napari_viewer(self) -> None:
+        """
+        Create the napari viewer.
+        """
+        # Set up napari viewer
+
         self.viewer.window.qt_viewer.dockLayerList.setVisible(False)
         self.viewer.window.qt_viewer.dockLayerControls.setVisible(False)
         self.z_thick = 1  # show +/- 1 plane initially
-        self.nz = self.nb.basic_info.nz
+        self.nz = nb.basic_info.nz
 
-        # Add background image/s if given
-        if not isinstance(background_image, list):
-            background_image = [background_image]
-        if not isinstance(background_image_colour, list):
-            background_image_colour = [background_image_colour]
-        background_image_dir = []
-        # populate background_image_dir with file names of background images and background_image with actual images
-        # or None
-        for i, b in enumerate(background_image):
-            # Check if b is a string, if so, assume it is a file name and try to load it. Then load the image into
-            # background_image. If it is not a string, assume it is an image and load it directly into background_image.
-            if not isinstance(b, str):
-                background_image_dir.append(None)
-                continue
-            # If we have got this far, b is a string. Check if it is a keyword for a standard image.
-            if b.lower() == "dapi":
-                file_name = nb.file_names.big_dapi_image
-            elif b.lower() == "anchor":
-                file_name = nb.file_names.big_anchor_image
-            else:
-                file_name = b
-            background_image_dir.append(file_name)
-            # Now try to load the image
-            if file_name is not None and os.path.isfile(file_name):
-                if file_name.endswith(".npz"):
-                    # Assume image is first array if .npz file. Now replace the string with the actual image.
-                    background_image[i] = np.load(file_name)
-                    background_image[i] = background_image[i].f.arr_0
-                elif file_name.endswith(".npy"):
-                    # Assume image is first array if .npz file. Now replace the string with the actual image.
-                    background_image[i] = np.load(file_name)
-                elif file_name.endswith(".tif"):
-                    background_image[i] = skimage.io.imread(file_name)
-            else:
-                background_image[i] = None
-                warnings.warn(
-                    f"No file exists with file name =\n\t{file_name}\nso plotting with no background."
-                )
-            # Check if background image is constant. If so, don't plot it.
-            if background_image[i] is not None and np.allclose(
-                    [background_image[i].max()], [background_image[i].min()]
-            ):
-                warnings.warn(
-                    f"Background image with file name =\n\t{file_name}"
-                    + "\ncontains constant values, so not plotting"
-                )
-                background_image[i] = None
-        # remove none entries from bg_images
-        good = [i for i, b in enumerate(background_image) if b is not None]
-        background_image = [background_image[i] for i in good]
-        background_image_colour = [background_image_colour[i] for i in good]
 
-        # Now background_image contains the actual images.
-        n_bg = len(background_image)
-        # define list of layers for background images and transparent spots layer index as the next layer up
-        self.image_layer_ind = np.arange(n_bg)
-        self.transparent_spots_ind = n_bg
-        self.image_contrast_slider = list(np.repeat(0, n_bg))
-
-        # Loop through all background images and add them to the viewer.
-        for i, b in enumerate(background_image):
-            self.viewer.add_image(b, blending="additive", colormap=background_image_colour[i])
-            self.viewer.layers[i].contrast_limits_range = [b.min(), b.max()]
-            self.image_contrast_slider[i] = QRangeSlider(Qt.Orientation.Horizontal)
-            self.image_contrast_slider[i].setRange(b.min(), b.max())
-            # Make starting lower bound contrast the 95th percentile value so most appears black
-            # Use mid_z to quicken calculation
-            mid_z = int(b.shape[0] / 2)
-            start_contrast = np.percentile(b[mid_z], [95, 99.9]).astype(int).tolist()
-            self.image_contrast_slider[i].setValue(start_contrast)
-            self.change_image_contrast(i)
-            # When dragging, status will show contrast values.
-            self.image_contrast_slider[i].valueChanged.connect(lambda x: self.show_image_contrast(x[0], x[1]))
-            # On release of slider, genes shown will change
-            self.image_contrast_slider[i].sliderReleased.connect(lambda j=i: self.change_image_contrast(i=j))
-            # add slider to viewer
-            self.viewer.window.add_dock_widget(self.image_contrast_slider[i], area="left", name="Image Contrast")
-            
-        # Add legend indicating genes plotted
-        self.legend = {"fig": None, "ax": None}
-        self.legend["fig"], self.legend["ax"], n_gene_label_letters = legend.add_legend(
-            gene_legend_info=gene_legend_info,
-            genes=self.gene_names,
-        )
-        # xy is position of each symbol in legend, need to see which gene clicked on.
-        self.legend["xy"] = np.zeros((len(self.legend["ax"].collections), 2), dtype=float)
-        self.legend["gene_no"] = np.zeros(len(self.legend["ax"].collections), dtype=int)
-        # In legend, each gene name label has at most n_gene_label_letters letters so need to crop
-        # gene_names in notebook when looking for corresponding gene in legend.
-        gene_names_crop = np.asarray([gene_name[:n_gene_label_letters] for gene_name in self.gene_names])
-        for i in range(self.legend["xy"].shape[0]):
-            # Position of label for each gene in legend window
-            self.legend["xy"][i] = np.asarray(self.legend["ax"].collections[i].get_offsets())
-            # gene no in notebook that each position in the legend corresponds to
-            self.legend["gene_no"][i] = np.where(gene_names_crop == self.legend["ax"].texts[i].get_text())[0][0]
-        self.legend["fig"].mpl_connect("button_press_event", self.update_genes)
-        self.viewer.window.add_dock_widget(self.legend["fig"], area="left", name="Genes")
-        self.active_genes = np.arange(len(self.gene_names))  # start with all genes shown
 
         # Add all spots in layer as transparent white spots.
         self.point_size = [self.z_thick, 10, 10]  # with size=4, spots are too small to see
@@ -261,40 +117,6 @@ class Viewer:
             self.z_thick_slider.setValue(self.z_thick)
             self.z_thick_slider.valueChanged.connect(lambda x: self.change_z_thick(x))
             self.viewer.window.add_dock_widget(self.z_thick_slider, area="left", name="Z Thickness")
-
-        # Add gene spots with coppafish color code - different layer for each symbol
-        # I'm not sure how this plots spots that are not mentioned in the legend. Their colour is by default set to 1,
-        # but their marker is not defined.
-        # Break things up into 3 cases: Anchor, gene probabilities and OMP with their gene numbers placed in this order
-        spot_gene_no_prob = np.argmax(self.nb.ref_spots.gene_probs, axis=1)
-        self.spot_gene_no = np.hstack((self.nb.ref_spots.gene_no, spot_gene_no_prob))
-        if self.nb.has_page("omp"):
-            self.spot_gene_no = np.hstack((self.spot_gene_no, self.nb.omp.gene_no))
-        # Gene assignment is different for gene probabilities
-        self.label_prefix = "Gene Symbol:"  # prefix of label for layers showing spots
-
-        # Add layer for each symbol. This won't find spots with symbol name 'nan', which is what we want.
-        for s in napari_symbols:
-            symbol_s_genes = np.arange(n_nb_genes)[self.gene_symbol == s]
-            symbol_s_spots = np.isin(self.spot_gene_no, symbol_s_genes)
-            if symbol_s_spots.any():
-                coords_to_plot = self.spot_zyx[symbol_s_spots]
-                spotcolor_to_plot = self.gene_color[self.spot_gene_no[symbol_s_spots]]
-                self.viewer.add_points(
-                    coords_to_plot,
-                    face_color=spotcolor_to_plot,
-                    symbol=s,
-                    name=f"{self.label_prefix}{s}",
-                    size=self.point_size,
-                    shown=show_spots[symbol_s_spots],
-                    out_of_slice_display=True,
-                )
-
-        self.viewer.layers.selection.active = self.viewer.layers[self.transparent_spots_ind]
-        # so indicates when a spot is selected in viewer status
-        # It is needed because layer is transparent so can't see when select spot.
-        self.viewer_status_on_select()
-
         config = self.nb.get_config()["thresholds"]
         self.score_omp_multiplier = config["score_omp_multiplier"]
         self.score_thresh_slider = QDoubleRangeSlider(Qt.Orientation.Horizontal)  # Slider to change score_thresh
@@ -345,7 +167,191 @@ class Viewer:
         else:
             self.viewer.dims.axis_labels = ["y", "x"]
 
-        napari.run()
+    # legend functions
+    def add_legend(self, gene_legend_info: pd.DataFrame, cell_legend_info: pd.DataFrame) -> None:
+        # Add legend indicating genes plotted
+        self.legend = {"fig": None, "ax": None}
+        self.legend["fig"], self.legend["ax"], n_gene_label_letters = legend.add_legend(
+            gene_legend_info=gene_legend_info,
+            genes=self.gene_names,
+        )
+        # xy is position of each symbol in legend, need to see which gene clicked on.
+        self.legend["xy"] = np.zeros((len(self.legend["ax"].collections), 2), dtype=float)
+        self.legend["gene_no"] = np.zeros(len(self.legend["ax"].collections), dtype=int)
+        # In legend, each gene name label has at most n_gene_label_letters letters so need to crop
+        # gene_names in notebook when looking for corresponding gene in legend.
+        gene_names_crop = np.asarray([gene_name[:n_gene_label_letters] for gene_name in self.gene_names])
+        for i in range(self.legend["xy"].shape[0]):
+            # Position of label for each gene in legend window
+            self.legend["xy"][i] = np.asarray(self.legend["ax"].collections[i].get_offsets())
+            # gene no in notebook that each position in the legend corresponds to
+            self.legend["gene_no"][i] = np.where(gene_names_crop == self.legend["ax"].texts[i].get_text())[0][0]
+        self.legend["fig"].mpl_connect("button_press_event", self.update_genes)
+        self.viewer.window.add_dock_widget(self.legend["fig"], area="left", name="Genes")
+        self.active_genes = np.arange(len(self.gene_names))  # start with all genes shown
+
+    # add some functions to load the data for the __init__ function
+    def load_genes(self, gene_marker_file: str, nb_gene_names: list) -> None:
+        """
+        Load genes from the legend into the Viewer Object.
+        Args:
+            gene_marker_file: str, path to csv file containing marker and color for each gene. There must be 7 columns
+                in the csv file with the following headers (comma separated):
+                * ID - int, unique number for each gene, in ascending order
+                * GeneNames - str, name of gene with first letter capital
+                * ColorR - float, Rgb color for plotting
+                * ColorG - float, rGb color for plotting
+                * ColorB - float, rgB color for plotting
+                * napari_symbol - str, symbol used to plot in napari
+                * mpl_symbol - str, equivalent of napari symbol in matplotlib.
+            nb_gene_names: list of gene names in the notebook
+        """
+        if gene_marker_file is None:
+            gene_marker_file = importlib_resources.files("coppafish.plot.results_viewer").joinpath("gene_color.csv")
+        gene_legend_info = pd.read_csv(gene_marker_file)
+        legend_gene_names = gene_legend_info["GeneNames"]
+        genes = []
+        for i, g in enumerate(nb_gene_names):
+            if g in legend_gene_names:
+                colour = gene_legend_info[gene_legend_info["GeneNames"] == g][["ColorR", "ColorG", "ColorB"]].values[0]
+                symbol_napari = gene_legend_info[gene_legend_info["GeneNames"] == g]["napari_symbol"].values[0]
+                symbol_mpl = gene_legend_info[gene_legend_info["GeneNames"] == g]["mpl_symbol"].values[0]
+                genes.append(Gene(name=g, notebook_index=i, colour=colour, symbol_mpl=symbol_mpl,
+                                  symbol_napari=symbol_napari))
+            else:
+                genes.append(Gene(name=g, notebook_index=i, colour=None, symbol_mpl=None, symbol_napari=None))
+        invisible_genes = [g for g in genes if g.symbol_mpl is None]
+        if invisible_genes:
+            warnings.warn(f"Genes {invisible_genes} are not in the gene marker file and will not be plotted.")
+        self.genes = genes
+
+    def load_bg_images(self, background_image: list, background_image_colour: list, nb: Notebook) -> None:
+        """
+        Load background images into the napari viewer and into the Viewer Object.
+        Note: napari viewer must be created before calling this function.
+
+        Args:
+            background_image: list of file_names or images that will be plotted as the background image.
+            background_image_colour: list of names of background colours. Must be same length as background_image
+            nb: Notebook.
+
+        """
+        # make things lists if not already
+        if not isinstance(background_image, list):
+            background_image = [background_image]
+        if not isinstance(background_image_colour, list):
+            background_image_colour = [background_image_colour]
+        background_image_dir = []
+
+        # load images
+        # users were allowed to specify a list of strings or images. If a string, assume it is a file name and try to
+        # load it. Save file names in background_image_dir and images in background_image.
+        for i, b in enumerate(background_image):
+            # Check if b is a string, if so, assume it is a file name and try to load it. Then load the image into
+            # background_image. If it is not a string, assume it is an image and load it directly into background_image.
+            if not isinstance(b, str):
+                background_image_dir.append(None)
+                continue
+            # If we have got this far, b is a string. Check if it is a keyword for a standard image.
+            if b.lower() == "dapi":
+                file_name = nb.file_names.big_dapi_image
+            elif b.lower() == "anchor":
+                file_name = nb.file_names.big_anchor_image
+            else:
+                file_name = b
+            background_image_dir.append(file_name)
+            # Now try to load the image
+            if file_name is not None and os.path.isfile(file_name):
+                if file_name.endswith(".npz"):
+                    # Assume image is first array if .npz file. Now replace the string with the actual image.
+                    background_image[i] = np.load(file_name)
+                    background_image[i] = background_image[i].f.arr_0
+                elif file_name.endswith(".npy"):
+                    # Assume image is first array if .npz file. Now replace the string with the actual image.
+                    background_image[i] = np.load(file_name)
+                elif file_name.endswith(".tif"):
+                    background_image[i] = skimage.io.imread(file_name)
+            else:
+                background_image[i] = None
+                warnings.warn(
+                    f"No file exists with file name =\n\t{file_name}\n so will not be plotted."
+                )
+            # Check if background image is constant. If so, don't plot it.
+            if background_image[i] is not None and np.allclose(
+                    [background_image[i].max()], [background_image[i].min()]
+            ):
+                warnings.warn(
+                    f"Background image with file name =\n\t{file_name}"
+                    + "\ncontains constant values, so not plotting"
+                )
+                background_image[i] = None
+        # remove none entries from bg_images
+        good = [i for i, b in enumerate(background_image) if b is not None]
+        self.background_image = [background_image[i] for i in good]
+        self.background_image_colour = [background_image_colour[i] for i in good]
+        self.background_image_name = [os.path.basename(background_image_dir[i]) for i in good]
+
+    def load_spots(self, nb: Notebook) -> None:
+        """
+        Load spots into the viewer and into the Viewer Object.
+        Args:
+            nb: Notebook containing at least the `call_spots` page.
+
+        """
+        # define frequently used variables
+        n_methods = len(self.method_names)
+        n_genes = len(self.gene_names)
+        tile_origin = nb.stitch.tile_origin
+        # initialise list of spots and load relevant information
+        spots = np.zeros((len(self.method_names), len(self.gene_names), 0)).tolist()
+        tile = [nb.__getattribute__(page).tile for page in self.relevant_pages]
+        global_loc = [(nb.__getattribute__(self.relevant_pages[i]).local_yxz + tile_origin[tile[i]])[:, [2, 0, 1]]
+                      for i in range(n_methods)]
+        colours = [nb.__getattribute__(page).colors for page in self.relevant_pages]
+        score = [nb.ref_spots.score, np.max(nb.ref_spots.gene_probs, axis=1)]
+        gene_no = [nb.ref_spots.gene_no, np.argmax(nb.ref_spots.gene_probs, axis=1)]
+        if nb.has_page("omp"):
+            score.append(nb.omp.score)
+            gene_no.append(nb.omp.gene_no)
+
+        # add spots to Viewer object and the napari viewer
+        for m, g in np.ndindex(n_methods, n_genes):
+            mask = gene_no[m] == g
+            indices = np.where(mask)[0]
+            spots[m][g] = Spots(location=global_loc[m][mask], score=score[m][mask], tile=tile[m][mask], index=indices,
+                                colours=colours[m][mask])
+        self.spots = spots
+
+    # Functions which will add data to the napari viewer
+    def add_bg_images_to_viewer(self) -> None:
+        """
+        Add background images to the napari viewer (they already exist in the Viewer object).
+        """
+        # add images to viewer
+        n_bg = len(self.background_image)
+        self.image_contrast_slider = list(np.repeat(0, n_bg))
+
+        # Loop through all background images and add them to the viewer.
+        for i, b in enumerate(self.background_image):
+
+            self.viewer.add_image(b, blending="additive", colormap=self.background_image_colour[i],
+                                  name=self.background_image_name[i])
+            self.viewer.layers[i].contrast_limits_range = [b.min(), b.max()]
+            self.image_contrast_slider[i] = QRangeSlider(Qt.Orientation.Horizontal)
+            self.image_contrast_slider[i].setRange(b.min(), b.max())
+            # Make starting lower bound contrast the 95th percentile value so most appears black
+            # Use mid_z to quicken calculation
+            mid_z = int(b.shape[0] / 2)
+            start_contrast = np.percentile(b[mid_z], [95, 99.9]).astype(int).tolist()
+            self.image_contrast_slider[i].setValue(start_contrast)
+            self.change_image_contrast(i)
+            # When dragging, status will show contrast values.
+            self.image_contrast_slider[i].valueChanged.connect(lambda x: self.show_image_contrast(x[0], x[1]))
+            # On release of slider, genes shown will change
+            self.image_contrast_slider[i].sliderReleased.connect(lambda j=i: self.change_image_contrast(i=j))
+            # add slider to viewer
+            self.viewer.window.add_dock_widget(self.image_contrast_slider[i],
+                                               area="left", name=f"{self.background_image_name} Contrast")
 
     def viewer_status_on_select(self):
         # indicate selected data in viewer status.
@@ -624,11 +630,6 @@ class Viewer:
                 score_multiplier = None
             histogram_score(self.nb, self.method_buttons.method, score_multiplier)
 
-        # @self.viewer.bind_key('Shift-h')
-        # def call_to_view_omp_score(viewer):
-        #     if self.nb.has_page('omp'):
-        #         histogram_2d_score(self.nb, self.omp_score_multiplier_slider.value())
-
         @self.viewer.bind_key(KeyBinds.view_scaled_k_means)
         def call_to_view_omp_score(viewer):
             call_spots_plot.view_scaled_k_means(self.nb)
@@ -707,31 +708,47 @@ class ButtonMethodWindow(QMainWindow):
             raise ValueError(f"Unexpected active_button, {active_button}, was given.")
 
 
-def zeta_to_coppa(zeta_list) -> np.ndarray:
+class Spots:
     """
-    coppafish numbers tiles in a particular convention. yml uses another. Need to marry these.
-    Args:
-        zeta_list: list generated by zetastitcher
-
-    Returns:
-        tile_origin: (3, n_rows * n_cols) np.ndarray tile origins in same form as coppafish
+    Class to hold different spot information. In the Viewer class we will have a list of lists of Spots objects, one
+    for each gene within each method.
     """
-    n_tiles = len(zeta_list)
-    tile_origin = np.zeros((n_tiles, 3))
-    x_index = []
-    y_index = []
+    def __init__(self, location: np.ndarray, colours: np.ndarray, score: np.ndarray, tile: np.ndarray,
+                 index: np.ndarray):
+        """
+        Create object for spots of a single gene within a single method.
+        Args:
+            location: (np.ndarray) of shape (n_spots, 3) with the zyx location of each spot. (int16)
+            colours: (np.ndarray) of shape (n_spots, n_rounds, n_channels) of the raw colour of each spot. (uint16)
+            score: (np.ndarray) of shape (n_spots,) with the score of each spot. (float32)
+            tile: (np.ndarray) of shape (n_spots,) with the tile of each spot. (int16)
+            index: (np.ndarray) of shape (n_spots,) with the index of each spot within its method. (int16)
+        """
+        assert len(location) == len(colours) == len(score) == len(tile) == len(index) # Check all arrays are same length
+        self.location = location
+        self.colours = colours
+        self.score = score
+        self.tile = tile
+        self.index = index
 
-    for t in range(n_tiles):
-        x_index.append(zeta_list[t]["X"])
-        y_index.append(zeta_list[t]["Y"])
 
-    n_rows = max(y_index) + 1
-    n_cols = max(x_index) + 1
-
-    for t in range(n_tiles):
-        x = zeta_list[t]["X"]
-        y = zeta_list[t]["Y"]
-        tile_index = int(n_cols * (n_rows - 1 - y) + (n_cols - 1 - x))
-        tile_origin[tile_index] = np.array([zeta_list[t]["Ys"], zeta_list[t]["Xs"], zeta_list[t]["Zs"]])
-
-    return tile_origin
+class Gene:
+    """
+    Class to hold gene information. In the Viewer class we will have a list of Gene objects, one for each gene.
+    This will store the gene name, index, colour and symbol.
+    """
+    def __init__(self, name: str, notebook_index: int, colour: np.ndarray, symbol_mpl: str, symbol_napari: str):
+        """
+        Create object for a single gene.
+        Args:
+            name: (str) gene name.
+            notebook_index: (int) index of the gene within the notebook.
+            colour: (np.ndarray) of shape (3,) with the RGB colour of the gene. (int8)
+            symbol_mpl: (str) symbol used to plot in matplotlib. (Used in the legend)
+            symbol_napari: (str) symbol used to plot in napari. (Used in the viewer)
+        """
+        self.name = name
+        self.notebook_index = notebook_index
+        self.colour = colour
+        self.symbol_mpl = symbol_mpl
+        self.symbol_napari = symbol_napari
