@@ -12,7 +12,7 @@ except ModuleNotFoundError:
     import importlib.resources as importlib_resources  # Python 3.10 support
 
 from ...omp import scores as omp_scores
-from ... import logging
+from ... import log
 from ...setup.notebook import Notebook
 
 
