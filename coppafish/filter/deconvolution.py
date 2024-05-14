@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 from typing import List, Union, Optional, Tuple
 
@@ -95,7 +96,10 @@ def get_psf_spots(
                     "intensity_thresh", intensity_thresh, median_im, utils.tiles_io.get_pixel_max()
                 )
             )
-        spot_yxz, _ = find_spots.detect_spots(im, intensity_thresh, radius_xy, radius_z, True)
+        spot_yxz, _ = find_spots.detect_spots(
+            torch.asarray(im.astype(np.float32)), intensity_thresh, radius_xy, radius_z, True
+        )
+        spot_yxz = spot_yxz.numpy()
         # check fall off in intensity not too large
         not_single_pixel = find_spots.check_neighbour_intensity(im, spot_yxz, median_im)
         isolated = find_spots.get_isolated_points(

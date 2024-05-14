@@ -1,6 +1,25 @@
+2024/05/14 Alpha Update (v0.10.5):
+ * Pytorch CPU is now a default dependency.
+ * Optical flow results are saved as compressed zarr files instead of uncompressed numpy arrays.
+ * Coppafish can send email notifications on completed pipelines and crashes.
+ * OMP has been overhauled.
+ * New diagnostic Viewer2D added.
+ * The OMP computed spot is now computed on a subset of one tile, not the full tile.
+ * OMP is faster and the entire tile is loaded into memory before running each tile.
+ * Removed inputimeout package dependency.
+ * Max Intensity Projection of background images added to main viewer as option.
+ * Fluorescent beads registration bug fix.
+ * New viewer for registration of fluorescent beads.
+ * Redundant warnings silenced.
+ * Default starting position for registration viewer now the registered image.
+ * New diagnostic in main viewer shows top 10 best fitted genes to a given spot along with their associated scores.
+
+
 2024/04/23 Alpha Update (v0.10.4):
  * Bug in Register which was causing large shifts not to be detected has been fixed. A global shift is now computed
     between the two images and the shift is applied to the second image before computing the local shifts.
+ * OMP unbound variable i_added_genes bug fixed in pytorch GPU.
+
 
 2024/04/18 Alpha Update (v0.10.3):
  * OMP crash on empty coef_image bug fix.

@@ -85,13 +85,7 @@ def create(
                 if c == nbp_basic.dapi_channel and include_dapi_preseq:
                     including = True
             if including:
-                all_indices.append(
-                    (
-                        t,
-                        r,
-                        c,
-                    )
-                )
+                all_indices.append((t, r, c))
     output = []
     for t, r, c in all_indices:
         new_index = (t,)

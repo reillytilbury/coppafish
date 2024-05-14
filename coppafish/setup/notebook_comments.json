@@ -276,34 +276,6 @@
             "Will be `None` if *2D* pipeline used. File won't exist/used if `config['extract']['deconvolve'] = False`.",
             "If *3D*, 1st axis in *npy* file is z."
         ],
-        "omp_spot_shape": [
-            "eq",
-            "File",
-            "*npy* file indicating average spot shape in *OMP* coefficient sign images.",
-            "Saved image is *int8 npy* with only values being -1, 0, 1."
-        ],
-        "omp_spot_shape_float": [
-            "eq",
-            "File",
-            "*npy* file storing nb.omp.spot_shape_float"
-        ],
-        "omp_spot_info": [
-            "eq",
-            "File",
-            "After each tile is finished in *OMP*, information about spots found is saved as array to *npy* file:",
-            "`numpy int16 array [n_spots x 7]` containing $y$, $x$, $z$, `gene_no`, `n_pos_neighb`, `n_neg_neighb`, `tile`.",
-            "If *3D*, 1st axis in *npy* file is z."
-        ],
-        "omp_spot_coef": [
-            "eq",
-            "File",
-            "After each tile is finished in *OMP*, coefficients for all spots found is saved as sparse ",
-            "`csr_matrix` to *npz* file: ",
-            "",
-            "`CSR_matrix float [n_spots x n_genes]`",
-            "",
-            "giving coefficient found for each gene for each spot."
-        ],
         "big_dapi_image": [
             "eq",
             "File or None",
@@ -579,7 +551,8 @@
             "tile_0",
             "Numpy float array [n_tiles x 3]",
             "`tile_origin[t,:]` is the bottom left $yxz$ coordinate of tile $t$.",
-            "$yx$ coordinates in yx-pixels and z coordinate in z-pixels."
+            "$yx$ coordinates in yx-pixels and z coordinate in z-pixels.",
+            "nan is populated in places where a tile is not used in the pipeline."
         ],
         "north_start_shift_search": [
             "eq",
@@ -939,49 +912,24 @@
             "",
             "Page added to *Notebook* in *pipeline/call_spots_omp.py*"
         ],
-        "initial_intensity_thresh": [
+        "spot_tile": [
             "",
-            "Float",
-            "To save time in `call_spots_omp`, coefficients only found for pixels with `intensity` ",
-            "of absolute `spot_colors` greater than `initial_intensity_thresh`.",
-            "This threshold is set to the `config['omp']['initial_intensity_thresh_percentile']` percentile ",
-            "of the absolute `intensity` of all pixels on the mid z-plane of the central tile (uses `nb.call_spots.abs_intensity_percentile`).",
-            "It is also clamped between the min and max values given in config file."
+            "Integer",
+            "`spot` was found from isolated spots detected on this tile."
         ],
-        "shape_tile": [
+        "mean_spot": [
             "",
-            "Integer or None",
-            "`spot_shape` was found from spots detected on this tile.",
-            "`None` if `spot_shape` not computed in this experiment."
+            "Numpy float16 array [shape_max_size[0] x shape_max_size[1] x shape_max_size[2]] or None",
+            "Mean of *OMP* coefficient sign in neighbourhood centred on detected isolated spot."
         ],
-        "shape_spot_local_yxz": [
-            "",
-            "Numpy integer array [n_shape_spots x 3] or None",
-            "$yxz$ coordinates on `shape_tile`, `ref_round`/`ref_channel` of spots used to compute `spot_shape`",
-            "`None` if `spot_shape` not computed in this experiment."
-        ],
-        "shape_spot_gene_no": [
-            "",
-            "Numpy integer array [n_shape_spots] or None",
-            "`shape_spot_gene_no[s]` is the gene that the spot at `shape_spot_local_yxz[s]` was assigned to.",
-            "`None` if `spot_shape` not computed in this experiment."
-        ],
-        "spot_shape_float": [
-            "",
-            "Numpy float array [shape_max_size[0] x shape_max_size[1] x shape_max_size[2]] or None",
-            "Mean of *OMP* coefficient sign in neighbourhood centered on spot.",
-            "`None` if `spot_shape` not computed in this experiment."
-        ],
-        "spot_shape": [
+        "spot": [
             "",
             "Numpy integer array [shape_size_y x shape_size_x x shape_size_z]",
             "Expected sign of *OMP* coefficient in neighbourhood centered on spot.",
             "",
             "1 means expected positive coefficient.",
             "",
-            "-1 means expected negative coefficient.",
-            "",
-            "0 means unsure of expected sign."
+            "0 means unsure of sign."
         ],
         "local_yxz": [
             "",
@@ -1000,22 +948,15 @@
             "Numpy int16 array [n_spots]",
             "Tile each spot was found on."
         ],
-        "colors": [
-            "",
-            "Numpy int32 array [n_spots x len(use_rounds) x len(use_channels)]",
-            "`[s, r, c]` is the intensity of spot $s$ on round $use_rounds[r]$, channel $use_channels[c]$.",
-            "It will be `-tile_pixel_value_shift` if that round/channel not used otherwise integer."
-        ],
         "gene_no": [
             "",
             "Numpy int16 array [n_spots]",
             "`gene_no[s]` is the index of the gene assigned to spot $s$."
         ],
-        "intensity": [
+        "colours": [
             "",
-            "Numpy float32 array [n_spots]",
-            "$\\chi_s = \\underset{r}{\\mathrm{median}}(\\max_c\\zeta_{s_{rc}})$",
-            "where $\\pmb{\\zeta}_s=$ `colors[s, r]/color_norm_factor[r]`."
+            "Numpy int32 `(n_spots x len(use_rounds) x len(use_channels))`",
+            "Each spot's intensity in every sequencing round/channel before colour normalisation."
         ],
         "software_version": [
             "",

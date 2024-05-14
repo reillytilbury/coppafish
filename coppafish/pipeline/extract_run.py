@@ -107,8 +107,12 @@ def run_extract(
                 im = im.astype(np.uint16, casting="safe")
                 # yxz -> zyx
                 im = im.transpose((2, 0, 1))
-                if ((im.max((1, 2)) - im.min((1, 2))) == 0).any():
-                    log.warn(f"Raw image {t=}, {r=}, {c=} has a single valued plane!")
+                if (im.mean((1, 2)) < config["z_plane_mean_warning"]).any():
+                    log.warn(
+                        f"Raw image {t=}, {r=}, {c=} has dim z plane(s). You may wish to remove the affected image by"
+                        + f" setting `bad_trc = ({t}, {r}, {c}), (...` in the basic_info config and re-run the pipeline"
+                        + " with an empty output directory."
+                    )
                 tiles_io._save_image(im, file_path, config["file_type"])
             # Compute the counts of each possible uint16 pixel value for the image.
             hist_counts[:, t, r, c] = np.histogram(

@@ -1,15 +1,17 @@
-import os
-import scipy
-import pickle
 import itertools
-import numpy as np
-from tqdm import tqdm
+import os
+import pickle
 from typing import Tuple
-from ..setup import NotebookPage
+
+import numpy as np
+import scipy
+from tqdm import tqdm
+import zarr
+
 from .. import find_spots, log
-from .. import spot_colors
 from ..register import preprocessing
 from ..register import base as register_base
+from ..setup import NotebookPage
 from ..utils import system, tiles_io
 
 
@@ -57,8 +59,11 @@ def register(
     nbp, nbp_debug = NotebookPage("register"), NotebookPage("register_debug")
     nbp.software_version = system.get_software_version()
     nbp.revision_hash = system.get_software_hash()
-    use_tiles, use_rounds, use_channels = (nbp_basic.use_tiles.copy(), nbp_basic.use_rounds.copy(),
-                                           nbp_basic.use_channels.copy())
+    use_tiles, use_rounds, use_channels = (
+        nbp_basic.use_tiles.copy(),
+        nbp_basic.use_rounds.copy(),
+        nbp_basic.use_channels.copy(),
+    )
     n_tiles, n_rounds, n_channels = nbp_basic.n_tiles, nbp_basic.n_rounds, nbp_basic.n_channels
     # Initialise variable for ICP step
     neighb_dist_thresh_yx = config["neighb_dist_thresh_yx"]
@@ -167,26 +172,55 @@ def register(
                 continue
             # load in flow
             flow_loc = os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy")
-            flow_tr = np.load(flow_loc, mmap_mode="r")
+            flow_tr = zarr.load(flow_loc)[:]
             # load in spots
             ref_spots_tr = find_spots.spot_yxz(nbp_find_spots.spot_yxz, t, r, c_ref, nbp_find_spots.spot_no)
             # put ref_spots from round r frame into the anchor frame. This is done by applying the inverse of the
             # flow to the ref_spots
             ref_spots_tr = preprocessing.apply_flow(flow=-flow_tr, points=ref_spots_tr, round_to_int=False)
-            round_correction[t, r], n_matches_round[t, r], mse_round[t, r], converged_round[t, r] = (
-                register_base.icp(
-                    yxz_base=ref_spots_tr_ref,
-                    yxz_target=ref_spots_tr,
-                    dist_thresh_yx=neighb_dist_thresh_yx,
-                    dist_thresh_z=neighb_dist_thresh_z,
-                    start_transform=np.eye(4, 3),
-                    n_iters=config["icp_max_iter"],
-                    robust=False,
-                )
+            round_correction[t, r], n_matches_round[t, r], mse_round[t, r], converged_round[t, r] = register_base.icp(
+                yxz_base=ref_spots_tr_ref,
+                yxz_target=ref_spots_tr,
+                dist_thresh_yx=neighb_dist_thresh_yx,
+                dist_thresh_z=neighb_dist_thresh_z,
+                start_transform=np.eye(4, 3),
+                n_iters=config["icp_max_iter"],
+                robust=False,
             )
             log.info(f"Tile: {t}, Round: {r}, Converged: {converged_round[t, r]}")
-        # don't do icp for the pre-seq round as we will not have spots in the anchor channel
-        round_correction[t, -1] = np.eye(4, 3)
+        # for preseq round, compute the correction between a high background channel in r_pre and the same channel in
+        # round r. Then we can compose this correction with the correction for round r.
+        if nbp_basic.use_preseq:
+            c_bg = 15 if 15 in use_channels else 2
+            r_pre, r_mid = nbp_basic.pre_seq_round, 3
+            rounds_preseq_reg = [r_pre, r_mid]
+            spots_preseq_req = []
+            for r in rounds_preseq_reg:
+                spots_preseq_req.append(
+                    find_spots.spot_yxz(nbp_find_spots.spot_yxz, t, r, c_bg, nbp_find_spots.spot_no)
+                )
+                # apply flow to put these in anchor frame of ref
+                # load in flow
+                flow_loc = os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy")
+                flow_tr = zarr.load(flow_loc)[:]
+                spots_preseq_req[-1] = preprocessing.apply_flow(
+                    flow=-flow_tr, points=spots_preseq_req[-1], round_to_int=False
+                )
+            # Now compute the bg correction
+            r_pre_correction = register_base.icp(
+                yxz_base=spots_preseq_req[1],
+                yxz_target=spots_preseq_req[0],
+                dist_thresh_yx=neighb_dist_thresh_yx,
+                dist_thresh_z=neighb_dist_thresh_z,
+                start_transform=np.eye(4, 3),
+                n_iters=config["icp_max_iter"],
+                robust=False,
+            )[0]
+            # r7 -> r_pre = r7 -> r3 -> r_pre
+            r_pre_correction = np.hstack((r_pre_correction, np.array([0, 0, 0, 1])[:, None]))
+            r_mid_correction = np.hstack((round_correction[t, r_mid], np.array([0, 0, 0, 1])[:, None]))
+            round_correction[t, r_pre] = (r_pre_correction @ r_mid_correction)[:, :3]
+
         # compute an affine correction to the channel transforms. This is done by finding the best affine map that
         # takes the anchor channel (post application of optical flow and round correction) to the other channels.
         for c in use_channels:
@@ -213,7 +247,7 @@ def register(
                 im_spots_trc = im_spots_trc[~oob]
                 # 2. apply the inverse of the flow to the spots
                 flow_loc = os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy")
-                flow_tr = np.load(flow_loc, mmap_mode="r")
+                flow_tr = zarr.load(flow_loc)[:]
                 im_spots_trc = preprocessing.apply_flow(flow=-flow_tr, points=im_spots_trc, round_to_int=False)
                 im_spots_tc = np.vstack((im_spots_tc, im_spots_trc))
             # check if there are enough spots to run ICP
@@ -326,12 +360,17 @@ def register(
         mid_z = len(nbp_basic.use_z) // 2
         tile_centre = np.array([nbp_basic.tile_sz // 2, nbp_basic.tile_sz // 2, mid_z])
         yx_rad, z_rad = min(nbp_basic.tile_sz // 2 - 1, 250), min(len(nbp_basic.use_z) // 2 - 1, 5)
-        yxz = [np.arange(tile_centre[0] - yx_rad, tile_centre[0] + yx_rad),
-               np.arange(tile_centre[1] - yx_rad, tile_centre[1] + yx_rad),
-               np.arange(mid_z - z_rad, mid_z + z_rad)]
-        flow_ind = np.ix_(np.arange(3), np.arange(tile_centre[0] - yx_rad, tile_centre[0] + yx_rad),
-                          np.arange(tile_centre[1] - yx_rad, tile_centre[1] + yx_rad),
-                          np.arange(mid_z - z_rad, mid_z + z_rad))
+        yxz = [
+            np.arange(tile_centre[0] - yx_rad, tile_centre[0] + yx_rad),
+            np.arange(tile_centre[1] - yx_rad, tile_centre[1] + yx_rad),
+            np.arange(mid_z - z_rad, mid_z + z_rad),
+        ]
+        flow_ind = np.ix_(
+            np.arange(3),
+            np.arange(tile_centre[0] - yx_rad, tile_centre[0] + yx_rad),
+            np.arange(tile_centre[1] - yx_rad, tile_centre[1] + yx_rad),
+            np.arange(mid_z - z_rad, mid_z + z_rad),
+        )
         new_origin = np.array([yxz[0][0], yxz[1][0], yxz[2][0]])
         for t, c in tqdm(
             itertools.product(use_tiles, use_channels),
@@ -352,7 +391,7 @@ def register(
                 yxz=yxz,
             )
             im_pre = preprocessing.transform_im(im_pre, affine_correction, flow_t_pre_dir, flow_ind)
-            im_pre = im_pre[:, :, z_rad-1:z_rad+1]
+            im_pre = im_pre[:, :, z_rad - 1 : z_rad + 1]
             bright = im_pre > np.percentile(im_pre, 99)
             im_pre = im_pre[bright]
             for r in use_rounds:
@@ -369,7 +408,7 @@ def register(
                     yxz=yxz,
                 )
                 im_r = preprocessing.transform_im(im_r, affine_correction, flow_t_r_dir, flow_ind)
-                im_r = im_r[:, :, z_rad-1:z_rad+1]
+                im_r = im_r[:, :, z_rad - 1 : z_rad + 1]
                 im_r = im_r[bright]
                 bg_scale[t, r, c] = np.median(im_r) / np.median(im_pre)
 
