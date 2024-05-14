@@ -1,21 +1,74 @@
-2024/04/dd Alpha Update (v0.10.1):
+2024/05/14 Alpha Update (v0.10.5):
+ * Pytorch CPU is now a default dependency.
+ * Optical flow results are saved as compressed zarr files instead of uncompressed numpy arrays.
+ * Coppafish can send email notifications on completed pipelines and crashes.
+ * OMP has been overhauled.
+ * The OMP computed spot is now computed on a subset of one tile, not the full tile.
+ * OMP is faster and the entire tile is loaded into memory before running each tile.
+ * Removed inputimeout package dependency.
+ * Max Intensity Projection of background images added to main viewer as option.
+ * Fluorescent beads registration bug fix.
+ * New viewer for registration of fluorescent beads.
+ * Redundant warnings silenced.
+ * Default starting position for registration viewer now the registered image.
+ * New diagnostic in main viewer shows top 10 best fitted genes to a given spot along with their associated scores.
+
+
+2024/04/23 Alpha Update (v0.10.4):
+ * Bug in Register which was causing large shifts not to be detected has been fixed. A global shift is now computed
+    between the two images and the shift is applied to the second image before computing the local shifts.
+ * OMP unbound variable i_added_genes bug fixed in pytorch GPU.
+
+
+2024/04/18 Alpha Update (v0.10.3):
+ * OMP crash on empty coef_image bug fix.
+
+
+2024/04/18 Alpha Update (v0.10.2):
+ * OMP spot shape wrongly computed has been fixed.
+ * OMP spot shape maximum size now 27, 27, 9 -> 15, 15, 9 by default.
+ * OMP score threshold changed 0.1 -> 0.15 by default.
+ * idna package security update.
+ * Docs update.
+
+
+2024/04/15 Alpha Update (v0.10.1):
  * User documentation updates.
  * Filter image scaling is reduced to further avoid clipping.
  * New OMP gene counts figure in _omp.pdf.
  * Pillow buffer overflow vulnerability fixed.
- * HTTP request sometimes failing to GitHub bug catched.
+ * HTTP request sometimes failing to GitHub bug caught.
  * New spot position histograms in _call_spots.pdf and _omp.pdf.
  * New image viewing diagnostics for the users, explained in the documentation.
  * Simplified advanced usage for moving output and tile directories.
  * _ref_call_spots.pdf now called _call_spots.pdf.
- * New ICP Viewer for point clouds
- * New optical flow viewer
- * improvements in reading old reg results
+ * New ICP Viewer for point clouds.
+ * New optical flow viewer.
+ * New optical flow config parameter `flow_cores` in `register` section.
+ * OMP checkpoint bug fixed.
+ * Improvements in reading old reg results.
+ * Coppafish's logging module now called 'log' to remove conflicting package names.
  * streamlined generation of reg images, meaning transforms no longer need to be applied when viewer is shown
  * Whole registration viewer has been refactored and improved making it easier to compare between different methods
-    of registration
+    of registration.
  * Support for removing a bad tile round channel from any analysis - this includes new nbp basic variable and config
-    variable to remove a bad tile round channel
+    variable to remove a bad tile round channel.
+ * integrated bad_trc into new indexing method so that it is easier to remove a bad tile round channel from
+    each part of the pipeline where we don't want bad trcs.
+ * Bad trc are now dealt with in call spots. For a given tile, if round r is bad, gene probs are computed from the
+    remaining rounds. Gene efficiencies are computed only from spots living on tiles with no bad rounds.
+ * New registration viewer for viewing the registration results.
+ * New ICP viewer for viewing the ICP results, including the point clouds, buttons for switching between registered and
+    unregistered images, and a smoothed score image in the background showing where good shifts are.
+ * New bg scale viewer for viewing the background scale images. This also led to a change in the way we compute bg
+    scales, done on unblurred images. This is done by taking a small region of both images, looking at regions
+    where bg is high and taking the median of the ratio of the two images in these regions. The previous
+    method looked at approx 10 z-planes and the boundary z-planes were causing an issue. Regression was also
+    not robust to outliers.
+ * new entire overlay function allows users to select any 2 rc pairs and overlay them in the viewer in anchor frame of
+    reference. This is different from just viewing against anchor. Can be useful for background reg viewing. z-params
+    make loading faster.
+
 
 2024/03/26 Alpha Update (v0.10.0):
  * OMP scoring has been changed.

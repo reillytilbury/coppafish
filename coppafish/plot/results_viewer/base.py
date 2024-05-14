@@ -22,15 +22,17 @@ from typing import Optional
 from . import legend
 from .hotkeys import KeyBinds, ViewHotkeys
 from ..call_spots import view_codes, view_bleed_matrix, view_bled_codes, view_spot, view_intensity, gene_counts
+from ...call_spots import qual_check
 from .. import call_spots as call_spots_plot
 from ..call_spots_new import GEViewer, ViewBleedCalc, ViewAllGeneScores, BGNormViewer
-from ..omp import view_omp, view_omp_fit, view_omp_score, histogram_score
+from ..omp import view_omp, view_omp_score, histogram_score
 from ..omp.coefs import view_score  # gives import error if call from call_spots.dot_product
 from ... import call_spots
 from ... import utils
 from ...setup import Notebook
+
 # set matplotlib background to dark
-plt.style.use('dark_background')
+plt.style.use("dark_background")
 
 
 class Viewer:
@@ -39,8 +41,7 @@ class Viewer:
         nb: Notebook,
         background_image: Optional[list] = ["dapi"],
         background_image_colour: Optional[list] = ["gray"],
-        gene_marker_file: Optional[str] = None,
-        zeta_tile_path: Optional[str] = None,
+        gene_marker_file: Optional[str] = None
     ) -> None:
         """
         This is the function to view the results of the pipeline i.e. the spots found and which genes they were
@@ -64,7 +65,6 @@ class Viewer:
                 If it is not provided, then the default file *coppafish/plot/results_viewer/legend.gene_color.csv*
                 will be used.
         """
-        # TODO: flip y axis so origin bottom left
         self.nb = nb
         self.is_3d = nb.basic_info.is_3d
         if gene_marker_file is None:
@@ -109,14 +109,7 @@ class Viewer:
             if len(self.gene_symbol[i]) == 0:
                 self.gene_symbol[i] = "nan"
         self.gene_symbol = np.asarray(self.gene_symbol)
-
-        # Get tile origin from zeta tile path if given, else from notebook
-        if zeta_tile_path:
-            with open(zeta_tile_path, "r") as file:
-                zeta_stitch = yaml.safe_load(file)["filematrix"]
-            tile_origin = zeta_to_coppa(zeta_stitch)
-        else:
-            tile_origin = self.nb.stitch.tile_origin
+        tile_origin = self.nb.stitch.tile_origin
 
         # concatenate anchor and omp spots so can use button to switch between them.
         self.omp_0_ind = self.nb.ref_spots.tile.size  # number of anchor spots
@@ -154,67 +147,83 @@ class Viewer:
         self.nz = self.nb.basic_info.nz
 
         # Add background image/s if given
-        self.diagnostic_layer_ind = 0
-        self.image_layer_ind = None
-        self.image_contrast_slider = list(np.repeat(None, len(background_image)))
-        if background_image is not None:
-            # Loop through all background images which should be paths to their directories
-            for i in range(len(background_image)):
-                if isinstance(background_image[i], str):
-                    if background_image[i].lower() == "dapi":
-                        file_name = nb.file_names.big_dapi_image
-                    elif background_image[i].lower() == "anchor":
-                        file_name = nb.file_names.big_anchor_image
-                    else:
-                        file_name = background_image[i]
-                    if file_name is not None and os.path.isfile(file_name):
-                        if file_name.endswith(".npz"):
-                            # Assume image is first array if .npz file. Now replace the string with the actual image.
-                            background_image[i] = np.load(file_name)
-                            background_image[i] = background_image[i].f.arr_0
-                        elif file_name.endswith(".npy"):
-                            # Assume image is first array if .npz file. Now replace the string with the actual image.
-                            background_image[i] = np.load(file_name)
-                        elif file_name.endswith(".tif"):
-                            background_image[i] = skimage.io.imread(file_name)
-                    else:
-                        background_image[i] = None
-                        warnings.warn(
-                            f"No file exists with file name =\n\t{file_name}\nso plotting with no background."
-                        )
-                if background_image[i] is not None and np.allclose(
+        if not isinstance(background_image, list):
+            background_image = [background_image]
+        if not isinstance(background_image_colour, list):
+            background_image_colour = [background_image_colour]
+        background_image_dir = []
+        # populate background_image_dir with file names of background images and background_image with actual images
+        # or None
+        for i, b in enumerate(background_image):
+            # Check if b is a string, if so, assume it is a file name and try to load it. Then load the image into
+            # background_image. If it is not a string, assume it is an image and load it directly into background_image.
+            if not isinstance(b, str):
+                background_image_dir.append(None)
+                continue
+            # If we have got this far, b is a string. Check if it is a keyword for a standard image.
+            if b.lower() == "dapi":
+                file_name = nb.file_names.big_dapi_image
+            elif b.lower() == "anchor":
+                file_name = nb.file_names.big_anchor_image
+            else:
+                file_name = b
+            background_image_dir.append(file_name)
+            # Now try to load the image
+            if file_name is not None and os.path.isfile(file_name):
+                if file_name.endswith(".npz"):
+                    # Assume image is first array if .npz file. Now replace the string with the actual image.
+                    background_image[i] = np.load(file_name)
+                    background_image[i] = background_image[i].f.arr_0
+                elif file_name.endswith(".npy"):
+                    # Assume image is first array if .npz file. Now replace the string with the actual image.
+                    background_image[i] = np.load(file_name)
+                elif file_name.endswith(".tif"):
+                    background_image[i] = skimage.io.imread(file_name)
+            else:
+                background_image[i] = None
+                warnings.warn(
+                    f"No file exists with file name =\n\t{file_name}\nso plotting with no background."
+                )
+            # Check if background image is constant. If so, don't plot it.
+            if background_image[i] is not None and np.allclose(
                     [background_image[i].max()], [background_image[i].min()]
-                ):
-                    warnings.warn(
-                        f"Background image with file name =\n\t{file_name}"
-                        + "\ncontains constant values, so not plotting"
-                    )
-                    background_image[i] = None
-                if background_image[i] is not None:
-                    self.viewer.add_image(background_image[i], blending="additive", colormap=background_image_colour[i])
+            ):
+                warnings.warn(
+                    f"Background image with file name =\n\t{file_name}"
+                    + "\ncontains constant values, so not plotting"
+                )
+                background_image[i] = None
+        # remove none entries from bg_images
+        good = [i for i, b in enumerate(background_image) if b is not None]
+        background_image = [background_image[i] for i in good]
+        background_image_colour = [background_image_colour[i] for i in good]
 
-                    self.viewer.layers[i].contrast_limits_range = [background_image[i].min(), background_image[i].max()]
-                    self.image_contrast_slider[i] = QRangeSlider(
-                        Qt.Orientation.Horizontal
-                    )  # Slider to change score_thresh
-                    self.image_contrast_slider[i].setRange(background_image[i].min(), background_image[i].max())
-                    # Make starting lower bound contrast the 95th percentile value so most appears black
-                    # Use mid_z to quicken up calculation
-                    mid_z = int(background_image[i].shape[0] / 2)
-                    start_contrast = np.percentile(background_image[i][mid_z], [95, 99.99]).astype(int).tolist()
-                    self.image_contrast_slider[i].setValue(start_contrast)
-                    self.change_image_contrast(i)
-                    # When dragging, status will show contrast values.
-                    self.image_contrast_slider[i].valueChanged.connect(lambda x: self.show_image_contrast(x[0], x[1]))
-                    # On release of slider, genes shown will change
-                    self.image_contrast_slider[i].sliderReleased.connect(lambda j=i: self.change_image_contrast(i=j))
-                    self.image_layer_ind = self.diagnostic_layer_ind
-                    self.diagnostic_layer_ind += 1
+        # Now background_image contains the actual images.
+        n_bg = len(background_image)
+        # define list of layers for background images and transparent spots layer index as the next layer up
+        self.image_layer_ind = np.arange(n_bg)
+        self.transparent_spots_ind = n_bg
+        self.image_contrast_slider = list(np.repeat(0, n_bg))
 
-        if self.diagnostic_layer_ind > 0:
-            self.image_layer_ind = np.arange(self.diagnostic_layer_ind)
-        else:
-            self.image_layer_ind = [0]
+        # Loop through all background images and add them to the viewer.
+        for i, b in enumerate(background_image):
+            self.viewer.add_image(b, blending="additive", colormap=background_image_colour[i])
+            self.viewer.layers[i].contrast_limits_range = [b.min(), b.max()]
+            self.image_contrast_slider[i] = QRangeSlider(Qt.Orientation.Horizontal)
+            self.image_contrast_slider[i].setRange(b.min(), b.max())
+            # Make starting lower bound contrast the 95th percentile value so most appears black
+            # Use mid_z to quicken calculation
+            mid_z = int(b.shape[0] / 2)
+            start_contrast = np.percentile(b[mid_z], [95, 99.9]).astype(int).tolist()
+            self.image_contrast_slider[i].setValue(start_contrast)
+            self.change_image_contrast(i)
+            # When dragging, status will show contrast values.
+            self.image_contrast_slider[i].valueChanged.connect(lambda x: self.show_image_contrast(x[0], x[1]))
+            # On release of slider, genes shown will change
+            self.image_contrast_slider[i].sliderReleased.connect(lambda j=i: self.change_image_contrast(i=j))
+            # add slider to viewer
+            self.viewer.window.add_dock_widget(self.image_contrast_slider[i], area="left", name="Image Contrast")
+            
         # Add legend indicating genes plotted
         self.legend = {"fig": None, "ax": None}
         self.legend["fig"], self.legend["ax"], n_gene_label_letters = legend.add_legend(
@@ -235,11 +244,6 @@ class Viewer:
         self.legend["fig"].mpl_connect("button_press_event", self.update_genes)
         self.viewer.window.add_dock_widget(self.legend["fig"], area="left", name="Genes")
         self.active_genes = np.arange(len(self.gene_names))  # start with all genes shown
-
-        for i in range(len(background_image)):
-            # Slider to change background image contrast
-            if background_image[i] is not None:
-                self.viewer.window.add_dock_widget(self.image_contrast_slider[i], area="left", name="Image Contrast")
 
         # Add all spots in layer as transparent white spots.
         self.point_size = [self.z_thick, 10, 10]  # with size=4, spots are too small to see
@@ -288,7 +292,7 @@ class Viewer:
                     out_of_slice_display=True,
                 )
 
-        self.viewer.layers.selection.active = self.viewer.layers[self.diagnostic_layer_ind]
+        self.viewer.layers.selection.active = self.viewer.layers[self.transparent_spots_ind]
         # so indicates when a spot is selected in viewer status
         # It is needed because layer is transparent so can't see when select spot.
         self.viewer_status_on_select()
@@ -318,7 +322,7 @@ class Viewer:
         # method.
         self.intensity_thresh_slider = QDoubleSlider(Qt.Orientation.Horizontal)
         self.intensity_thresh_slider.setRange(0, 1)
-        intensity_thresh = call_spots.qual_check.get_intensity_thresh(nb)
+        intensity_thresh = qual_check.get_intensity_thresh(nb)
         self.intensity_thresh_slider.setValue(intensity_thresh)
         # When dragging, status will show thresh.
         self.intensity_thresh_slider.valueChanged.connect(lambda x: self.show_intensity_thresh(x))
@@ -392,7 +396,7 @@ class Viewer:
                     yield selectedData
                 yield None
 
-        return _watchSelectedData(self.viewer.layers[self.diagnostic_layer_ind])
+        return _watchSelectedData(self.viewer.layers[self.transparent_spots_ind])
 
     def update_plot(self):
         # This updates the spots plotted to reflect score_range and intensity threshold selected by sliders,
@@ -400,7 +404,7 @@ class Viewer:
         if self.method_buttons.method == "OMP":
             score = call_spots.qual_check.omp_spot_score(self.nb.omp)
             method_ind = np.arange(self.omp_0_ind * 2, self.n_spots)
-            intensity_ok = self.nb.omp.intensity > self.intensity_thresh_slider.value()
+            intensity_ok = np.full_like(score, True, dtype=bool)
         elif self.method_buttons.method == "Anchor":
             score = self.nb.ref_spots.score
             method_ind = np.arange(self.omp_0_ind)
@@ -421,7 +425,7 @@ class Viewer:
         genes_shown = np.isin(self.spot_gene_no[method_ind], self.active_genes)
         spots_shown[method_ind[genes_shown]] = qual_ok[genes_shown]
         for i in range(len(self.viewer.layers)):
-            if i == self.diagnostic_layer_ind:
+            if i == self.transparent_spots_ind:
                 self.viewer.layers[i].shown = spots_shown
             elif self.label_prefix in self.viewer.layers[i].name:
                 s = self.viewer.layers[i].name.replace(self.label_prefix, "")
@@ -539,9 +543,9 @@ class Viewer:
         # Returns spot_no selected if only one selected (this is the spot_no relavent to the Notebook i.e.
         # if omp, the index of the spot in nb.omp is returned).
         # Otherwise, returns None and indicates why in viewer status.
-        n_selected = len(self.viewer.layers[self.diagnostic_layer_ind].selected_data)
+        n_selected = len(self.viewer.layers[self.transparent_spots_ind].selected_data)
         if n_selected == 1:
-            spot_no = list(self.viewer.layers[self.diagnostic_layer_ind].selected_data)[0]
+            spot_no = list(self.viewer.layers[self.transparent_spots_ind].selected_data)[0]
             if self.method_buttons.method == "OMP":
                 spot_no = spot_no - self.omp_0_ind * 2  # return spot_no as saved in self.nb for current method.
             else:
@@ -663,12 +667,16 @@ class Viewer:
 
         @self.viewer.bind_key(KeyBinds.view_omp_fit)
         def call_to_view_omp(viewer):
+            warnings.warn(f"Viewing the OMP fit is not implemented")
+            return
             spot_no = self.get_selected_spot()
             if spot_no is not None:
                 view_omp_fit(self.nb, spot_no, self.method_buttons.method)
 
         @self.viewer.bind_key(KeyBinds.view_omp_score)
         def call_to_view_omp_score(viewer):
+            warnings.warn(f"Viewing the OMP score is not implemented")
+            return
             spot_no = self.get_selected_spot()
             if spot_no is not None:
                 view_omp_score(self.nb, spot_no, self.method_buttons.method, self.omp_score_multiplier_slider.value())

@@ -3,7 +3,7 @@ import numpy as np
 import os
 from typing import Optional
 
-from .. import utils, logging
+from .. import utils, log
 
 
 def spot_yxz(local_yxz: np.ndarray, tile: int, round: int, channel: int, spot_no: np.ndarray) -> np.ndarray:
@@ -137,9 +137,7 @@ def check_neighbour_intensity(image: np.ndarray, spot_yxz: np.ndarray, thresh: f
     elif image.ndim == 2:
         transforms = [[1, 0], [0, 1], [-1, 0], [0, -1]]
     else:
-        logging.error(
-            ValueError(f"image has to have two or three dimensions but given image has {image.ndim} dimensions.")
-        )
+        log.error(ValueError(f"image has to have two or three dimensions but given image has {image.ndim} dimensions."))
     keep = np.zeros((spot_yxz.shape[0], len(transforms)), dtype=bool)
     for i, t in enumerate(transforms):
         mod_spot_yx = spot_yxz + t
@@ -213,6 +211,7 @@ def filter_intense_spots(
     Returns:
         local_yxz: [n_spots_keep x 3] int array of yxz positions of spots
     """
+    assert spot_intensity.ndim == 1
     keep = np.ones(local_yxz.shape[0], dtype=bool)
     # Loop over each z plane and keep only the top max_spots spots
     for z in range(n_z):

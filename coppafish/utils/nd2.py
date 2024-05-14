@@ -7,7 +7,7 @@ import numbers
 from tqdm import tqdm
 from typing import Optional, List, Union, Tuple
 
-from .. import setup, logging
+from .. import setup, log
 from ..setup import NotebookPage
 from ..utils import raw
 from . import errors
@@ -29,7 +29,7 @@ def load(file_path: str) -> Tuple[np.ndarray, dict]:
         Dask array indices in order `fov`, `channel`, `y`, `x`, `z`.
     """
     if not os.path.isfile(file_path):
-        logging.error(errors.NoFileError(file_path))
+        log.error(errors.NoFileError(file_path))
     with nd2.ND2File(file_path) as images:
         images = images.to_dask()
     # images = nd2.imread(file_name, dask=True)  # get python crashing with this in get_image for some reason
@@ -82,7 +82,7 @@ def get_metadata(file_path: str, config: dict) -> dict:
     """
 
     if not os.path.isfile(file_path):
-        logging.error(errors.NoFileError(file_path))
+        log.error(errors.NoFileError(file_path))
 
     with nd2.ND2File(file_path) as images:
         metadata = {
@@ -140,7 +140,7 @@ def get_all_metadata(file_path: str) -> dict:
         dict: dictionary containing all found metadata for given ND2 file.
     """
     if not os.path.isfile(file_path):
-        logging.error(errors.NoFileError(file_path))
+        log.error(errors.NoFileError(file_path))
 
     with nd2.ND2File(file_path) as images:
         metadata = images.unstructured_metadata()
@@ -360,7 +360,7 @@ def save_metadata(json_file: str, nd2_file: str, use_channels: Optional[List] = 
     metadata = get_metadata(nd2_file)
     if use_channels is not None:
         if len(use_channels) > metadata["sizes"]["c"]:
-            logging.error(
+            log.error(
                 ValueError(
                     f"use_channels contains {len(use_channels)} channels but there "
                     f"are only {metadata['sizes']['c']} channels in the nd2 metadata."
@@ -503,7 +503,7 @@ def get_raw_images(
 #              and then field of view.
 #     """
 #     if not os.path.isfile(file_path):
-#         logging.error(errors.NoFileError(file_path))
+#         log.error(errors.NoFileError(file_path))
 #     images = ND2Reader(file_path)
 #     images.iter_axes = 'vcz'
 #     return images

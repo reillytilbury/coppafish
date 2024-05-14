@@ -5,7 +5,7 @@ from tqdm import tqdm
 import numpy.typing as npt
 from typing import Optional, Tuple
 
-from .. import utils, extract, logging, filter
+from .. import utils, extract, log, filter
 from ..utils import tiles_io, indexing
 from ..filter import deconvolution
 from ..filter import base as filter_base
@@ -46,7 +46,7 @@ def run_filter(
     nbp.software_version = utils.system.get_software_version()
     nbp.revision_hash = utils.system.get_software_hash()
 
-    logging.debug("Filter started")
+    log.debug("Filter started")
     start_time = time.time()
     if not os.path.isdir(nbp_file.tile_dir):
         os.mkdir(nbp_file.tile_dir)
@@ -139,7 +139,7 @@ def run_filter(
     compute_scale = True
     if os.path.isfile(nbp_file.scale):
         scale = float(filter_base.get_scale_from_txt(nbp_file.scale)[0])
-        logging.info(f"Using image scale {scale} found at {nbp_file.scale}")
+        log.info(f"Using image scale {scale} found at {nbp_file.scale}")
         compute_scale = False
 
     indices = indexing.create(
@@ -219,7 +219,7 @@ def run_filter(
                     # oa convolve uses lots of memory and much slower here.
                     im_filtered = utils.morphology.imfilter(im_filtered, smooth_kernel, oa=False)
                 if (im_filtered > np.iinfo(np.int32).max).sum() > 0:
-                    logging.warn(f"Converting to int32 has cut off pixels for {t=}, {r=}, {c=} filtered image")
+                    log.warn(f"Converting to int32 has cut off pixels for {t=}, {r=}, {c=} filtered image")
                 if compute_scale:
                     compute_scale = False
                     # Images cannot scale too much as to make negative pixels below the invalid pixel value of -15,000
@@ -227,7 +227,7 @@ def run_filter(
                     scale = min([scale, max_pixel_value / im_filtered.max()])
                     # A margin for max/min pixel variability between images. Scale can never be below 1.
                     scale = max([config["scale_multiplier"] * float(scale), 1])
-                    logging.debug(f"{scale=} computed from {t=}, {r=}, {c=}")
+                    log.debug(f"{scale=} computed from {t=}, {r=}, {c=}")
                     # Save scale in case need to re-run without the notebook
                     filter_base.save_scale(nbp_file.scale, scale, scale)
                 # Scale non DAPI images up by scale (or anchor_scale) factor after all filtering
@@ -271,7 +271,6 @@ def run_filter(
                 t,
                 r,
                 c,
-                suffix="_raw",
                 num_rotations=config["num_rotations"],
                 percent_clip_warn=config["percent_clip_warn"],
                 percent_clip_error=config["percent_clip_error"],
@@ -284,5 +283,5 @@ def run_filter(
     nbp.bg_scale = None
     end_time = time.time()
     nbp_debug.time_taken = end_time - start_time
-    logging.debug("Filter complete")
+    log.debug("Filter complete")
     return nbp, nbp_debug

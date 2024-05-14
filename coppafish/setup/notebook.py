@@ -46,7 +46,7 @@ from typing import Tuple, Optional, List, Any
 
 from .config import get_config
 from .file_names import set_file_names
-from .. import logging
+from .. import log
 
 
 # Functions in Notebook._no_save_pages need defined here
@@ -122,7 +122,7 @@ def _decode_type(key, val, typ):
     for n, _, f in TYPES:
         if n == typ:
             return f(val)
-    logging.error(
+    log.error(
         TypeError(
             f"Key {key!r} has type {typ!r}, "
             "but we don't know how to decode that.  "
@@ -150,7 +150,7 @@ def _get_type(key, val):
     for n, f, _ in TYPES:
         if f(val):
             return n
-    logging.error(
+    log.error(
         TypeError(
             f"Key {key!r} has value {val!r} which "
             f"is of type {type(val)}, which is invalid.  "
@@ -297,12 +297,12 @@ class Notebook:
         object.__setattr__(self, "_page_times", {})
         if notebook_file is None:
             if config_file is None:
-                logging.error(ValueError("Both notebook_file and config_file are None"))
+                log.error(ValueError("Both notebook_file and config_file are None"))
             else:
                 config_file_names = get_config(config_file)["file_names"]
                 notebook_file = os.path.join(config_file_names["output_dir"], config_file_names["notebook_name"])
                 if not os.path.isdir(config_file_names["output_dir"]):
-                    logging.error(
+                    log.error(
                         ValueError(
                             f"\nconfig['file_names']['output_dir'] = {config_file_names['output_dir']}\n"
                             f"is not a valid directory."
@@ -322,7 +322,7 @@ class Notebook:
                 with open(config_file, "r") as f:
                     read_config = f.read()
             else:
-                logging.error(ValueError(f"Config file given is not valid: {config_file}"))
+                log.error(ValueError(f"Config file given is not valid: {config_file}"))
         else:
             read_config = None
         # If the file already exists, initialize the Notebook object from this
@@ -333,13 +333,13 @@ class Notebook:
                 object.__setattr__(self, page.name, page)  # don't want to set page_time hence use object setattr
             if read_config is not None:
                 if not self.compare_config(get_config(read_config)):
-                    logging.error(SystemError("Passed config file is not the same as the saved config file"))
+                    log.error(SystemError("Passed config file is not the same as the saved config file"))
                 self._config = read_config  # update config to new one - only difference will be in file_names section
             self.add_no_save_pages()  # add file_names page with new config
         else:
-            logging.info("Notebook file not found, creating a new notebook.")
+            log.info("Notebook file not found, creating a new notebook.")
             if read_config is None:
-                logging.warn("Have not passed a config_file so Notebook.get_config() won't work.")
+                log.warn("Have not passed a config_file so Notebook.get_config() won't work.")
             self._created_time = time.time()
             self._config = read_config
 
@@ -363,7 +363,7 @@ class Notebook:
         if self._config is not None:
             return get_config(self._config)
         else:
-            logging.error(ValueError("Notebook does not contain config parameter."))
+            log.error(ValueError("Notebook does not contain config parameter."))
 
     def compare_config(self, config_2: dict) -> bool:
         """
@@ -384,7 +384,7 @@ class Notebook:
         config = self.get_config()
         is_equal = True
         if config.keys() != config_2.keys():
-            logging.info("The config files have different sections.")
+            log.info("The config files have different sections.")
             is_equal = False
         else:
             sort_page_names = sorted(self._page_times.items(), key=lambda x: x[1])  # sort by time added to notebook
@@ -394,7 +394,13 @@ class Notebook:
                 # Only compare sections for which there is a corresponding page in the notebook.
                 if section not in self._no_compare_config_sections and section in page_names:
                     if config[section] != config_2[section]:
-                        logging.info(f"The {section} section of the two config files differ.")
+                        log.info(f"The {section} section of the two config files differ.")
+                        for param in config[section].keys():
+                            if config[section][param] != config_2[section][param]:
+                                log.info(
+                                    f"The notebook config has {param} = {config[section][param]} and "
+                                    f"the passed config has {param} = {config_2[section][param]}."
+                                )
                         is_equal = False
         return is_equal
 
@@ -403,9 +409,9 @@ class Notebook:
         `describe(var)` will print comments for variables called `var` in each `NotebookPage`.
         """
         if key is None:
-            logging.info(self.__repr__())
+            log.info(self.__repr__())
         elif len(self._page_times) == 0:
-            logging.info(f"No pages so cannot search for variable {key}")
+            log.info(f"No pages so cannot search for variable {key}")
         else:
             sort_page_names = sorted(self._page_times.items(), key=lambda x: x[1])  # sort by time added to notebook
             page_names = [name[0] for name in sort_page_names]
@@ -418,9 +424,9 @@ class Notebook:
             for page_name in page_names:
                 # if in comments file, then print the comment
                 if key in json_comments[page_name]:
-                    logging.info(f"{key} in {page_name}:")
+                    log.info(f"{key} in {page_name}:")
                     self.__getattribute__(page_name).describe(key)
-                    logging.info("")
+                    log.info("")
                     n_times_appeared += 1
 
                 elif self._config is not None:
@@ -433,14 +439,14 @@ class Notebook:
                     for section in config_sections:
                         for param in config[section].keys():
                             if param.lower() == key.lower():
-                                logging.info(
+                                log.info(
                                     f"No variable named {key} in the {page_name} page.\n"
                                     f"But it is in the {section} section of the config file and has value:\n"
                                     f"{config[section][param]}\n"
                                 )
                                 n_times_appeared += 1
             if n_times_appeared == 0:
-                logging.info(f"{key} is not in any of the pages in this notebook.")
+                log.info(f"{key} is not in any of the pages in this notebook.")
 
     def __eq__(self, other):
         """
@@ -466,13 +472,13 @@ class Notebook:
         # If adding something other than a `NotebookPage`, this syntax does exactly as it is for other classes.
         if isinstance(value, NotebookPage):
             if self._SEP in key:
-                logging.error(NameError(f"The separator {self._SEP} may not be in the page's name"))
+                log.error(NameError(f"The separator {self._SEP} may not be in the page's name"))
             if value.finalized:
-                logging.error(ValueError("Page already added to a Notebook, cannot add twice"))
+                log.error(ValueError("Page already added to a Notebook, cannot add twice"))
             if key in self._page_times.keys():
-                logging.error(ValueError("Cannot add two pages with the same name"))
+                log.error(ValueError("Cannot add two pages with the same name"))
             if value.name != key:
-                logging.error(ValueError(f"Page name is {value.name} but key given is {key}"))
+                log.error(ValueError(f"Page name is {value.name} but key given is {key}"))
 
             # ensure all the variables in the comments file are included
             with open(value._comments_file) as f:
@@ -480,11 +486,11 @@ class Notebook:
             if value.name in json_comments:
                 for var in json_comments[value.name]:
                     if var not in value._times and var != "DESCRIPTION":
-                        logging.error(InvalidNotebookPageError(None, var, value.name))
+                        log.error(InvalidNotebookPageError(None, var, value.name))
                 # ensure all variables in page are in comments file
                 for var in value._times:
                     if var not in json_comments[value.name]:
-                        logging.error(InvalidNotebookPageError(var, None, value.name))
+                        log.error(InvalidNotebookPageError(var, None, value.name))
 
             value.finalized = True
             object.__setattr__(self, key, value)
@@ -493,7 +499,7 @@ class Notebook:
                 self.save()
             self.add_no_save_pages()
         elif key in self._page_times.keys():
-            logging.error(ValueError(f"Page with name {key} in notebook so can't add variable with this name."))
+            log.error(ValueError(f"Page with name {key} in notebook so can't add variable with this name."))
         else:
             object.__setattr__(self, key, value)
 
@@ -512,7 +518,7 @@ class Notebook:
         is then deleted once the new save is complete.
         """
         if not isinstance(page, NotebookPage):
-            logging.error(TypeError("Only NotebookPage objects may be added to a notebook."))
+            log.error(TypeError("Only NotebookPage objects may be added to a notebook."))
         backup_path = os.path.join(os.path.dirname(self._file), "notebook_backup.npz")
         if os.path.isfile(self._file):
             shutil.copyfile(self._file, backup_path)
@@ -529,7 +535,7 @@ class Notebook:
         elif isinstance(page_name, list):
             output = [any(page_name[i] == p for p in self._page_times) for i in range(len(page_name))]
         else:
-            logging.error(ValueError(f"page_name given was {page_name}. This is not a list or a string."))
+            log.error(ValueError(f"page_name given was {page_name}. This is not a list or a string."))
         return output
 
     def get_page_names(self):
@@ -559,7 +565,7 @@ class Notebook:
         assert isinstance(other, Notebook), "Can only combine notebook with another notebook"
         new_path = os.path.join(os.path.dirname(self._file), "notebook_combined.npz")
         if os.path.isfile(new_path):
-            logging.warn(f"Combined notebook at {new_path} already exists, replacing...")
+            log.warn(f"Combined notebook at {new_path} already exists, replacing...")
             os.remove(new_path)
 
         tile_indices = [self.basic_info.use_tiles, other.basic_info.use_tiles]
@@ -599,7 +605,7 @@ class Notebook:
             new_name:
         """
         nbp = self.__getattribute__(old_name)
-        logging.info(f"Changing name of {old_name} page to {new_name}")
+        log.info(f"Changing name of {old_name} page to {new_name}")
         time_added = self._page_times[old_name]
         nbp.finalized = False
         nbp.name = new_name
@@ -661,13 +667,13 @@ class Notebook:
             d[self._NBMETA + self._SEP + self._CONFIGMETA] = self._config
         np.savez_compressed(self._file, **d)
         # Finishing the diagnostics described above
-        logging.info(f"Notebook saved: took {round(time.time() - save_start_time, 3)} seconds")
+        log.info(f"Notebook saved: took {round(time.time() - save_start_time, 3)} seconds")
         versions = set(self.get_all_variable_instances(self._SOFTWARE_VERSION))
         hashes = set(self.get_all_variable_instances(self._HASH_NAME))
         if len(versions) > 1:
-            logging.warn(f"Saved notebook contains more than one software version: {versions}")
+            log.warn(f"Saved notebook contains more than one software version: {versions}")
         if len(hashes) > 1:
-            logging.warn(f"Notebook hashes have differed. The source code may have been changed")
+            log.warn(f"Notebook hashes have differed. The source code may have been changed")
 
     def from_file(self, fn: str) -> Tuple[List, dict, float, str]:
         """
@@ -802,7 +808,7 @@ class NotebookPage:
             elif not np.array_equal(attribute_0, attribute_1):
                 equal = False
             if not equal:
-                logging.info(f"{attribute_0} != {attribute_1}")
+                log.info(f"{attribute_0} != {attribute_1}")
                 return equal
         return equal
 
@@ -822,12 +828,12 @@ class NotebookPage:
 
     def __repr__(self):
         # This means that print(nbp) gives description of page if available or name and time created if not.
-        json_comments = json.load(open(self._comments_file))
-        if self.name in json_comments:
-            return "\n".join(json_comments[self.name][self._PAGE_DESCRIPTION_KEY])
-        else:
-            time_created = time.strftime("%d-%m-%Y- %H:%M:%S", time.localtime(self._time_created))
-            return f"{self.name} page created at {time_created}"
+        with json.load(open(self._comments_file)) as json_comments:
+            if self.name in json_comments:
+                return "\n".join(json_comments[self.name][self._PAGE_DESCRIPTION_KEY])
+            else:
+                time_created = time.strftime("%d-%m-%Y- %H:%M:%S", time.localtime(self._time_created))
+                return f"{self.name} page created at {time_created}"
 
     def describe(self, key: Optional[str] = None):
         """
@@ -839,10 +845,10 @@ class NotebookPage:
 
         """
         if key is None:
-            logging.info(self.__repr__())  # describe whole page if no key given
+            log.info(self.__repr__())  # describe whole page if no key given
         else:
             if key not in self._times.keys():
-                logging.error(f"No variable named {key} in the {self.name} page.")
+                log.error(f"No variable named {key} in the {self.name} page.")
             else:
                 json_comments = json.load(open(self._comments_file))
                 if self.name in json_comments:
@@ -850,9 +856,9 @@ class NotebookPage:
                     while "" in json_comments[self.name][key]:
                         json_comments[self.name][key].remove("")
                     # replace below removes markdown code indicators
-                    logging.info("\n".join(json_comments[self.name][key][1:]).replace("`", ""))
+                    log.info("\n".join(json_comments[self.name][key][1:]).replace("`", ""))
                 else:
-                    logging.warn(f"No comments available for page called {self.name}.")
+                    log.warn(f"No comments available for page called {self.name}.")
 
     def __setattr__(self, key, value):
         # Add an item to the notebook page.
@@ -862,20 +868,20 @@ class NotebookPage:
         # notebook.  Specifically, it implements a write-once mechanism.
         if self._is_result_key(key):
             if self.finalized:
-                logging.error(
+                log.error(
                     ValueError("This NotebookPage has already been added to a Notebook, no more values can be added.")
                 )
             assert isinstance(key, str), f"NotebookPage key {key!r} must be a string, not {type(key)}"
             _get_type(key, value)
             if key in self.__dict__.keys():
-                logging.error(ValueError(f"Cannot assign {key} = {value!r} to the notebook page, key already exists"))
+                log.error(ValueError(f"Cannot assign {key} = {value!r} to the notebook page, key already exists"))
             with open(self._comments_file) as f:
                 json_comments = json.load(f)
             if self.name in json_comments:
                 if key not in json_comments[self.name]:
-                    logging.error(InvalidNotebookPageError(key, None, self.name))
+                    log.error(InvalidNotebookPageError(key, None, self.name))
                 if key == self._PAGE_DESCRIPTION_KEY:
-                    logging.error(InvalidNotebookPageError(key, None, self.name))
+                    log.error(InvalidNotebookPageError(key, None, self.name))
             self._times[key] = time.time()
         object.__setattr__(self, key, value)
 
@@ -883,9 +889,7 @@ class NotebookPage:
         # Method to delete a result or attribute. Deals with del nbp.name.
         # Can only delete attribute if page has not been finalized.
         if self.finalized:
-            logging.error(
-                ValueError("This NotebookPage has already been added to a Notebook, no values can be deleted.")
-            )
+            log.error(ValueError("This NotebookPage has already been added to a Notebook, no values can be deleted."))
         object.__delattr__(self, name)
         if name in self._times:
             # extra bit if _is_result_key
@@ -979,34 +983,28 @@ class NotebookPage:
         ), f"Unexpected keyword {combine_type} in notebook comments for {variable_name}"
         if combine_type == "eq":
             if not (np.asarray(var_0) == np.asarray(var_1)).all():
-                logging.error(
-                    ValueError(f"The notebook pages cannot be combined; variables {variable_name} are not equal")
-                )
+                log.error(ValueError(f"The notebook pages cannot be combined; variables {variable_name} are not equal"))
             combined_var = var_0
         elif combine_type == "add":
             combined_var = var_0 + var_1
         elif combine_type == "close":
             if not (np.allclose(var_0, var_1, equal_nan=True) or (var_0 is None and var_1 is None)):
-                logging.error(
-                    ValueError(f"The notebook pages cannot be combined; variables {variable_name} are not close")
-                )
+                log.error(ValueError(f"The notebook pages cannot be combined; variables {variable_name} are not close"))
             combined_var = var_0
         elif combine_type == "ignore":
             combined_var = var_0
         elif combine_type == "append":
             axis_no = int(combine_info[1])
             if not isinstance(var_0, np.ndarray):
-                logging.error(TypeError(f"To append variables, they must be of type np.ndarray, got {type(var_0)}"))
+                log.error(TypeError(f"To append variables, they must be of type np.ndarray, got {type(var_0)}"))
             for t in tiles_0:
                 if t in tiles_1:
-                    logging.error(
-                        ValueError(f"Tile {t} is in both notebook pages, so cannot append {variable_name} data")
-                    )
+                    log.error(ValueError(f"Tile {t} is in both notebook pages, so cannot append {variable_name} data"))
             combined_var = np.append(var_0, var_1, axis=axis_no)
         elif combine_type == "tile":
             axis_no = int(combine_info[1])
             if not isinstance(var_0, np.ndarray):
-                logging.error(
+                log.error(
                     TypeError(f"To combine by tile axis, variables must be of type np.ndarray, got {type(var_0)}")
                 )
             n_tiles = 1 + np.max(tile_indices)
@@ -1016,7 +1014,7 @@ class NotebookPage:
                 var_0_t = np.take(var_0, indices=[t], axis=axis_no)
                 if t in added_tiles:
                     if not np.allclose(var_0_t, np.take(combined_var, indices=[t], axis=axis_no), equal_nan=True):
-                        logging.error(
+                        log.error(
                             ValueError(
                                 f"A shared tile {t} in notebook pages are not close in value for {variable_name}"
                             )
@@ -1031,7 +1029,7 @@ class NotebookPage:
                 var_1_t = np.take(var_1, indices=[t], axis=axis_no)
                 if t in added_tiles:
                     if not np.allclose(var_1_t, np.take(combined_var, indices=[t], axis=axis_no), equal_nan=True):
-                        logging.error(
+                        log.error(
                             ValueError(
                                 f"A shared tile {t} in notebook pages are not close in value for {variable_name}"
                             )
@@ -1043,7 +1041,7 @@ class NotebookPage:
                 )
                 added_tiles.append(t)
         else:
-            logging.error(AttributeError(f"Unknown keyword {combine_type} given for {variable_name}"))
+            log.error(AttributeError(f"Unknown keyword {combine_type} given for {variable_name}"))
         return combined_var
 
     def combine_with_page(self, other, tile_indices: List[List[int]]):
@@ -1064,7 +1062,7 @@ class NotebookPage:
         with open(self._comments_file) as f:
             notebook_comments: dict = json.load(f)
         if self.name not in notebook_comments:
-            logging.error(LookupError(f"Page {self.name} not found in {self._comments_file}"))
+            log.error(LookupError(f"Page {self.name} not found in {self._comments_file}"))
 
         combined_page = NotebookPage(self.name)
         variable_names = [v for v in dir(self) if not v.startswith("_") and not callable(getattr(self, v))]

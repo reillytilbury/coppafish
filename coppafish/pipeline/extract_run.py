@@ -5,7 +5,7 @@ from tqdm import tqdm
 from typing import Tuple, Optional
 
 from ..setup.notebook import NotebookPage
-from .. import utils, logging
+from .. import utils, log
 from ..utils import tiles_io, indexing
 
 
@@ -31,7 +31,7 @@ def run_extract(
     # initialise notebook pages
     if not nbp_basic.is_3d:
         # config["deconvolve"] = False  # only deconvolve if 3d pipeline
-        logging.error(
+        log.error(
             NotImplementedError(f"coppafish 2d is not in a stable state, please contact a dev to add this. Sorry! ;(")
         )
 
@@ -40,7 +40,7 @@ def run_extract(
     nbp.revision_hash = utils.system.get_software_hash()
     nbp.file_type = config["file_type"]
 
-    logging.debug("Extraction started")
+    log.debug("Extraction started")
 
     if nbp_basic.use_preseq:
         pre_seq_round = nbp_basic.pre_seq_round
@@ -107,8 +107,12 @@ def run_extract(
                 im = im.astype(np.uint16, casting="safe")
                 # yxz -> zyx
                 im = im.transpose((2, 0, 1))
-                if ((im.max((1, 2)) - im.min((1, 2))) == 0).any():
-                    logging.warn(f"Raw image {t=}, {r=}, {c=} has a single valued plane!")
+                if (im.mean((1, 2)) < config["z_plane_mean_warning"]).any():
+                    log.warn(
+                        f"Raw image {t=}, {r=}, {c=} has dim z plane(s). You may wish to remove the affected image by"
+                        + f" setting `bad_trc = ({t}, {r}, {c}), (...` in the basic_info config and re-run the pipeline"
+                        + " with an empty output directory."
+                    )
                 tiles_io._save_image(im, file_path, config["file_type"])
             # Compute the counts of each possible uint16 pixel value for the image.
             hist_counts[:, t, r, c] = np.histogram(
@@ -118,5 +122,5 @@ def run_extract(
             del im
             pbar.update()
             del round_dask_array
-    logging.debug("Extraction complete")
+    log.debug("Extraction complete")
     return nbp

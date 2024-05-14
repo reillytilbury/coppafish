@@ -85,13 +85,7 @@ def create(
                 if c == nbp_basic.dapi_channel and include_dapi_preseq:
                     including = True
             if including:
-                all_indices.append(
-                    (
-                        t,
-                        r,
-                        c,
-                    )
-                )
+                all_indices.append((t, r, c))
     output = []
     for t, r, c in all_indices:
         new_index = (t,)
@@ -103,7 +97,7 @@ def create(
     # Remove any duplicate indices
     output = sorted(list(set(output)))
     if not include_bad_trc:
-        bad_trc = nbp_basic.bad_trc
+        bad_trc = [tuple(trc) for trc in nbp_basic.bad_trc]
         output = [index for index in output if index not in bad_trc]
     return output
 

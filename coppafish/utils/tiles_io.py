@@ -1,21 +1,17 @@
 import os
-import zarr
 import enum
 import numbers
+from typing import Any, List, Optional, Tuple, Union
+
+from numcodecs import Blosc, blosc
 import numpy as np
-from numcodecs import blosc, Blosc
-
-try:
-    import jax.numpy as jnp
-except ImportError:
-    import numpy as jnp
-from tqdm import tqdm
-import numpy_indexed
 import numpy.typing as npt
-from typing import Tuple, Union, Optional, List
+import numpy_indexed
+from tqdm import tqdm
+import zarr
 
+from .. import extract, log, utils
 from ..setup import NotebookPage
-from .. import utils, extract, logging
 
 
 IMAGE_SAVE_DTYPE = np.uint16
@@ -24,6 +20,43 @@ IMAGE_SAVE_DTYPE = np.uint16
 class OptimisedFor(enum.Enum):
     FULL_READ_AND_WRITE = enum.auto()
     Z_PLANE_READ = enum.auto()
+
+
+def get_compressor_and_chunks(
+    optimised_for: OptimisedFor, image_shape: Tuple[int], image_z_index: Optional[int] = None
+) -> Tuple[Any, Tuple[int]]:
+    # By benchmarking every single blosc algorithm type (except snappy since this is unsupported by zarr),
+    # chunk size and compression level, it was found that zstd, chunk size of 1x2x2 and compression level 3 was
+    # fast at the sum of full image reading + writing times while still compressing the files to ~70-80%.
+    # Benchmarking done by Paul Shuker (paul.shuker@outlook.com), January 2024.
+    blosc.use_threads = True
+    blosc.set_nthreads(utils.system.get_core_count())
+    if image_z_index is None:
+        image_z_index = np.argmin(image_shape).item()
+    if optimised_for == OptimisedFor.FULL_READ_AND_WRITE:
+        compressor = Blosc(cname="lz4", clevel=2, shuffle=Blosc.BITSHUFFLE)
+        chunk_count_z = image_shape[image_z_index] // 2
+        chunk_count_yx = min(288, np.max(image_shape).item())
+    elif optimised_for == OptimisedFor.Z_PLANE_READ:
+        compressor = Blosc(cname="lz4", clevel=4, shuffle=Blosc.SHUFFLE)
+        chunk_count_z = image_shape[0] // 2
+        chunk_count_yx = min(576, np.max(image_shape).item())
+    else:
+        raise ValueError(f"Unknown OptimisedFor value of {optimised_for}")
+    if len(image_shape) >= 3:
+        chunks = tuple()
+        for i in range(len(image_shape)):
+            if image_shape[i] < 4:
+                chunks += (image_shape[i],)
+            elif i == image_z_index:
+                chunks += (chunk_count_z,)
+            else:
+                chunks += (chunk_count_yx,)
+    elif len(image_shape) == 2:
+        chunks = (chunk_count_yx, chunk_count_yx)
+    else:
+        raise ValueError(f"Got image_shape with {len(image_shape)} dimensions: {image_shape}")
+    return compressor, chunks
 
 
 def get_pixel_max() -> int:
@@ -60,11 +93,11 @@ def image_exists(file_path: str, file_type: str) -> bool:
         # Require a non-empty zarr directory
         return os.path.isdir(file_path) and len(os.listdir(file_path)) > 0
     else:
-        logging.error(ValueError(f"Unsupported file_type: {file_type.lower()}"))
+        log.error(ValueError(f"Unsupported file_type: {file_type.lower()}"))
 
 
 def _save_image(
-    image: Union[npt.NDArray[np.uint16], jnp.ndarray],
+    image: npt.NDArray[np.uint16],
     file_path: str,
     file_type: str,
     optimised_for: OptimisedFor = None,
@@ -74,7 +107,7 @@ def _save_image(
     was given.
 
     Args:
-        image (((nz x) ny x nx) ndarray[uint16]): image to save.
+        image ((nz x ny x nx) ndarray[uint16]): image to save.
         file_path (str): file path.
         file_type (str): file type, case insensitive.
         optimised_for (literal[int]): what speed to optimise compression for. Affects the blosc compressor. Default:
@@ -91,26 +124,7 @@ def _save_image(
     if file_type.lower() == ".npy":
         np.save(file_path, image)
     elif file_type.lower() == ".zarr":
-        blosc.use_threads = True
-        blosc.set_nthreads(utils.system.get_core_count())
-        # By formally benchmarking every single blosc algorithm type (except snappy since this is unsupported by zarr),
-        # chunk size and compression level, it was found that zstd, chunk size of 1x2x2 and compression level 3 was
-        # fast at the sum of full image reading + writing times while still compressing the files to ~70-80%.
-        # Benchmarking done by Paul Shuker (paul.shuker@outlook.com), January 2024.
-        if optimised_for == OptimisedFor.FULL_READ_AND_WRITE:
-            compressor = Blosc(cname="lz4", clevel=2, shuffle=Blosc.BITSHUFFLE)
-            chunk_count_z = image.shape[0] // 2
-            chunk_count_yx = min(288, image.shape[1])
-        elif optimised_for == OptimisedFor.Z_PLANE_READ:
-            compressor = Blosc(cname="lz4", clevel=4, shuffle=Blosc.SHUFFLE)
-            chunk_count_z = image.shape[0] // 2
-            chunk_count_yx = min(576, image.shape[1])
-        else:
-            ValueError(f"Unexpected opimised_for parameter: {optimised_for.value}")
-        if image.ndim == 3:
-            chunks = (chunk_count_z, chunk_count_yx, chunk_count_yx)
-        else:
-            chunks = (chunk_count_yx, chunk_count_yx)
+        compressor, chunks = get_compressor_and_chunks(optimised_for, image.shape)
         zarray = zarr.open(
             store=file_path,
             shape=image.shape,
@@ -122,7 +136,7 @@ def _save_image(
         )
         zarray[:] = image
     else:
-        logging.error(ValueError(f"Unsupported `file_type`: {file_type.lower()}"))
+        raise ValueError(f"Unsupported `file_type`: {file_type.lower()}")
 
 
 def _load_image(
@@ -165,7 +179,7 @@ def _load_image(
             return zarr.open(file_path, mode="r")[indices, ...]
         return zarr.open(file_path, mode="r").get_coordinate_selection(indices)
     else:
-        logging.error(ValueError(f"Unsupported `file_type`: {file_type.lower()}"))
+        log.error(ValueError(f"Unsupported `file_type`: {file_type.lower()}"))
 
 
 def save_image(
@@ -212,7 +226,7 @@ def save_image(
 
     if nbp_basic.is_3d:
         if c is None:
-            logging.error(ValueError("3d image but channel not given."))
+            log.error(ValueError("3d image but channel not given."))
         if not apply_shift or (c == nbp_basic.dapi_channel):
             # If dapi is given then image should already by uint16 so no clipping
             percent_clipped_pixels = (image < 0).sum()
@@ -234,15 +248,15 @@ def save_image(
         percent_clipped_pixels *= 100 / image.size
         message = f"{t=}, {r=}, {c=} saved image has clipped {round(percent_clipped_pixels, 5)}% of pixels"
         if percent_clip_warn is not None and percent_clipped_pixels >= percent_clip_warn:
-            logging.warn(message)
+            log.warn(message)
         if percent_clip_error is not None and percent_clipped_pixels >= percent_clip_error:
-            logging.error(message)
+            log.error(message)
         if percent_clipped_pixels >= 1:
-            logging.debug(message)
+            log.debug(message)
         # In 3D, cannot possibly save any un-used channel hence no exception for this case.
         expected_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
         if not utils.errors.check_shape(image, expected_shape):
-            logging.error(utils.errors.ShapeError("tile to be saved", image.shape, expected_shape))
+            log.error(utils.errors.ShapeError("tile to be saved", image.shape, expected_shape))
         # yxz -> zxy
         image = np.swapaxes(image, 2, 0)
         # zxy -> zyx
@@ -255,7 +269,7 @@ def save_image(
         _save_image(image, file_path, file_type, optimised_for=OptimisedFor.Z_PLANE_READ)
         return image
     else:
-        logging.error(NotImplementedError("2D image saving is currently not supported"))
+        log.error(NotImplementedError("2D image saving is currently not supported"))
 
 
 def load_image(
@@ -265,7 +279,7 @@ def load_image(
     t: int,
     r: int,
     c: int,
-    yxz: Optional[Union[List, Tuple, np.ndarray, jnp.ndarray]] = None,
+    yxz: Optional[Union[List, Tuple, np.ndarray]] = None,
     apply_shift: bool = True,
     suffix: str = "",
 ) -> npt.NDArray[Union[np.int32, np.uint16]]:
@@ -306,15 +320,15 @@ def load_image(
         file_path = nbp_file.tile[t][r][c]
         file_path = file_path[: file_path.index(file_type)] + suffix + file_type
     else:
-        logging.error(NotImplementedError("2D image loading is currently not supported"))
+        log.error(NotImplementedError("2D image loading is currently not supported"))
     if not image_exists(file_path, file_type):
-        logging.error(FileNotFoundError(f"Could not find image at {file_path} to load from"))
+        log.error(FileNotFoundError(f"Could not find image at {file_path} to load from"))
     if yxz is not None:
         # Use mmap when only loading in part of image
         if isinstance(yxz, (list, tuple)):
             if nbp_basic.is_3d:
                 if len(yxz) != 3:
-                    logging.error(ValueError(f"Loading in a 3D tile but dimension of coordinates given is {len(yxz)}."))
+                    log.error(ValueError(f"Loading in a 3D tile but dimension of coordinates given is {len(yxz)}."))
                 if yxz[0] is None and yxz[1] is None:
                     z_indices = yxz[2]
                     if isinstance(z_indices, int):
@@ -335,33 +349,24 @@ def load_image(
                     image = np.moveaxis(_load_image(file_path, file_type, indices=coord_index_zyx, mmap_mode="r"), 0, 2)
             else:
                 if len(yxz) != 2:
-                    logging.error(ValueError(f"Loading in a 2D tile but dimension of coordinates given is {len(yxz)}."))
+                    log.error(ValueError(f"Loading in a 2D tile but dimension of coordinates given is {len(yxz)}."))
                 coord_index = np.ix_(np.array([c]), yxz[0], yxz[1])  # add channel as first coordinate in 2D.
                 # [0] below is to remove channel index of length 1.
                 image = _load_image(nbp_file.tile[t][r], file_type, mmap_mode="r")[coord_index][0]
-        elif isinstance(yxz, (np.ndarray, jnp.ndarray)):
+        elif isinstance(yxz, np.ndarray):
             if nbp_basic.is_3d:
                 if yxz.shape[1] != 3:
-                    logging.error(
-                        ValueError(f"Loading in a 3D tile but dimension of coordinates given is {yxz.shape[1]}.")
-                    )
+                    log.error(ValueError(f"Loading in a 3D tile but dimension of coordinates given is {yxz.shape[1]}."))
                 coord_index_zyx = tuple([yxz[:, j] for j in [2, 0, 1]])
-                if np.allclose(coord_index_zyx[0], coord_index_zyx[0][0]) and coord_index_zyx[0].size > 100_000:
-                    image = _load_image(file_path, file_type, indices=coord_index_zyx[0][0].item())
-                    image = image[coord_index_zyx[1:]]
-                else:
-                    image = _load_image(file_path, file_type, indices=coord_index_zyx, mmap_mode="r")
+                image = _load_image(file_path, file_type)[coord_index_zyx]
             else:
                 if yxz.shape[1] != 2:
-                    logging.error(
-                        ValueError(f"Loading in a 2D tile but dimension of coordinates given is {yxz.shape[1]}.")
-                    )
+                    log.error(ValueError(f"Loading in a 2D tile but dimension of coordinates given is {yxz.shape[1]}."))
                 coord_index = tuple(np.asarray(yxz[:, i]) for i in range(2))
                 coord_index = (np.full(yxz.shape[0], c, int),) + coord_index  # add channel as first coordinate in 2D.
-                # image = np.load(nbp_file.tile[t][r], mmap_mode='r')[coord_index]
                 image = _load_image(nbp_file.tile[t][r], file_type, mmap_mode="r")[coord_index]
         else:
-            logging.error(
+            log.error(
                 ValueError(
                     f"yxz should either be an [n_spots x n_dim] array to return an n_spots array indicating "
                     f"the value of the image at these coordinates or \n"

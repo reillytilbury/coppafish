@@ -1,11 +1,11 @@
-from typing import Optional, List, Union, Tuple
+import os
+import zarr
 import numpy as np
 from tqdm import tqdm
-import os
+from typing import Optional, List, Union, Tuple
 
 from ..setup import NotebookPage
 from ..utils import tiles_io
-from .. import logging
 
 
 def apply_transform(
@@ -60,6 +60,7 @@ def get_spot_colors(
     use_rounds: Optional[List[int]] = None,
     use_channels: Optional[List[int]] = None,
     return_in_bounds: bool = False,
+    output_dtype: np.dtype = np.int32,
 ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Takes some spots found on the reference round, and computes the corresponding spot intensity
@@ -86,6 +87,7 @@ def get_spot_colors(
             Error will raise if transform is zero for particular channel.
             If `None`, all channels in `nbp_basic.use_channels` used.
         return_in_bounds: `bool`. If 'True' will only return spots that are in the bounds of the tile.
+        output_dtype (`np.dtype`): return the resulting colours in this data type.
 
     Returns:
         - `spot_colors` - `int32 [n_spots x n_rounds_use x n_channels_use]` or
@@ -118,7 +120,7 @@ def get_spot_colors(
     with tqdm(total=n_use_rounds * n_use_channels, disable=no_verbose) as pbar:
         pbar.set_description(f"Reading {n_spots} spot_colors from {file_type} files")
         for i, r in enumerate(use_rounds):
-            flow_r = np.load(os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy"), mmap_mode="r")
+            flow_r = zarr.load(os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy"))[:]
             for j, c in enumerate(use_channels):
                 transform_rc = transform[t, r, c]
                 pbar.set_postfix({"round": r, "channel": c})
@@ -150,17 +152,22 @@ def get_spot_colors(
         yxz_base = yxz_base[colours_valid]
 
     # if we are using bg colours, address that here
+    bad_rc = [(trc[1], trc[2]) for trc in nbp_basic.bad_trc if trc[0] == t]
     if bg_scale is not None:
         bg_colours = np.repeat(spot_colors[:, -1, :][:, None, :], n_use_rounds - 1, axis=1).astype(np.float32)
         bg_colours = np.maximum(bg_colours, 0)
         bg_colours *= bg_scale[t][np.ix_(use_rounds[:-1], use_channels)][None, :, :]
         bg_colours = bg_colours.astype(np.int32)
+        # set bg colours to 0 if spot is in bad rc
+        for rc in bad_rc:
+            r, c = use_rounds.index(rc[0]), use_channels.index(rc[1])
+            bg_colours[:, r, c] = 0
         spot_colors = spot_colors[:, :-1, :]
         spot_colors = spot_colors - bg_colours
 
-    output_tuple = (spot_colors, yxz_base)
+    output_tuple = (spot_colors.astype(output_dtype), yxz_base)
     if bg_scale is not None:
-        output_tuple += (bg_colours,)
+        output_tuple += (bg_colours.astype(output_dtype),)
     if not return_in_bounds:
         output_tuple += (colours_valid,)
 

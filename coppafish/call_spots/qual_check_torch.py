@@ -1,11 +1,9 @@
 import torch
-import numpy as np
-from typing import Union
 
-from .. import logging
+from .. import log
 
 
-def get_spot_intensity(spot_colors: Union[torch.Tensor, np.ndarray]) -> Union[torch.Tensor, np.ndarray]:
+def get_spot_intensity(spot_colors: torch.Tensor) -> torch.Tensor:
     """
     Finds the max intensity for each imaging round across all imaging channels for each spot.
     Then median of these max round intensities is returned.
@@ -23,9 +21,10 @@ def get_spot_intensity(spot_colors: Union[torch.Tensor, np.ndarray]) -> Union[to
         - This has to return a numpy and support a numpy input because it is used in optimised and non-optimised
             scripts. Very confusing!
     """
-    if not isinstance(spot_colors, torch.Tensor):
-        spot_colors = torch.asarray(spot_colors)
+    assert isinstance(spot_colors, torch.Tensor)
+    assert spot_colors.dim() == 3
+
     if (spot_colors <= -15_000).sum() > 0:
-        logging.warn(f"Found spot colors <= -15000")
+        log.warn(f"Found spot colors <= -15000")
     # Max over all channels, then median over all rounds
-    return torch.median(torch.max(spot_colors, dim=2)[0], dim=1)[0].numpy()
+    return spot_colors.abs().max(dim=2)[0].median(dim=1)[0]

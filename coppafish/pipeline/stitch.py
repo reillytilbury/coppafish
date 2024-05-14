@@ -1,7 +1,7 @@
 from tqdm import tqdm
 import numpy as np
 
-from .. import utils, logging
+from .. import utils, log
 from ..stitch import starting_shifts as stitch_starting_shifts
 from ..stitch import shift as stich_shift
 from ..stitch import tile_origin as stitch_tile_origin
@@ -36,7 +36,7 @@ def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no
     directions = ["north", "east"]
     coords = ["y", "x", "z"]
     shifts = stitch_starting_shifts.get_shifts_to_search(config, nbp_basic, nbp_debug)
-    logging.debug("Stitch started")
+    log.debug("Stitch started")
 
     if not nbp_basic.is_3d:
         config["nz_collapse"] = None
@@ -123,7 +123,7 @@ def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no
         shift_info[j]["outlier_shifts"][good_shifts, :] = 0
         shift_info[j]["outlier_score"][good_shifts, :] = 0
         if (np.sum(good_shifts) < 2 and len(good_shifts) > 4) or (np.sum(good_shifts) == 0 and len(good_shifts) > 0):
-            logging.warn(
+            log.warn(
                 f"{len(good_shifts) - np.sum(good_shifts)}/{len(good_shifts)}" f" of shifts fell below score threshold"
             )
         for i in np.where(good_shifts == False)[0]:
@@ -149,7 +149,7 @@ def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no
                 config["nz_collapse"],
                 config["shift_step"][2],
             )[:2]
-            logging.warn(
+            log.warn(
                 f"\nShift from tile {t} to tile {t_neighb} changed from\n"
                 f"{shift_info[j]['outlier_shifts'][i]} to {shift_info[j]['shifts'][i]}."
             )
@@ -193,7 +193,7 @@ def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no
         )
     elif no_tiles_connected:
         if nbp_basic.n_tiles > 1:
-            logging.warn(
+            log.warn(
                 "No tiles used are connected, so cannot find tile origins. "
                 "Setting all tile origins to non-overlapping values."
             )
@@ -207,7 +207,7 @@ def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no
 
     else:
         # Raise error if some tiles are connected and some are not.
-        logging.error(
+        log.error(
             ValueError(
                 "Some tiles used are connected and some are not, so cannot find tile origins. "
                 "Either all tiles or no tiles should be connected."
@@ -234,5 +234,5 @@ def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no
         )[:, 2]
         for var in shift_info[j].keys():
             nbp_debug.__setattr__(j + "_" + var, shift_info[j][var])
-    logging.debug("Stitch complete")
+    log.debug("Stitch complete")
     return nbp_debug

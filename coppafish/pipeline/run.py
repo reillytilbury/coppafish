@@ -1,15 +1,6 @@
 import os
 import sys
-import tqdm
-import numpy as np
-from scipy import sparse
 
-from .. import utils
-from ..setup import Notebook
-from ..find_spots import check_spots
-from ..call_spots import base as call_spots_base
-from ..pdf.base import BuildPDF
-from .. import logging
 from . import basic_info
 from . import extract_run
 from . import filter_run
@@ -18,7 +9,12 @@ from . import register
 from . import stitch
 from . import get_reference_spots
 from . import call_reference_spots
-from . import omp
+from . import omp_torch
+from .. import utils
+from .. import log
+from ..find_spots import check_spots
+from ..pdf.base import BuildPDF
+from ..setup import Notebook
 
 
 def run_pipeline(
@@ -45,12 +41,13 @@ def run_pipeline(
         Notebook: notebook containing all information gathered during the pipeline.
     """
     nb = initialize_nb(config_file)
-    logging.error_catch(run_tile_indep_pipeline, nb)
-    logging.error_catch(run_stitch, nb)
-    logging.error_catch(run_reference_spots, nb, overwrite_ref_spots)
-    logging.error_catch(BuildPDF, nb)
-    logging.error_catch(run_omp, nb)
-    logging.error_catch(BuildPDF, nb, auto_open=True)
+    log.error_catch(run_tile_indep_pipeline, nb)
+    log.error_catch(run_stitch, nb)
+    log.error_catch(run_reference_spots, nb, overwrite_ref_spots)
+    log.error_catch(BuildPDF, nb)
+    log.error_catch(run_omp, nb)
+    log.error_catch(BuildPDF, nb, auto_open=True)
+    log.info(f"Pipeline complete", force_email=True)
     return nb
 
 
@@ -90,11 +87,14 @@ def initialize_nb(config_file: str) -> Notebook:
     config = nb.get_config()
     config_file = config["file_names"]
 
-    logging.base.set_log_config(
+    log.base.set_log_config(
         config["basic_info"]["minimum_print_severity"],
         os.path.join(config_file["output_dir"], config_file["log_name"]),
+        config["basic_info"]["email_me"],
+        config["basic_info"]["sender_email"],
+        config["basic_info"]["sender_email_password"],
     )
-    logging.info(
+    log.info(
         f" COPPAFISH v{utils.system.get_software_version()} ".center(utils.system.current_terminal_size_xy(-33)[0], "=")
     )
 
@@ -102,20 +102,15 @@ def initialize_nb(config_file: str) -> Notebook:
         nbp_basic = basic_info.set_basic_info_new(config)
         nb += nbp_basic
     else:
-        logging.warn(utils.warnings.NotebookPageWarning("basic_info"))
+        log.warn(utils.warnings.NotebookPageWarning("basic_info"))
     if utils.system.get_software_version() not in nb.get_all_variable_instances(nb._SOFTWARE_VERSION):
-        logging.warn(
+        log.warn(
             f"You are running on v{utils.system.get_software_version()}, but the notebook contains "
-            + f"data from versions {nb.get_all_variable_instances(nb._SOFTWARE_VERSION)}.",
+            + f"data from versions {', '.join(set(nb.get_all_variable_instances(nb._SOFTWARE_VERSION)))}.",
         )
-        logging.warn("Are you sure you want to continue? (automatically continuing in 60s)")
-        user_input = utils.system.input_timeout("type y or n: ", timeout_result="y")
-        if user_input.strip().lower() != "y":
-            logging.info("Exiting...")
-            sys.exit()
     online_version = utils.system.get_remote_software_version()
     if online_version != utils.system.get_software_version():
-        logging.warn(
+        log.warn(
             f"You are running v{utils.system.get_software_version()}. The latest online version is v{online_version}"
         )
     return nb
@@ -141,7 +136,7 @@ def run_extract(nb: Notebook) -> None:
         nbp = extract_run.run_extract(config["extract"], nb.file_names, nb.basic_info)
         nb += nbp
     else:
-        logging.warn(utils.warnings.NotebookPageWarning("extract"))
+        log.warn(utils.warnings.NotebookPageWarning("extract"))
 
 
 def run_filter(nb: Notebook) -> None:
@@ -157,7 +152,7 @@ def run_filter(nb: Notebook) -> None:
         nb += nbp
         nb += nbp_debug
     else:
-        logging.warn(utils.warnings.NotebookPageWarning("filter"))
+        log.warn(utils.warnings.NotebookPageWarning("filter"))
 
 
 def run_find_spots(nb: Notebook) -> Notebook:
@@ -186,7 +181,7 @@ def run_find_spots(nb: Notebook) -> Notebook:
         )
         nb += nbp
     else:
-        logging.warn(utils.warnings.NotebookPageWarning("find_spots"))
+        log.warn(utils.warnings.NotebookPageWarning("find_spots"))
     return nb
 
 
@@ -208,7 +203,7 @@ def run_stitch(nb: Notebook) -> None:
         nbp_debug = stitch.stitch(config["stitch"], nb.basic_info, nb.find_spots.spot_yxz, nb.find_spots.spot_no)
         nb += nbp_debug
     else:
-        logging.warn(utils.warnings.NotebookPageWarning("stitch"))
+        log.warn(utils.warnings.NotebookPageWarning("stitch"))
     # Two conditions below:
     # 1. Check if there is a big dapi_image
     # 2. Check if there is NOT a file in the path directory for the dapi image
@@ -273,8 +268,8 @@ def run_register(nb: Notebook) -> None:
         nb += nbp_debug
         register.preprocessing.generate_reg_images(nb)
     else:
-        logging.warn(utils.warnings.NotebookPageWarning("register"))
-        logging.warn(utils.warnings.NotebookPageWarning("register_debug"))
+        log.warn(utils.warnings.NotebookPageWarning("register"))
+        log.warn(utils.warnings.NotebookPageWarning("register_debug"))
 
 
 def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None:
@@ -313,7 +308,7 @@ def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None
         nb += nbp  # save to Notebook with gene_no, score, score_diff, intensity = None.
         # These will be added in call_reference_spots
     else:
-        logging.warn(utils.warnings.NotebookPageWarning("ref_spots"))
+        log.warn(utils.warnings.NotebookPageWarning("ref_spots"))
     if not nb.has_page("call_spots"):
         config = nb.get_config()
         nbp, nbp_ref_spots = call_reference_spots.call_reference_spots(
@@ -328,7 +323,7 @@ def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None
         )
         nb += nbp
     else:
-        logging.warn(utils.warnings.NotebookPageWarning("call_spots"))
+        log.warn(utils.warnings.NotebookPageWarning("call_spots"))
 
 
 def run_omp(nb: Notebook) -> None:
@@ -346,35 +341,16 @@ def run_omp(nb: Notebook) -> None:
     if not nb.has_page("omp"):
         config = nb.get_config()
         # Use tile with most spots on to find spot shape in omp
-        spots_tile = np.sum(nb.find_spots.spot_no, axis=(1, 2))
-        tile_most_spots = nb.basic_info.use_tiles[np.argmax(spots_tile[nb.basic_info.use_tiles])]
-        nbp = omp.call_spots_omp(
+        nbp = omp_torch.run_omp(
             config["omp"],
             nb.file_names,
             nb.basic_info,
             nb.extract,
             nb.filter,
+            nb.register,
+            nb.register_debug,
             nb.call_spots,
-            nb.stitch.tile_origin,
-            nb.register.icp_correction,
-            tile_most_spots,
         )
         nb += nbp
-
-        # Update omp_info files after omp notebook page saved into notebook
-        # Save only non-duplicates - important spot_coefs saved first for exception at start of call_spots_omp
-        # which can deal with case where duplicates removed from spot_coefs but not spot_info.
-        # After re-saving here, spot_coefs[s] should be the coefficients for gene at nb.omp.local_yxz[s]
-        # i.e. indices should match up.
-        spot_info = np.load(nb.file_names.omp_spot_info)
-        not_duplicate = call_spots_base.get_non_duplicate(
-            nb.stitch.tile_origin, nb.basic_info.use_tiles, nb.basic_info.tile_centre, spot_info[:, :3], spot_info[:, 5]
-        )
-        spot_coefs = sparse.load_npz(nb.file_names.omp_spot_coef)
-        sparse.save_npz(nb.file_names.omp_spot_coef, spot_coefs[not_duplicate])
-        np.save(nb.file_names.omp_spot_info, spot_info[not_duplicate])
-
-        # only raise error after saving to notebook if spot_colors have nan in wrong places.
-        utils.errors.check_color_nan(nbp.colors, nb.basic_info)
     else:
-        logging.warn(utils.warnings.NotebookPageWarning("omp"))
+        log.warn(utils.warnings.NotebookPageWarning("omp"))

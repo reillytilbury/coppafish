@@ -1,7 +1,8 @@
+import torch
 import numpy as np
 from typing import List, Union, Optional, Tuple
 
-from .. import utils, find_spots, logging
+from .. import utils, find_spots, log
 from ..filter import base as filter_base
 from ..setup import NotebookPage
 
@@ -90,12 +91,15 @@ def get_psf_spots(
         if intensity_thresh is None:
             intensity_thresh = median_im + np.median(np.abs(im[:, :, mid_z] - median_im)) * intensity_auto_param
         elif intensity_thresh <= median_im or intensity_thresh >= utils.tiles_io.get_pixel_max():
-            logging.error(
+            log.error(
                 utils.errors.OutOfBoundsError(
                     "intensity_thresh", intensity_thresh, median_im, utils.tiles_io.get_pixel_max()
                 )
             )
-        spot_yxz, _ = find_spots.detect_spots(im, intensity_thresh, radius_xy, radius_z, True)
+        spot_yxz, _ = find_spots.detect_spots(
+            torch.asarray(im.astype(np.float32)), intensity_thresh, radius_xy, radius_z, True
+        )
+        spot_yxz = spot_yxz.numpy()
         # check fall off in intensity not too large
         not_single_pixel = find_spots.check_neighbour_intensity(im, spot_yxz, median_im)
         isolated = find_spots.get_isolated_points(
@@ -115,7 +119,7 @@ def get_psf_spots(
         spot_yxz = spot_yxz[chosen_spots, :]
         if n_spots == 0 and np.shape(spot_yxz)[0] < min_spots / 4:
             # raise error on first tile if looks like we are going to use more than 4 tiles
-            logging.error(
+            log.error(
                 ValueError(
                     f"\nFirst tile, {t}, only found {np.shape(spot_yxz)[0]} spots."
                     f"\nMaybe consider lowering intensity_thresh from current value of {intensity_thresh}."
@@ -129,7 +133,7 @@ def get_psf_spots(
         use_tiles = np.setdiff1d(use_tiles, t)
         tiles_used.append(t)
         if len(use_tiles) == 0 and n_spots < min_spots:
-            logging.error(
+            log.error(
                 ValueError(
                     f"\nRequired min_spots = {min_spots}, but only found {n_spots}.\n"
                     f"Maybe consider lowering intensity_thresh from current value of {intensity_thresh}."

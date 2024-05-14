@@ -2,7 +2,7 @@
 
 If the coppafish pipeline is crashing, first read the error message. If there is a suggestion about how to fix the
 issue in the config, try changing the config variable and run the pipeline again. If the suggestion does not make sense
-to you, feel free to reach out to the developers for help. If the error message is not clear to you, please
+to you, feel free to reach out to the developers for help or 
 [create an issue](https://github.com/reillytilbury/coppafish/issues/new) on GitHub!
 
 ## Notebook will not open
@@ -42,4 +42,10 @@ issue:
  * Follow a "I don't care" strategy by increasing `percent_clip_error` above the default to allow for more clipped
    pixels. You can then restart the pipeline without deleting any files. If you wish to ignore warnings too, increase
    `percent_clip_warn`.
+
+## Memory crash at OMP
+
+Try lowering subset_size_xy in the OMP config. This will cause OMP to compute on fewer pixels at time. It has a 
+minimal effect on compute times, but can lower the RAM/VRAM usage. The default is found 
+[here](https://github.com/reillytilbury/coppafish/raw/HEAD/coppafish/setup/settings.default.ini").
 

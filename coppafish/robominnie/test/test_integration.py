@@ -9,7 +9,7 @@ from coppafish.plot.register.diagnostics import RegistrationViewer
 
 
 def get_robominnie_scores(rm: RoboMinnie, include_omp: bool = True) -> None:
-    print(rm.compare_spots("ref"))
+    print(rm.compare_spots("ref", score_threshold=0.75))
     overall_score = rm.overall_score()
     print(f"Overall score: {round(overall_score*100, 1)}%")
     if overall_score < 0.75:
@@ -17,7 +17,7 @@ def get_robominnie_scores(rm: RoboMinnie, include_omp: bool = True) -> None:
 
     if not include_omp:
         return
-    print(rm.compare_spots("omp"))
+    print(rm.compare_spots("omp", score_threshold=0.2))
     overall_score = rm.overall_score()
     print(f"Overall score: {round(overall_score*100, 1)}%")
     if overall_score < 0.75:
@@ -65,7 +65,7 @@ def test_integration_small_two_tile():
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
 
-    robominnie = RoboMinnie(n_channels=4, n_planes=4, n_tile_yx=(128, 128), n_tiles_y=2)
+    robominnie = RoboMinnie(n_channels=5, n_planes=4, n_tile_yx=(128, 128), n_tiles_y=2)
     robominnie.generate_gene_codes(4)
     robominnie.generate_pink_noise()
     robominnie.add_spots(500)
