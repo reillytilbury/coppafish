@@ -551,7 +551,8 @@
             "tile_0",
             "Numpy float array [n_tiles x 3]",
             "`tile_origin[t,:]` is the bottom left $yxz$ coordinate of tile $t$.",
-            "$yx$ coordinates in yx-pixels and z coordinate in z-pixels."
+            "$yx$ coordinates in yx-pixels and z coordinate in z-pixels.",
+            "nan is populated in places where a tile is not used in the pipeline."
         ],
         "north_start_shift_search": [
             "eq",

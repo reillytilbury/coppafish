@@ -1,6 +1,6 @@
-from enum import Enum, auto
-import numbers
 import os
+import enum
+import numbers
 from typing import Any, List, Optional, Tuple, Union
 
 from numcodecs import Blosc, blosc
@@ -17,9 +17,9 @@ from ..setup import NotebookPage
 IMAGE_SAVE_DTYPE = np.uint16
 
 
-class OptimisedFor(Enum):
-    FULL_READ_AND_WRITE = auto()
-    Z_PLANE_READ = auto()
+class OptimisedFor(enum.Enum):
+    FULL_READ_AND_WRITE = enum.auto()
+    Z_PLANE_READ = enum.auto()
 
 
 def get_compressor_and_chunks(
