@@ -287,6 +287,113 @@ class Viewer:
         v_range[0] = (0, self.nz - 1, 1)
         self.viewer.dims.range = tuple(v_range)
 
+    def update_selection_status(self):
+        """
+        Update the status of the viewer to show the number of spots selected, and if 1 spot is selected, show the gene,
+        score and tile of that spot.
+        """
+        def indicate_selected(selectedData):
+            if selectedData is not None:
+                n_selected = len(selectedData)
+                if n_selected == 1:
+                    spot_index = list(selectedData)[0]
+                    spot_gene = self.spots[self.active_method][-1][spot_index].gene
+                    tile = self.spots[self.active_method][-1][spot_index].tile
+                    score = self.spots[self.active_method][-1][spot_index].score
+                    self.viewer.status = (
+                        f"Spot {spot_index}, Gene {spot_gene}, Score {score:.2f}, " f"Tile {tile} selected"
+                    )
+                elif n_selected > 1:
+                    self.viewer.status = f"{n_selected} spots selected"
+
+        # This decorator will run the function in a separate thread, so that the napari viewer does not freeze.
+        @napari.qt.thread_worker(connect={"yielded": indicate_selected})
+        def _watchSelectedData(pointsLayer):
+            """
+                Listen to selected data changes
+            """
+            selectedData = None
+            while True:
+                time.sleep(1 / 10)
+                oldSelectedData = selectedData
+                selectedData = pointsLayer.selected_data
+                if oldSelectedData != selectedData:
+                    yield selectedData
+                yield None
+
+        return _watchSelectedData(self.viewer.layers[self.viewer.layers.selection.active])
+
+    def update_active_genes(self, event):
+        """
+            Update the genes plotted in the napari viewer based on the gene that was clicked in the legend.
+            When click on a gene in the legend will remove/add that gene to plot.
+            When right-click on a gene, it will only show that gene.
+            When click on a gene which is the only selected gene, it will return to showing all genes.
+        """
+        clicked_coordinates = np.array([event.xdata, event.ydata])
+        closest_gene_coordinates = np.zeros(2)
+
+        # Find the closest gene coordinates in the legend to the clicked position
+        for i in range(2):
+            closest_grid_point = np.abs(clicked_coordinates[i] - self.legend["xy"][:, i]).argmin()
+            closest_gene_coordinates[i] = self.legend["xy"][closest_grid_point, i]
+
+        # Identify the gene that was clicked
+        clicked_gene_index = np.where((self.legend["xy"] == closest_gene_coordinates).all(axis=1))[0][0]
+        clicked_gene_number = self.legend["gene_no"][clicked_gene_index]
+
+        # Get the current number of active genes and check if the clicked gene is active
+        num_active_genes = self.active_genes.size
+        is_gene_active = np.isin(clicked_gene_number, self.active_genes)
+        previous_active_genes = self.active_genes.copy()
+
+        # Update the active genes based on the click event
+        if is_gene_active and num_active_genes == 1:
+            # If the gene is the only selected gene, clicking it will show all genes
+            self.active_genes = np.sort(self.legend["gene_no"])
+            changed_genes = np.setdiff1d(self.active_genes, previous_active_genes)
+        elif event.button.name == "RIGHT":
+            # If right-clicking on a gene, it will select only that gene
+            self.active_genes = np.array([clicked_gene_number])
+            changed_genes = np.setdiff1d(previous_active_genes, self.active_genes)
+            if not is_gene_active:
+                # If the clicked gene was not active, add it to the changed genes
+                changed_genes = np.append(changed_genes, clicked_gene_number)
+        elif is_gene_active:
+            # If single-clicking on an active gene, it will remove that gene
+            self.active_genes = np.setdiff1d(self.active_genes, clicked_gene_number)
+            changed_genes = np.array([clicked_gene_number])
+        else:
+            # If single-clicking on an inactive gene, it will add that gene
+            self.active_genes = np.append(self.active_genes, clicked_gene_number)
+            changed_genes = np.array([clicked_gene_number])
+
+        # Update the legend formatting to reflect the changes
+        for gene_number in changed_genes:
+            gene_index = np.where(self.legend["gene_no"] == gene_number)[0][0]
+            alpha_value = 1 if np.isin(gene_number, self.active_genes) else 0.5
+            self.legend["ax"].collections[gene_index].set_alpha(alpha_value)
+            self.legend["ax"].texts[gene_index].set_alpha(alpha_value)
+
+        # Redraw the legend figure to apply the changes
+        self.legend["fig"].draw()
+        self.update_layers()
+
+    def get_selected_spot_index(self):
+        """
+            Get the index of the selected spot.
+        """
+        n_selected = len(self.viewer.layers[self.viewer.layers.selection.active].selected_data)
+        if n_selected == 1:
+            spot_index = list(self.viewer.layers[self.viewer.layers.selection.active].selected_data)[0]
+        elif n_selected > 1:
+            self.viewer.status = f"{n_selected} spots selected - need 1 to run diagnostic"
+            spot_index = None
+        else:
+            self.viewer.status = "No spot selected :("
+            spot_index = None
+        return spot_index
+
     def create_gene_list(self, gene_marker_file: str, nb_gene_names: list) -> None:
         """
         Create a list of genes from the notebook to store information about each gene. This will be saved to the object
@@ -462,113 +569,6 @@ class Viewer:
                 name=f"{self.method_names[m]} {self.genes[g].name}",
                 out_of_slice_display=True,
             )
-
-    def update_selection_status(self):
-        """
-        Update the status of the viewer to show the number of spots selected, and if 1 spot is selected, show the gene,
-        score and tile of that spot.
-        """
-        def indicate_selected(selectedData):
-            if selectedData is not None:
-                n_selected = len(selectedData)
-                if n_selected == 1:
-                    spot_index = list(selectedData)[0]
-                    spot_gene = self.spots[self.active_method][-1][spot_index].gene
-                    tile = self.spots[self.active_method][-1][spot_index].tile
-                    score = self.spots[self.active_method][-1][spot_index].score
-                    self.viewer.status = (
-                        f"Spot {spot_index}, Gene {spot_gene}, Score {score:.2f}, " f"Tile {tile} selected"
-                    )
-                elif n_selected > 1:
-                    self.viewer.status = f"{n_selected} spots selected"
-
-        # This decorator will run the function in a separate thread, so that the napari viewer does not freeze.
-        @napari.qt.thread_worker(connect={"yielded": indicate_selected})
-        def _watchSelectedData(pointsLayer):
-            """
-                Listen to selected data changes
-            """
-            selectedData = None
-            while True:
-                time.sleep(1 / 10)
-                oldSelectedData = selectedData
-                selectedData = pointsLayer.selected_data
-                if oldSelectedData != selectedData:
-                    yield selectedData
-                yield None
-
-        return _watchSelectedData(self.viewer.layers[self.viewer.layers.selection.active])
-
-    def update_active_genes(self, event):
-        """
-            Update the genes plotted in the napari viewer based on the gene that was clicked in the legend.
-            When click on a gene in the legend will remove/add that gene to plot.
-            When right-click on a gene, it will only show that gene.
-            When click on a gene which is the only selected gene, it will return to showing all genes.
-        """
-        clicked_coordinates = np.array([event.xdata, event.ydata])
-        closest_gene_coordinates = np.zeros(2)
-
-        # Find the closest gene coordinates in the legend to the clicked position
-        for i in range(2):
-            closest_grid_point = np.abs(clicked_coordinates[i] - self.legend["xy"][:, i]).argmin()
-            closest_gene_coordinates[i] = self.legend["xy"][closest_grid_point, i]
-
-        # Identify the gene that was clicked
-        clicked_gene_index = np.where((self.legend["xy"] == closest_gene_coordinates).all(axis=1))[0][0]
-        clicked_gene_number = self.legend["gene_no"][clicked_gene_index]
-
-        # Get the current number of active genes and check if the clicked gene is active
-        num_active_genes = self.active_genes.size
-        is_gene_active = np.isin(clicked_gene_number, self.active_genes)
-        previous_active_genes = self.active_genes.copy()
-
-        # Update the active genes based on the click event
-        if is_gene_active and num_active_genes == 1:
-            # If the gene is the only selected gene, clicking it will show all genes
-            self.active_genes = np.sort(self.legend["gene_no"])
-            changed_genes = np.setdiff1d(self.active_genes, previous_active_genes)
-        elif event.button.name == "RIGHT":
-            # If right-clicking on a gene, it will select only that gene
-            self.active_genes = np.array([clicked_gene_number])
-            changed_genes = np.setdiff1d(previous_active_genes, self.active_genes)
-            if not is_gene_active:
-                # If the clicked gene was not active, add it to the changed genes
-                changed_genes = np.append(changed_genes, clicked_gene_number)
-        elif is_gene_active:
-            # If single-clicking on an active gene, it will remove that gene
-            self.active_genes = np.setdiff1d(self.active_genes, clicked_gene_number)
-            changed_genes = np.array([clicked_gene_number])
-        else:
-            # If single-clicking on an inactive gene, it will add that gene
-            self.active_genes = np.append(self.active_genes, clicked_gene_number)
-            changed_genes = np.array([clicked_gene_number])
-
-        # Update the legend formatting to reflect the changes
-        for gene_number in changed_genes:
-            gene_index = np.where(self.legend["gene_no"] == gene_number)[0][0]
-            alpha_value = 1 if np.isin(gene_number, self.active_genes) else 0.5
-            self.legend["ax"].collections[gene_index].set_alpha(alpha_value)
-            self.legend["ax"].texts[gene_index].set_alpha(alpha_value)
-
-        # Redraw the legend figure to apply the changes
-        self.legend["fig"].draw()
-        self.update_layers()
-
-    def get_selected_spot_index(self):
-        """
-            Get the index of the selected spot.
-        """
-        n_selected = len(self.viewer.layers[self.viewer.layers.selection.active].selected_data)
-        if n_selected == 1:
-            spot_index = list(self.viewer.layers[self.viewer.layers.selection.active].selected_data)[0]
-        elif n_selected > 1:
-            self.viewer.status = f"{n_selected} spots selected - need 1 to run diagnostic"
-            spot_index = None
-        else:
-            self.viewer.status = "No spot selected :("
-            spot_index = None
-        return spot_index
 
     def key_call_functions(self):
         # Contains all functions which can be called by pressing a key with napari viewer open
