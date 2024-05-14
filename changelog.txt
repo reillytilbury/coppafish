@@ -6,6 +6,12 @@
  * The OMP computed spot is now computed on a subset of one tile, not the full tile.
  * OMP is faster and the entire tile is loaded into memory before running each tile.
  * Removed inputimeout package dependency.
+ * Max Intensity Projection of background images added to main viewer as option.
+ * Fluorescent beads registration bug fix.
+ * New viewer for registration of fluorescent beads.
+ * Redundant warnings silenced.
+ * Default starting position for registration viewer now the registered image.
+ * New diagnostic in main viewer shows top 10 best fitted genes to a given spot along with their associated scores.
 
 
 2024/04/23 Alpha Update (v0.10.4):
