@@ -74,6 +74,18 @@ BuildPDF("path/to/notebook.npz", "path/to/output/directory")
 ```
 if you want the PDFs to be re-created, you must delete the old ones first.
 
+## Viewer2D
+
+To open
+```python
+from coppafish import Notebook, Viewer2D
+
+nb = Notebook("path/to/notebook.npz")
+Viewer2D(nb)
+```
+
+The viewer is updated by typing commands in the terminal. To find out the available commands, type `help` or `h`.
+
 ## Viewing images
 
 ### Raw images

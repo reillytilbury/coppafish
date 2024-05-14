@@ -1,5 +1,4 @@
 import sys
-import enum
 import numpy as np
 import pandas as pd
 import math as maths
@@ -32,6 +31,8 @@ class Viewer2D:
         REDRAW = ("r", "redraw")
 
         METHOD = ("m", "method")
+        SHOW_ALL = ("all",)
+        SHOW_NONE = ("none",)
         TOGGLE_GENE = ("toggle",)
         TOGGLE_GENE_COLOUR = ("togglec", "togglecolour", "togglecolor")
 
@@ -45,7 +46,7 @@ class Viewer2D:
         SECTIONS = {
             "Navigating": (Z_UP, Z_DOWN, Z_SHIFT, Z_MIN, Z_MAX),
             "Viewing": (SCORE_MIN, SCORE_MAX, TOGGLE_LEGEND, TOGGLE_DARK_LIGHT_MODE, REDRAW),
-            "Gene selection": (METHOD, TOGGLE_GENE, TOGGLE_GENE_COLOUR),
+            "Gene selection": (METHOD, SHOW_ALL, SHOW_NONE, TOGGLE_GENE, TOGGLE_GENE_COLOUR),
             "Information": (HELP, COUNT_GENES),
             "Others": (QUIT,),
         }
@@ -101,7 +102,9 @@ class Viewer2D:
             self.Keywords.HELP: f"{self._tuple_to_str(self.Keywords.HELP)} [command] get help for given command",
             self.Keywords.REDRAW: f"{self._tuple_to_str(self.Keywords.REDRAW)} manually redraw the Viewer",
             self.Keywords.METHOD: f"{self._tuple_to_str(self.Keywords.METHOD)} [method] show the given gene calling "
-            + "method. Can be 'anchor' (default), 'probs' for Von-Mises probabilities, or 'omp'",
+            + "method. Can be 'anchor', 'probs' for Von-Mises probabilities, or 'omp'",
+            self.Keywords.SHOW_ALL: f"{self._tuple_to_str(self.Keywords.SHOW_ALL)} show all genes",
+            self.Keywords.SHOW_NONE: f"{self._tuple_to_str(self.Keywords.SHOW_NONE)} show no genes",
             self.Keywords.TOGGLE_GENE: f"{self._tuple_to_str(self.Keywords.TOGGLE_GENE)} [gene] toggle the given "
             + "gene name on or off",
             self.Keywords.TOGGLE_GENE_COLOUR: f"{self._tuple_to_str(self.Keywords.TOGGLE_GENE_COLOUR)} [gene] toggle "
@@ -261,7 +264,7 @@ class Viewer2D:
             if np.isin(g, self.legend_gene_no):
                 marker = self.legend_symbols[self.legend_gene_no == g].item()
             else:
-                logging.warn(f"Gene number {g} does not have an assigned marker")
+                log.warn(f"Gene number {g} does not have an assigned marker")
                 marker = ""
             keep = in_z_range * is_gene_g * in_score_range
             self.marker_count += keep.sum()
@@ -388,6 +391,10 @@ class Viewer2D:
         elif keyword in self.Keywords.COUNT_GENES:
             print(f"Total gene reads shown: {self.marker_count}")
             return
+        elif keyword in self.Keywords.SHOW_ALL:
+            self.show_gene_no[:] = True
+        elif keyword in self.Keywords.SHOW_NONE:
+            self.show_gene_no[:] = False
         elif keyword in self.Keywords.TOGGLE_GENE:
             if len(args) == 0:
                 self._argument_not_given("gene name")

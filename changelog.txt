@@ -3,6 +3,7 @@
  * Optical flow results are saved as compressed zarr files instead of uncompressed numpy arrays.
  * Coppafish can send email notifications on completed pipelines and crashes.
  * OMP has been overhauled.
+ * New diagnostic Viewer2D added.
  * The OMP computed spot is now computed on a subset of one tile, not the full tile.
  * OMP is faster and the entire tile is loaded into memory before running each tile.
  * Removed inputimeout package dependency.
