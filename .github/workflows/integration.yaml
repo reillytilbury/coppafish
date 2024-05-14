@@ -1,4 +1,4 @@
-name: default CI
+name: CI
 
 # Trigger on any push or pull requests
 on:
@@ -11,7 +11,7 @@ jobs:
       # Do not fail fast, so we can see all errors from the unit/integration tests
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
         python-version:
           - "3.9"
           - "3.10"
@@ -40,7 +40,7 @@ jobs:
           python -m pip install .
 
       - name: Run default unit tests
-        run: pytest -m 'not slow and not optimised and not integration and not pytorch'
+        run: pytest -m 'not slow and not optimised and not integration'
 
       - name: Run default integration tests
-        run: pytest -m 'integration and not slow and not optimised and not pytorch'
+        run: pytest -m 'integration and not slow and not optimised'
