@@ -91,7 +91,7 @@ class Viewer:
         self.active_method = 2 if nb.has_page("omp") else 0
         self.active_genes = np.arange(len(nb.call_spots.gene_names))
         self.add_data_to_viewer()
-        self.viewer_status_on_select()
+        self.update_status_continually()
         self.key_call_functions()
         napari.run()
 
@@ -131,7 +131,7 @@ class Viewer:
         self.method_buttons = Method(active_button=self.method_names[self.active_method],
                                      has_omp=self.method_names[-1] == "omp")
         for i in range(len(self.method_names)):
-            self.method_buttons.button[i].clicked.connect(lambda x=i: self.change_method(method=x))
+            self.method_buttons.button[i].clicked.connect(lambda x=i: self.method_event_handler(method=x))
             self.method_buttons.button[i].clicked.connect(self.update_layers)
         self.viewer.window.add_dock_widget(self.method_buttons, area="left", name="Method")
 
@@ -150,18 +150,25 @@ class Viewer:
             gene_legend_info=gene_legend_info,
             genes=self.gene_names,
         )
-        # xy is position of each symbol in legend, need to see which gene clicked on.
-        self.legend["xy"] = np.zeros((len(self.legend["ax"].collections), 2), dtype=float)
-        self.legend["gene_no"] = np.zeros(len(self.legend["ax"].collections), dtype=int)
-        # In legend, each gene name label has at most n_gene_label_letters letters so need to crop
-        # gene_names in notebook when looking for corresponding gene in legend.
-        gene_names_crop = np.asarray([gene_name[:n_gene_label_letters] for gene_name in self.gene_names])
-        for i in range(self.legend["xy"].shape[0]):
-            # Position of label for each gene in legend window
-            self.legend["xy"][i] = np.asarray(self.legend["ax"].collections[i].get_offsets())
-            # gene no in notebook that each position in the legend corresponds to
-            self.legend["gene_no"][i] = np.where(gene_names_crop == self.legend["ax"].texts[i].get_text())[0][0]
-        self.legend["fig"].mpl_connect("button_press_event", self.update_genes)
+
+        # Initialize positions and gene numbers in the legend
+        num_genes = len(self.legend["ax"].collections)
+        self.legend["xy"] = np.zeros((num_genes, 2), dtype=float)
+        self.legend["gene_no"] = np.zeros(num_genes, dtype=int)
+
+        # Crop gene names to the maximum label length
+        cropped_gene_names = np.array([gene[:max_label_length] for gene in self.gene_names])
+
+        # Populate positions and gene numbers for the legend
+        for idx in range(num_genes):
+            self.legend["xy"][idx] = np.array(self.legend["ax"].collections[idx].get_offsets())
+            legend_text = self.legend["ax"].texts[idx].get_text()
+            self.legend["gene_no"][idx] = np.where(cropped_gene_names == legend_text)[0][0]
+
+        # Connect the event handler for legend clicks
+        self.legend["fig"].mpl_connect("button_press_event", self.legend_event_handler)
+
+        # Add the legend figure to the viewer window
         self.viewer.window.add_dock_widget(self.legend["fig"], area="left", name="Genes")
 
     def add_slider(self, name: str, value: Union[float, tuple], slider_range: tuple,
@@ -178,16 +185,19 @@ class Viewer:
         """
         assert slider_mode in ["range", "single"], "mode must be either 'range' or 'single'"
         assert slider_variable in ["spot", "image", "z_thick"], "variable must be either 'spot' or 'image'"
+
         if slider_mode == "range":
             slider = QDoubleRangeSlider(Qt.Orientation.Horizontal)
-        elif slider_mode == "single":
+        else:
             slider = QDoubleSlider(Qt.Orientation.Horizontal)
         slider.setRange(slider_range[0], slider_range[1])
         slider.setValue(value)
+
         # connect to show_slider_value to show user the new value of the slider
         slider.valueChanged.connect(lambda x: self.show_slider_value(
             string=f'{self.method_names[self.active_method]} {name}', value=np.array(x)))
-        # connect to update_plot to update the plot when the slider is released
+
+        # connect to the appropriate function to update the napari viewer
         if slider_variable == "spot":
             slider.sliderReleased.connect(self.update_thresholds)
             self.__setattr__(f"{name}_slider", slider)
@@ -198,6 +208,8 @@ class Viewer:
         elif slider_variable == "z_thick":
             slider.sliderReleased.connect(self.update_z_thick)
             self.z_thick_slider = slider
+
+        # add slider to napari viewer
         self.viewer.window.add_dock_widget(slider, area="left", name=name)
 
     def show_slider_value(self, string, value):
@@ -215,15 +227,6 @@ class Viewer:
             self.image_contrast_slider[i].value()[0],
             self.image_contrast_slider[i].value()[1],
         ]
-
-    def update_method(self, method: int):
-        for i in range(3):
-            self.method_buttons.button[i].setChecked(method == i)
-        self.active_method = method
-        # change the active layer to the transparent spots layer for the new method
-        active_layer_name = f"{self.method_names[self.active_method]} all"
-        self.viewer.layers.selection.active = self.viewer.layers[active_layer_name]
-        self.update_layers()
 
     def update_layers(self) -> None:
         """
@@ -256,6 +259,7 @@ class Viewer:
         score_range = self.score_thresh_slider.value()
         intensity_thresh = self.intensity_thresh_slider.value()
         # We add 1 to the genes as the last entry of the spots is all genes
+        # Turn off spots by setting size to 0
         for m, g in np.ndindex(len(self.method_names), len(self.genes) + 1):
             layer_name = f"{self.method_names[m]} {self.genes[g].name}"
             # 1. score range
@@ -274,20 +278,20 @@ class Viewer:
         It will be called when the z-thickness changes, or the z-position of the viewer changes.
         """
         z_thick = self.z_thick_slider.value()
-        # we will change the z_thickness of the spots for each points layer
-        # since napari does not allow changing the z_thickness of a layer, we will scale the z-thickness of the spots
+        # we will change the z_thickness of the spots for each points layer. Do this by adaptively scaling and shifting
+        # the z-coords of the spots. This will make the spots appear thicker in the z-direction.
         scale = 1 / (2 * z_thick + 1)
         shift = (1 - scale) * self.viewer.dims.current_step[0]
         for layer in self.viewer.layers:
-            if self.active_method in layer.name:
-                layer.scale = (scale, 1, 1)
-                layer.translate = (shift, 0, 0)
+            layer.scale = (scale, 1, 1)
+            layer.translate = (shift, 0, 0)
+
         # napari automatically adjusts the size of the z-step when points are scaled, so we undo that below:
         v_range = list(self.viewer.dims.range)
         v_range[0] = (0, self.nz - 1, 1)
         self.viewer.dims.range = tuple(v_range)
 
-    def update_selection_status(self):
+    def update_status_continually(self):
         """
         Update the status of the viewer to show the number of spots selected, and if 1 spot is selected, show the gene,
         score and tile of that spot.
@@ -323,7 +327,16 @@ class Viewer:
 
         return _watchSelectedData(self.viewer.layers[self.viewer.layers.selection.active])
 
-    def update_active_genes(self, event):
+    def method_event_handler(self, method: int):
+        for i in range(3):
+            self.method_buttons.button[i].setChecked(method == i)
+        self.active_method = method
+        # change the active layer to the transparent spots layer for the new method
+        active_layer_name = f"{self.method_names[self.active_method]} all"
+        self.viewer.layers.selection.active = self.viewer.layers[active_layer_name]
+        self.update_layers()
+
+    def legend_event_handler(self, event):
         """
             Update the genes plotted in the napari viewer based on the gene that was clicked in the legend.
             When click on a gene in the legend will remove/add that gene to plot.
@@ -416,6 +429,9 @@ class Viewer:
         gene_legend_info = pd.read_csv(gene_marker_file)
         legend_gene_names = gene_legend_info["GeneNames"]
         genes = []
+
+        # create a list of genes with the relevant information. If the gene is not in the gene marker file, it will be
+        # added with None values for colour and symbols.
         for i, g in enumerate(nb_gene_names):
             if g in legend_gene_names:
                 colour = gene_legend_info[gene_legend_info["GeneNames"] == g][["ColorR", "ColorG", "ColorB"]].values[0]
@@ -425,6 +441,8 @@ class Viewer:
                                   symbol_napari=symbol_napari))
             else:
                 genes.append(Gene(name=g, notebook_index=i, colour=None, symbol_mpl=None, symbol_napari=None))
+
+        # warn if any genes are not in the gene marker file
         invisible_genes = [g for g in genes if g.symbol_mpl is None]
         if invisible_genes:
             warnings.warn(f"Genes {invisible_genes} are not in the gene marker file and will not be plotted.")
@@ -447,6 +465,7 @@ class Viewer:
         n_methods = len(self.method_names)
         n_genes = len(nb.gene_names)
         tile_origin = nb.stitch.tile_origin
+
         # initialise list of spots and load relevant information
         spots = np.zeros((len(self.method_names), len(self.gene_names) + 1, 0)).tolist()
         tile = [nb.__getattribute__(page).tile for page in self.relevant_pages]
@@ -468,7 +487,8 @@ class Viewer:
                                 colours=colours[m][mask],
                                 intensity=nb.__getattribute__(self.relevant_pages[m]).intensity[mask],
                                 gene=g)
-        # add all spots for each method
+
+        # add all spots for each method as the last element of the list
         for m in range(n_methods):
             spots[m][-1] = Spots(location=global_loc[m],
                                  score=score[m],
@@ -538,6 +558,7 @@ class Viewer:
                     + "\ncontains constant values, so not plotting"
                 )
                 background_image[i] = None
+
         # remove none entries from bg_images
         good = [i for i, b in enumerate(background_image) if b is not None]
         self.background_image = [background_image[i] for i in good]
@@ -553,6 +574,7 @@ class Viewer:
             self.viewer.add_image(b, blending="additive", colormap=self.background_image_colour[i],
                                   name=self.background_image_name[i])
             self.viewer.layers[i].contrast_limits_range = [b.min(), b.max()]
+
         # add a single layer of transparent spots to viewer for each method
         for m in range(len(self.method_names)):
             point_loc = self.spots[m][-1].location
