@@ -347,16 +347,20 @@ class BuildPDF:
                 axes[0, 0].set_title(info, fontdict=INFO_FONTDICT, y=0.5)
                 self.empty_plot_ticks(axes[0, 0])
                 pdf.savefig(fig)
+                plt.close(fig)
 
                 fig = self.create_omp_score_distribution_fig(nb.basic_info, nb.omp)
                 pdf.savefig(fig)
+                plt.close(fig)
 
                 fig = self.create_omp_spot_shape_fig(nb.omp)
                 pdf.savefig(fig)
+                plt.close(fig)
 
                 for i in range(10):
                     fig = self.create_omp_gene_counts_fig(nb.file_names, nb.ref_spots, nb.omp, score_threshold=i * 0.1)
                     pdf.savefig(fig)
+                    plt.close(fig)
 
                 for t in nb.basic_info.use_tiles:
                     keep = nb.omp.tile == t
@@ -368,6 +372,7 @@ class BuildPDF:
                         use_z=nb.basic_info.use_z,
                     )
                     pdf.savefig(fig)
+                    plt.close(fig)
             plt.close(fig)
         pbar.update()
         pbar.close()
@@ -633,7 +638,7 @@ class BuildPDF:
     def get_omp_text_info(self, omp_page: NotebookPage) -> str:
         output = "OMP\n \n"
         output += self.get_version_from_page(omp_page)
-        output += f"computed spot shape size: {omp_page.spot_shape.shape}\n"
+        output += f"computed spot shape size: {omp_page.spot.shape}\n"
         return output
 
     def create_omp_score_distribution_fig(
@@ -712,7 +717,7 @@ class BuildPDF:
             for row in range(axes.shape[0])
         ]
         z_offsets = [-2, 0, +2]
-        mean_spot_shape = omp_page.spot_shape_float
+        mean_spot_shape = omp_page.mean_spot
         if mean_spot_shape is not None:
             mid_z = mean_spot_shape.shape[2] // 2
             max_z = mean_spot_shape.shape[2] - 1
@@ -733,7 +738,7 @@ class BuildPDF:
                     show_right_frame=True,
                 )
 
-        spot_shape = omp_page.spot_shape
+        spot_shape = omp_page.spot
         mid_z = spot_shape.shape[2] // 2
         max_z = spot_shape.shape[2] - 1
         for column, z_offset in enumerate(z_offsets):

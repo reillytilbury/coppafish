@@ -109,18 +109,6 @@ def set_file_names(nb, nbp):
     config["spot_details_info"] = config["spot_details_info"].replace(".npy", "")
     nbp.spot_details_info = os.path.join(config["output_dir"], config["spot_details_info"] + ".npz")
 
-    # where to save omp_spot_shape, indicating average spot shape in omp coefficient sign images.
-    config["omp_spot_shape"] = config["omp_spot_shape"].replace(".npy", "")
-    omp_spot_shape_file = os.path.join(config["output_dir"], config["omp_spot_shape"] + ".npy")
-    nbp.omp_spot_shape = omp_spot_shape_file
-    nbp.omp_spot_shape_float = os.path.join(config["output_dir"], "omp_spot_shape_float.npy")
-
-    # Add files to save omp results after each tile as security if hit any bugs
-    config["omp_spot_info"] = config["omp_spot_info"].replace(".npy", "")
-    nbp.omp_spot_info = os.path.join(config["output_dir"], config["omp_spot_info"] + ".npy")
-    config["omp_spot_coef"] = config["omp_spot_coef"].replace(".npz", "")
-    nbp.omp_spot_coef = os.path.join(config["output_dir"], config["omp_spot_coef"] + ".npz")
-
     # Add files so save plotting information for pciseq
     config["pciseq"] = [val.replace(".csv", "") for val in config["pciseq"]]
     nbp.pciseq = [os.path.join(config["output_dir"], val + ".csv") for val in config["pciseq"]]

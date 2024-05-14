@@ -1,21 +1,24 @@
-from PyQt5.QtWidgets import QPushButton, QMainWindow, QSlider, QLineEdit, QLabel
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from coppafish.spot_colors import apply_transform
-from coppafish.utils.tiles_io import load_image
-from scipy.ndimage import affine_transform
-from coppafish.register import preprocessing
-from coppafish.find_spots import spot_yxz
-from coppafish.setup import Notebook
-from scipy.spatial import KDTree
-from superqt import QRangeSlider
-from qtpy.QtCore import Qt
-from tqdm import tqdm
+import os
+
+from PyQt5.QtWidgets import QLabel, QLineEdit, QMainWindow, QPushButton, QSlider
 import matplotlib.pyplot as plt
-import numpy as np
-import skimage
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import napari
 import nd2
-import os
+import zarr
+import numpy as np
+from qtpy.QtCore import Qt
+from scipy.ndimage import affine_transform
+from scipy.spatial import KDTree
+import skimage
+from superqt import QRangeSlider
+from tqdm import tqdm
+
+from coppafish.find_spots import spot_yxz
+from coppafish.register import preprocessing
+from coppafish.setup import Notebook
+from coppafish.spot_colors import apply_transform
+from coppafish.utils.tiles_io import load_image
 
 
 class RegistrationViewer:
@@ -52,15 +55,15 @@ class RegistrationViewer:
         # load round images
         round_im, channel_im = {}, {}
         for r in self.nb.basic_info.use_rounds + [self.nb.basic_info.pre_seq_round] * self.nb.basic_info.use_preseq:
-            round_im[f"r{r}"] = np.load(os.path.join(self.reg_data_dir, "round", f"r{r}.npy"))
+            round_im[f"r{r}"] = zarr.load(os.path.join(self.reg_data_dir, "round", f"r{r}.npy"))[:]
         # repeat anchor image 3 times along new 0 axis
-        im_anchor = np.load(os.path.join(self.reg_data_dir, "round", "anchor.npy"))
+        im_anchor = zarr.load(os.path.join(self.reg_data_dir, "round", "anchor.npy"))[:]
         round_im["anchor"] = np.repeat(im_anchor[None], 3, axis=0)
         # load channel images
         for c in self.nb.basic_info.use_channels:
-            channel_im[f"c{c}"] = np.load(os.path.join(self.reg_data_dir, "channel", f"c{c}.npy"))
+            channel_im[f"c{c}"] = zarr.load(os.path.join(self.reg_data_dir, "channel", f"c{c}.npy"))[:]
         # repeat anchor image 3 times along new 0 axis
-        im_anchor = np.load(os.path.join(self.reg_data_dir, "channel", "anchor.npy"))
+        im_anchor = zarr.load(os.path.join(self.reg_data_dir, "channel", "anchor.npy"))[:]
         channel_im["anchor"] = np.repeat(im_anchor[None], 3, axis=0)
 
         # clear previous images
@@ -209,9 +212,11 @@ class RegistrationViewer:
         button_name = ["r", "c"]
         text_buttons = TextButtonCreator(button_name, button_loc, size=(50, 28))
         # connect the view button to the appropriate function
-        text_buttons.button.clicked.connect(lambda _: view_bg_scale(self.nb, self.t,
-                                                                    r=int(text_buttons.text_box[0].text()),
-                                                                    c=int(text_buttons.text_box[1].text())))
+        text_buttons.button.clicked.connect(
+            lambda _: view_bg_scale(
+                self.nb, self.t, r=int(text_buttons.text_box[0].text()), c=int(text_buttons.text_box[1].text())
+            )
+        )
         self.viewer.window.add_dock_widget(text_buttons, area="left", name="bg scale")
 
     def add_overlay_buttons(self):
@@ -219,13 +224,17 @@ class RegistrationViewer:
         button_loc = generate_button_positions(n_buttons=7, n_cols=2, x_offset=50, x_spacing=100)
         button_name = ["r1", "c1", "r2", "c2", "z_s", "z_e"]
         text_buttons = TextButtonCreator(button_name, button_loc, size=(50, 28))
-        text_buttons.button.clicked.connect(lambda _: view_overlay(self.nb, self.t,
-                                                                 rc=[(int(text_buttons.text_box[0].text()),
-                                                                      int(text_buttons.text_box[1].text())),
-                                                                     (int(text_buttons.text_box[2].text()),
-                                                                      int(text_buttons.text_box[3].text()))],
-                                                                 use_z=np.arange(int(text_buttons.text_box[4].text()),
-                                                                                 int(text_buttons.text_box[5].text()))))
+        text_buttons.button.clicked.connect(
+            lambda _: view_overlay(
+                self.nb,
+                self.t,
+                rc=[
+                    (int(text_buttons.text_box[0].text()), int(text_buttons.text_box[1].text())),
+                    (int(text_buttons.text_box[2].text()), int(text_buttons.text_box[3].text())),
+                ],
+                use_z=np.arange(int(text_buttons.text_box[4].text()), int(text_buttons.text_box[5].text())),
+            )
+        )
         self.viewer.window.add_dock_widget(text_buttons, area="left", name="overlay")
 
     def add_icp_buttons(self):
@@ -344,7 +353,7 @@ class TextButtonCreator(QMainWindow):
             label.setGeometry(position[i][0] - 30, position[i][1], size[0], size[1])
             self.text_box.append(QLineEdit(name, self))
             self.text_box[-1].setGeometry(position[i][0], position[i][1], size[0], size[1])
-            self.text_box[-1].setText('0')
+            self.text_box[-1].setText("0")
         self.button = QPushButton("view", self)
         self.button.setGeometry(position[-1][0], position[-1][1], size[0], size[1])
 
@@ -402,7 +411,7 @@ class ICPPointCloudViewer:
             # in round mode, apply the flow only and set the round to the selected round
             r = self.r
             affine_round_correction = np.eye(4, 3)
-        flow = np.load(os.path.join(self.nb.register.flow_dir, "smooth", f"t{self.t}_r{r}.npy"), mmap_mode="r")
+        flow = zarr.load(os.path.join(self.nb.register.flow_dir, "smooth", f"t{self.t}_r{r}.npy"))[:]
         base_1, in_bounds = apply_transform(
             yxz=base, flow=flow, icp_correction=affine_round_correction, tile_sz=self.nb.basic_info.tile_sz
         )
@@ -584,13 +593,13 @@ def view_optical_flow(nb: Notebook, t: int, r: int):
     # load the warps
     output_dir = nb.file_names.output_dir + "/flow"
     name = ["raw", "smooth"]
-    flow = [np.load(os.path.join(output_dir, f, f"t{t}_r{r}.npy")).astype(np.float32) for f in name]
+    flow = [zarr.load(os.path.join(output_dir, f, f"t{t}_r{r}.npy"))[:].astype(np.float32) for f in name]
     # warp the base image using the flows
     base_warped = [skimage.transform.warp(base, f + coords, order=0) for f in flow]
     print("Base image warped.")
     del coords
     # load the correlation
-    corr = np.load(os.path.join(output_dir, "corr", f"t{t}_r{r}.npy"))
+    corr = zarr.load(os.path.join(output_dir, "corr", f"t{t}_r{r}.npy"))[:]
     print("Correlation loaded.")
     mask = corr > np.percentile(corr, 97.5)
 
@@ -641,7 +650,7 @@ def view_optical_flow(nb: Notebook, t: int, r: int):
 #     """
 #     # load the flow
 #     output_dir = nb.file_names.output_dir + '/flow'
-#     flow = np.load(os.path.join(output_dir, 'smooth', f't{t}_r{r}.npy'), mmap_mode='r')[:, ::100, ::100, ::5]
+#     flow = zarr.load(os.path.join(output_dir, 'smooth', f't{t}_r{r}.npy'))[:, ::100, ::100, ::5]
 #     flow = flow.astype(np.float32)
 #     ny, nx, nz = flow.shape[1:]
 #     start_points = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing='ij'))
@@ -839,14 +848,39 @@ def view_bg_scale(nb: Notebook, t: int, r: int, c: int):
     tile_sz = nb.basic_info.tile_sz
     tile_center = tile_sz // 2
     yx_rad = 250
-    yxz = [np.arange(tile_center - yx_rad, tile_center + yx_rad), np.arange(tile_center - yx_rad, tile_center + yx_rad),
-           np.arange(mid_z - z_rad, mid_z + z_rad)]
+    yxz = [
+        np.arange(tile_center - yx_rad, tile_center + yx_rad),
+        np.arange(tile_center - yx_rad, tile_center + yx_rad),
+        np.arange(mid_z - z_rad, mid_z + z_rad),
+    ]
     r_pre = nb.basic_info.pre_seq_round
     # get the images
-    base = preprocessing.load_transformed_image(nb=nb, t=t, r=r, c=c, yxz=yxz, reg_type='flow_icp').astype(np.float32)
-    pre = preprocessing.load_transformed_image(nb=nb, t=t, r=r_pre, c=c, yxz=yxz, reg_type='flow_icp').astype(np.float32)
-    base = base[:, :, z_rad-1:z_rad+1]
-    pre = pre[:, :, z_rad-1:z_rad+1]
+    base = preprocessing.load_transformed_image(
+        nb.basic_info,
+        nb.file_names,
+        nb.extract,
+        nb.register,
+        nb.register_debug,
+        t=t,
+        r=r,
+        c=c,
+        yxz=yxz,
+        reg_type="flow_icp",
+    ).astype(np.float32)
+    pre = preprocessing.load_transformed_image(
+        nb.basic_info,
+        nb.file_names,
+        nb.extract,
+        nb.register,
+        nb.register_debug,
+        t=t,
+        r=r_pre,
+        c=c,
+        yxz=yxz,
+        reg_type="flow_icp",
+    ).astype(np.float32)
+    base = base[:, :, z_rad - 1 : z_rad + 1]
+    pre = pre[:, :, z_rad - 1 : z_rad + 1]
     # get the bright mask
     bright = pre > np.percentile(pre, 99)
     base_values = base[bright]
@@ -865,8 +899,11 @@ def view_bg_scale(nb: Notebook, t: int, r: int, c: int):
     plt.subplot(1, 2, 1)
     plt.scatter(x=pre_values, y=base_values, s=1, alpha=0.25)
     col = ["red", "green", "blue"]
-    title = [f"25th percentile: {bg_scale[0]:.2f}", f"50th percentile: {bg_scale[1]:.2f}",
-             f"75th percentile: {bg_scale[2]:.2f}"]
+    title = [
+        f"25th percentile: {bg_scale[0]:.2f}",
+        f"50th percentile: {bg_scale[1]:.2f}",
+        f"75th percentile: {bg_scale[2]:.2f}",
+    ]
     for i in range(3):
         plt.plot(pre_values, bg_scale[i] * pre_values, color=col[i], label=title[i])
     plt.legend()
@@ -905,20 +942,44 @@ def view_overlay(nb: Notebook, t: int = None, rc: list = None, use_z: np.ndarray
     for i, rc_pair in tqdm(enumerate(rc), total=len(rc), desc="Loading images"):
         # LOAD IMAGE
         r, c = rc_pair
-        im_none[i] = preprocessing.load_transformed_image(nb=nb, t=t, r=r, c=c, yxz=yxz, reg_type='none')
-        im[i] = preprocessing.load_transformed_image(nb=nb, t=t, r=r, c=c, yxz=yxz, reg_type='flow_icp')
+        im_none[i] = preprocessing.load_transformed_image(
+            nb.basic_info,
+            nb.file_names,
+            nb.extract,
+            nb.register,
+            nb.register_debug,
+            t=t,
+            r=r,
+            c=c,
+            yxz=yxz,
+            reg_type="none",
+        )
+        im[i] = preprocessing.load_transformed_image(
+            nb.basic_info,
+            nb.file_names,
+            nb.extract,
+            nb.register,
+            nb.register_debug,
+            t=t,
+            r=r,
+            c=c,
+            yxz=yxz,
+            reg_type="flow_icp",
+        )
 
     # create viewer
     viewer = napari.Viewer()
     colours = ["red", "green", "blue", "yellow"]
     for i, rc_pair in enumerate(rc):
         r, c = rc_pair
-        viewer.add_image(im_none[i], name=f"t{t}_r{r}_c{c}_none", colormap=colours[i], blending="additive",
-                         visible=False)
+        viewer.add_image(
+            im_none[i], name=f"t{t}_r{r}_c{c}_none", colormap=colours[i], blending="additive", visible=False
+        )
         viewer.add_image(im[i], name=f"t{t}_r{r}_c{c}", colormap=colours[i], blending="additive")
     viewer.dims.axis_labels = ["y", "x", "z"]
     viewer.dims.order = (2, 0, 1)
     napari.run()
+
 
 # nb_file = '/home/reilly/local_datasets/dante_bad_trc_test/notebook.npz'
 # nb = Notebook(nb_file)

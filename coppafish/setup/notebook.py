@@ -397,8 +397,10 @@ class Notebook:
                         log.info(f"The {section} section of the two config files differ.")
                         for param in config[section].keys():
                             if config[section][param] != config_2[section][param]:
-                                log.info(f"The notebook config has {param} = {config[section][param]} and "
-                                         f"the passed config has {param} = {config_2[section][param]}.")
+                                log.info(
+                                    f"The notebook config has {param} = {config[section][param]} and "
+                                    f"the passed config has {param} = {config_2[section][param]}."
+                                )
                         is_equal = False
         return is_equal
 
@@ -826,12 +828,12 @@ class NotebookPage:
 
     def __repr__(self):
         # This means that print(nbp) gives description of page if available or name and time created if not.
-        json_comments = json.load(open(self._comments_file))
-        if self.name in json_comments:
-            return "\n".join(json_comments[self.name][self._PAGE_DESCRIPTION_KEY])
-        else:
-            time_created = time.strftime("%d-%m-%Y- %H:%M:%S", time.localtime(self._time_created))
-            return f"{self.name} page created at {time_created}"
+        with json.load(open(self._comments_file)) as json_comments:
+            if self.name in json_comments:
+                return "\n".join(json_comments[self.name][self._PAGE_DESCRIPTION_KEY])
+            else:
+                time_created = time.strftime("%d-%m-%Y- %H:%M:%S", time.localtime(self._time_created))
+                return f"{self.name} page created at {time_created}"
 
     def describe(self, key: Optional[str] = None):
         """
@@ -887,9 +889,7 @@ class NotebookPage:
         # Method to delete a result or attribute. Deals with del nbp.name.
         # Can only delete attribute if page has not been finalized.
         if self.finalized:
-            log.error(
-                ValueError("This NotebookPage has already been added to a Notebook, no values can be deleted.")
-            )
+            log.error(ValueError("This NotebookPage has already been added to a Notebook, no values can be deleted."))
         object.__delattr__(self, name)
         if name in self._times:
             # extra bit if _is_result_key
@@ -983,17 +983,13 @@ class NotebookPage:
         ), f"Unexpected keyword {combine_type} in notebook comments for {variable_name}"
         if combine_type == "eq":
             if not (np.asarray(var_0) == np.asarray(var_1)).all():
-                log.error(
-                    ValueError(f"The notebook pages cannot be combined; variables {variable_name} are not equal")
-                )
+                log.error(ValueError(f"The notebook pages cannot be combined; variables {variable_name} are not equal"))
             combined_var = var_0
         elif combine_type == "add":
             combined_var = var_0 + var_1
         elif combine_type == "close":
             if not (np.allclose(var_0, var_1, equal_nan=True) or (var_0 is None and var_1 is None)):
-                log.error(
-                    ValueError(f"The notebook pages cannot be combined; variables {variable_name} are not close")
-                )
+                log.error(ValueError(f"The notebook pages cannot be combined; variables {variable_name} are not close"))
             combined_var = var_0
         elif combine_type == "ignore":
             combined_var = var_0
@@ -1003,9 +999,7 @@ class NotebookPage:
                 log.error(TypeError(f"To append variables, they must be of type np.ndarray, got {type(var_0)}"))
             for t in tiles_0:
                 if t in tiles_1:
-                    log.error(
-                        ValueError(f"Tile {t} is in both notebook pages, so cannot append {variable_name} data")
-                    )
+                    log.error(ValueError(f"Tile {t} is in both notebook pages, so cannot append {variable_name} data"))
             combined_var = np.append(var_0, var_1, axis=axis_no)
         elif combine_type == "tile":
             axis_no = int(combine_info[1])

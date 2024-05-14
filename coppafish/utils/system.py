@@ -4,8 +4,7 @@ import psutil
 import urllib
 import numpy as np
 from pathlib import PurePath
-from inputimeout import inputimeout, TimeoutOccurred
-from typing import Tuple, Union
+from typing import Tuple
 
 VERSION_URL = "https://github.com/reillytilbury/coppafish/raw/HEAD/coppafish/_version.py"
 # The character(s) that encapsulate the software version tag in _version.py, in this case it is quotation marks
@@ -115,23 +114,3 @@ def internet_is_active() -> bool:
         return True
     except:
         return False
-
-
-def input_timeout(message: str, timeout_result: Union[str, None] = None, timeout: float = 60) -> Union[str, None]:
-    """
-    Wait for a user input. If one is not given in time, return `timeout_result`.
-
-    Args:
-        message (str): input message
-        timeout_result (str, optional): returned if no result given by the user. Default: none.
-        timeout (float, optional): time in seconds to wait for user input. Default: 60.
-
-    Returns:
-        str: input result or timeout result.
-    """
-    assert timeout > 0, f"Invalid timeout: {timeout}"
-    try:
-        user_input = str(inputimeout(prompt=message, timeout=timeout))
-        return user_input
-    except TimeoutOccurred:
-        return timeout_result

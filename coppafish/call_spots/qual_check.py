@@ -26,7 +26,7 @@ def get_spot_intensity(spot_colors: npt.NDArray[np.float_]) -> npt.NDArray[np.fl
     if (spot_colors <= -15_000).sum() > 0:
         log.warn(f"Found spot colors <= -15000")
     # Max over all channels, then median over all rounds
-    return np.median(np.max(spot_colors, axis=2), axis=1)
+    return np.median(np.max(np.abs(spot_colors), axis=2), axis=1)
 
 
 def omp_spot_score(
@@ -64,8 +64,7 @@ def get_intensity_thresh(nb: Notebook) -> float:
     if nb.has_page("thresholds"):
         intensity_thresh = nb.thresholds.intensity
     else:
-        config = nb.get_config()["omp"]
-        intensity_thresh = nb.call_spots.abs_intensity_percentile[config["initial_intensity_thresh_percentile"]]
+        intensity_thresh = nb.call_spots.abs_intensity_percentile[50]
     return intensity_thresh
 
 
@@ -100,15 +99,11 @@ def quality_threshold(
             score_thresh = config["score_ref"]
         elif method_prob:
             score_thresh = config["score_prob"]
-        score_multiplier = config["score_omp_multiplier"] if method_omp else None
         # if thresholds page exists, use those values to override config file
         if nb.has_page("thresholds"):
             score_thresh = nb.thresholds.score_omp if method_omp else nb.thresholds.score_ref
-            score_multiplier = nb.thresholds.score_omp_multiplier if method_omp else None
-    else:
-        score_multiplier = 1
 
-    intensity = nb.omp.intensity if method_omp else nb.ref_spots.intensity
+    intensity = np.ones_like(nb.omp.gene_no, dtype=np.float32) if method_omp else nb.ref_spots.intensity
     if method_omp:
         score = omp_spot_score(nb.omp)
     elif method_anchor:
