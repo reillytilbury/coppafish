@@ -346,9 +346,9 @@ def run_omp(
                 f"No OMP spots found on tile {t}. Please check that registration and call spots is working. "
                 + "If so, consider adjusting OMP config parameters."
             )
-        # For each detected spot, save the image intensity at its location.
+        # For each detected spot, save the image intensity at its location, without background fitting.
         t_local_yxzs = tuple(spots_local_yxz[t_spots].int().T)
-        t_spots_colours = torch.asarray(colour_image[t_local_yxzs].astype(np.int32))
+        t_spots_colours = torch.asarray(colour_image[t_local_yxzs].astype(np.int32) - nbp_basic.tile_pixel_value_shift)
         spots_colours = torch.cat((spots_colours, t_spots_colours), dim=0)
 
         del colour_image, t_spots, t_local_yxzs, t_spots_colours

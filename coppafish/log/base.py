@@ -112,10 +112,10 @@ def log(msg: Union[str, Exception], severity: int, force_email: bool = False) ->
     ):
         delta_time = (time.time() - _start_time) / 60
         email_message = (
-            f"On device {socket.gethostname()}"
-            + f"After {round(delta_time // 60)}hrs and {round(delta_time % 60)}mins:\n\n"
+            f"On device {socket.gethostname()}, "
+            + f"after {round(delta_time // 60)}hrs and {round(delta_time % 60)}mins:\n\n"
             + message
-            + f"\n\nfor any errors, please refer to our troubleshoot page "
+            + f"\n\nFor errors, please refer to our troubleshoot page "
             + f"(https://reillytilbury.github.io/coppafish/troubleshoot/)"
         )
         email.send_email(
