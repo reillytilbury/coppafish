@@ -120,9 +120,8 @@ def run_omp(
 
         description = f"Computing OMP on tile {t} using the "
         description += "gpu" if (not config["force_cpu"] and torch.cuda.is_available()) else "cpu"
-        for i, subset_yxz in enumerate(tqdm.tqdm(subset_origins_yxz, desc=description, unit="subset")):
-            # STEP 2: Compute OMP coefficients on a subset of the tile: a mini tile with the same number of z planes.
-            log.debug(f"Subset {i}, Subset origin {subset_yxz}")
+        for subset_yxz in tqdm.tqdm(subset_origins_yxz, desc=description, unit="subset"):
+            # STEP 2: Compute OMP coefficients on a subset: a mini tile with the same number of z planes.
 
             def subset_to_tile_positions(positions_yxz: torch.Tensor) -> torch.Tensor:
                 return positions_yxz.detach().clone() + torch.asarray(subset_yxz)[np.newaxis]
@@ -185,7 +184,6 @@ def run_omp(
             subset_colours = subset_colours.reshape((-1, n_rounds_use * n_channels_use))
             bled_codes_ge = bled_codes_ge.reshape((n_genes, n_rounds_use * n_channels_use))
             bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
-            log.debug("Computing OMP coefficients started")
             coefficient_image = coefs_torch.compute_omp_coefficients(
                 subset_colours,
                 bled_codes_ge,
@@ -200,7 +198,6 @@ def run_omp(
                 do_not_compute_on=do_not_compute_on,
                 force_cpu=config["force_cpu"],
             )
-            log.debug("Computing OMP coefficients complete")
             del subset_colours, bg_coefficients, bg_codes, bled_codes_ge, do_not_compute_on
 
             # STEP 2.5: On the first OMP subset/tile, compute the OMP spot shape using the found coefficients.
