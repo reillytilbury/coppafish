@@ -64,9 +64,15 @@ class Viewer:
         """
         # declare variables needed from the notebook
         self.is_3d, self.nz, self.abs_intensity_thresh = (nb.basic_info.is_3d, nb.basic_info.nz,
-                                                          nb.call_spots.abs_intensity_thresh[50])
+                                                          nb.call_spots.abs_intensity_percentile[50])
         self.method_names = ["anchor", "prob"] + (["omp"] if nb.has_page("omp") else [])
         self.relevant_pages = ["ref_spots", "ref_spots", "omp"] if nb.has_page("omp") else ["ref_spots", "ref_spots"]
+        # TODO: Remove nb from Viewer class. This will mean refactoring some of the diagnostic functions which take
+        #  nb as an argument.
+        self.nb = nb
+        if gene_marker_file is None:
+            gene_marker_file = importlib_resources.files("coppafish.plot.results_viewer").joinpath("gene_color.csv")
+        gene_legend_info = pd.read_csv(gene_marker_file)
 
         # declare image and spot variables
         self.genes, self.spots = None, None
@@ -75,6 +81,8 @@ class Viewer:
         self.create_gene_list(gene_marker_file=gene_marker_file, nb_gene_names=nb.call_spots.gene_names)
         self.create_spots_list(nb=nb)
         self.load_bg_images(nb=nb, background_image=background_image, background_image_colour=background_image_colour)
+        self.active_method = 2 if nb.has_page("omp") else 0
+        self.active_genes = np.arange(len(nb.call_spots.gene_names))
 
         # create napari viewer
         self.viewer = napari.Viewer()
@@ -85,17 +93,15 @@ class Viewer:
             self.z_thick = 1
             self.z_thick_slider = None
         self.method_buttons = None
-        self.format_napari_viewer(gene_marker_file=gene_marker_file)
+        self.format_napari_viewer(gene_legend_info=gene_legend_info)
 
         # add images and spots to napari viewer. Hook up the selection status to the viewer status, and key bindings
-        self.active_method = 2 if nb.has_page("omp") else 0
-        self.active_genes = np.arange(len(nb.call_spots.gene_names))
         self.add_data_to_viewer()
         self.update_status_continually()
         self.key_call_functions()
         napari.run()
 
-    def format_napari_viewer(self, gene_marker_file: pd.DataFrame) -> None:
+    def format_napari_viewer(self, gene_legend_info: pd.DataFrame) -> None:
         """
         Create the napari viewer.
         """
@@ -104,7 +110,7 @@ class Viewer:
         self.viewer.window.qt_viewer.dockLayerControls.setVisible(False)
 
         # add gene legend to viewer
-        self.add_legend(gene_legend_info=gene_marker_file)
+        self.add_legend(gene_legend_info=gene_legend_info)
 
         # Z-thickness slider
         if self.is_3d:
@@ -146,9 +152,10 @@ class Viewer:
 
     def add_legend(self, gene_legend_info: pd.DataFrame) -> None:
         # Add legend indicating genes plotted
-        self.legend["fig"], self.legend["ax"], n_gene_label_letters = legend.add_legend(
+        gene_names = np.array([gene.name for gene in self.genes])
+        self.legend["fig"], self.legend["ax"], max_label_length = legend.add_legend(
             gene_legend_info=gene_legend_info,
-            genes=self.gene_names,
+            genes=gene_names,
         )
 
         # Initialize positions and gene numbers in the legend
@@ -157,7 +164,7 @@ class Viewer:
         self.legend["gene_no"] = np.zeros(num_genes, dtype=int)
 
         # Crop gene names to the maximum label length
-        cropped_gene_names = np.array([gene[:max_label_length] for gene in self.gene_names])
+        cropped_gene_names = np.array([gene[:max_label_length] for gene in gene_names])
 
         # Populate positions and gene numbers for the legend
         for idx in range(num_genes):
@@ -325,7 +332,7 @@ class Viewer:
                     yield selectedData
                 yield None
 
-        return _watchSelectedData(self.viewer.layers[self.viewer.layers.selection.active])
+        return _watchSelectedData(self.viewer.layers[self.viewer.layers.index(self.viewer.layers.selection.active)])
 
     def method_event_handler(self, method: int):
         for i in range(3):
@@ -427,7 +434,7 @@ class Viewer:
         if gene_marker_file is None:
             gene_marker_file = importlib_resources.files("coppafish.plot.results_viewer").joinpath("gene_color.csv")
         gene_legend_info = pd.read_csv(gene_marker_file)
-        legend_gene_names = gene_legend_info["GeneNames"]
+        legend_gene_names = gene_legend_info["GeneNames"].values
         genes = []
 
         # create a list of genes with the relevant information. If the gene is not in the gene marker file, it will be
@@ -443,7 +450,7 @@ class Viewer:
                 genes.append(Gene(name=g, notebook_index=i, colour=None, symbol_mpl=None, symbol_napari=None))
 
         # warn if any genes are not in the gene marker file
-        invisible_genes = [g for g in genes if g.symbol_mpl is None]
+        invisible_genes = [g.name for g in genes if g.symbol_mpl is None]
         if invisible_genes:
             warnings.warn(f"Genes {invisible_genes} are not in the gene marker file and will not be plotted.")
         self.genes = genes
@@ -463,20 +470,24 @@ class Viewer:
         """
         # define frequently used variables
         n_methods = len(self.method_names)
-        n_genes = len(nb.gene_names)
+        n_genes = len(nb.call_spots.gene_names)
         tile_origin = nb.stitch.tile_origin
+        use_rounds, use_channels = nb.basic_info.use_rounds, nb.basic_info.use_channels
 
         # initialise list of spots and load relevant information
-        spots = np.zeros((len(self.method_names), len(self.gene_names) + 1, 0)).tolist()
+        spots = np.zeros((n_methods, n_genes + 1, 0)).tolist()
         tile = [nb.__getattribute__(page).tile for page in self.relevant_pages]
         global_loc = [(nb.__getattribute__(self.relevant_pages[i]).local_yxz + tile_origin[tile[i]])[:, [2, 0, 1]]
                       for i in range(n_methods)]
-        colours = [nb.__getattribute__(page).colors for page in self.relevant_pages]
-        score = [nb.ref_spots.score, np.max(nb.ref_spots.gene_probs, axis=1)]
+        colours = [nb.__getattribute__(page).colours[:, :, use_channels] for page in self.relevant_pages]
+        score = [nb.ref_spots.scores, np.max(nb.ref_spots.gene_probs, axis=1)]
         gene_no = [nb.ref_spots.gene_no, np.argmax(nb.ref_spots.gene_probs, axis=1)]
+        intensity = [nb.ref_spots.intensity, nb.ref_spots.intensity]
         if nb.has_page("omp"):
-            score.append(nb.omp.score)
+            score.append(nb.omp.scores)
             gene_no.append(nb.omp.gene_no)
+            intensity_omp = np.median(np.max(nb.omp.colours, axis=-1), axis=-1)
+            intensity.append(intensity_omp)
 
         # add spots for each method and gene
         for m, g in np.ndindex(n_methods, n_genes):
@@ -485,7 +496,7 @@ class Viewer:
                                 score=score[m][mask],
                                 tile=tile[m][mask],
                                 colours=colours[m][mask],
-                                intensity=nb.__getattribute__(self.relevant_pages[m]).intensity[mask],
+                                intensity=intensity[m][mask],
                                 gene=g)
 
         # add all spots for each method as the last element of the list
@@ -494,7 +505,7 @@ class Viewer:
                                  score=score[m],
                                  tile=tile[m],
                                  colours=colours[m],
-                                 intensity=nb.__getattribute__(self.relevant_pages[m]).intensity,
+                                 intensity=intensity[m],
                                  gene=gene_no[m])
         self.spots = spots
 
@@ -586,7 +597,7 @@ class Viewer:
             self.viewer.add_points(
                 self.spots[m][g].location,
                 size=10,
-                face_color=self.spots[m][g].colours,
+                face_color=self.genes[g].colour,
                 symbol=self.genes[g].symbol_napari,
                 name=f"{self.method_names[m]} {self.genes[g].name}",
                 out_of_slice_display=True,
@@ -661,44 +672,44 @@ class Viewer:
 
         @self.viewer.bind_key(KeyBinds.view_colour_and_codes)
         def call_to_view_codes(viewer):
-            spot_index = self.get_selected_spot()
+            spot_index = self.get_selected_spot_index()
             if spot_index is not None:
                 view_codes(self.nb, spot_index, self.method_names[self.active_method])
 
         @self.viewer.bind_key(KeyBinds.view_spot_intensities)
         def call_to_view_spot(viewer):
-            spot_index = self.get_selected_spot()
+            spot_index = self.get_selected_spot_index()
             if spot_index is not None:
                 view_spot(self.nb, spot_index, self.method_names[self.active_method])
 
         @self.viewer.bind_key(KeyBinds.view_spot_colours_and_weights)
         def call_to_view_omp_score(viewer):
-            spot_index = self.get_selected_spot()
+            spot_index = self.get_selected_spot_index()
             if spot_index is not None:
                 view_score(self.nb, spot_index, self.method_names[self.active_method])
 
         @self.viewer.bind_key(KeyBinds.view_intensity_from_colour)
         def call_to_view_omp_score(viewer):
-            spot_index = self.get_selected_spot()
+            spot_index = self.get_selected_spot_index()
             if spot_index is not None:
                 view_intensity(self.nb, spot_index, self.method_names[self.active_method])
 
         @self.viewer.bind_key(KeyBinds.view_omp_coefficients)
         def call_to_view_omp(viewer):
-            spot_index = self.get_selected_spot()
+            spot_index = self.get_selected_spot_index()
             if spot_index is not None:
                 view_omp(self.nb, spot_index, self.method_names[self.active_method])
 
         @self.viewer.bind_key(KeyBinds.view_omp_fit)
         def call_to_view_omp(viewer):
-            spot_index = self.get_selected_spot()
+            spot_index = self.get_selected_spot_index()
             if spot_index is not None:
                 view_omp_fit(self.nb, spot_index, self.method_names[self.active_method])
 
         # TODO: Remove or refactor this as this as we don't have a score multiplier for omp
         # @self.viewer.bind_key(KeyBinds.view_omp_score)
         # def call_to_view_omp_score(viewer):
-        #     spot_index = self.get_selected_spot()
+        #     spot_index = self.get_selected_spot_index()
         #     if spot_index is not None:
         #         view_omp_score(self.nb, spot_index, self.method_buttons.method, self.omp_score_multiplier_slider.value())
 
@@ -765,7 +776,7 @@ class Spots:
                 or (np.ndarray) of shape (n_spots,) with the gene number of each spot. (int16)
         """
         assert len(location) == len(colours) == len(score) == len(tile) == len(intensity)   # Check all same length
-        if len(gene) > 1:
+        if isinstance(gene, list):
             assert len(location) == len(gene)
         self.location = location
         self.colours = colours

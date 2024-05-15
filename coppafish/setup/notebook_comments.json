@@ -793,7 +793,7 @@
             "Numpy int16 array [n_spots]",
             "Tile each spot was found on."
         ],
-        "colors": [
+        "colours": [
             "",
             "Numpy int32 array [n_spots x n_rounds x n_channels]",
             "`[s, r, c]` is the intensity of spot $s$ on round $r$, channel $c$.",
@@ -804,7 +804,7 @@
             "Numpy int16 array [n_spots]",
             "Gene number assigned to each spot. `None` if not assigned."
         ],
-        "score": [
+        "scores": [
             "",
             "Numpy float array [n_spots]",
             "`score[s]' is the highest gene coef of spot s."
@@ -1000,7 +1000,7 @@
             "Numpy int16 array [n_spots]",
             "Tile each spot was found on."
         ],
-        "colors": [
+        "colours": [
             "",
             "Numpy int32 array [n_spots x len(use_rounds) x len(use_channels)]",
             "`[s, r, c]` is the intensity of spot $s$ on round $use_rounds[r]$, channel $use_channels[c]$.",
