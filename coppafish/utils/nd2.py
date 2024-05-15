@@ -320,7 +320,7 @@ def get_jobs_metadata(files: list, input_dir: str, config: dict) -> dict:
 #     return n_tiles, n_rounds
 
 
-def get_image(images: np.ndarray, fov: int, channel: int, use_z: Optional[List[int]] = None) -> np.ndarray:
+def get_images(images: np.ndarray, fov: int, channels: List[int], use_z: Optional[List[int]] = None) -> np.ndarray:
     """
     Using dask array from nd2 file, this loads the image of the desired fov and channel.
 
@@ -336,9 +336,11 @@ def get_image(images: np.ndarray, fov: int, channel: int, use_z: Optional[List[i
         `uint16 [im_sz_y x im_sz_x x n_use_z]`.
             Image of the desired `fov` and `channel`.
     """
+    assert isinstance(channels, list)
     if use_z is None:
         use_z = np.arange(images.shape[-1])
-    return np.asarray(images[fov, channel, :, :, use_z])
+    all_channels = np.asarray(images[fov, :, :, :, use_z])
+    return tuple([all_channels[c].copy() for c in channels])
 
 
 def save_metadata(json_file: str, nd2_file: str, use_channels: Optional[List] = None):
@@ -483,7 +485,7 @@ def get_raw_images(
             for t in range(n_tiles):
                 for c in range(n_channels):
                     pbar.set_postfix({"round": rounds[r], "tile": tiles[t], "channel": channels[c]})
-                    raw_images[t, r, c] = raw.load_image(
+                    (raw_images[t, r, c],) = raw.load_image(
                         nbp_file, nbp_basic, tiles[t], channels[c], round_dask_array, rounds[r], use_z
                     )
                     pbar.update(1)
