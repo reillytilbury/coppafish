@@ -340,7 +340,7 @@ def get_images(images: np.ndarray, fov: int, channels: List[int], use_z: Optiona
     if use_z is None:
         use_z = np.arange(images.shape[-1])
     all_channels = np.asarray(images[fov, :, :, :, use_z])
-    return tuple([all_channels[:, c].copy() for c in channels])
+    return tuple([all_channels[c].copy() for c in channels])
 
 
 def save_metadata(json_file: str, nd2_file: str, use_channels: Optional[List] = None):
