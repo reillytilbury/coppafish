@@ -216,11 +216,11 @@ def load_image(
     nbp_file: NotebookPage,
     nbp_basic: NotebookPage,
     t: int,
-    c: Union[int, List[int]],
+    c: int,
     round_dask_array: Optional[dask.array.Array] = None,
     r: Optional[int] = None,
     use_z: Optional[List[int]] = None,
-) -> Tuple[np.ndarray]:
+) -> np.ndarray:
     """
     Loads in raw data either from npy stack or nd2 file for tile and channel specified. If no round dask array specified
     we load one in.
@@ -229,7 +229,7 @@ def load_image(
         nbp_file: `file_names` notebook page
         nbp_basic: `basic_info` notebook page
         t: npy tile index considering.
-        c: Channel(s) considering.
+        c: Channel considering.
         round_dask_array: Dask array with indices in order `fov`, `channel`, `y`, `x`, `z`.
             If None, will load it in first.
         r: Round considering (anchor will be assumed to be the last round if using).
@@ -238,32 +238,43 @@ def load_image(
             If use_z = None, will load in all z-planes.
 
     Returns:
-        tuple of numpy arrays [n_y x n_x x len(use_z)] for each channel given.
+        numpy array [n_y x n_x x len(use_z)].
     """
     if not np.isin(nbp_file.raw_extension, [".nd2", ".npy", "jobs"]):
-        raise ValueError(f"nbp_file.raw_extension must be '.nd2', '.npy' or 'jobs' but it is {nbp_file.raw_extension}.")
+        log.error(
+            ValueError(f"nbp_file.raw_extension must be '.nd2', '.npy' or 'jobs' but it is {nbp_file.raw_extension}.")
+        )
 
     if round_dask_array is None:
-        round_dask_array, _ = load_dask(nbp_file, nbp_basic, r)
+        if nbp_basic.use_anchor:
+            # always have anchor as first round after imaging rounds
+            round_files = nbp_file.round + [nbp_file.anchor]
+        else:
+            round_files = nbp_file.round
+        if nbp_basic.use_preseq:
+            round_files = round_files + [nbp_file.pre_seq]
+        if nbp_file.raw_extension == ".nd2":
+            round_file = os.path.join(nbp_file.input_dir, round_files[r])
+            round_dask_array = nd2.load(round_file + nbp_file.raw_extension)
+        elif nbp_file.raw_extension == ".npy":
+            round_file = os.path.join(nbp_file.input_dir, round_files[r])
+            round_dask_array = dask.array.from_npy_stack(round_file)
+        elif nbp_file.raw_extension == "jobs":
+            round_dask_array, _ = load_dask(nbp_file, nbp_basic, r)
+
     # Return a tile/channel/z-planes from the dask array.
     if use_z is None:
         use_z = nbp_basic.use_z
-    if isinstance(c, int):
-        channels = [c]
-    elif isinstance(c, list):
-        channels = c
-    else:
-        raise TypeError(f"Unexpected type {type(c)} for parameter c")
-    assert len(channels) > 0
 
     t_nd2 = nd2.get_nd2_tile_ind(t, nbp_basic.tilepos_yx_nd2, nbp_basic.tilepos_yx)
     if nbp_file.raw_extension == ".nd2":
         # Only need this if statement because nd2.get_image will be different if use nd2reader not nd2 module
         # which is needed on M1 mac.
-        return nd2.get_images(round_dask_array, t_nd2, channels, use_z)
-    result = tuple()
-    for channel in channels:
+        return nd2.get_image(round_dask_array, t_nd2, c, use_z)
+    elif nbp_file.raw_extension == ".npy":
         # Need the with below to silence warning
         with dask.config.set(**{"array.slicing.split_large_chunks": False}):
-            result += (np.asarray(round_dask_array[t_nd2, channel, :, :, use_z]),)
-    return result
+            return np.asarray(round_dask_array[t_nd2, c, :, :, use_z])
+    elif nbp_file.raw_extension == "jobs":
+        with dask.config.set(**{"array.slicing.split_large_chunks": False}):
+            return np.asarray(round_dask_array[t_nd2, c, :, :, use_z])

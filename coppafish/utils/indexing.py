@@ -1,4 +1,5 @@
 import itertools
+import numpy as np
 from typing import Tuple, Optional, Union, List, Any
 
 from ..setup import NotebookPage
@@ -99,20 +100,6 @@ def create(
         bad_trc = [tuple(trc) for trc in nbp_basic.bad_trc]
         output = [index for index in output if index not in bad_trc]
     return output
-
-
-def find_channels_for(indices: List[Tuple[int, int, int]], tile: int, round: int) -> Tuple[int]:
-    """
-    Gather a list of all unique channel indices with the given tile and round indices.
-    """
-    assert isinstance(indices, list)
-    assert len(indices[0]) == 3
-
-    channels = []
-    for t, r, c in indices:
-        if t == tile and round == r:
-            channels.append(c)
-    return tuple(set(channels))
 
 
 def unique(indices: List[Tuple[Any]], axis: Optional[int] = None) -> List[Tuple[Any]]:
