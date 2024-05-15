@@ -99,7 +99,6 @@ def run_extract(
                     nbp_file, nbp_basic, t=t, c=channels, r=r, use_z=nbp_basic.use_z
                 )
                 for im, c, file_path, file_exists in zip(channel_images, channels, file_paths, files_exist):
-                    pbar.set_postfix({"round": r, "tile": t, "channel": c, "exists": str(file_exists)})
                     if file_exists:
                         im = tiles_io._load_image(file_path, config["file_type"])
                     else:
