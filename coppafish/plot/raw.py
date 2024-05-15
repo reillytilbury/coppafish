@@ -69,7 +69,7 @@ def get_raw_images(
             for t in range(n_tiles):
                 for c in range(n_channels):
                     pbar.set_postfix({"round": rounds[r], "tile": tiles[t], "channel": channels[c]})
-                    raw_images[t, r, c] = raw.load_image(
+                    (raw_images[t, r, c],) = raw.load_image(
                         nb.file_names, nb.basic_info, tiles[t], channels[c], round_dask_array, rounds[r], use_z
                     )
                     pbar.update(1)
@@ -149,10 +149,7 @@ def view_raw(
 
 
 def view_tile_layout(
-    nb: Notebook,
-    num_rotations: int = 0,
-    tiles: Optional[Union[int, List[int]]] = None,
-    channel: int = 0
+    nb: Notebook, num_rotations: int = 0, tiles: Optional[Union[int, List[int]]] = None, channel: int = 0
 ):
     """
     Function to view the tile layout in napari. Images will be middle z plane from nd2 files in the anchor round.
@@ -215,11 +212,8 @@ def view_tile_layout(
     viewer.add_points(point_locs, text=text_nd2_ind, size=0, name="ND2 Tile Indices", visible=False)
     viewer.add_points(point_locs, text=text_npy_pos, size=0, name="NPY YX Positions", visible=False)
     viewer.add_points(point_locs, text=text_nd2_pos, size=0, name="ND2 YX Positions", visible=False)
-    viewer.add_vectors(
-        np.array([[0, 0], [0, 1]]) * tile_sz, edge_width=50, edge_color="green", name="Y Axis")
-    viewer.add_vectors(
-        np.array([[0, 0], [1, 0]]) * tile_sz, edge_width=50, edge_color="green",  name="X Axis"
-    )
+    viewer.add_vectors(np.array([[0, 0], [0, 1]]) * tile_sz, edge_width=50, edge_color="green", name="Y Axis")
+    viewer.add_vectors(np.array([[0, 0], [1, 0]]) * tile_sz, edge_width=50, edge_color="green", name="X Axis")
     axis_text = {
         "string": ["Y", "X"],
         "color": "green",
