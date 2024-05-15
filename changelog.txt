@@ -1,3 +1,7 @@
+2024/05/15 Alpha Update (v0.10.6):
+ * Disk loading of ND2 files is now 28 times faster during extract.
+
+
 2024/05/14 Alpha Update (v0.10.5):
  * Pytorch CPU is now a default dependency.
  * Optical flow results are saved as compressed zarr files instead of uncompressed numpy arrays.
