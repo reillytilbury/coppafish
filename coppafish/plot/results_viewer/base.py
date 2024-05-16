@@ -27,6 +27,7 @@ from ..omp import view_omp, view_omp_fit, view_omp_score, histogram_score
 from ..omp.coefs import view_score  # gives import error if call from call_spots.dot_product
 from ... import call_spots
 from ... import utils
+from time import gmtime, strftime
 from ...setup import Notebook
 # set matplotlib background to dark
 plt.style.use('dark_background')
@@ -99,6 +100,8 @@ class Viewer:
         self.add_data_to_viewer()
         self.update_status_continually()
         self.key_call_functions()
+        for layer in self.viewer.layers:
+            print(layer.name)
         napari.run()
 
     def format_napari_viewer(self, gene_legend_info: pd.DataFrame) -> None:
@@ -128,7 +131,7 @@ class Viewer:
                             slider_mode="range", slider_variable="image")
 
         # Slider to change score_thresh
-        self.add_slider(name="score_thresh", value=(0.3, 1), slider_range=(0, 1), slider_mode="range",
+        self.add_slider(name="score_range", value=(0.3, 1), slider_range=(0, 1), slider_mode="range",
                         slider_variable="spot")
         # Slider to change intensity_thresh
         self.add_slider(name="intensity_thresh", value=self.abs_intensity_thresh, slider_range=(0, 1),
@@ -141,7 +144,7 @@ class Viewer:
             self.method_buttons.button[i].clicked.connect(self.update_layers)
         self.viewer.window.add_dock_widget(self.method_buttons, area="left", name="Method")
 
-        # connect a change in z-plane to update the z-thick slider
+        # connect a change in z-plane to the z-thickness slider
         self.viewer.dims.events.current_step.connect(self.update_z_thick)
 
         # label the axes
@@ -240,18 +243,14 @@ class Viewer:
         This method updates the layers in the napari viewer to reflect the current state of the Viewer object. It will
         be called when the active method or active genes change.
         """
-        # update active genes and methods in the transparent layer
+        # loop through methods, set the visible layers to the current method and set the visible spots on each layer
+        # to those whose gene is in the active genes list.
         for m in range(len(self.method_names)):
-            layer_name = f"{self.method_names[m]} all"
+            layer_name = f"{self.method_names[m]}"
             self.viewer.layers[layer_name].visible = (m == self.active_method)
 
-        # update active genes and methods in the non-transparent layers
-        for m, g in np.ndindex(len(self.method_names), len(self.genes)):
-            layer_name = f"{self.method_names[m]} {self.genes[g].name}"
-            self.viewer.layers[layer_name].visible = (m == self.active_method and g in self.active_genes)
-
         # update active layer in napari viewer to the transparent all layer
-        active_layer_name = f"{self.method_names[self.active_method]} all"
+        active_layer_name = f"{self.method_names[self.active_method]}"
         self.viewer.layers.selection.active = self.viewer.layers[active_layer_name]
 
     def update_thresholds(self) -> None:
@@ -263,21 +262,17 @@ class Viewer:
 
         The z-thickness slider will be updated in the method `update_z_thick`.
         """
-        score_range = self.score_thresh_slider.value()
+        score_range = self.score_range_slider.value()
         intensity_thresh = self.intensity_thresh_slider.value()
-        # We add 1 to the genes as the last entry of the spots is all genes
-        # Turn off spots by setting size to 0
-        for m, g in np.ndindex(len(self.method_names), len(self.genes) + 1):
-            layer_name = f"{self.method_names[m]} {self.genes[g].name}"
+        for m in range(len(self.method_names)):
+            layer_name = f"{self.method_names[m]}"
             # 1. score range
-            good_score = (self.spots[m][g].score >= score_range[0]) & (self.spots[m][g].score <= score_range[1])
+            good_score = (self.spots[m].score >= score_range[0]) & (self.spots[m].score <= score_range[1])
             # 2. intensity threshold
-            good_intensity = self.spots[m][g].intensity >= intensity_thresh
+            good_intensity = self.spots[m].intensity >= intensity_thresh
             # create mask
-            mask = good_score & good_intensity
-            size = np.zeros(len(mask), dtype=int)
-            size[mask] = 10
-            self.viewer.layers[layer_name].size = size
+            mask = 10 * (good_score & good_intensity).astype(int)
+            self.viewer.layers[layer_name].size = mask
 
     def update_z_thick(self) -> None:
         """
@@ -285,18 +280,23 @@ class Viewer:
         It will be called when the z-thickness changes, or the z-position of the viewer changes.
         """
         z_thick = self.z_thick_slider.value()
-        # we will change the z_thickness of the spots for each points layer. Do this by adaptively scaling and shifting
-        # the z-coords of the spots. This will make the spots appear thicker in the z-direction.
-        scale = 1 / (2 * z_thick + 1)
-        shift = (1 - scale) * self.viewer.dims.current_step[0]
-        for layer in self.viewer.layers:
-            layer.scale = (scale, 1, 1)
-            layer.translate = (shift, 0, 0)
+        # we will changing the z-coordinates of the spots to the current z-plane if they are within the z-thickness
+        # of the current z-plane.
+        current_z = self.viewer.dims.current_step[0]
+        for m in range(len(self.viewer.layers)):
+            layer_name = f"{self.viewer.layers[m].name}"
+            print(layer_name)
+            z_coords = self.spots[m].location[:, 0].copy()
+            in_range = np.abs(z_coords - current_z) <= z_thick / 2
+            z_coords[in_range] = current_z
+            self.viewer.layers[layer_name].data[:, 0] = z_coords
+            self.viewer.layers[layer_name].refresh()
 
         # napari automatically adjusts the size of the z-step when points are scaled, so we undo that below:
         v_range = list(self.viewer.dims.range)
         v_range[0] = (0, self.nz - 1, 1)
         self.viewer.dims.range = tuple(v_range)
+        print(f'{strftime("%H:%M:%S", gmtime())} - Event triggered: z-thickness changed to {z_thick}')
 
     def update_status_continually(self):
         """
@@ -308,9 +308,9 @@ class Viewer:
                 n_selected = len(selectedData)
                 if n_selected == 1:
                     spot_index = list(selectedData)[0]
-                    spot_gene = self.spots[self.active_method][-1][spot_index].gene
-                    tile = self.spots[self.active_method][-1][spot_index].tile
-                    score = self.spots[self.active_method][-1][spot_index].score
+                    spot_gene = self.spots[self.active_method][spot_index].gene
+                    tile = self.spots[self.active_method][spot_index].tile
+                    score = self.spots[self.active_method][spot_index].score
                     self.viewer.status = (
                         f"Spot {spot_index}, Gene {spot_gene}, Score {score:.2f}, " f"Tile {tile} selected"
                     )
@@ -332,7 +332,7 @@ class Viewer:
                     yield selectedData
                 yield None
 
-        return _watchSelectedData(self.viewer.layers[self.viewer.layers.index(self.viewer.layers.selection.active)])
+        return _watchSelectedData(self.viewer.layers[self.viewer.layers.selection.active.name])
 
     def method_event_handler(self, method: int):
         for i in range(3):
@@ -403,9 +403,9 @@ class Viewer:
         """
             Get the index of the selected spot.
         """
-        n_selected = len(self.viewer.layers[self.viewer.layers.selection.active].selected_data)
+        n_selected = len(self.viewer.layers[self.viewer.layers.selection.active.name].selected_data)
         if n_selected == 1:
-            spot_index = list(self.viewer.layers[self.viewer.layers.selection.active].selected_data)[0]
+            spot_index = list(self.viewer.layers[self.viewer.layers.selection.active.name].selected_data)[0]
         elif n_selected > 1:
             self.viewer.status = f"{n_selected} spots selected - need 1 to run diagnostic"
             spot_index = None
@@ -417,7 +417,7 @@ class Viewer:
     def create_gene_list(self, gene_marker_file: str, nb_gene_names: list) -> None:
         """
         Create a list of genes from the notebook to store information about each gene. This will be saved to the object
-         as self.genes. Each element of the list will be a Gene object. So it will contain the name, location,
+         as self.genes. Each element of the list will be a Gene object. So it will contain the name,
          colour and symbols for each gene.
         Args:
             gene_marker_file: str, path to csv file containing marker and color for each gene. There must be 7 columns
@@ -461,8 +461,10 @@ class Viewer:
         as self.spots. Each element of the list will be a Spots object. So it will contain the location, score, tile,
         colour and intensity for each spot.
 
-        Note that self.spots is a list of lists. The first list is for each method, the second list is for each gene.
-        The last element of the second list is for all genes.
+        Note that self.spots is a list of length n_methods. Each element is a Spots object containing all spots for that
+        method.
+
+        This is better than a spots object for each gene as napari does not handle large numbers of layers well.
 
         Args:
             nb: Notebook containing at least the `call_spots` page.
@@ -470,12 +472,11 @@ class Viewer:
         """
         # define frequently used variables
         n_methods = len(self.method_names)
-        n_genes = len(nb.call_spots.gene_names)
         tile_origin = nb.stitch.tile_origin
         use_rounds, use_channels = nb.basic_info.use_rounds, nb.basic_info.use_channels
 
         # initialise list of spots and load relevant information
-        spots = np.zeros((n_methods, n_genes + 1, 0)).tolist()
+        spots = np.zeros((n_methods, 0)).tolist()
         tile = [nb.__getattribute__(page).tile for page in self.relevant_pages]
         global_loc = [(nb.__getattribute__(self.relevant_pages[i]).local_yxz + tile_origin[tile[i]])[:, [2, 0, 1]]
                       for i in range(n_methods)]
@@ -489,24 +490,14 @@ class Viewer:
             intensity_omp = np.median(np.max(nb.omp.colours, axis=-1), axis=-1)
             intensity.append(intensity_omp)
 
-        # add spots for each method and gene
-        for m, g in np.ndindex(n_methods, n_genes):
-            mask = gene_no[m] == g
-            spots[m][g] = Spots(location=global_loc[m][mask],
-                                score=score[m][mask],
-                                tile=tile[m][mask],
-                                colours=colours[m][mask],
-                                intensity=intensity[m][mask],
-                                gene=g)
-
-        # add all spots for each method as the last element of the list
+        # add all spots for each method to the spots list
         for m in range(n_methods):
-            spots[m][-1] = Spots(location=global_loc[m],
-                                 score=score[m],
-                                 tile=tile[m],
-                                 colours=colours[m],
-                                 intensity=intensity[m],
-                                 gene=gene_no[m])
+            spots[m] = Spots(location=global_loc[m].copy(),
+                             score=score[m],
+                             tile=tile[m],
+                             colours=colours[m],
+                             intensity=intensity[m],
+                             gene=gene_no[m])
         self.spots = spots
 
     def load_bg_images(self, background_image: list, background_image_colour: list, nb: Notebook) -> None:
@@ -579,6 +570,9 @@ class Viewer:
     def add_data_to_viewer(self) -> None:
         """
         Add background images and spots to the napari viewer (they already exist in the Viewer object).
+
+        There will be n_bg image layers, followed by n_methods (either 2 or 3) spots layers. This is because a single
+        layer for each gene of each method is too slow to render in napari.
         """
         # Loop through all background images and add them to the viewer.
         for i, b in enumerate(self.background_image):
@@ -586,22 +580,25 @@ class Viewer:
                                   name=self.background_image_name[i])
             self.viewer.layers[i].contrast_limits_range = [b.min(), b.max()]
 
-        # add a single layer of transparent spots to viewer for each method
+        # add a single layer of spots to viewer for each method
+        gene_colours = np.array([g.colour for g in self.genes])
+        gene_symbols = np.array([g.symbol_napari for g in self.genes])
         for m in range(len(self.method_names)):
-            point_loc = self.spots[m][-1].location
-            self.viewer.add_points(point_loc, size=10, face_color="white", name=f'{self.method_names[m]} all',
-                                   opacity=0, out_of_slice_display=True)
-
-        # add spots for each method and gene to viewer
-        for m, g in np.ndindex(len(self.method_names), len(self.genes)):
-            self.viewer.add_points(
-                self.spots[m][g].location,
-                size=10,
-                face_color=self.genes[g].colour,
-                symbol=self.genes[g].symbol_napari,
-                name=f"{self.method_names[m]} {self.genes[g].name}",
-                out_of_slice_display=True,
-            )
+            point_loc = self.spots[m].location.copy()
+            # load the colours and symbols for the spots of this method. These are both arrays of length n_spots.
+            gene_no = self.spots[m].gene
+            face_colour = gene_colours[gene_no]
+            face_symbol = gene_symbols[gene_no]
+            # face_colour is an array of shape (n_spots, 4) where the last dimension is the rgba values.
+            # Set final row to all 1s
+            face_colour = np.hstack((face_colour, np.ones((face_colour.shape[0], 1))))
+            spot_size = 10 * np.isin(gene_no, self.active_genes).astype(int)
+            self.viewer.add_points(data=point_loc,
+                                   size=spot_size,
+                                   face_color=face_colour,
+                                   symbol=face_symbol,
+                                   name=f'{self.method_names[m]}',
+                                   out_of_slice_display=False)
 
     def key_call_functions(self):
         # Contains all functions which can be called by pressing a key with napari viewer open
@@ -762,8 +759,8 @@ class Spots:
     Class to hold different spot information. In the Viewer class we will have a list of lists of Spots objects, one
     for each gene within each method.
     """
-    def __init__(self, location: np.ndarray, colours: np.ndarray, score: np.ndarray, tile: np.ndarray, intensity: np.ndarray,
-                 gene: Union[int, np.ndarray]):
+    def __init__(self, location: np.ndarray, colours: np.ndarray, score: np.ndarray, tile: np.ndarray,
+                 intensity: np.ndarray, gene: np.ndarray):
         """
         Create object for spots of a single gene within a single method.
         Args:
@@ -772,12 +769,9 @@ class Spots:
             score: (np.ndarray) of shape (n_spots,) with the score of each spot. (float32)
             tile: (np.ndarray) of shape (n_spots,) with the tile of each spot. (int16)
             intensity: (np.ndarray) of shape (n_spots,) with the intensity of each spot. (float32)
-            gene: (int) gene number of the gene that the spots belong to. (int16)
-                or (np.ndarray) of shape (n_spots,) with the gene number of each spot. (int16)
+            gene: (np.ndarray) of shape (n_spots,) with the gene number of each spot. (int16)
         """
-        assert len(location) == len(colours) == len(score) == len(tile) == len(intensity)   # Check all same length
-        if isinstance(gene, list):
-            assert len(location) == len(gene)
+        assert len(location) == len(colours) == len(score) == len(tile) == len(intensity) == len(gene)
         self.location = location
         self.colours = colours
         self.score = score
