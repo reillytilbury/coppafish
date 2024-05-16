@@ -970,9 +970,7 @@ class RoboMinnie:
         deconvolve = {True}
         auto_thresh_multiplier = 2
         num_rotations = 0
-        psf_isolation_dist = 4
-        psf_min_spots = 100
-        psf_shape = {psf_shape}
+        wiener_pad_shape = 40, 40, 9
 
         [find_spots]
         n_spots_warn_fraction = 0

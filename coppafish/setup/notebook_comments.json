@@ -271,10 +271,9 @@
         ],
         "psf": [
             "eq",
-            "File or None",
-            "*npy* file indicating average spot shape (before padding and scaled to fill *uint16* range).",
-            "Will be `None` if *2D* pipeline used. File won't exist/used if `config['extract']['deconvolve'] = False`.",
-            "If *3D*, 1st axis in *npy* file is z."
+            "File",
+            "*npy* file location indicating the average spot shape",
+            "This will have the shape `n_z x n_y x n_x`."
         ],
         "big_dapi_image": [
             "eq",
@@ -467,19 +466,7 @@
             "close",
             "Numpy float array [psf_shape[0] x psf_shape[1] x psf_shape[2]] or None (psf_shape is in config file)",
             "Average shape of spot from individual raw spot images normalised so max is 1 and min is 0.",
-            "`None` if `config['deconvolve'] = False`."
-        ],
-        "psf_intensity_thresh": [
-            "close",
-            "Float",
-            "Intensity threshold used to detect spots in raw images which were used to make the psf.",
-            "None if `config['deconvolve'] = False` or psf provided without spot detection."
-        ],
-        "psf_tiles_used": [
-            "eq",
-            "Integer list or None",
-            "Tiles where spots for psf calculation came from.",
-            "`None` if `config['deconvolve'] = False` or psf provided without spot detection."
+            "`None` if not applying the Wiener deconvolution."
         ],
         "z_info": [
             "eq",
