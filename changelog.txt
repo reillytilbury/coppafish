@@ -1,5 +1,5 @@
 2024/05/15 Alpha Update (v0.10.6):
- * Disk loading of ND2 files is now 28 times faster during extract.
+ * Disk loading of ND2 files is now faster during extract.
 
 
 2024/05/14 Alpha Update (v0.10.5):
