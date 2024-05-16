@@ -175,7 +175,7 @@ def test_bg_subtraction() -> None:
         spot_amplitude_dapi=0.05,
     )
     robominnie.save_raw_images(output_dir=output_dir, register_with_dapi=False)
-    nb = robominnie.run_coppafish()
+    robominnie.run_coppafish()
     get_robominnie_scores(robominnie)
     del robominnie
 

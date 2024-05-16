@@ -98,12 +98,9 @@ def set_file_names(nb, nbp):
     config["scale"] = config["scale"].replace(".txt", "")
     nbp.scale = os.path.join(config["tile_dir"], config["scale"] + ".txt")
 
-    # where to save psf, indicating average spot shape in raw image. Only ever needed in 3D.
-    if nb.basic_info.is_3d:
-        config["psf"] = config["psf"].replace(".npy", "")
-        nbp.psf = os.path.join(config["output_dir"], config["psf"] + ".npy")
-    else:
-        nbp.psf = None
+    if config["psf"] is None:
+        config["psf"] = str(importlib_resources.files("coppafish.setup").joinpath("default_psf.npz"))
+    nbp.psf = config["psf"]
 
     # Add files to save find_spot results after each tile as security if hit any bugs
     config["spot_details_info"] = config["spot_details_info"].replace(".npy", "")
