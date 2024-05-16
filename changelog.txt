@@ -1,3 +1,8 @@
+2024/mm/dd Alpha Update (v0.11.0):
+ * The PSF used for image filtering is not computed anymore. It is given as an input. There is a default PSF located at 
+    coppafish/setup/default_psf.npz.
+
+
 2024/05/15 Alpha Update (v0.10.6):
  * Disk loading of ND2 files is now 28 times faster during extract.
 
