@@ -1,15 +1,16 @@
 import os
 import time
-import numpy as np
-from tqdm import tqdm
-import numpy.typing as npt
 from typing import Optional, Tuple
 
-from .. import utils, extract, log, filter
-from ..utils import tiles_io, indexing
+import numpy as np
+import numpy.typing as npt
+from tqdm import tqdm
+
+from .. import extract, filter, log, utils
 from ..filter import deconvolution
 from ..filter import base as filter_base
 from ..setup.notebook import NotebookPage
+from ..utils import indexing, tiles_io
 
 
 def run_filter(
@@ -217,7 +218,6 @@ def run_filter(
                 r,
                 c,
                 suffix="_raw" if r == nbp_basic.pre_seq_round else "",
-                num_rotations=config["num_rotations"],
                 percent_clip_warn=config["percent_clip_warn"],
                 percent_clip_error=config["percent_clip_error"],
             )
@@ -241,7 +241,6 @@ def run_filter(
                 t,
                 r,
                 c,
-                num_rotations=config["num_rotations"],
                 percent_clip_warn=config["percent_clip_warn"],
                 percent_clip_error=config["percent_clip_error"],
             )

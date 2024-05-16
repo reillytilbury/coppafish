@@ -1,6 +1,8 @@
 2024/mm/dd Alpha Update (v0.11.0):
  * The PSF used for image filtering is not computed anymore. It is given as an input. There is a default PSF located at 
     coppafish/setup/default_psf.npz.
+ * Images are now rotated during extract instead of filter. Hence, the config parameter `num_rotations` has been moved 
+    from the `filter` section to the `extract` section.
 
 
 2024/05/15 Alpha Update (v0.10.6):

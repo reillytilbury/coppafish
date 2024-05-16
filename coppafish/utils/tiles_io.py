@@ -190,7 +190,6 @@ def save_image(
     t: int,
     r: int,
     c: Optional[int] = None,
-    num_rotations: int = 0,
     suffix: str = "",
     apply_shift: bool = True,
     percent_clip_warn: float = None,
@@ -210,8 +209,6 @@ def save_image(
         t (int): npy tile index considering.
         r (int): round considering.
         c (int, optional): channel considering. Default: not given, raises error when `nbp_basic.is_3d == True`.
-        num_rotations (int, optional): number of `90` degree clockwise rotations to apply to image before saving.
-            Applied to the `x` and `y` axes, to 3d `image` data only. Default: `0`.
         suffix (str, optional): suffix to add to file name before the file extension. Default: empty.
         apply_shift (bool, optional): if true and saving a non-dapi channel, will apply the shift to the image.
         n_clip_warn (int, optional): if the number of pixels clipped off by saving is at least this number, a warning
@@ -261,9 +258,6 @@ def save_image(
         image = np.swapaxes(image, 2, 0)
         # zxy -> zyx
         image = np.swapaxes(image, 1, 2)
-        # Now rotate image
-        if num_rotations != 0:
-            image = np.rot90(image, k=num_rotations, axes=(1, 2))
         file_path = nbp_file.tile[t][r][c]
         file_path = file_path[: file_path.index(file_type)] + suffix + file_type
         _save_image(image, file_path, file_type, optimised_for=OptimisedFor.Z_PLANE_READ)

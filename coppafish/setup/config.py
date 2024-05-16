@@ -108,7 +108,7 @@ _options = {
     },
     "extract": {
         "file_type": "str",
-        "wait_time": "int",
+        "num_rotations": "int",
         "z_plane_mean_warning": "number",
     },
     "filter": {
@@ -123,7 +123,6 @@ _options = {
         "r2": "maybe_int",
         "r1_auto_microns": "number",
         "difference_of_hanning": "bool",
-        "num_rotations": "int",
         "pre_seq_blur_radius": "maybe_int",
         "scale_multiplier": "number",
         "percent_clip_warn": "number",
