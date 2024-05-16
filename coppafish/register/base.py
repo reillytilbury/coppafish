@@ -644,6 +644,21 @@ def channel_registration(
     if fluorescent_beads.shape[0] == 28:
         fluorescent_beads = fluorescent_beads[[0, 9, 18, 23]]
 
+    # Typically, the image histogram will be bimodal, with the second peak corresponding to the fluorescent beads.
+    # The isodata thresholding method is used to separate the beads from the background.
+    # We will set the pixels above the isodata threshold to a high value.
+    for i in range(n_cams):
+        bead_pixels = fluorescent_beads[i] > skimage.filters.threshold_isodata(fluorescent_beads[i])
+        fluorescent_beads[i][bead_pixels] = skimage.filters.threshold_isodata(fluorescent_beads[i])
+
+    # correct for shifts with phase cross correlation
+    target_cams = [i for i in range(n_cams) if i != anchor_cam_idx]
+    initial_transform = np.repeat(np.eye(4, 3)[None, :, :], n_cams, axis=0)
+    for i in target_cams:
+        shift_yx = skimage.registration.phase_cross_correlation(reference_image=fluorescent_beads[i],
+                                                                moving_image=fluorescent_beads[anchor_cam_idx])[0]
+        initial_transform[i][-1, :-1] = shift_yx
+
     # Now we'll turn each image into a point cloud
     bead_point_clouds = []
     for i in range(n_cams):
@@ -668,15 +683,13 @@ def channel_registration(
     ]
 
     # Set up ICP
-    initial_transform = np.zeros((n_cams, 4, 3))
     transform = np.zeros((n_cams, 4, 3))
     mse = np.zeros((n_cams, 50))
-    target_cams = [i for i in range(n_cams) if i != anchor_cam_idx]
+    # target_cams = [i for i in range(n_cams) if i != anchor_cam_idx]
     with tqdm(total=len(target_cams)) as pbar:
         for i in target_cams:
             pbar.set_description("Running ICP for camera " + str(i))
             # Set initial transform to identity (shift already accounted for)
-            initial_transform[i, :3, :3] = np.eye(3)
             # Run ICP
             transform[i], _, mse[i], converged = icp(
                 yxz_base=bead_point_clouds[anchor_cam_idx],
