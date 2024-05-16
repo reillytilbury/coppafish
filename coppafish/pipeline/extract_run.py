@@ -1,12 +1,12 @@
 import os
-import pickle
+from typing import Optional, Tuple
+
 import numpy as np
 from tqdm import tqdm
-from typing import Tuple, Optional
 
+from .. import log, utils
 from ..setup.notebook import NotebookPage
-from .. import utils, log
-from ..utils import tiles_io, indexing
+from ..utils import indexing, tiles_io
 
 
 def run_extract(
@@ -105,6 +105,7 @@ def run_extract(
                         im = im.astype(np.uint16, casting="safe")
                         # yxz -> zyx
                         im = im.transpose((2, 0, 1))
+                        im = np.rot90(im, k=config["num_rotations"], axes=(1, 2))
                         if (im.mean((1, 2)) < config["z_plane_mean_warning"]).any():
                             log.warn(
                                 f"Raw image {t=}, {r=}, {c=} has dim z plane(s). You may wish to remove the affected image by"

@@ -965,11 +965,12 @@ class RoboMinnie:
         use_channels = {', '.join([str(i) for i in np.arange((self.dapi_channel + 1), (self.n_channels + 1))])}
         anchor_channel = {self.anchor_channel if self.include_anchor else ''}
         dapi_channel = {self.dapi_channel if self.include_dapi else ''}
+
+        [extract]
+        num_rotations = 0
         
         [filter]
-        deconvolve = {True}
         auto_thresh_multiplier = 2
-        num_rotations = 0
         wiener_pad_shape = 40, 40, 9
 
         [find_spots]

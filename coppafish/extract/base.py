@@ -1,53 +1,6 @@
-import os
-import time
-import numpy as np
-from tqdm import tqdm
 from typing import Tuple
 
-from .. import utils, log
-
-
-def wait_for_data(data_path: str, wait_time: int, dir: bool = False):
-    """
-    Waits for wait_time seconds to see if file/directory at data_path becomes available in that time.
-
-    Args:
-        data_path: Path to file or directory of interest
-        wait_time: Time to wait in seconds for file to become available.
-        dir: If True, assumes data_path points to a directory, otherwise assumes points to a file.
-    """
-    if dir:
-        check_data_func = lambda x: os.path.isdir(x)
-    else:
-        check_data_func = lambda x: os.path.isfile(x)
-    if not check_data_func(data_path):
-        # wait for file to become available
-        if wait_time > 60**2:
-            wait_time_print = round(wait_time / 60**2, 1)
-            wait_time_unit = "hours"
-        else:
-            wait_time_print = round(wait_time, 1)
-            wait_time_unit = "seconds"
-        log.warn(f"\nNo file named\n{data_path}\nexists. Waiting for {wait_time_print} {wait_time_unit}...")
-        with tqdm(total=wait_time, position=0) as pbar:
-            pbar.set_description(f"Waiting for {data_path}")
-            for i in range(wait_time):
-                time.sleep(1)
-                if check_data_func(data_path):
-                    break
-                pbar.update(1)
-        pbar.close()
-        if not check_data_func(data_path):
-            log.error(utils.errors.NoFileError(data_path))
-        log.info("file found!\nWaiting for file to fully load...")
-        # wait for file to stop loading
-        old_bytes = 0
-        new_bytes = 0.00001
-        while new_bytes > old_bytes:
-            time.sleep(5)
-            old_bytes = new_bytes
-            new_bytes = os.path.getsize(data_path)
-        log.info("file loaded!")
+import numpy as np
 
 
 def get_pixel_length(length_microns: float, pixel_size: float) -> int:
