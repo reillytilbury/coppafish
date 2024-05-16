@@ -23,7 +23,7 @@ def background_fitting(nb: Notebook, method: str) -> Tuple[np.ndarray, np.ndarra
     rc_ind = np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
     trc_ind = np.ix_(nb.ref_spots.tile, nb.basic_info.use_rounds, nb.basic_info.use_channels)
     if method.lower() == "omp":
-        spot_colors = np.moveaxis(np.moveaxis(nb.omp.colors, 0, -1), -1, 0)
+        spot_colors = np.moveaxis(np.moveaxis(nb.omp.colours, 0, -1), -1, 0)
         config = nb.get_config()["omp"]
     else:
         spot_colors = np.moveaxis(np.moveaxis(nb.ref_spots.colors, 0, -1)[rc_ind], -1, 0)

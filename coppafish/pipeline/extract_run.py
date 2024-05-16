@@ -70,53 +70,54 @@ def run_extract(
         include_dapi_anchor=True,
         include_dapi_preseq=True,
     )
-    first_rounds = indexing.unique(indices, 1)
-    loaded_dasks = [utils.raw.load_dask(nbp_file, nbp_basic, r=r) for _, r, _ in first_rounds]
+    indices_t = indexing.unique(indices, axis=0)
+    indices_r = indexing.unique(indices, axis=1)
+    # first_rounds = indexing.unique(indices, 1)
     with tqdm(
-        total=len(indices), desc=f"Extracting raw {nbp_file.raw_extension} files to {config['file_type']}"
+        total=len(indices_t) * len(indices_r),
+        desc=f"Extracting raw {nbp_file.raw_extension} files to {config['file_type']}",
     ) as pbar:
-        for t, r, c in indices:
-            round_dask_array, metadata = loaded_dasks[r]
-            if (t, r, c) in first_rounds:
-                # Save raw metadata for each round
-                metadata_path = os.path.join(
-                    nbp_file.tile_unfiltered_dir, f"{nbp_file.raw_extension}_metadata_r{r}.pkl"
-                )
-                if not os.path.isfile(metadata_path) and metadata is not None:
-                    # Dump all metadata to pickle file
-                    with open(metadata_path, "wb") as file:
-                        pickle.dump(metadata, file)
-            # Load and save each image, if it does not already exist
-            if r != pre_seq_round:
-                file_path = nbp_file.tile_unfiltered[t][r][c]
-                file_exists = tiles_io.image_exists(file_path, config["file_type"])
-            else:
-                file_path = nbp_file.tile_unfiltered[t][r][c]
-                file_path = file_path[: file_path.index(config["file_type"])] + "_raw" + config["file_type"]
-                file_exists = tiles_io.image_exists(file_path, config["file_type"])
-            pbar.set_postfix({"round": r, "tile": t, "channel": c, "exists": str(file_exists)})
-            if hist_counts_values_exists[t, r, c] and file_exists:
-                # This image and its pixel histogram values already exist
-                pbar.update()
-                continue
+        for t, _, _ in indices_t:
+            for _, r, _ in indices_r:
+                pbar.set_postfix({"tile": t, "round": r})
+                channels = list(indexing.find_channels_for(indices, tile=t, round=r))
 
-            if file_exists:
-                im = tiles_io._load_image(file_path, config["file_type"])
-            if not file_exists:
-                im = utils.raw.load_image(nbp_file, nbp_basic, t, c, round_dask_array, r, nbp_basic.use_z)
-                im = im.astype(np.uint16, casting="safe")
-                # yxz -> zyx
-                im = im.transpose((2, 0, 1))
-                if ((im.max((1, 2)) - im.min((1, 2))) == 0).any():
-                    log.warn(f"Raw image {t=}, {r=}, {c=} has a single valued plane!")
-                tiles_io._save_image(im, file_path, config["file_type"])
-            # Compute the counts of each possible uint16 pixel value for the image.
-            hist_counts[:, t, r, c] = np.histogram(
-                im, hist_values.size, range=(tiles_io.get_pixel_min(), tiles_io.get_pixel_max())
-            )[0]
-            np.savez_compressed(hist_counts_values_path, hist_counts, hist_values)
-            del im
-            pbar.update()
-            del round_dask_array
+                if r != pre_seq_round:
+                    file_paths = [nbp_file.tile_unfiltered[t][r][c] for c in channels]
+                    files_exist = [tiles_io.image_exists(file_path, config["file_type"]) for file_path in file_paths]
+                else:
+                    file_paths = [nbp_file.tile_unfiltered[t][r][c] for c in channels]
+                    for i, file_path in enumerate(file_paths):
+                        file_paths[i] = file_path[: file_path.index(config["file_type"])] + "_raw" + config["file_type"]
+                    files_exist = [tiles_io.image_exists(file_path, config["file_type"]) for file_path in file_paths]
+
+                if hist_counts_values_exists[t, r, channels].all() and np.all(files_exist):
+                    pbar.update()
+                    continue
+
+                channel_images: tuple[np.ndarray] = utils.raw.load_image(
+                    nbp_file, nbp_basic, t=t, c=channels, r=r, use_z=nbp_basic.use_z
+                )
+                for im, c, file_path, file_exists in zip(channel_images, channels, file_paths, files_exist):
+                    if file_exists:
+                        im = tiles_io._load_image(file_path, config["file_type"])
+                    else:
+                        im = im.astype(np.uint16, casting="safe")
+                        # yxz -> zyx
+                        im = im.transpose((2, 0, 1))
+                        if (im.mean((1, 2)) < config["z_plane_mean_warning"]).any():
+                            log.warn(
+                                f"Raw image {t=}, {r=}, {c=} has dim z plane(s). You may wish to remove the affected image by"
+                                + f" setting `bad_trc = ({t}, {r}, {c}), (...` in the basic_info config and re-run the pipeline"
+                                + " with an empty output directory."
+                            )
+                        tiles_io._save_image(im, file_path, config["file_type"])
+                    # Compute the counts of each possible uint16 pixel value for the image.
+                    hist_counts[:, t, r, c] = np.histogram(
+                        im, hist_values.size, range=(tiles_io.get_pixel_min(), tiles_io.get_pixel_max())
+                    )[0]
+                    np.savez_compressed(hist_counts_values_path, hist_counts, hist_values)
+                    del im
+                pbar.update()
     log.debug("Extraction complete")
     return nbp

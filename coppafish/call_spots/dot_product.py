@@ -26,7 +26,7 @@ def dot_product_score(
     n_spots, n_rounds_channels_use = spot_colours.shape
     # If no weighting is given, use equal weighting
     if weight_squared is None:
-        weight_squared = np.ones((n_spots, n_rounds_channels_use))
+        weight_squared = np.ones((n_spots, n_rounds_channels_use), dtype=spot_colours.dtype)
 
     weight_squared = weight_squared / np.sum(weight_squared, axis=1)[:, None]
     spot_colours = spot_colours / (np.linalg.norm(spot_colours, axis=1)[:, None] + norm_shift)

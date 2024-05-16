@@ -21,16 +21,18 @@ from typing import Optional, Union
 from . import legend
 from .hotkeys import KeyBinds, ViewHotkeys
 from ..call_spots import view_codes, view_bleed_matrix, view_bled_codes, view_spot, view_intensity, gene_counts
+from ...call_spots import qual_check
 from .. import call_spots as call_spots_plot
 from ..call_spots_new import GEViewer, ViewBleedCalc, ViewAllGeneScores, BGNormViewer
-from ..omp import view_omp, view_omp_fit, view_omp_score, histogram_score
+from ..omp import view_omp, view_omp_score, histogram_score
 from ..omp.coefs import view_score  # gives import error if call from call_spots.dot_product
 from ... import call_spots
 from ... import utils
 from time import gmtime, strftime
 from ...setup import Notebook
+
 # set matplotlib background to dark
-plt.style.use('dark_background')
+plt.style.use("dark_background")
 
 
 class Viewer:
