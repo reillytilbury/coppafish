@@ -55,23 +55,16 @@ Our latest coppafish release can be cloned locally
 git clone --depth 1 https://github.com/reillytilbury/coppafish
 ```
 
-to install the optimised, [pytorch](https://github.com/pytorch) GPU code
+to install the optimised, [pytorch](https://github.com/pytorch) GPU and CPU support
 ```console
 cd coppafish
 python -m pip install --upgrade pip
-python -m pip install -r requirements-pytorchgpu.txt
+python -m pip install -r requirements-gpu.txt
 python -m pip install -e .
 ```
 
-or for the optimised, [pytorch](https://github.com/pytorch) CPU code
-```console
-cd coppafish
-python -m pip install --upgrade pip
-python -m pip install -r requirements-pytorch.txt
-python -m pip install -e .
-```
-
-or for the slower, numpy-only code
+By default, the GPU will be used if available, otherwise coppafish will revert back to the CPU. For the optimised, 
+[pytorch](https://github.com/pytorch) CPU-only support
 ```console
 cd coppafish
 python -m pip install --upgrade pip
@@ -79,14 +72,8 @@ python -m pip install -r requirements.txt
 python -m pip install -e .
 ```
 
-this can be useful for people with limited disk space for large packages like pytorch who do not mind sacrificing
-some computation speed.
-
 If you do not wish to keep a local copy of coppafish (i.e. not interested in `git pull`ing higher coppafish versions
 later) then remove the `-e` option. The source code can then be deleted after installing.
-
-If pytorch GPU is installed, but no cuda device is found available, then coppafish will automatically revert back to
-pytorch CPU.
 
 ## Updating
 

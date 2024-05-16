@@ -22,15 +22,17 @@ from typing import Optional
 from . import legend
 from .hotkeys import KeyBinds, ViewHotkeys
 from ..call_spots import view_codes, view_bleed_matrix, view_bled_codes, view_spot, view_intensity, gene_counts
+from ...call_spots import qual_check
 from .. import call_spots as call_spots_plot
 from ..call_spots_new import GEViewer, ViewBleedCalc, ViewAllGeneScores, BGNormViewer
-from ..omp import view_omp, view_omp_fit, view_omp_score, histogram_score
+from ..omp import view_omp, view_omp_score, histogram_score
 from ..omp.coefs import view_score  # gives import error if call from call_spots.dot_product
 from ... import call_spots
 from ... import utils
 from ...setup import Notebook
+
 # set matplotlib background to dark
-plt.style.use('dark_background')
+plt.style.use("dark_background")
 
 
 class Viewer:
@@ -320,7 +322,7 @@ class Viewer:
         # method.
         self.intensity_thresh_slider = QDoubleSlider(Qt.Orientation.Horizontal)
         self.intensity_thresh_slider.setRange(0, 1)
-        intensity_thresh = call_spots.qual_check.get_intensity_thresh(nb)
+        intensity_thresh = qual_check.get_intensity_thresh(nb)
         self.intensity_thresh_slider.setValue(intensity_thresh)
         # When dragging, status will show thresh.
         self.intensity_thresh_slider.valueChanged.connect(lambda x: self.show_intensity_thresh(x))
@@ -402,7 +404,7 @@ class Viewer:
         if self.method_buttons.method == "OMP":
             score = call_spots.qual_check.omp_spot_score(self.nb.omp)
             method_ind = np.arange(self.omp_0_ind * 2, self.n_spots)
-            intensity_ok = self.nb.omp.intensity > self.intensity_thresh_slider.value()
+            intensity_ok = np.full_like(score, True, dtype=bool)
         elif self.method_buttons.method == "Anchor":
             score = self.nb.ref_spots.score
             method_ind = np.arange(self.omp_0_ind)
@@ -665,12 +667,16 @@ class Viewer:
 
         @self.viewer.bind_key(KeyBinds.view_omp_fit)
         def call_to_view_omp(viewer):
+            warnings.warn(f"Viewing the OMP fit is not implemented")
+            return
             spot_no = self.get_selected_spot()
             if spot_no is not None:
                 view_omp_fit(self.nb, spot_no, self.method_buttons.method)
 
         @self.viewer.bind_key(KeyBinds.view_omp_score)
         def call_to_view_omp_score(viewer):
+            warnings.warn(f"Viewing the OMP score is not implemented")
+            return
             spot_no = self.get_selected_spot()
             if spot_no is not None:
                 view_omp_score(self.nb, spot_no, self.method_buttons.method, self.omp_score_multiplier_slider.value())

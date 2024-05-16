@@ -234,9 +234,8 @@ class view_codes(ColorPlotBase):
         if method.lower() == "omp":
             page_name = "omp"
             t = nb.omp.tile[spot_no]
-            config = nb.get_config()["thresholds"]
             spot_score = omp_spot_score(nb.omp, spot_no)
-            self.spot_color = nb.omp.colors[spot_no]
+            self.spot_color = nb.omp.colours[spot_no]
         else:
             page_name = "ref_spots"
             spot_score = nb.ref_spots.score[spot_no]

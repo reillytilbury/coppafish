@@ -13,7 +13,17 @@ nb = Notebook("path/to/notebook.npz")
 Viewer(nb)
 ```
 
-where a new napari tab will be opened.
+where a new napari tab will be opened. You can specify a how genes are marked using a .csv file, then the Viewer can be 
+opened by
+
+```python
+from coppafish import Notebook, Viewer
+nb = Notebook("path/to/notebook.npz")
+Viewer(nb, gene_marker_file="path/to/custom/gene_marker_file.csv")
+```
+
+see <a href="https://github.com/reillytilbury/coppafish/raw/HEAD/coppafish/plot/results_viewer/gene_color.csv" target="_blank">
+here</a> for the default .csv file for gene markers.
 
 ### Description
 
@@ -63,6 +73,18 @@ specify the directory to save to by
 BuildPDF("path/to/notebook.npz", "path/to/output/directory")
 ```
 if you want the PDFs to be re-created, you must delete the old ones first.
+
+## Viewer2D
+
+To open
+```python
+from coppafish import Notebook, Viewer2D
+
+nb = Notebook("path/to/notebook.npz")
+Viewer2D(nb)
+```
+
+The viewer is updated by typing commands in the terminal. To find out the available commands, type `help` or `h`.
 
 ## Viewing images
 

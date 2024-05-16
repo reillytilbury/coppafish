@@ -1,3 +1,9 @@
+## Email notification
+
+To be emailed when the pipeline crashes or finishes, under `basic_info` in the config, add the variable `email_me` 
+with your email address. You must have a sender email with SMTP support, this email's credentials must be given in 
+`basic_info` under the variables `sender_email` and `sender_email_password`.
+
 ## Generate gene codes
 
 Generate gene codes automatically by:
