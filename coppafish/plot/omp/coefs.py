@@ -1,12 +1,9 @@
 from ..call_spots.spot_colors import ColorPlotBase
 from ..call_spots.dot_product import view_score
 from ..call_spots.background import view_background
-from .track_fit import get_track_info
 from ...spot_colors.base import get_spot_colors
 from ...call_spots import omp_spot_score, get_spot_intensity
 from ...setup import Notebook
-from ...omp.coefs import get_all_coefs
-from ...omp.base import get_initial_intensity_thresh
 import matplotlib.pyplot as plt
 import numpy as np
 from typing import Optional, List, Tuple
@@ -76,10 +73,7 @@ def get_coef_images(
     # Only look at pixels with high enough intensity - same as in full pipeline
     spot_intensity = get_spot_intensity(np.abs(spot_colors))
     config = nb.get_config()["omp"]
-    if nb.has_page("omp"):
-        initial_intensity_thresh = nb.omp.initial_intensity_thresh
-    else:
-        initial_intensity_thresh = get_initial_intensity_thresh(config, nb.call_spots)
+    initial_intensity_thresh = 0
 
     keep = spot_intensity > initial_intensity_thresh
     bled_codes = nb.call_spots.bled_codes_ge
@@ -99,11 +93,13 @@ def get_coef_images(
     max_genes = config["max_genes"]
     weight_coef_fit = config["weight_coef_fit"]
 
-    all_coefs = np.zeros((spot_colors.shape[0], n_genes + nb.basic_info.n_channels))
-    (
-        all_coefs[np.ix_(keep, np.arange(n_genes))],
-        all_coefs[np.ix_(keep, np.array(nb.basic_info.use_channels) + n_genes)],
-    ) = get_all_coefs(spot_colors[keep], bled_codes, 0, 0, 0, alpha, beta, max_genes, weight_coef_fit)
+    all_coefs = None
+    # FIXME: Does not work after the OMP refactor.
+    # all_coefs = np.zeros((spot_colors.shape[0], n_genes + nb.basic_info.n_channels))
+    # (
+    #     all_coefs[np.ix_(keep, np.arange(n_genes))],
+    #     all_coefs[np.ix_(keep, np.array(nb.basic_info.use_channels) + n_genes)],
+    # ) = get_all_coefs(spot_colors[keep], bled_codes, 0, 0, 0, alpha, beta, max_genes, weight_coef_fit)
 
     n_genes = all_coefs.shape[1]
     nz = len(z)
@@ -210,147 +206,3 @@ class view_omp(ColorPlotBase):
         )
         self.change_norm()
         plt.show()
-
-
-class view_omp_fit(ColorPlotBase):
-    def __init__(
-        self,
-        nb: Notebook,
-        spot_no: int,
-        method: str = "omp",
-        dp_thresh: Optional[float] = None,
-        max_genes: Optional[int] = None,
-    ):
-        """
-        Diagnostic to run omp on a single pixel and see which genes fitted at which iteration.
-        Right-clicking on a particular bled code will cause *coppafish.plot.call_spots.dot_product.view_score*
-        to run, indicating how the dot product calculation for that iteration was performed.
-
-        Left-clicking on background image will cause coppafish.plot.call_spots.background.view_background to run,
-        indicating how the dot product calculation for performed.
-
-        Args:
-            nb: Notebook containing experiment details. Must have run at least as far as `call_reference_spots`.
-            spot_no: Spot of interest to be plotted.
-            method: `'anchor'` or `'omp'`.
-                Which method of gene assignment used i.e. `spot_no` belongs to `ref_spots` or `omp` page of Notebook.
-            dp_thresh: If None, will use value in omp section of config file.
-            max_genes: If None, will use value in omp section of config file.
-        """
-        track_info, bled_codes, dp_thresh = get_track_info(nb, spot_no, method, dp_thresh, max_genes)
-        # Add info so can call view_dot_product
-        self.nb = nb
-        self.track_info = track_info
-        self.bled_codes = bled_codes
-        self.dp_thresh = dp_thresh
-        self.spot_no = spot_no
-        self.fitting_method = method
-        n_genes, n_use_rounds, n_use_channels = bled_codes.shape
-
-        n_residual_images = track_info["residual"].shape[0]
-        residual_images = [track_info["residual"][i].transpose() for i in range(n_residual_images)]
-        background_image = np.zeros((n_use_rounds, n_use_channels))
-        for c in range(n_use_channels):
-            background_image += track_info["background_codes"][c] * track_info["background_coefs"][c]
-        background_image = background_image.transpose()
-
-        # allow for possibly adding background vector
-        # TODO: Think may get index error if best gene ever was background_vector.
-        bled_codes = np.append(bled_codes, track_info["background_codes"], axis=0)
-        all_gene_names = list(nb.call_spots.gene_names) + [f"BG{i}" for i in nb.basic_info.use_channels]
-        gene_images = [
-            bled_codes[track_info["gene_added"][i]].transpose() * track_info["coef"][i][track_info["gene_added"][i]]
-            for i in range(2, n_residual_images)
-        ]
-        all_images = residual_images + [background_image] + gene_images
-
-        # Plot all images
-        subplot_adjust = [0.06, 0.82, 0.075, 0.9]
-        super().__init__(all_images, None, [2, n_residual_images], subplot_adjust=subplot_adjust, fig_size=(15, 7))
-
-        # label axis
-        self.ax[0].set_yticks(ticks=np.arange(self.im_data[0].shape[0]), labels=nb.basic_info.use_channels)
-        self.ax[0].set_xticks(ticks=np.arange(self.im_data[0].shape[1]), labels=nb.basic_info.use_rounds)
-        self.fig.supxlabel("Round", size=12, x=(subplot_adjust[0] + subplot_adjust[1]) / 2)
-        self.fig.supylabel("Color Channel", size=12)
-        plt.suptitle(
-            f"Residual at each iteration of OMP for Spot {spot_no}. DP Threshold = {dp_thresh}",
-            x=(subplot_adjust[0] + subplot_adjust[1]) / 2,
-        )
-
-        # Add titles for each subplot
-        titles = ["Initial", "Post Background"]
-        for g in track_info["gene_added"][2:]:
-            titles = titles + ["Post " + all_gene_names[g]]
-        for i in range(n_residual_images):
-            titles[i] = titles[i] + "\nRes = {:.2f}".format(np.linalg.norm(residual_images[i]))
-        titles = titles + ["Background"]
-        for i in range(2, n_residual_images):
-            g = track_info["gene_added"][i]
-            titles = titles + [f"{g}: {all_gene_names[g]}"]
-            titles[-1] = titles[-1] + "\nDP = {:.2f}".format(track_info["dot_product"][i])
-
-        # Make title red if dot product fell below dp_thresh or if best gene background
-        is_fail_thresh = False
-        for i in range(self.n_images):
-            if np.isin(i, np.arange(2, n_residual_images)):
-                # failed if bad dot product, gene added is background or gene added has previously been added
-                is_fail_thresh = (
-                    np.abs(track_info["dot_product"][i]) < dp_thresh
-                    or track_info["gene_added"][i] >= n_genes
-                    or np.isin(track_info["gene_added"][i], track_info["gene_added"][2:i])
-                )
-                if is_fail_thresh:
-                    text_color = "r"
-                else:
-                    text_color = "w"
-            elif i == self.n_images - 1 and is_fail_thresh:
-                text_color = "r"
-            else:
-                text_color = "w"
-            self.ax[i].set_title(titles[i], size=8, color=text_color)
-
-        # Add rectangles where added gene is intense
-        for i in range(len(gene_images)):
-            gene_coef = track_info["coef"][i + 2][track_info["gene_added"][i + 2]]
-            intense_gene_cr = np.where(np.abs(gene_images[i] / gene_coef) > self.intense_gene_thresh)
-            for j in range(len(intense_gene_cr[0])):
-                for k in [i + 1, i + 1 + n_residual_images]:
-                    # can't add rectangle to multiple axes hence second for loop
-                    rectangle = plt.Rectangle(
-                        (intense_gene_cr[1][j] - 0.5, intense_gene_cr[0][j] - 0.5),
-                        1,
-                        1,
-                        fill=False,
-                        ec="g",
-                        linestyle=":",
-                        lw=2,
-                    )
-                    self.ax[k].add_patch(rectangle)
-
-        self.change_norm()
-        self.fig.canvas.mpl_connect("button_press_event", self.show_calc)
-        self.track_info = track_info
-        plt.show()
-
-    def show_calc(self, event):
-        x_click = event.x
-        y_click = event.y
-        if event.button.name == "RIGHT":
-            # If right click anywhere, it will show dot product calculation for the iteration clicked on.
-            n_iters = len(self.track_info["gene_added"]) - 2
-            iter_x_coord = np.zeros(n_iters)
-            for i in range(n_iters):
-                iter_x_coord[i] = np.mean(self.ax[i + 1].bbox.extents[:3:2])
-            iter = np.argmin(np.abs(iter_x_coord - x_click))
-            view_score(
-                self.nb,
-                self.spot_no,
-                self.fitting_method,
-                iter=iter,
-                omp_fit_info=[self.track_info, self.bled_codes, self.dp_thresh],
-            )
-        else:
-            # If click on background plot, it will show background calculation
-            if y_click < self.ax[0].bbox.extents[1] and x_click < self.ax[1].bbox.extents[0]:
-                view_background(self.nb, self.spot_no, self.fitting_method, track_info=[self.track_info, None])

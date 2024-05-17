@@ -18,6 +18,7 @@ from tqdm import tqdm
 import numpy.typing as npt
 from typing import Dict, List, Any, Tuple, Optional
 
+from ..omp import scores as omp_scores
 from .. import utils
 from ..pipeline import run
 
@@ -162,9 +163,6 @@ class RoboMinnie:
             assert (
                 self.dapi_channel != self.anchor_channel
             ), "Cannot have DAPI and anchor channel identical because they are both saved in the same anchor round"
-        if bool(self.include_dapi) != bool(self.include_presequence):
-            # XOR operation
-            warnings.warn(f"DAPI and presequence images are not included together. Will likely crash coppafish")
         # Ordering for data matrices is round x channel x Y x X x Z, like the nd2 raw files for coppafish
         # Extra channel is added for DAPI channel support, if needed
         self.shape = (
@@ -195,11 +193,6 @@ class RoboMinnie:
         self.presequence_image = np.zeros(self.presequence_shape, dtype=self.image_dtype)
         if self.n_tile_yx[0] != self.n_tile_yx[1]:
             raise NotImplementedError("Coppafish does not support non-square tiles")
-        if self.n_tile_yx[0] < 2_000 or self.n_tile_yx[1] < 2_000:
-            warnings.warn(
-                "Coppafish may not support tile sizes that are too small due to implicit assumptions about a tile "
-                + "size of 2048 in the x and y directions"
-            )
         if self.n_planes < 4:
             warnings.warn("Coppafish may break with fewer than four z planes")
 
@@ -997,7 +990,8 @@ class RoboMinnie:
 
         [omp]
         max_genes = {omp_iterations}
-        initial_intensity_thresh_percentile = {omp_initial_intensity_thresh_percentile}
+        shape_isolation_distance_yx = 8
+        pixel_max_percentile = 5
         """
         # Remove any large spaces in the config contents
         config_file_contents = config_file_contents.replace("  ", "")
@@ -1071,7 +1065,8 @@ class RoboMinnie:
         assert nb.has_page("omp"), f"OMP not found in notebook at {config_filepath}"
         # Keep the OMP spot intensities, assigned gene, assigned tile number and the spot positions in the class
         # instance
-        self.omp_spot_intensities = nb.omp.intensity
+        self.omp_spot_intensities = np.ones_like(nb.omp.gene_no)
+        self.omp_spot_scores = omp_scores.omp_scores_int_to_float(nb.omp.scores)
         self.omp_gene_numbers = nb.omp.gene_no
         self.omp_tile_number = nb.omp.tile
         self.omp_spot_local_positions = nb.omp.local_yxz  # yxz position of each gene found
@@ -1142,7 +1137,7 @@ class RoboMinnie:
             coppafish_spot_positions_yxz = self.omp_spot_local_positions.astype(np.float64)
             coppafish_spots_gene_indices = self.omp_gene_numbers
             coppafish_spots_intensities = self.omp_spot_intensities
-            coppafish_spots_scores = np.ones(coppafish_spots_gene_indices.size) * np.inf
+            coppafish_spots_scores = self.omp_spot_scores
             coppafish_spots_tiles = self.omp_tile_number
 
         # Convert local spot positions into coordinates using coppafish-calculated global tile positions

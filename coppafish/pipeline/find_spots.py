@@ -1,7 +1,9 @@
+import torch
 from tqdm import tqdm
 import numpy as np
 
 from .. import find_spots as fs
+from ..find_spots import detect_torch
 from .. import utils, log
 from ..setup.notebook import NotebookPage
 from ..utils import tiles_io, indexing
@@ -79,8 +81,11 @@ def find_spots(
         dtype=bool,
     )
     for t, r, c in indexing.create(
-        nbp_basic, include_preseq_round=True, include_anchor_round=True, include_anchor_channel=True,
-        include_bad_trc=False
+        nbp_basic,
+        include_preseq_round=True,
+        include_anchor_round=True,
+        include_anchor_channel=True,
+        include_bad_trc=False,
     ):
         use_indices[t, r, c] = True
 
@@ -106,13 +111,15 @@ def find_spots(
                 apply_shift=False,
                 suffix="_raw" if r == nbp_basic.pre_seq_round else "",
             )
-            local_yxz, spot_intensity = fs.detect_spots(
-                image_trc,
+            local_yxz, spot_intensity = detect_torch.detect_spots(
+                torch.asarray(image_trc.astype(np.float32)),
                 auto_thresh[t, r, c] + nbp_basic.tile_pixel_value_shift,
                 config["radius_xy"],
                 config["radius_z"],
                 True,
             )
+            local_yxz = local_yxz.numpy()
+            spot_intensity = spot_intensity.numpy()
             no_negative_neighbour = fs.check_neighbour_intensity(
                 image_trc, local_yxz, thresh=nbp_basic.tile_pixel_value_shift
             )
