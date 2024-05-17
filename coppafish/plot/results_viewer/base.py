@@ -100,8 +100,6 @@ class Viewer:
         self.add_data_to_viewer()
         self.update_status_continually()
         self.key_call_functions()
-        for layer in self.viewer.layers:
-            print(layer.name)
         napari.run()
 
     def format_napari_viewer(self, gene_legend_info: pd.DataFrame) -> None:
@@ -141,7 +139,6 @@ class Viewer:
                                      has_omp=self.method_names[-1] == "omp")
         for i in range(len(self.method_names)):
             self.method_buttons.button[i].clicked.connect(lambda x=i: self.method_event_handler(method=x))
-            self.method_buttons.button[i].clicked.connect(self.update_layers)
         self.viewer.window.add_dock_widget(self.method_buttons, area="left", name="Method")
 
         # connect a change in z-plane to the z-thickness slider
@@ -238,20 +235,13 @@ class Viewer:
             self.image_contrast_slider[i].value()[1],
         ]
 
-    def update_layers(self) -> None:
+    def update_genes(self) -> None:
         """
-        This method updates the layers in the napari viewer to reflect the current state of the Viewer object. It will
-        be called when the active method or active genes change.
+        This method updates the genes plotted in the napari viewer to reflect the current state of the Viewer object.
         """
-        # loop through methods, set the visible layers to the current method and set the visible spots on each layer
-        # to those whose gene is in the active genes list.
-        for m in range(len(self.method_names)):
-            layer_name = f"{self.method_names[m]}"
-            self.viewer.layers[layer_name].visible = (m == self.active_method)
-
-        # update active layer in napari viewer to the transparent all layer
-        active_layer_name = f"{self.method_names[self.active_method]}"
-        self.viewer.layers.selection.active = self.viewer.layers[active_layer_name]
+        mask = np.isin(self.spots[self.active_method].gene, self.active_genes).astype(int)
+        print(f'Gene active: {[g.name for g in np.array(self.genes)[self.active_genes]]}, num_spots: {np.sum(mask)}')
+        self.viewer.layers[self.method_names[self.active_method]].size = 10 * mask
 
     def update_thresholds(self) -> None:
         """
@@ -285,7 +275,6 @@ class Viewer:
         current_z = self.viewer.dims.current_step[0]
         for m in range(len(self.viewer.layers)):
             layer_name = f"{self.viewer.layers[m].name}"
-            print(layer_name)
             z_coords = self.spots[m].location[:, 0].copy()
             in_range = np.abs(z_coords - current_z) <= z_thick / 2
             z_coords[in_range] = current_z
@@ -296,7 +285,6 @@ class Viewer:
         v_range = list(self.viewer.dims.range)
         v_range[0] = (0, self.nz - 1, 1)
         self.viewer.dims.range = tuple(v_range)
-        print(f'{strftime("%H:%M:%S", gmtime())} - Event triggered: z-thickness changed to {z_thick}')
 
     def update_status_continually(self):
         """
@@ -335,13 +323,18 @@ class Viewer:
         return _watchSelectedData(self.viewer.layers[self.viewer.layers.selection.active.name])
 
     def method_event_handler(self, method: int):
-        for i in range(3):
+        # Set method to the checked button, set this as the active method and update the napari viewer so that we are
+        # on the layer for the active method.
+        for i in range(len(self.method_names)):
             self.method_buttons.button[i].setChecked(method == i)
         self.active_method = method
-        # change the active layer to the transparent spots layer for the new method
-        active_layer_name = f"{self.method_names[self.active_method]} all"
+        active_layer_name = self.method_names[self.active_method]
         self.viewer.layers.selection.active = self.viewer.layers[active_layer_name]
-        self.update_layers()
+
+        # loop through methods, set the visible layer to the layer for the active method
+        for m in range(len(self.method_names)):
+            layer_name = self.method_names[m]
+            self.viewer.layers[layer_name].visible = (m == self.active_method)
 
     def legend_event_handler(self, event):
         """
@@ -371,25 +364,18 @@ class Viewer:
         if is_gene_active and num_active_genes == 1:
             # If the gene is the only selected gene, clicking it will show all genes
             self.active_genes = np.sort(self.legend["gene_no"])
-            changed_genes = np.setdiff1d(self.active_genes, previous_active_genes)
         elif event.button.name == "RIGHT":
             # If right-clicking on a gene, it will select only that gene
             self.active_genes = np.array([clicked_gene_number])
-            changed_genes = np.setdiff1d(previous_active_genes, self.active_genes)
-            if not is_gene_active:
-                # If the clicked gene was not active, add it to the changed genes
-                changed_genes = np.append(changed_genes, clicked_gene_number)
         elif is_gene_active:
             # If single-clicking on an active gene, it will remove that gene
             self.active_genes = np.setdiff1d(self.active_genes, clicked_gene_number)
-            changed_genes = np.array([clicked_gene_number])
         else:
             # If single-clicking on an inactive gene, it will add that gene
             self.active_genes = np.append(self.active_genes, clicked_gene_number)
-            changed_genes = np.array([clicked_gene_number])
 
         # Update the legend formatting to reflect the changes
-        for gene_number in changed_genes:
+        for gene_number in range(len(self.genes)):
             gene_index = np.where(self.legend["gene_no"] == gene_number)[0][0]
             alpha_value = 1 if np.isin(gene_number, self.active_genes) else 0.5
             self.legend["ax"].collections[gene_index].set_alpha(alpha_value)
@@ -397,7 +383,7 @@ class Viewer:
 
         # Redraw the legend figure to apply the changes
         self.legend["fig"].draw()
-        self.update_layers()
+        self.update_genes()
 
     def get_selected_spot_index(self):
         """
@@ -597,8 +583,9 @@ class Viewer:
                                    size=spot_size,
                                    face_color=face_colour,
                                    symbol=face_symbol,
-                                   name=f'{self.method_names[m]}',
-                                   out_of_slice_display=False)
+                                   name=self.method_names[m],
+                                   out_of_slice_display=False,
+                                   visible=(m == self.active_method))
 
     def key_call_functions(self):
         # Contains all functions which can be called by pressing a key with napari viewer open
