@@ -2,7 +2,17 @@
 
 Coppafish requires raw, `uint16` microscope images, metadata, and a configuration file. We currently only support raw 
 data in ND2, JOBs, or numpy format. If your data is not already in one of these formats, we recommend configuring your 
-data into numpy format (see below).
+data into [numpy](#numpy) format.
+
+### ND2
+
+ND2 files index tiles differently to coppafish. The difference is illustrated below on a 3x2 grid.
+
+<figure markdown="span">
+  ![Image title](images/coppafish_and_nd2_tile_indices.png){ width="400" }
+  <figcaption>Gene calling on a tile.</figcaption>
+</figure>
+
 
 ### Numpy
 
@@ -35,7 +45,7 @@ dask.array.to_npy_stack(save_path, image_dask)
 where `n_...` variables represent counts (integers), `n_total_channels` can include other channels other than the 
 sequencing channel (e.g. a DAPI channel and anchor channel). `seq_image_tiles` is a numpy array of shape 
 `(n_seq_rounds, n_tiles, n_total_channels, n_y, n_x, n_z)`, while `anchor_image` and `preseq_image` are numpy arrays of 
-shape `(n_tiles, n_total_channels, n_y, n_x, n_z)`. Note that `n_y` must be equal to `n_x`.
+shape `(n_tiles, n_total_channels, n_y, n_x, n_z)`. Note that `n_y` must equal `n_x`.
 
 
 ### Metadata
