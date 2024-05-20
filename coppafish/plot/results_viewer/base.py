@@ -215,15 +215,13 @@ class Viewer:
         slider.setValue(value)
 
         # connect to show_slider_value to show user the new value of the slider
-        slider.valueChanged.connect(lambda x: self.show_slider_value(
-            string=f'{name}', value=np.array(x)))
+        slider.valueChanged.connect(lambda x: self.show_slider_value(string=f'{name}', value=np.array(x)))
 
         # connect to the appropriate function to update the napari viewer
         if slider_variable == "spot":
             slider.sliderReleased.connect(self.update_thresholds)
         elif slider_variable == "image":
-            layer_ind = self.background_images["names"].index(name)
-            slider.sliderReleased.connect(lambda i=layer_ind: self.update_image_contrast(i))
+            slider.sliderReleased.connect(lambda x=name: self.update_image_contrast(x))
         elif slider_variable == "z_thick":
             slider.sliderReleased.connect(self.update_z_thick)
 
@@ -241,13 +239,11 @@ class Viewer:
         """
         self.viewer.status = f"{string}: {np.round(value, 2)}"
 
-    def update_image_contrast(self, i):
-        # Change contrast of background image i
-        im_name = self.background_images["names"][i]
-        slider_ind = list(self.sliders.keys()).index(im_name)
-        self.viewer.layers[i].contrast_limits = [
-            self.sliders[slider_ind].value()[0],
-            self.sliders[slider_ind].value()[1],
+    def update_image_contrast(self, layer_name: str):
+        # Change contrast of background image in napari viewer
+        self.viewer.layers[layer_name].contrast_limits = [
+            self.sliders[layer_name].value()[0],
+            self.sliders[layer_name].value()[1],
         ]
 
     def update_genes(self) -> None:
@@ -380,7 +376,7 @@ class Viewer:
         if is_gene_active and num_active_genes == 1:
             # If the gene is the only selected gene, clicking it will show all genes
             for gene in self.genes:
-                gene.active = True
+                gene.active = (gene.name in self.legend["gene_names"])
         elif event.button.name == "RIGHT":
             # If right-clicking on a gene, it will select only that gene
             # self.active_genes = np.array([clicked_gene_number])
@@ -453,8 +449,11 @@ class Viewer:
                 genes.append(Gene(name=g, notebook_index=i, colour=colour, symbol_mpl=symbol_mpl,
                                   symbol_napari=symbol_napari, active=True))
             else:
-                genes.append(Gene(name=g, notebook_index=i, colour=None, symbol_mpl=None, symbol_napari=None,
-                                  active=False))
+                invisible_colour = np.array([0, 0, 0])
+                invisible_symbol_mpl = 'o'
+                invisible_symbol_napari = 'o'
+                genes.append(Gene(name=g, notebook_index=i, colour=invisible_colour, symbol_mpl=invisible_symbol_mpl,
+                                  symbol_napari=invisible_symbol_napari, active=False))
 
         # warn if any genes are not in the gene marker file
         invisible_genes = [g.name for g in genes if g.symbol_mpl is None]
@@ -486,7 +485,7 @@ class Viewer:
         tile = [nb.__getattribute__(self.method["pages"][i]).tile for i in range(n_methods)]
         local_loc = [nb.__getattribute__(self.method["pages"][i]).local_yxz for i in range(n_methods)]
         global_loc = [(local_loc[i] + tile_origin[tile[i]])[:, [2, 0, 1]] for i in range(n_methods)]
-        colours = [nb.__getattribute__(self.method["pages"][i]).colours[:, :, use_channels] for i in range(n_methods)]
+        colours = [nb.__getattribute__(self.method["pages"][i]).colours[:, :, use_channels] for i in range(2)]
         score = [nb.ref_spots.scores, np.max(nb.ref_spots.gene_probs, axis=1)]
         gene_no = [nb.ref_spots.gene_no, np.argmax(nb.ref_spots.gene_probs, axis=1)]
         intensity = [nb.ref_spots.intensity, nb.ref_spots.intensity]
@@ -495,6 +494,7 @@ class Viewer:
             gene_no.append(nb.omp.gene_no)
             intensity_omp = np.median(np.max(nb.omp.colours, axis=-1), axis=-1)
             intensity.append(intensity_omp)
+            colours.append(nb.omp.colours)
 
         # add all spots for each method to the spots list
         for i, m in enumerate(self.method["names"]):
@@ -575,8 +575,8 @@ class Viewer:
 
         # remove none entries from bg_images
         good = [i for i, b in enumerate(background_image) if b is not None]
-        self.background_images["image"] = [background_image[i] for i in good]
-        self.background_images["names"] = [os.path.basename(background_image_dir[i]) for i in good]
+        self.background_images["images"] = [background_image[i] for i in good]
+        self.background_images["names"] = [os.path.basename(background_image_dir[i]).split(".")[0] for i in good]
         self.background_images["colours"] = [background_image_colour[i] for i in good]
 
     def add_data_to_viewer(self, spot_size: int = 10) -> None:
@@ -590,7 +590,7 @@ class Viewer:
         layer for each gene of each method is too slow to render in napari.
         """
         # Loop through all background images and add them to the viewer.
-        for i, b in enumerate(self.background_images["image"]):
+        for i, b in enumerate(self.background_images["images"]):
             self.viewer.add_image(b, blending="additive", colormap=self.background_images["colours"][i],
                                   name=self.background_images["names"][i])
             self.viewer.layers[i].contrast_limits_range = [b.min(), b.max()]
