@@ -41,7 +41,7 @@ class ViewAllGeneScores():
         """
         self.mode = mode
         if mode == 'score':
-            values = self.nb.ref_spots.score
+            values = self.nb.ref_spots.scores
         elif mode == 'prob':
             values = np.max(self.nb.ref_spots.gene_probs, axis=1)
         elif mode == 'score_diff':
@@ -159,7 +159,7 @@ def view_spot_brightness_hists(nb: Notebook):
         nb: Notebook
     """
     use_channels, n_rounds = nb.basic_info.use_channels, nb.basic_info.n_rounds
-    spot_colours_no_bg = nb.ref_spots.colors[:, :, use_channels] - \
+    spot_colours_no_bg = nb.ref_spots.colours[:, :, use_channels] - \
                          np.repeat(nb.ref_spots.background_strength[:, np.newaxis, :], n_rounds, axis=1)
     initial_bleed = nb.call_spots.initial_bleed_matrix[:, use_channels]
     _, spot_brightness = normalise_rc(spot_colours_no_bg, initial_bleed)
@@ -317,7 +317,7 @@ class GESpotViewer():
         else:
             self.gene_g_mask = nb.ref_spots.gene_no == gene_index
         # self.gene_g_mask = nb.ref_spots.gene_no == gene_index
-        spots = nb.ref_spots.colors[self.gene_g_mask][:, :, nb.basic_info.use_channels]
+        spots = nb.ref_spots.colours[self.gene_g_mask][:, :, nb.basic_info.use_channels]
         # remove background codes. To do this, repeat background_strenth along a new axis for rounds
         background_strength = nb.ref_spots.background_strength[self.gene_g_mask]
         # remove background from spots
@@ -327,8 +327,8 @@ class GESpotViewer():
                                                                       nb.basic_info.use_channels)].reshape((1, -1)),
                                spots.shape[0], axis=0)
         self.spots = spots / color_norm
-        # order spots by nb.ref_spots.score
-        # self.spots = self.spots[np.argsort(nb.ref_spots.score[self.gene_g_mask]), :]
+        # order spots by nb.ref_spots.scores
+        # self.spots = self.spots[np.argsort(nb.ref_spots.scores[self.gene_g_mask]), :]
         # We need to find the expected spot profile for each round/channel
         self.spots_expected = nb.call_spots.bled_codes[self.gene_index, :, nb.basic_info.use_channels].T
         # normalise so that mean brightness is the same as that of the observed spots
@@ -578,7 +578,7 @@ class BGNormViewer():
         ]
         background_noise = nb.ref_spots.background_strength[isolated]
 
-        spot_colour_raw = nb.ref_spots.colors.copy()[isolated][:, :, nb.basic_info.use_channels]
+        spot_colour_raw = nb.ref_spots.colours.copy()[isolated][:, :, nb.basic_info.use_channels]
         spot_colour_no_bg = spot_colour_raw - background_noise
         spot_colour_normed_no_bg = spot_colour_no_bg / norm_factor[isolated]
         # Now we'd like to order the spots by background noise in descending order
@@ -662,7 +662,7 @@ class ViewBleedCalc:
         # We're going to remove background from spots, so need to expand the background strength variable from
         # n_spots x n_channels to n_spots x n_rounds x n_channels by repeating the values for each round
         background_strength = nb.ref_spots.background_strength[nb.ref_spots.isolated]
-        self.isolated_spots = nb.ref_spots.colors[nb.ref_spots.isolated][:, :, nb.basic_info.use_channels] - \
+        self.isolated_spots = nb.ref_spots.colours[nb.ref_spots.isolated][:, :, nb.basic_info.use_channels] - \
                               background_strength
         self.isolated_spots = self.isolated_spots / color_norm
         if nb.file_names.initial_bleed_matrix is not None:
@@ -761,7 +761,7 @@ class GeneScoreScatter():
         else:
             self.ax.clear()
         gene_g_mask = self.nb.ref_spots.gene_no == self.gene_no
-        self.score = self.nb.ref_spots.score[gene_g_mask]
+        self.score = self.nb.ref_spots.scores[gene_g_mask]
         self.second_score = self.score - self.nb.ref_spots.score_diff[gene_g_mask]
         self.ax.scatter(x=self.second_score, y=self.score, s=1)
         # Add a line at y=x
@@ -839,7 +839,7 @@ class GEScatter():
             for ax in self.ax.flatten():
                 ax.clear()
         gene_g_mask = (self.nb.ref_spots.gene_no == self.gene_no) * (self.nb.call_spots.use_ge)
-        spot_colours = self.nb.ref_spots.colors[gene_g_mask][:, :, self.nb.basic_info.use_channels]
+        spot_colours = self.nb.ref_spots.colours[gene_g_mask][:, :, self.nb.basic_info.use_channels]
         # Remove background from spot colours
         background = np.repeat(self.nb.ref_spots.background_strength[gene_g_mask, np.newaxis, :], 7, axis=1)
         spot_colours = spot_colours - background
@@ -1005,7 +1005,7 @@ class GeneProbs():
         # First, we need to get the scores for this spot
         scores = np.zeros(self.n_genes)
         bled_codes = self.nb.call_spots.bled_codes_ge[:, :, self.nb.basic_info.use_channels]
-        spot = self.nb.ref_spots.colors[spot_no][:, self.nb.basic_info.use_channels]
+        spot = self.nb.ref_spots.colours[spot_no][:, self.nb.basic_info.use_channels]
         background = self.nb.ref_spots.background_strength[spot_no][np.newaxis, :]
         background = np.repeat(background, self.nb.basic_info.n_rounds, axis=0)
         spot = spot - background

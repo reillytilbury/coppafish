@@ -766,7 +766,7 @@
             "Numpy int16 array [n_spots]",
             "Tile each spot was found on."
         ],
-        "colors": [
+        "colours": [
             "",
             "Numpy int32 array [n_spots x n_rounds x n_channels]",
             "`[s, r, c]` is the intensity of spot $s$ on round $r$, channel $c$.",
@@ -777,7 +777,7 @@
             "Numpy int16 array [n_spots]",
             "Gene number assigned to each spot. `None` if not assigned."
         ],
-        "score": [
+        "scores": [
             "",
             "Numpy float array [n_spots]",
             "`score[s]' is the highest gene coef of spot s."
@@ -948,15 +948,16 @@
             "Numpy int16 array [n_spots]",
             "Tile each spot was found on."
         ],
+        "colours": [
+            "",
+            "Numpy int32 array [n_spots x len(use_rounds) x len(use_channels)]",
+            "`[s, r, c]` is the intensity of spot $s$ on round $use_rounds[r]$, channel $use_channels[c]$.",
+            "It will be `-tile_pixel_value_shift` if that round/channel not used otherwise integer."
+        ],
         "gene_no": [
             "",
             "Numpy int16 array [n_spots]",
             "`gene_no[s]` is the index of the gene assigned to spot $s$."
-        ],
-        "colours": [
-            "",
-            "Numpy int32 `(n_spots x len(use_rounds) x len(use_channels))`",
-            "Each spot's intensity in every sequencing round/channel before colour normalisation."
         ],
         "software_version": [
             "",
@@ -989,7 +990,7 @@
             "Float",
             "Final accepted reference spots are those which pass `quality_threshold` which is:",
             "",
-            "`nb.ref_spots.score > thresholds[score_ref]` and `intensity > thresholds[intensity]`.",
+            "`nb.ref_spots.scores > thresholds[score_ref]` and `intensity > thresholds[intensity]`.",
             "",
             "This is copied from `config[thresholds]`.",
             "Max score is 1 so `score_ref` should be less than this."

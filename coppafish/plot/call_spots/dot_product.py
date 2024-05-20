@@ -47,7 +47,7 @@ class view_score:
             iter: Iteration in OMP to view the dot product calculation for i.e. the number of genes
                 which have already been fitted (`iter=0` will have only background fit,
                 `iter=1` will have background + 1 gene etc.).
-                The score saved as `nb.ref_spots.score` can be viewed with `iter=0`.
+                The score saved as `nb.ref_spots.scores` can be viewed with `iter=0`.
             omp_fit_info: This is a list containing `[track_info, bled_codes, dp_thresh]`.
                 It is only ever used to call this function from `view_omp_fit`.
             check_weight: When this is `True`, we raise an error if weight computed here is different
@@ -76,7 +76,7 @@ class view_score:
                         f"config['call_spots'] have not been changed.\n"
                         f"Set check_weight=False to skip this error."
                     )
-            self.dp_val_saved = nb.ref_spots.score[spot_no]
+            self.dp_val_saved = nb.ref_spots.scores[spot_no]
             config_name = "call_spots"
         else:
             self.g_saved = None
