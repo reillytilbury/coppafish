@@ -349,7 +349,7 @@ def call_reference_spots(
 
     # Load spot colours and background colours
     bleed_matrix = initial_bleed_matrix / np.linalg.norm(initial_bleed_matrix, axis=0)
-    colours = nbp_ref_spots.colors[:, :, nbp_basic.use_channels].astype(float)
+    colours = nbp_ref_spots.colours[:, :, nbp_basic.use_channels].astype(float)
     bg_colours = nbp_ref_spots.bg_colours.astype(float)
     spot_tile = nbp_ref_spots.tile
     n_spots, n_rounds, n_channels_use = colours.shape
@@ -503,7 +503,7 @@ def call_reference_spots(
 
     # save overwritable variables in nbp_ref_spots
     nbp_ref_spots.gene_no = gene_no
-    nbp_ref_spots.score = gene_score
+    nbp_ref_spots.scores = gene_score
     nbp_ref_spots.score_diff = gene_score - gene_score_second
     nbp_ref_spots.intensity = np.median(np.max(colours, axis=2), axis=1).astype(np.float32)
     nbp_ref_spots.background_strength = bg_codes

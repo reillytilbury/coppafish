@@ -990,7 +990,7 @@
             "Float",
             "Final accepted reference spots are those which pass `quality_threshold` which is:",
             "",
-            "`nb.ref_spots.score > thresholds[score_ref]` and `intensity > thresholds[intensity]`.",
+            "`nb.ref_spots.scores > thresholds[score_ref]` and `intensity > thresholds[intensity]`.",
             "",
             "This is copied from `config[thresholds]`.",
             "Max score is 1 so `score_ref` should be less than this."

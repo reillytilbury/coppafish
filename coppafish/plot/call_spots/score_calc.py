@@ -26,7 +26,7 @@ def background_fitting(nb: Notebook, method: str) -> Tuple[np.ndarray, np.ndarra
         spot_colors = np.moveaxis(np.moveaxis(nb.omp.colours, 0, -1), -1, 0)
         config = nb.get_config()["omp"]
     else:
-        spot_colors = np.moveaxis(np.moveaxis(nb.ref_spots.colors, 0, -1)[rc_ind], -1, 0)
+        spot_colors = np.moveaxis(np.moveaxis(nb.ref_spots.colours, 0, -1)[rc_ind], -1, 0)
         config = nb.get_config()["call_spots"]
     alpha = config["alpha"]
     beta = config["beta"]

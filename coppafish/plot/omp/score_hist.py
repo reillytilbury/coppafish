@@ -23,7 +23,7 @@ class histogram_score:
         show_plot: bool = True,
     ):
         """
-        If method is anchor, this will show the histogram of `nb.ref_spots.score` with the option to
+        If method is anchor, this will show the histogram of `nb.ref_spots.scores` with the option to
         view the histogram of the score computed using various other configurations of `background` fitting
         and `gene_efficiency`. This allows one to see how the these affect the score.
 
@@ -55,11 +55,11 @@ class histogram_score:
 
         # Get spot colors
         spot_colors_no_background = (
-            nb.ref_spots.colors[:, :, nb.basic_info.use_channels] - nb.ref_spots.background_strength
+            nb.ref_spots.colours[:, :, nb.basic_info.use_channels] - nb.ref_spots.background_strength
         )
         spot_colors = spot_colors_no_background / nb.call_spots.color_norm_factor[trc_index]
         spot_colors_background = (
-            nb.ref_spots.colors[:, :, nb.basic_info.use_channels] / nb.call_spots.color_norm_factor[trc_index]
+            nb.ref_spots.colours[:, :, nb.basic_info.use_channels] / nb.call_spots.color_norm_factor[trc_index]
         )
         grc_ind = np.ix_(np.arange(self.n_genes), nb.basic_info.use_rounds, nb.basic_info.use_channels)
         # Bled codes saved to Notebook should already have L2 norm = 1 over used_channels and rounds
@@ -90,9 +90,9 @@ class histogram_score:
             1
         ]
         if method.lower() != "omp" and check:
-            if np.max(np.abs(self.score[:, 0] - nb.ref_spots.score)) > self.check_tol:
+            if np.max(np.abs(self.score[:, 0] - nb.ref_spots.scores)) > self.check_tol:
                 raise ValueError(
-                    f"nb.ref_spots.score differs to that computed here\n" f"Set check=False to get past this error"
+                    f"nb.ref_spots.scores differs to that computed here\n" f"Set check=False to get past this error"
                 )
 
         # DP score no background
