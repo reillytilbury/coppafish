@@ -1,3 +1,4 @@
+import copy
 import os
 import pandas as pd
 import numpy as np
@@ -50,7 +51,6 @@ class Viewer:
                 'image', 'name' and 'colour'. 'image' will contain the images, 'name' will contain the names of the
                 images and 'colour' will contain the colours of the images.
             * genes: list, containing information about each gene. Each element of the list will be a Gene object.
-            * active_genes: np.ndarray, containing the indices of the genes that are currently being plotted.
             * spots: dict, containing all spots for each method. The keys are the method names and the values are Spots
                 objects.
             * viewer: napari.Viewer, the napari viewer object.
@@ -94,7 +94,6 @@ class Viewer:
             self.spots["omp"] = []
         # add genes objects
         self.genes = []
-        self.active_genes = np.arange(len(nb.call_spots.gene_names))
         # populate variables
         self.create_gene_list(gene_marker_file=gene_marker_file, nb_gene_names=nb.call_spots.gene_names)
         self.create_spots_list(nb=nb)
@@ -103,8 +102,8 @@ class Viewer:
         # create napari viewer
         self.viewer = napari.Viewer()
         self.add_data_to_viewer()
-        self.format_napari_viewer(gene_legend_info=gene_legend_info, nb=nb)
         self.update_status_continually()
+        self.format_napari_viewer(gene_legend_info=gene_legend_info, nb=nb)
         self.key_call_functions()
         napari.run()
 
@@ -248,11 +247,10 @@ class Viewer:
         This method updates the genes plotted in the napari viewer to reflect the current state of the Viewer object.
         """
         active_layer_name = self.method["names"][self.method["active"]]
-        mask = np.isin(self.spots[active_layer_name].gene, self.active_genes).astype(int)
-        print(f'Gene active: {[g.name for g in np.array(self.genes)[self.active_genes]]}, num_spots: {np.sum(mask)}')
-        self.viewer.layers[active_layer_name].size = 10 * mask
-        self.viewer.layers[active_layer_name].face_color[:, -1] = mask
-        self.viewer.layers[active_layer_name].edge_color[:, -1] = mask
+        active_genes = np.array([g.notebook_index for g in self.genes if g.active])
+        mask = np.isin(self.spots[active_layer_name].gene, active_genes)
+        print(f'Gene active: {[g.name for g in np.array(self.genes)[active_genes]]}, num_spots: {np.sum(mask)}')
+        self.viewer.layers[active_layer_name].shown = mask
         self.viewer.layers[active_layer_name].refresh()
 
     def update_thresholds(self) -> None:
@@ -272,10 +270,8 @@ class Viewer:
             # 2. intensity threshold
             good_intensity = self.spots[m].intensity >= intensity_thresh
             # create mask
-            mask = (good_score & good_intensity).astype(int)
-            self.viewer.layers[m].size = 10 * mask
-            self.viewer.layers[m].face_color[:, -1] = mask
-            self.viewer.layers[m].edge_color[:, -1] = mask
+            mask = good_score & good_intensity
+            self.viewer.layers[m].shown = mask
             self.viewer.layers[m].refresh()
 
     def update_z_thick(self) -> None:
@@ -309,9 +305,10 @@ class Viewer:
                 n_selected = len(selectedData)
                 if n_selected == 1:
                     spot_index = list(selectedData)[0]
-                    spot_gene = self.spots[self.method["active"]][spot_index].gene
-                    tile = self.spots[self.method["active"]][spot_index].tile
-                    score = self.spots[self.method["active"]][spot_index].score
+                    active_method_name = self.method["names"][self.method["active"]]
+                    spot_gene = self.spots[active_method_name].gene[spot_index]
+                    tile = self.spots[active_method_name].tile[spot_index]
+                    score = self.spots[active_method_name].score[spot_index]
                     self.viewer.status = (
                         f"Spot {spot_index}, Gene {spot_gene}, Score {score:.2f}, " f"Tile {tile} selected"
                     )
@@ -327,13 +324,13 @@ class Viewer:
             selectedData = None
             while True:
                 time.sleep(0.1)
-                oldSelectedData = selectedData
-                selectedData = pointsLayer.selected_data
+                oldSelectedData = copy.deepcopy(selectedData)
+                selectedData = copy.deepcopy(pointsLayer.selected_data)
                 if oldSelectedData != selectedData:
                     yield selectedData
                 yield None
-
-        return _watchSelectedData(self.viewer.layers[self.viewer.layers.selection.active.name])
+        active_method_name = self.method["names"][self.method["active"]]
+        return _watchSelectedData(self.viewer.layers[active_method_name])
 
     def method_event_handler(self, method_index: int):
         # Set this method as the active method
@@ -367,27 +364,32 @@ class Viewer:
         clicked_gene_number = self.legend["gene_no"][clicked_gene_index]
 
         # Get the current number of active genes and check if the clicked gene is active
-        num_active_genes = self.active_genes.size
-        is_gene_active = np.isin(clicked_gene_number, self.active_genes)
+        active_genes = np.array([g.notebook_index for g in self.genes if g.active])
+        num_active_genes = len(active_genes)
+        is_gene_active = np.isin(clicked_gene_number, active_genes)
 
         # Update the active genes based on the click event
         if is_gene_active and num_active_genes == 1:
             # If the gene is the only selected gene, clicking it will show all genes
-            self.active_genes = np.sort(self.legend["gene_no"])
+            for gene in self.genes:
+                gene.active = True
         elif event.button.name == "RIGHT":
             # If right-clicking on a gene, it will select only that gene
-            self.active_genes = np.array([clicked_gene_number])
+            # self.active_genes = np.array([clicked_gene_number])
+            for gene in self.genes:
+                gene.active = (gene.notebook_index == clicked_gene_number)
         elif is_gene_active:
             # If single-clicking on an active gene, it will remove that gene
-            self.active_genes = np.setdiff1d(self.active_genes, clicked_gene_number)
+            self.genes[clicked_gene_number].active = False
         else:
             # If single-clicking on an inactive gene, it will add that gene
-            self.active_genes = np.append(self.active_genes, clicked_gene_number)
+            self.genes[clicked_gene_number].active = True
 
         # Update the legend formatting to reflect the changes
+        active_genes = np.array([g.notebook_index for g in self.genes if g.active])
         for gene_number in range(len(self.genes)):
             gene_index = np.where(self.legend["gene_no"] == gene_number)[0][0]
-            alpha_value = 1 if np.isin(gene_number, self.active_genes) else 0.5
+            alpha_value = 1 if np.isin(gene_number, active_genes) else 0.5
             self.legend["ax"].collections[gene_index].set_alpha(alpha_value)
             self.legend["ax"].texts[gene_index].set_alpha(alpha_value)
 
@@ -441,9 +443,10 @@ class Viewer:
                 symbol_napari = gene_legend_info[gene_legend_info["GeneNames"] == g]["napari_symbol"].values[0]
                 symbol_mpl = gene_legend_info[gene_legend_info["GeneNames"] == g]["mpl_symbol"].values[0]
                 genes.append(Gene(name=g, notebook_index=i, colour=colour, symbol_mpl=symbol_mpl,
-                                  symbol_napari=symbol_napari))
+                                  symbol_napari=symbol_napari, active=True))
             else:
-                genes.append(Gene(name=g, notebook_index=i, colour=None, symbol_mpl=None, symbol_napari=None))
+                genes.append(Gene(name=g, notebook_index=i, colour=None, symbol_mpl=None, symbol_napari=None,
+                                  active=False))
 
         # warn if any genes are not in the gene marker file
         invisible_genes = [g.name for g in genes if g.symbol_mpl is None]
@@ -571,6 +574,7 @@ class Viewer:
             self.viewer.layers[i].contrast_limits_range = [b.min(), b.max()]
 
         # add a single layer of spots to viewer for each method
+        active_genes = np.array([g.notebook_index for g in self.genes if g.active])
         gene_colours = np.array([g.colour for g in self.genes])
         gene_symbols = np.array([g.symbol_napari for g in self.genes])
         for i, m in enumerate(self.method["names"]):
@@ -582,14 +586,15 @@ class Viewer:
             # face_colour is an array of shape (n_spots, 4) where the last dimension is the rgba values.
             # Set final row to all 1s
             face_colour = np.hstack((face_colour, np.ones((face_colour.shape[0], 1))))
-            spot_size = 10 * np.isin(gene_no, self.active_genes).astype(int)
+            mask = np.isin(gene_no, active_genes)
             self.viewer.add_points(data=point_loc,
-                                   size=spot_size,
+                                   size=10,
                                    face_color=face_colour,
                                    symbol=face_symbol,
                                    name=m,
                                    out_of_slice_display=False,
-                                   visible=(i == self.method["active"]))
+                                   visible=(i == self.method["active"]),
+                                   shown=mask)
         self.viewer.layers.selection.active = self.viewer.layers[self.method["names"][self.method["active"]]]
 
     def key_call_functions(self):
@@ -689,11 +694,11 @@ class Viewer:
             if spot_index is not None:
                 view_omp(self.nb, spot_index, self.method["names"][self.method["active"]])
 
-        @self.viewer.bind_key(KeyBinds.view_omp_fit)
-        def call_to_view_omp(viewer):
-            spot_index = self.get_selected_spot_index()
-            if spot_index is not None:
-                view_omp_fit(self.nb, spot_index, self.method["names"][self.method["active"]])
+        # @self.viewer.bind_key(KeyBinds.view_omp_fit)
+        # def call_to_view_omp(viewer):
+        #     spot_index = self.get_selected_spot_index()
+        #     if spot_index is not None:
+        #         view_omp_fit(self.nb, spot_index, self.method["names"][self.method["active"]])
 
         # TODO: Remove or refactor this as this as we don't have a score multiplier for omp
         # @self.viewer.bind_key(KeyBinds.view_omp_score)
@@ -765,7 +770,7 @@ class Gene:
     This will store the gene name, index, colour and symbol.
     """
     def __init__(self, name: str, notebook_index: int, colour: Union[np.ndarray, None], symbol_mpl: Union[str, None],
-                 symbol_napari: Union[str, None]):
+                 symbol_napari: Union[str, None], active: bool = True):
         """
         Create object for a single gene.
         Args:
@@ -777,9 +782,11 @@ class Gene:
                 file).
             symbol_napari: (str) symbol used to plot in napari. (Used in the viewer) or None (if not in gene marker
                 file).
+            active: (bool) whether the gene is active or not in the viewer.
         """
         self.name = name
         self.notebook_index = notebook_index
         self.colour = colour
         self.symbol_mpl = symbol_mpl
         self.symbol_napari = symbol_napari
+        self.active = active
