@@ -17,7 +17,6 @@ class histogram_score:
         self,
         nb: Notebook,
         method: str = "omp",
-        score_omp_multiplier: Optional[float] = None,
         check: bool = False,
         hist_spacing: float = 0.001,
         show_plot: bool = True,
@@ -43,10 +42,6 @@ class histogram_score:
             show_plot: Whether to run `plt.show()` or not.
         """
         # Add data
-        if score_omp_multiplier is None:
-            config = nb.get_config()["thresholds"]
-            score_omp_multiplier = config["score_omp_multiplier"]
-        self.score_multiplier = score_omp_multiplier
         self.gene_names = nb.call_spots.gene_names
         self.n_genes = self.gene_names.size
         # Use all genes by default
@@ -140,9 +135,9 @@ class histogram_score:
         self.ax.set_ylim(0, None)
 
         # Add text box to change score multiplier
-        text_box_labels = ["Gene", "Histogram\nSpacing", "Score\n" + r"Multiplier, $\rho$"]
-        text_box_values = ["all", self.hist_spacing, np.around(self.score_multiplier, 2)]
-        text_box_funcs = [self.update_genes, self.update_hist_spacing, self.update_score_multiplier]
+        text_box_labels = ["Gene", "Histogram\nSpacing"]
+        text_box_values = ["all", self.hist_spacing, ]
+        text_box_funcs = [self.update_genes, self.update_hist_spacing]
         if method.lower() != "omp":
             text_box_labels = text_box_labels[:2]
             text_box_values = text_box_values[:2]
@@ -273,21 +268,6 @@ class histogram_score:
         self.hist_spacing = hist_spacing
         self.text_boxes[1].set_val(hist_spacing)
         self.update()
-
-    def update_score_multiplier(self, text):
-        # Can see how changing score_multiplier affects distribution
-        try:
-            score_multiplier = float(text)
-        except (ValueError, TypeError):
-            warnings.warn(f"\nScore multiplier given, {text}, is not valid")
-            score_multiplier = self.score_multiplier
-        if score_multiplier < 0:
-            warnings.warn("Score multiplier cannot be negative")
-            score_multiplier = self.score_multiplier
-        self.score_multiplier = score_multiplier
-        self.score[:, self.n_plots - 1] = omp_spot_score(self.nbp_omp)
-        self.text_boxes[2].set_val(np.around(score_multiplier, 2))
-        self.update(inds_update=[self.n_plots - 1])
 
     def choose_plots(self, label):
         index = self.button_labels.index(label)

@@ -21,10 +21,14 @@ from typing import Optional, Union
 
 from . import legend
 from .hotkeys import KeyBinds, ViewHotkeys
-from ..call_spots import view_codes, view_bleed_matrix, view_bled_codes, view_spot, view_intensity
-from ..call_spots_new import GEViewer, ViewAllGeneScores, BGNormViewer
-from ..omp import view_omp
+from ..call_spots import view_codes, view_bleed_matrix, view_bled_codes, view_spot, view_intensity, gene_counts
+from ...call_spots import qual_check
+from .. import call_spots as call_spots_plot
+from ..call_spots_new import GEViewer, ViewBleedCalc, ViewAllGeneScores, BGNormViewer
+from ..omp import view_omp, view_omp_score, histogram_score
 from ..omp.coefs import view_score  # gives import error if call from call_spots.dot_product
+from ... import call_spots
+from ... import utils
 from ...setup import Notebook
 
 # set matplotlib background to dark
@@ -37,7 +41,9 @@ class Viewer:
         nb: Notebook,
         background_image: Optional[list] = ["dapi"],
         background_image_colour: Optional[list] = ["gray"],
-        gene_marker_file: Optional[str] = None
+        background_image_max_intensity_projection: Optional[list] = [False],
+        gene_marker_file: Optional[str] = None,
+        spot_size: int = 10,
     ) -> None:
         """
         This is the function to view the results of the pipeline i.e. the spots found and which genes they were
@@ -45,24 +51,24 @@ class Viewer:
 
         The Viewer object will have the following attributes:
             * method: dict, containing method names used to assign genes to spots, their corresponding pages in the
-                notebook and the names of the buttons in the napari viewer. The keys are 'names', 'pages', 'buttons' and
-                'active'. The names will be 'anchor', 'prob' and 'omp' if the notebook has an 'omp' page.
+                notebook and the names of the buttons in the napari viewer.
             * background_images: dict, containing the background images to be plotted in the napari viewer. The keys are
-                'image', 'name' and 'colour'. 'image' will contain the images, 'name' will contain the names of the
-                images and 'colour' will contain the colours of the images.
+                'image', 'name' and 'colour'.
             * genes: list, containing information about each gene. Each element of the list will be a Gene object.
             * spots: dict, containing all spots for each method. The keys are the method names and the values are Spots
                 objects.
             * viewer: napari.Viewer, the napari viewer object.
             * legend: dict, containing the legend figure and axes.
             * sliders: dict, containing the sliders in the napari viewer.
-            * nb: Notebook, the notebook object. TODO: Remove this attribute. This means refactoring downstream code.
+            * nb: Notebook, the notebook object.
         Args:
             nb: Notebook containing at least the `ref_spots` page.
             background_image: Optional list of file_names or images that will be plotted as the background image.
                 If images, z dimensions need to be first i.e. `n_z x n_y x n_x` if 3D or `n_y x n_x` if 2D.
                 If pass *2D* image for *3D* data, will show same image as background on each z-plane.
             background_image_colour: list of names of background colours. Must be same length as background_image
+            background_image_max_intensity_projection: Optional list of bools. If True, will plot the maximum intensity
+                projection of the background image. If False, will plot the background_image as is.
             gene_marker_file: Path to csv file containing marker and color for each gene. There must be 7 columns
                 in the csv file with the following headers (comma separated):
                 * ID - int, unique number for each gene, in ascending order
@@ -74,6 +80,7 @@ class Viewer:
                 * mpl_symbol - str, equivalent of napari symbol in matplotlib.
                 If it is not provided, then the default file *coppafish/plot/results_viewer/legend.gene_color.csv*
                 will be used.
+            spot_size: int, size of the spots to be plotted in the napari viewer.
         """
         # set up gene legend info
         if gene_marker_file is None:
@@ -97,11 +104,12 @@ class Viewer:
         # populate variables
         self.create_gene_list(gene_marker_file=gene_marker_file, nb_gene_names=nb.call_spots.gene_names)
         self.create_spots_list(nb=nb)
-        self.load_bg_images(nb=nb, background_image=background_image, background_image_colour=background_image_colour)
+        self.load_bg_images(nb=nb, background_image=background_image, background_image_colour=background_image_colour,
+                            max_intensity_projections=background_image_max_intensity_projection)
 
         # create napari viewer
         self.viewer = napari.Viewer()
-        self.add_data_to_viewer()
+        self.add_data_to_viewer(spot_size=spot_size)
         self.update_status_continually()
         self.format_napari_viewer(gene_legend_info=gene_legend_info, nb=nb)
         self.key_call_functions()
@@ -493,7 +501,8 @@ class Viewer:
             self.spots[m] = Spots(location=global_loc[i], score=score[i], tile=tile[i], colours=colours[i],
                                   gene=gene_no[i], intensity=intensity[i])
 
-    def load_bg_images(self, background_image: list, background_image_colour: list, nb: Notebook) -> None:
+    def load_bg_images(self, background_image: list, background_image_colour: list,
+                       max_intensity_projections: list, nb: Notebook) -> None:
         """
         Load background images into the napari viewer and into the Viewer Object.
         Note: napari viewer must be created before calling this function.
@@ -501,6 +510,8 @@ class Viewer:
         Args:
             background_image: list of file_names or images that will be plotted as the background image.
             background_image_colour: list of names of background colours. Must be same length as background_image
+            max_intensity_projections: list of bools. If max_intensity_projections[i] is True, will plot the maximum
+                intensity projection of the background image i. If False, will plot the background_image as is.
             nb: Notebook.
 
         """
@@ -509,6 +520,11 @@ class Viewer:
             background_image = [background_image]
         if not isinstance(background_image_colour, list):
             background_image_colour = [background_image_colour]
+        if not isinstance(max_intensity_projections, list):
+            max_intensity_projections = [max_intensity_projections]
+        assert len(background_image) == len(background_image_colour) == len(max_intensity_projections), (
+            "background_image, background_image_colour and max_intensity_projections must all be the same length."
+        )
         background_image_dir = []
 
         # load images
@@ -539,6 +555,9 @@ class Viewer:
                     background_image[i] = np.load(file_name)
                 elif file_name.endswith(".tif"):
                     background_image[i] = skimage.io.imread(file_name)
+                # If the user specified MIP[i] = True, plot the maximum intensity projection of the image.
+                if max_intensity_projections[i]:
+                    background_image[i] = background_image[i].max(axis=0)
             else:
                 background_image[i] = None
                 warnings.warn(
@@ -560,9 +579,12 @@ class Viewer:
         self.background_images["names"] = [os.path.basename(background_image_dir[i]) for i in good]
         self.background_images["colours"] = [background_image_colour[i] for i in good]
 
-    def add_data_to_viewer(self) -> None:
+    def add_data_to_viewer(self, spot_size: int = 10) -> None:
         """
         Add background images and spots to the napari viewer (they already exist in the Viewer object).
+
+        The user can specify the size of the spots to be plotted. This will be the size of the spots in the napari
+        viewer.
 
         There will be n_bg image layers, followed by n_methods (either 2 or 3) spots layers. This is because a single
         layer for each gene of each method is too slow to render in napari.
@@ -588,7 +610,7 @@ class Viewer:
             face_colour = np.hstack((face_colour, np.ones((face_colour.shape[0], 1))))
             mask = np.isin(gene_no, active_genes)
             self.viewer.add_points(data=point_loc,
-                                   size=10,
+                                   size=spot_size,
                                    face_color=face_colour,
                                    symbol=face_symbol,
                                    name=m,
@@ -645,24 +667,19 @@ class Viewer:
         def call_to_view_gene_efficiency(viewer):
             GEViewer(self.nb)
 
-        # # TODO: Remove or refactor this as this as we don't have a different score thresh for omp
-        # @self.viewer.bind_key(KeyBinds.view_gene_counts)
-        # def call_to_gene_counts(viewer):
-        #     score_thresh = self.score_thresh_slider.value()[0]
-        #     intensity_thresh = self.intensity_thresh_slider.value()
-        #     gene_counts(self.nb, None, None, score_thresh, intensity_thresh, score_omp_thresh)
-        #
-        # @self.viewer.bind_key(KeyBinds.view_histogram_scores)
-        # def call_to_view_omp_score(viewer):
-        #     if self.nb.has_page("omp"):
-        #         score_multiplier = self.omp_score_multiplier_slider.value()
-        #     else:
-        #         score_multiplier = None
-        #     histogram_score(self.nb, self.method_buttons.method, score_multiplier)
-        #
-        # @self.viewer.bind_key(KeyBinds.view_scaled_k_means)
-        # def call_to_view_omp_score(viewer):
-        #     call_spots_plot.view_scaled_k_means(self.nb)
+        @self.viewer.bind_key(KeyBinds.view_gene_counts)
+        def call_to_gene_counts(viewer):
+            score_thresh = self.sliders['score_range'].value()[0]
+            intensity_thresh = self.sliders['intensity_thresh'].value()
+            gene_counts(self.nb, None, None, score_thresh, intensity_thresh)
+
+        @self.viewer.bind_key(KeyBinds.view_histogram_scores)
+        def call_to_view_omp_score(viewer):
+            histogram_score(self.nb, self.method["names"][self.method["active"]])
+
+        @self.viewer.bind_key(KeyBinds.view_scaled_k_means)
+        def call_to_view_omp_score(viewer):
+            call_spots_plot.view_scaled_k_means(self.nb)
 
         @self.viewer.bind_key(KeyBinds.view_colour_and_codes)
         def call_to_view_codes(viewer):
