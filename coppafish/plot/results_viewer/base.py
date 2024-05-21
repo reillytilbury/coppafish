@@ -308,11 +308,12 @@ class Viewer:
             if selectedData is not None:
                 n_selected = len(selectedData)
                 if n_selected == 1:
-                    spot_index = list(selectedData)[0]
+                    napari_layer_index = list(selectedData)[0]
                     active_method_name = self.method["names"][self.method["active"]]
-                    spot_gene = self.spots[active_method_name].gene[spot_index]
-                    tile = self.spots[active_method_name].tile[spot_index]
-                    score = self.spots[active_method_name].score[spot_index]
+                    spot_index = self.spots[active_method_name].notebook_index[napari_layer_index]
+                    spot_gene = self.spots[active_method_name].gene[napari_layer_index]
+                    tile = self.spots[active_method_name].tile[napari_layer_index]
+                    score = self.spots[active_method_name].score[napari_layer_index]
                     self.viewer.status = (
                         f"Spot {spot_index}, Gene {spot_gene}, Score {score:.2f}, " f"Tile {tile} selected"
                     )
@@ -407,7 +408,8 @@ class Viewer:
         """
         n_selected = len(self.viewer.layers[self.viewer.layers.selection.active.name].selected_data)
         if n_selected == 1:
-            spot_index = list(self.viewer.layers[self.viewer.layers.selection.active.name].selected_data)[0]
+            napari_layer_index = list(self.viewer.layers[self.viewer.layers.selection.active.name].selected_data)[0]
+            spot_index = self.spots[self.method["names"][self.method["active"]]].notebook_index[napari_layer_index]
         elif n_selected > 1:
             self.viewer.status = f"{n_selected} spots selected - need 1 to run diagnostic"
             spot_index = None
@@ -456,7 +458,7 @@ class Viewer:
                                   symbol_napari=invisible_symbol_napari, active=False))
 
         # warn if any genes are not in the gene marker file
-        invisible_genes = [g.name for g in genes if g.symbol_mpl is None]
+        invisible_genes = [g.name for g in genes if not g.active]
         if invisible_genes:
             warnings.warn(f"Genes {invisible_genes} are not in the gene marker file and will not be plotted.")
         self.genes = genes
@@ -496,10 +498,14 @@ class Viewer:
             intensity.append(intensity_omp)
             colours.append(nb.omp.colours)
 
-        # add all spots for each method to the spots list
+        # add all spots of shown genes to the napari viewer. If a gene is not shown, the spots will be disregarded.
+        visible_genes = np.where([g.active for g in self.genes])[0]
         for i, m in enumerate(self.method["names"]):
-            self.spots[m] = Spots(location=global_loc[i], score=score[i], tile=tile[i], colours=colours[i],
-                                  gene=gene_no[i], intensity=intensity[i])
+            mask = np.isin(gene_no[i], visible_genes)
+            spot_indices = np.where(mask)[0]
+            self.spots[m] = Spots(location=global_loc[i][mask], score=score[i][mask], tile=tile[i][mask],
+                                  colours=colours[i][mask],gene=gene_no[i][mask], intensity=intensity[i][mask],
+                                  notebook_index=spot_indices)
 
     def load_bg_images(self, background_image: list, background_image_colour: list,
                        max_intensity_projections: list, nb: Notebook) -> None:
@@ -761,7 +767,7 @@ class Spots:
     for each gene within each method.
     """
     def __init__(self, location: np.ndarray, colours: np.ndarray, score: np.ndarray, tile: np.ndarray,
-                 intensity: np.ndarray, gene: np.ndarray):
+                 intensity: np.ndarray, gene: np.ndarray, notebook_index: np.ndarray):
         """
         Create object for spots of a single gene within a single method.
         Args:
@@ -771,14 +777,17 @@ class Spots:
             tile: (np.ndarray) of shape (n_spots,) with the tile of each spot. (int16)
             intensity: (np.ndarray) of shape (n_spots,) with the intensity of each spot. (float32)
             gene: (np.ndarray) of shape (n_spots,) with the gene number of each spot. (int16)
+            notebook_index: (np.ndarray) of shape (n_spots,) with the index of each spot in the notebook. (int16)
         """
-        assert len(location) == len(colours) == len(score) == len(tile) == len(intensity) == len(gene)
+        assert len(location) == len(colours) == len(score) == len(tile) == len(intensity) == len(gene) == len(
+            notebook_index), "All arrays must be the same length."
         self.location = location
         self.colours = colours
         self.score = score
         self.tile = tile
         self.intensity = intensity
         self.gene = gene
+        self.notebook_index = notebook_index
 
 
 class Gene:
