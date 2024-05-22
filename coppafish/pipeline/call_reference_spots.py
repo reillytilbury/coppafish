@@ -427,10 +427,12 @@ def call_reference_spots(
     for d in tqdm(range(n_dyes), desc="Estimating bleed matrix"):
         for r in range(n_rounds):
             my_genes = [g for g in range(n_genes) if gene_codes[g, r] == d]
-            keep = ((gene_prob_score > gene_prob_bleed_thresh)
-                    * (bg_strength < np.percentile(bg_strength, bg_percentile))
-                    * np.isin(spot_tile, good_t)
-                    * np.isin(gene_no, my_genes))
+            keep = (
+                (gene_prob_score > gene_prob_bleed_thresh)
+                * (bg_strength < np.percentile(bg_strength, bg_percentile))
+                * np.isin(spot_tile, good_t)
+                * np.isin(gene_no, my_genes)
+            )
             colours_d = colours[keep, r, :]
             is_positive = np.sum(colours_d, axis=1) > 0
             colours_d = colours_d[is_positive]
@@ -450,10 +452,12 @@ def call_reference_spots(
             if [t, r] in bad_tr:
                 pseudo_bleed_matrix[t, r, :, d] = bleed_matrix[:, d]
                 continue
-            keep = ((spot_tile == t)
-                    * (gene_prob_score > gene_prob_bleed_thresh)
-                    * (bg_strength < np.percentile(bg_strength, bg_percentile))
-                    * np.isin(gene_no, my_genes))
+            keep = (
+                (spot_tile == t)
+                * (gene_prob_score > gene_prob_bleed_thresh)
+                * (bg_strength < np.percentile(bg_strength, bg_percentile))
+                * np.isin(gene_no, my_genes)
+            )
             colours_trd = colours[keep, r, :]
             log.info(
                 "Tile " + str(t) + " Round " + str(r) + " Dye" + str(d) + " has " + str(len(colours_trd)) + " spots."
@@ -536,10 +540,16 @@ def call_reference_spots(
         mid_z = int(nbp_basic.use_z[0] + (nbp_basic.use_z[-1] - nbp_basic.use_z[0]) // 2 - min(nbp_basic.use_z))
     else:
         mid_z = None
-    pixel_colors = spot_colors.get_spot_colors(yxz_base=spot_colors.all_pixel_yxz(nbp_basic.tile_sz, nbp_basic.tile_sz, mid_z),
-                                               t=central_tile, transform=transform, bg_scale=nbp_filter.bg_scale,
-                                               file_type=nbp_extract.file_type,
-                                               nbp_file=nbp_file, nbp_basic=nbp_basic, return_in_bounds=True)[0]
+    pixel_colors = spot_colors.get_spot_colors(
+        yxz_base=spot_colors.all_pixel_yxz(nbp_basic.tile_sz, nbp_basic.tile_sz, mid_z),
+        t=central_tile,
+        transform=transform,
+        bg_scale=nbp_filter.bg_scale,
+        file_type=nbp_extract.file_type,
+        nbp_file=nbp_file,
+        nbp_basic=nbp_basic,
+        return_in_bounds=True,
+    )[0]
     pixel_intensity = call_spots.get_spot_intensity(np.abs(pixel_colors) / colour_norm_factor[central_tile])
     nbp.abs_intensity_percentile = np.percentile(pixel_intensity, np.arange(1, 101))
     log.debug("Call ref spots complete")
