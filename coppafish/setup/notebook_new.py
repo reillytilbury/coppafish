@@ -104,6 +104,16 @@ class Notebook:
         self._save()
         return self
 
+    def has_page(self, page_name: str) -> bool:
+        assert type(page_name) is str
+        assert page_name in self._options.keys(), f"Not a real page name: {page_name}"
+
+        try:
+            self.__getattribute__(page_name)
+            return True
+        except AttributeError:
+            return False
+
     def __gt__(self, page_name: str) -> None:
         """
         Print a page's description by doing `notebook > "page_name"`.
@@ -114,16 +124,6 @@ class Notebook:
             print(f"No page named {page_name}")
             return
         print(f"{self._options[page_name][0]}")
-
-    def has_page(self, page_name: str) -> bool:
-        assert type(page_name) is str
-        assert page_name in self._options.keys(), f"Not a real page name: {page_name}"
-
-        try:
-            self.__getattribute__(page_name)
-            return True
-        except AttributeError:
-            return False
 
     def _save(self) -> None:
         """
