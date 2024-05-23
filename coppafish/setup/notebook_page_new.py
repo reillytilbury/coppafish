@@ -2,7 +2,8 @@ import os
 import time
 import json
 import shutil
-from typing import Any, Dict, List, Tuple
+import tempfile
+from typing import Any, Dict, Iterable, List, Tuple
 
 import zarr
 import numpy as np
@@ -10,12 +11,14 @@ import numpy as np
 from .. import utils
 
 
+# NOTE: Every method and variable with an underscore at the start should not be accessed externally.
 class NotebookPage:
     def get_page_name(self):
         return self._name
 
     _name: str
     name = property(get_page_name)
+
     # Attribute names allowed to be set inside the notebook page that are not in _options.
     _VALID_ATTRIBUTE_NAMES = ("_name", "_time_created", "_version")
 
@@ -784,9 +787,9 @@ class NotebookPage:
         os.mkdir(page_directory)
         metadata_path = self._get_metadata_path(page_directory)
         self._save_metadata(metadata_path)
-        for name in self._options[self._name].keys():
+        for name in self._get_variables().keys():
             value = self.__getattribute__(name)
-            types_as_str: str = self._options[self._name][name][0]
+            types_as_str: str = self._get_variables()[name][0]
             self._save_variable(name, value, types_as_str, page_directory)
 
     def load(self, page_directory: str, /) -> None:
@@ -799,7 +802,7 @@ class NotebookPage:
 
         metadata_path = self._get_metadata_path(page_directory)
         self._load_metadata(metadata_path)
-        for name in self._options[self._name].keys():
+        for name in self._get_variables().keys():
             self.__setattr__(name, self._load_variable(name, page_directory))
 
     def get_unset_variables(self) -> Tuple[str]:
@@ -807,25 +810,63 @@ class NotebookPage:
         Return a tuple of all variable names that have not been set to a valid value in the notebook page.
         """
         unset_variables = []
-        for variable_name in self._options[self._name].keys():
+        for variable_name in self._get_variables().keys():
             try:
                 self.__getattribute__(variable_name)
             except AttributeError:
                 unset_variables.append(variable_name)
         return tuple(unset_variables)
 
+    def resave(self, page_directory: str, /) -> None:
+        """
+        Re-save all variables in the given page directory based on the variables in memory.
+        """
+        assert type(page_directory) is str
+        if not os.path.isdir(page_directory):
+            raise SystemError(f"No page directory at {page_directory}")
+        if len(os.listdir(page_directory)) == 0:
+            raise SystemError(f"Page directory at {page_directory} is empty")
+        if len(self.get_unset_variables()) > 0:
+            raise ValueError(
+                f"Cannot re-save a notebook page at {page_directory} when it has not been completed yet. "
+                + f"The variable(s) {', '.join(self.get_unset_variables())} are not assigned."
+            )
+
+        temp_directories: List[tempfile.TemporaryDirectory] = []
+        for variable_name, description in self._get_variables().items():
+            prefix = self._type_str_to_prefix(description[0].split(self._datatype_separator)[0])
+            variable_path = self._get_variable_path(page_directory, variable_name, prefix)
+
+            if prefix == "zarr":
+                # Zarr files are saved outside the page during re-save as they are not kept in memory.
+                temp_directory = tempfile.TemporaryDirectory()
+                temp_zarr_path = os.path.join(temp_directory.name, f"{variable_name}.{prefix}")
+                temp_directories.append(temp_directory)
+                shutil.copytree(variable_path, temp_zarr_path)
+                shutil.rmtree(variable_path)
+                self.__setattr__(variable_name, temp_zarr_path)
+                continue
+
+            os.remove(variable_path)
+
+        shutil.rmtree(page_directory)
+        self.save(page_directory)
+        for temp_directory in temp_directories:
+            temp_directory.cleanup()
+
     def __gt__(self, variable_name: str) -> None:
         """
         Print a variable's description by doing `notebook_page > "variable_name"`.
         """
         assert type(variable_name) is str
-        if variable_name not in self._options[self._name].keys():
+        if variable_name not in self._get_variables().keys():
             print(f"No variable named {variable_name}")
             return
-        if len(self._options[self._name][variable_name]) <= 1:
-            print(f"No description found for {variable_name}")
+        if len(self._get_variables()[variable_name]) <= 1:
+            print(f"No description found for variable {variable_name}")
+            return
 
-        print(f"{self._options[self._name][variable_name][1]}")
+        print(f"{self._get_variables()[variable_name][1]}")
 
     def __setattr__(self, name: str, value: Any, /) -> None:
         """
@@ -835,13 +876,17 @@ class NotebookPage:
             object.__setattr__(self, name, value)
             return
 
-        if name not in self._options[self._name].keys():
+        if name not in self._get_variables().keys():
             raise NameError(f"Cannot set variable {name} in {self._name} page. It is not inside _options")
         expected_types = self._get_expected_types(name)
         if not self._is_types(value, expected_types):
             raise TypeError(f"Failed to set variable {name} to type {type(value)}. Expected type(s) {expected_types}")
 
         object.__setattr__(self, name, value)
+
+    def _get_variables(self) -> Dict[str, List[str]]:
+        # Variable refers to variables that are set during the pipeline, not metadata.
+        return self._options[self._name]
 
     def _save_metadata(self, file_path: str) -> None:
         assert not os.path.isfile(file_path), f"Metadata file at {file_path} should not exist"
@@ -872,11 +917,11 @@ class NotebookPage:
         return os.path.join(in_directory, self._name)
 
     def _get_expected_types(self, name: str) -> str:
-        return self._options[self._name][name][0]
+        return self._get_variables()[name][0]
 
     def _save_variable(self, name: str, value: Any, types_as_str: str, page_directory: str) -> None:
         file_prefix = self._type_str_to_prefix(types_as_str.split(self._datatype_separator)[0])
-        file_path = os.path.join(page_directory, f"{name}.{file_prefix}")
+        file_path = self._get_variable_path(page_directory, name, file_prefix)
 
         if file_prefix == "json":
             with open(file_path, "x") as file:
@@ -910,13 +955,16 @@ class NotebookPage:
             raise NotImplementedError(f"File prefix {file_prefix} is not supported")
 
     def _load_variable(self, name: str, page_directory: str) -> Any:
-        types_as_str = self._options[self._name][name][0].split(self._datatype_separator)
+        types_as_str = self._get_variables()[name][0].split(self._datatype_separator)
         file_prefix = self._type_str_to_prefix(types_as_str[0])
-        file_path = os.path.join(page_directory, f"{name}.{file_prefix}")
+        file_path = self._get_variable_path(page_directory, name, file_prefix)
 
         if file_prefix == "json":
             with open(file_path, "r") as file:
                 value = json.loads(file.read())["value"]
+                # A JSON file does not support saving tuples, they must be converted back to tuples here.
+                if type(value) is list:
+                    value = self._deep_tuple(value)
             return value
         elif file_prefix == "npz":
             return np.load(file_path)["arr_0"]
@@ -924,6 +972,13 @@ class NotebookPage:
             return file_path
         else:
             raise NotImplementedError(f"File prefix {file_prefix} is not supported")
+
+    def _get_variable_path(self, page_directory: str, variable_name: str, suffix: str) -> str:
+        assert type(page_directory) is str
+        assert type(variable_name) is str
+        assert type(suffix) is str
+
+        return str(os.path.join(page_directory, f"{variable_name}.{suffix}"))
 
     def _sanity_check_options(self) -> None:
         # Only multiple datatypes can be options for the same variable if they save to the same save file type. So, a
@@ -939,6 +994,18 @@ class NotebookPage:
                         f"Variable {var_name} in page {page_name} has incompatible types: "
                         + f"{' and '.join(unique_prefixes)} in _options"
                     )
+
+    def _deep_tuple(self, value: Iterable[Any]) -> Tuple[Any]:
+        # Convert the iterable and all iterables inside into tuples.
+        assert hasattr(value, "__iter__")
+
+        result = tuple()
+        for subvalue in value:
+            if hasattr(subvalue, "__iter__"):
+                result += (self._deep_tuple(subvalue),)
+            else:
+                result += (subvalue,)
+        return result
 
     def _type_str_to_prefix(self, type_as_str: str) -> str:
         return self._type_prefixes[type_as_str.split(self._datatype_nest_start)[0]]

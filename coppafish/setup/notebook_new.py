@@ -1,7 +1,7 @@
 import os
 import time
 import json
-from typing import List
+from typing import Any, List, Tuple
 
 from .. import log, utils
 from .notebook_page_new import NotebookPage
@@ -9,6 +9,9 @@ from .notebook_page_new import NotebookPage
 
 class Notebook:
     _directory: str
+
+    # Attribute names allowed to be set inside the notebook page that are not in _options.
+    _VALID_ATTRIBUTE_NAMES = ("_directory", "_time_created", "_version")
 
     _metadata_name: str = "_metadata.json"
 
@@ -58,7 +61,7 @@ class Notebook:
             "*thresholds* page contains quality thresholds which affect which spots plotted and exported to pciSeq.",
         ],
         "debug": [
-            "*debug* page is only for unit testing.",
+            "*debug* page for unit testing.",
         ],
     }
 
@@ -106,13 +109,44 @@ class Notebook:
 
     def has_page(self, page_name: str) -> bool:
         assert type(page_name) is str
-        assert page_name in self._options.keys(), f"Not a real page name: {page_name}"
+        if page_name not in self._options.keys():
+            raise ValueError(f"Not a real page name: {page_name}. Expected one of {', '.join(self._options.keys())}")
 
         try:
             self.__getattribute__(page_name)
             return True
         except AttributeError:
             return False
+
+    def resave(self) -> None:
+        """
+        Delete the notebook on disk and re-save every page using the instance in memory.
+        """
+        # NOTE: This function should not be used by the coppafish pipeline. This is purely a function for developers
+        # to manually change variables that are already saved to disk. Even then, this function should be used as
+        # little as possible.
+        start_time = time.time()
+        for page in self._get_existing_pages():
+            page.resave(self._get_page_directory(page.name))
+        os.remove(self._get_metadata_path())
+        self._save_metadata()
+        end_time = time.time()
+        print(f"Notebook re-saved in {end_time - start_time:.2f}s")
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """
+        Deals with syntax `notebook.name = value`.
+        """
+        if name in self._VALID_ATTRIBUTE_NAMES:
+            object.__setattr__(self, name, value)
+            return
+
+        if type(value) is not NotebookPage:
+            raise TypeError(f"Can only add NotebookPage classes to the Notebook, got {type(value)}")
+        if self.has_page(value.name):
+            raise ValueError(f"Notebook already contains page named {value.name}")
+
+        object.__setattr__(self, name, value)
 
     def __gt__(self, page_name: str) -> None:
         """
@@ -135,17 +169,17 @@ class Notebook:
             page_dir = self._get_page_directory(page.name)
             page.save(page_dir)
         end_time = time.time()
-        log.info(f"Notebook saved in {round(end_time - start_time, 1)}s")
+        log.info(f"Notebook saved in {end_time - start_time:.2f}s")
 
     def _load(self) -> None:
         self._load_metadata()
 
-    def _get_existing_pages(self) -> List[NotebookPage]:
+    def _get_existing_pages(self) -> Tuple[NotebookPage]:
         pages = []
         for page_name in self._options.keys():
             if self.has_page(page_name):
                 pages.append(self.__getattribute__(page_name))
-        return pages
+        return tuple(pages)
 
     def _get_page_directory(self, page_name: str) -> str:
         assert type(page_name) is str
