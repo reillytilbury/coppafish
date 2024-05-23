@@ -1,9 +1,9 @@
 import tqdm
 import numpy as np
 import numpy.typing as npt
-from typing import Union, Optional, Dict, List, Tuple
+from typing import Union, Optional, Dict, Tuple
 
-from ..setup.notebook import NotebookPage
+from ..setup import NotebookPage
 from .. import log
 
 

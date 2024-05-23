@@ -7,11 +7,11 @@ import torch
 import numpy as np
 from typing_extensions import assert_type
 
-from .. import log, utils
+from .. import log
 from ..call_spots import background_pytorch, qual_check_torch
 from ..find_spots import detect_torch
 from ..omp import base, coefs_torch, scores_torch, spots_torch
-from ..setup.notebook import NotebookPage
+from ..setup import NotebookPage
 
 
 def run_omp(
@@ -59,8 +59,6 @@ def run_omp(
     log.debug(f"{config['force_cpu']=}")
 
     nbp = NotebookPage("omp")
-    nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_software_hash()
 
     # We want exact, reproducible results.
     torch.backends.cudnn.deterministic = True

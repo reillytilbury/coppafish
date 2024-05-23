@@ -466,7 +466,7 @@ def save_stitched(
     with tqdm(total=z_size * len(nbp_basic.use_tiles), desc="Saving stitched image") as pbar:
         for t in nbp_basic.use_tiles:
             if from_raw:
-                (image_t,) = utils.raw.load_image(nbp_file, nbp_basic, t, c, round_dask_array, r, nbp_basic.use_z)
+                (image_t,) = utils.raw.load_image(nbp_file, nbp_basic, t, c, round_dask_array, r, list(nbp_basic.use_z))
                 # replicate non-filtering procedure in extract_and_filter
                 if not nbp_basic.is_3d:
                     image_t = extract.focus_stack(image_t)

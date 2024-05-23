@@ -4,7 +4,7 @@ from tqdm import tqdm
 from itertools import product
 from scipy.sparse.linalg import svds
 
-from ..setup.notebook import NotebookPage
+from ..setup import NotebookPage
 from ..filter import base as filter_base
 from .. import call_spots
 from .. import spot_colors
@@ -89,8 +89,6 @@ def call_reference_spots(
         if hasattr(nbp_ref_spots, var):
             nbp_ref_spots.__delattr__(var)
     nbp = NotebookPage("call_spots")
-    nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_software_hash()
     log.debug("Call ref spots started")
 
     # 0. Initialise frequently used variables

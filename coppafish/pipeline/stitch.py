@@ -6,7 +6,7 @@ from ..stitch import starting_shifts as stitch_starting_shifts
 from ..stitch import shift as stich_shift
 from ..stitch import tile_origin as stitch_tile_origin
 from ..find_spots import base as find_spots_base
-from ..setup.notebook import NotebookPage
+from ..setup import NotebookPage
 
 
 def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no: np.ndarray) -> NotebookPage:

@@ -19,8 +19,8 @@ import numpy.typing as npt
 from typing import Tuple
 
 from ..omp import base, spots_new
-from ..setup.notebook import NotebookPage
-from .. import utils, call_spots, find_spots, log, omp
+from ..setup import NotebookPage
+from .. import call_spots, find_spots, log, omp
 
 
 def run_omp(
@@ -78,8 +78,6 @@ def run_omp(
 
     log.info("OMP started")
     nbp = NotebookPage("omp")
-    nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_software_hash()
 
     n_genes = nbp_call_spots.bled_codes_ge.shape[0]
     n_rounds_use = len(nbp_basic.use_rounds)

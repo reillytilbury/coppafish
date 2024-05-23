@@ -1,19 +1,19 @@
-import os
-import time
 import json
+import os
 import shutil
 import tempfile
-from typing import Any, Dict, Iterable, List, Tuple
+import time
+from typing import Any, Dict, List, Tuple
 
-import zarr
 import numpy as np
+import zarr
 
 from .. import utils
 
 
 # NOTE: Every method and variable with an underscore at the start should not be accessed externally.
 class NotebookPage:
-    def get_page_name(self):
+    def get_page_name(self) -> str:
         return self._name
 
     _name: str
@@ -29,6 +29,11 @@ class NotebookPage:
     _time_created_key: str = "time_created"
     _version: str
     _version_key: str = "version"
+
+    def get_version(self) -> str:
+        return self._version
+
+    version = property(get_version)
 
     # Each page variable is given a list. The list contains a datatype(s) in the first index followed by a description.
     # A variable can be allowed to take multiple datatypes by separating them with an ' or '. Check the supported
@@ -66,7 +71,7 @@ class NotebookPage:
                 + "\n"
                 + "| 11 | 10 | 9  |",
             ],
-            "use_dyes": ["tuple[int]", "n_use_dyes dyes to use when assigning spots to genes."],
+            "use_dyes": ["tuple[int] or none", "n_use_dyes dyes to use when assigning spots to genes."],
             "dye_names": [
                 "tuple[str] or none",
                 "Names of all dyes so for gene with code $360...$,"
@@ -78,12 +83,12 @@ class NotebookPage:
                 "`True` if *3D* pipeline used, `False` if *2D*",
             ],
             "channel_camera": [
-                "tuple[int] or none",
+                "ndarray[int]",
                 "`channel_camera[i]` is the wavelength in *nm* of the camera on channel $i$."
                 + "`none` if `dye_names = none`.",
             ],
             "channel_laser": [
-                "tuple[int] or none",
+                "ndarray[int]",
                 "`channel_laser[i]` is the wavelength in *nm* of the laser on channel $i$."
                 + "`none` if `dye_names = none`.",
             ],
@@ -160,7 +165,7 @@ class NotebookPage:
                 "round number of pre-seq round",
             ],
             "bad_trc": [
-                "tuple[tuple[int]]",
+                "tuple[tuple[int]] or none",
                 "Tuple of bad tile, round, channel combinations. If a tile, round, channel combination is in this,"
                 + "it will not be used in the pipeline.",
             ],
@@ -293,13 +298,6 @@ class NotebookPage:
                 + "image in filter. The scaling helps to use more of the uint16 integer range when saving the images for "
                 + "improved pixel value precision.",
             ],
-            "bg_scale": [
-                "ndarray[float]",
-                "Numpy float array `[n_tiles x n_rounds x n_channels]`"
-                + "`bg_scale[t, r, c]` is the scale factor applied to the preseq round of tile $t$, channel $c$"
-                + "to match the colour profile of the sequencing image in tile t, round r, channel c."
-                + "None if not using preseq round.",
-            ],
         },
         "filter_debug": {
             "r_dapi": [
@@ -339,13 +337,13 @@ class NotebookPage:
                 + "*Typical: 0*",
             ],
             "spot_no": [
-                "ndarray[int]",
-                "Numpy int32 array [n_tiles x (n_rounds + n_extra_rounds) x n_channels]"
+                "ndarray[int32]",
+                "Numpy array [n_tiles x (n_rounds + n_extra_rounds) x n_channels]"
                 + "`spot_no[t, r, c]` is the number of spots found on tile $t$, round $r$, channel $c$",
             ],
             "spot_yxz": [
-                "ndarray[int]",
-                "Numpy int16 array [n_total_spots x 3]"
+                "ndarray[int16]",
+                "Numpy array [n_total_spots x 3]"
                 + "`spot_yxz[i,:]` is `[y, x, z]` for spot $i$"
                 + "$y$, $x$ gives the local tile coordinates in yx-pixels. "
                 + "$z$ gives local tile coordinate in z-pixels (0 if *2D*)",
@@ -471,6 +469,14 @@ class NotebookPage:
                 "Numpy float array [n_tiles x n_rounds x n_channels x 4 x 3]"
                 + "yxz affine corrections to be applied after the warp.",
             ],
+            "bg_scale": [
+                "ndarray[float]",
+                "Numpy float array `[n_tiles x n_rounds x n_channels]`"
+                + "`bg_scale[t, r, c]` is the scale factor applied to the preseq round of tile $t$, channel $c$"
+                + "to match the colour profile of the sequencing image in tile t, round r, channel c. "
+                + "This is computed in register because the images must be well-alligned to compute. "
+                + "Zeros if not using the preseq round.",
+            ],
         },
         "register_debug": {
             "channel_transform_initial": [
@@ -521,8 +527,8 @@ class NotebookPage:
         },
         "ref_spots": {
             "local_yxz": [
-                "ndarray[int]",
-                "Numpy int16 array [n_spots x 3]. "
+                "ndarray[int16]",
+                "Numpy array [n_spots x 3]. "
                 + "`local_yxz[s]` are the $yxz$ coordinates of spot $s$ found on `tile[s]`, `ref_round`, `ref_channel`."
                 + "To get `global_yxz`, add `nb.stitch.tile_origin[tile[s]]`.",
             ],
@@ -532,18 +538,18 @@ class NotebookPage:
                 + "`True` for spots that are well isolated i.e. surroundings have low intensity so no nearby spots.",
             ],
             "tile": [
-                "ndarray[int]",
-                "Numpy int16 array [n_spots]. Tile each spot was found on.",
+                "ndarray[int16]",
+                "Numpy array [n_spots]. Tile each spot was found on.",
             ],
             "colors": [
-                "ndarray[int]",
-                "Numpy int32 array [n_spots x n_rounds x n_channels]. "
+                "ndarray[int32]",
+                "Numpy array [n_spots x n_rounds x n_channels]. "
                 + "`[s, r, c]` is the intensity of spot $s$ on round $r$, channel $c$."
                 + "`-tile_pixel_value_shift` if that round/channel not used otherwise integer.",
             ],
             "gene_no": [
-                "ndarray[int]",
-                "Numpy int16 array [n_spots]. Gene number assigned to each spot. `None` if not assigned.",
+                "ndarray[int16]",
+                "Numpy array [n_spots]. Gene number assigned to each spot. `None` if not assigned.",
             ],
             "score": [
                 "ndarray[float]",
@@ -574,8 +580,8 @@ class NotebookPage:
                 "Numpy float array [n_spots x n_rounds x n_dyes]. Strength of each dye in each round for each spot.",
             ],
             "bg_colours": [
-                "ndarray[int]",
-                "Numpy int32 array [n_spots x n_rounds x n_channels]. "
+                "ndarray[int32]",
+                "Numpy array [n_spots x n_rounds x n_channels]. "
                 + "Background colour of each spot. Calculated as the median of the channel across rounds.",
             ],
         },
@@ -662,28 +668,28 @@ class NotebookPage:
                 + "0 means unsure of sign.",
             ],
             "local_yxz": [
-                "ndarray[int]",
-                "Numpy int16 array [n_spots, 3]"
+                "ndarray[int16]",
+                "Numpy array [n_spots, 3]"
                 + "`local_yxz[s]` are the $yxz$ coordinates of spot $s$ found on `tile[s]`, `ref_round`, `ref_channel`."
                 + "To get `global_yxz`, add `nb.stitch.tile_origin[tile[s]]`.",
             ],
             "scores": [
-                "ndarray[int]",
-                "Numpy int16 array [n_spots]"
+                "ndarray[int16]",
+                "Numpy array [n_spots]"
                 + "For each spot `s`, specified by position `local_yxz[s]` at tile `tile[s]` with gene read `gene_no[s]`, "
                 + "has gene read score of `scores[s]`. Each score is between 0 and `np.iinfo(np.int16).max`.",
             ],
             "tile": [
-                "ndarray[int]",
-                "Numpy int16 array [n_spots]" + "Tile each spot was found on.",
+                "ndarray[int16]",
+                "Numpy array [n_spots]" + "Tile each spot was found on.",
             ],
             "gene_no": [
-                "ndarray[int]",
-                "Numpy int16 array [n_spots]" + "`gene_no[s]` is the index of the gene assigned to spot $s$.",
+                "ndarray[int16]",
+                "Numpy array [n_spots]" + "`gene_no[s]` is the index of the gene assigned to spot $s$.",
             ],
             "colours": [
-                "ndarray[int]",
-                "Numpy int32 `(n_spots x len(use_rounds) x len(use_channels))`"
+                "ndarray[int32]",
+                "Numpy `(n_spots x len(use_rounds) x len(use_channels))`"
                 + "Each spot's intensity in every sequencing round/channel before colour normalisation.",
             ],
         },
@@ -964,7 +970,7 @@ class NotebookPage:
                 value = json.loads(file.read())["value"]
                 # A JSON file does not support saving tuples, they must be converted back to tuples here.
                 if type(value) is list:
-                    value = self._deep_tuple(value)
+                    value = utils.base.to_deep_tuple(value)
             return value
         elif file_prefix == "npz":
             return np.load(file_path)["arr_0"]
@@ -994,18 +1000,6 @@ class NotebookPage:
                         f"Variable {var_name} in page {page_name} has incompatible types: "
                         + f"{' and '.join(unique_prefixes)} in _options"
                     )
-
-    def _deep_tuple(self, value: Iterable[Any]) -> Tuple[Any]:
-        # Convert the iterable and all iterables inside into tuples.
-        assert hasattr(value, "__iter__")
-
-        result = tuple()
-        for subvalue in value:
-            if hasattr(subvalue, "__iter__"):
-                result += (self._deep_tuple(subvalue),)
-            else:
-                result += (subvalue,)
-        return result
 
     def _type_str_to_prefix(self, type_as_str: str) -> str:
         return self._type_prefixes[type_as_str.split(self._datatype_nest_start)[0]]
@@ -1050,15 +1044,19 @@ class NotebookPage:
                         return False
                 return True
         elif type_as_str == "ndarray[int]":
-            return type(value) is np.ndarray and isinstance(value.dtype.type(), (np.int16, np.int32, np.int64))
+            return self._is_ndarray_of_dtype(value, (np.int16, np.int32, np.int64))
+        elif type_as_str == "ndarray[int16]":
+            return self._is_ndarray_of_dtype(value, (np.int16,))
+        elif type_as_str == "ndarray[int32]":
+            return self._is_ndarray_of_dtype(value, (np.int32,))
         elif type_as_str == "ndarray[uint]":
-            return type(value) is np.ndarray and isinstance(value.dtype.type(), (np.uint16, np.uint32, np.uint64))
+            return self._is_ndarray_of_dtype(value, (np.uint16, np.uint32, np.uint64))
         elif type_as_str == "ndarray[float]":
-            return type(value) is np.ndarray and isinstance(value.dtype.type(), (np.float16, np.float32, np.float64))
+            return self._is_ndarray_of_dtype(value, (np.float16, np.float32, np.float64))
         elif type_as_str == "ndarray[str]":
-            return type(value) is np.ndarray and isinstance(value.dtype.type(), (str, np.str_))
+            return self._is_ndarray_of_dtype(value, (str, np.str_))
         elif type_as_str == "ndarray[bool]":
-            return type(value) is np.ndarray and isinstance(value.dtype.type(), (np.bool_, bool))
+            return self._is_ndarray_of_dtype(value, (bool, np.bool_))
         elif type_as_str == "zarr":
             # A zarr is specified by pointing the notebook page to the location of the zarr array. This way the array
             # does not need to be in memory all the time and the array can be deleted once it is saved within the
@@ -1066,3 +1064,8 @@ class NotebookPage:
             return type(value) is str and os.path.isdir(value) and value.endswith(".zarr")
         else:
             raise TypeError(f"Unexpected type '{type_as_str}' found in _options in NotebookPage")
+
+    def _is_ndarray_of_dtype(self, variable: Any, valid_dtypes: Tuple[np.dtype], /) -> bool:
+        assert type(valid_dtypes) is tuple
+
+        return type(variable) is np.ndarray and isinstance(variable.dtype.type(), valid_dtypes)

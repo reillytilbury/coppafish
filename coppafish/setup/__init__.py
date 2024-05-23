@@ -1,2 +1,4 @@
 from .tile_details import get_tilepos
-from .notebook import Notebook, NotebookPage
+from . import config
+from .notebook import Notebook
+from .notebook_page import NotebookPage

@@ -2,8 +2,8 @@ import numpy as np
 from ..spot_colors import base as spot_colors_base
 from ..call_spots import base as call_spots_base
 from .. import find_spots as fs
-from .. import utils, log
-from ..setup.notebook import NotebookPage
+from .. import log
+from ..setup import NotebookPage
 
 
 def get_reference_spots(
@@ -51,8 +51,6 @@ def get_reference_spots(
     # We create a notebook page for ref_spots which stores information like local coords, isolated info, tile_no of each
     # spot and much more.
     nbp = NotebookPage("ref_spots")
-    nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_software_hash()
     # The code is going to loop through all tiles, as we expect some anchor spots on each tile but r and c should stay
     # fixed as the value of the reference round and reference channel
     r = nbp_basic.anchor_round

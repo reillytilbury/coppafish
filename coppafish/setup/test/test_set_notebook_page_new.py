@@ -1,9 +1,9 @@
 import os
-import zarr
-import shutil
 from pathlib import PurePath
+import shutil
 
 import numpy as np
+import zarr
 
 from coppafish.setup.notebook_new import Notebook
 from coppafish.setup.notebook_page_new import NotebookPage
@@ -16,6 +16,13 @@ def test_notebook_creation() -> None:
     if os.path.isdir(nb_path):
         shutil.rmtree(nb_path)
     nb = Notebook(nb_path)
+
+    nb.config_path = "blahalbshkglvsf"
+    try:
+        nb.config_path = "djfhdersd"
+        assert False, "Should not be allowed to set the config path twice"
+    except ValueError:
+        pass
 
     assert nb.has_page("debug") == False
 
@@ -141,11 +148,6 @@ def test_notebook_creation() -> None:
 
     nb > "debug"
     nb_page > "o"
-
-    assert nb_page._deep_tuple([[0, 2, 3], [1, 4], []]) == ((0, 2, 3), (1, 4), tuple())
-    assert nb_page._deep_tuple(([0, 2, 3], [1, 4], [])) == ((0, 2, 3), (1, 4), tuple())
-    assert nb_page._deep_tuple([[0, 2, [0]], [1, 4], []]) == ((0, 2, (0,)), (1, 4), tuple())
-    assert nb_page._deep_tuple([[0, 2, (0,)], [1, 4], []]) == ((0, 2, (0,)), (1, 4), tuple())
 
     check_variables()
     del nb_page

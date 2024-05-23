@@ -11,7 +11,7 @@ import numpy.typing as npt
 
 from .. import utils, log
 from ..register import preprocessing
-from ..setup.notebook import NotebookPage
+from ..setup import NotebookPage
 
 
 def load_spot_colours(

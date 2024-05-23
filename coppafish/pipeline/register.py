@@ -12,7 +12,7 @@ from .. import find_spots, log
 from ..register import preprocessing
 from ..register import base as register_base
 from ..setup import NotebookPage
-from ..utils import system, tiles_io
+from ..utils import tiles_io
 
 
 def register(
@@ -56,13 +56,12 @@ def register(
     # Part 0: Initialisation
     # Initialise frequently used variables
     log.debug("Register started")
-    nbp, nbp_debug = NotebookPage("register"), NotebookPage("register_debug")
-    nbp.software_version = system.get_software_version()
-    nbp.revision_hash = system.get_software_hash()
+    nbp = NotebookPage("register")
+    nbp_debug = NotebookPage("register_debug")
     use_tiles, use_rounds, use_channels = (
-        nbp_basic.use_tiles.copy(),
-        nbp_basic.use_rounds.copy(),
-        nbp_basic.use_channels.copy(),
+        list(nbp_basic.use_tiles),
+        list(nbp_basic.use_rounds),
+        list(nbp_basic.use_channels),
     )
     n_tiles, n_rounds, n_channels = nbp_basic.n_tiles, nbp_basic.n_rounds, nbp_basic.n_channels
     # Initialise variable for ICP step
@@ -413,11 +412,8 @@ def register(
                 bg_scale[t, r, c] = np.median(im_r) / np.median(im_pre)
 
         # Now add the bg_scale to the nbp_filter page. To do this we need to delete the bg_scale attribute.
-        nbp_filter.finalized = False
-        del nbp_filter.bg_scale
+        nbp.bg_scale = bg_scale
         log.debug("Compute background scale factors complete")
-        nbp_filter.bg_scale = bg_scale
-        nbp_filter.finalized = True
 
     log.debug("Register complete")
     return nbp, nbp_debug

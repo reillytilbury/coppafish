@@ -1,5 +1,4 @@
 import os
-import sys
 
 from . import basic_info
 from . import extract_run
@@ -10,11 +9,10 @@ from . import stitch
 from . import get_reference_spots
 from . import call_reference_spots
 from . import omp_torch
-from .. import utils
-from .. import log
+from .. import log, utils, setup
 from ..find_spots import check_spots
 from ..pdf.base import BuildPDF
-from ..setup import Notebook
+from ..setup import Notebook, file_names
 
 
 def run_pipeline(
@@ -70,7 +68,7 @@ def run_tile_indep_pipeline(nb: Notebook) -> None:
     check_spots.check_n_spots(nb)
 
 
-def initialize_nb(config_file: str) -> Notebook:
+def initialize_nb(config_path: str) -> Notebook:
     """
     Creates a `Notebook` and adds `basic_info` page before saving.
     `file_names` page will be added automatically as soon as `basic_info` page is added.
@@ -82,28 +80,27 @@ def initialize_nb(config_file: str) -> Notebook:
     Returns:
         `Notebook` containing `file_names` and `basic_info` pages.
     """
-    nb = Notebook(config_file=config_file)
+    config = setup.config.get_config(config_path)
 
-    config = nb.get_config()
+    config_basic = config["basic_info"]
     config_file = config["file_names"]
 
+    nb_path = os.path.join(config_file["output_dir"], config_file["notebook_name"])
+    nb = Notebook(nb_path)
+    nb.config_path = config_path
+
     log.base.set_log_config(
-        config["basic_info"]["minimum_print_severity"],
+        config_basic["minimum_print_severity"],
         os.path.join(config_file["output_dir"], config_file["log_name"]),
-        config["basic_info"]["email_me"],
-        config["basic_info"]["sender_email"],
-        config["basic_info"]["sender_email_password"],
+        config_basic["email_me"],
+        config_basic["sender_email"],
+        config_basic["sender_email_password"],
     )
     log.info(
         f" COPPAFISH v{utils.system.get_software_version()} ".center(utils.system.current_terminal_size_xy(-33)[0], "=")
     )
 
-    if not nb.has_page("basic_info"):
-        nbp_basic = basic_info.set_basic_info_new(config)
-        nb += nbp_basic
-    else:
-        log.warn(utils.warnings.NotebookPageWarning("basic_info"))
-    if utils.system.get_software_version() not in nb.get_all_variable_instances(nb._SOFTWARE_VERSION):
+    if utils.system.get_software_version() not in nb.get_unqiue_versions():
         log.warn(
             f"You are running on v{utils.system.get_software_version()}, but the notebook contains "
             + f"data from versions {', '.join(set(nb.get_all_variable_instances(nb._SOFTWARE_VERSION)))}.",
@@ -113,6 +110,16 @@ def initialize_nb(config_file: str) -> Notebook:
         log.warn(
             f"You are running v{utils.system.get_software_version()}. The latest online version is v{online_version}"
         )
+    if not nb.has_page("basic_info"):
+        nbp_basic = basic_info.set_basic_info_new(config)
+        nb += nbp_basic
+    else:
+        log.warn(utils.warnings.NotebookPageWarning("basic_info"))
+    if not nb.has_page("file_names"):
+        nbp_file = file_names.get_file_names(nb)
+        nb += nbp_file
+    else:
+        log.warn(utils.warnings.NotebookPageWarning("file_names"))
     return nb
 
 
@@ -132,7 +139,7 @@ def run_extract(nb: Notebook) -> None:
             tile, otherwise None.
     """
     if not nb.has_page("extract"):
-        config = nb.get_config()
+        config = setup.config.get_config(nb.config_path)
         nbp = extract_run.run_extract(config["extract"], nb.file_names, nb.basic_info)
         nb += nbp
     else:
@@ -147,7 +154,7 @@ def run_filter(nb: Notebook) -> None:
         nb (Notebook): `Notebook` containing `file_names`, `basic_info`, `scale` and `extract` pages.
     """
     if not nb.has_page("filter"):
-        config = nb.get_config()
+        config = setup.config.get_config(nb.config_path)
         nbp, nbp_debug = filter_run.run_filter(config["filter"], nb.file_names, nb.basic_info, nb.extract)
         nb += nbp
         nb += nbp_debug
@@ -170,7 +177,7 @@ def run_find_spots(nb: Notebook) -> Notebook:
         NoteBook containing 'find_spots' page.
     """
     if not nb.has_page("find_spots"):
-        config = nb.get_config()
+        config = setup.config.get_config(nb.config_path)
         nbp = find_spots.find_spots(
             config["find_spots"],
             nb.file_names,
@@ -198,7 +205,7 @@ def run_stitch(nb: Notebook) -> None:
     Args:
         nb: `Notebook` containing `find_spots` page.
     """
-    config = nb.get_config()
+    config = setup.config.get_config(nb.config_path)
     if not nb.has_page("stitch"):
         nbp_debug = stitch.stitch(config["stitch"], nb.basic_info, nb.find_spots.spot_yxz, nb.find_spots.spot_no)
         nb += nbp_debug
@@ -252,7 +259,7 @@ def run_register(nb: Notebook) -> None:
     Args:
         nb: `Notebook` containing `extract` page.
     """
-    config = nb.get_config()
+    config = setup.config.get_config(nb.config_path)
     # if not all(nb.has_page(["register", "register_debug"])):
     if not nb.has_page("register"):
         nbp, nbp_debug = register.register(
@@ -310,8 +317,8 @@ def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None
     else:
         log.warn(utils.warnings.NotebookPageWarning("ref_spots"))
     if not nb.has_page("call_spots"):
-        config = nb.get_config()
-        nbp, nbp_ref_spots = call_reference_spots.call_reference_spots(
+        config = setup.config.get_config(nb.config_path)
+        nbp, _ = call_reference_spots.call_reference_spots(
             config["call_spots"],
             nb.file_names,
             nb.basic_info,
@@ -339,7 +346,7 @@ def run_omp(nb: Notebook) -> None:
         nb: `Notebook` containing `call_spots` page.
     """
     if not nb.has_page("omp"):
-        config = nb.get_config()
+        config = setup.config.get_config(nb.config_path)
         # Use tile with most spots on to find spot shape in omp
         nbp = omp_torch.run_omp(
             config["omp"],

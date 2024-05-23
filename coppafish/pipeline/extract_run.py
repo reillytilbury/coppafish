@@ -5,7 +5,7 @@ import numpy as np
 from tqdm import tqdm
 
 from .. import log, utils
-from ..setup.notebook import NotebookPage
+from ..setup import NotebookPage
 from ..utils import indexing, tiles_io
 
 
@@ -36,8 +36,6 @@ def run_extract(
         )
 
     nbp = NotebookPage("extract")
-    nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_software_hash()
     nbp.file_type = config["file_type"]
 
     log.debug("Extraction started")
@@ -96,7 +94,7 @@ def run_extract(
                     continue
 
                 channel_images: tuple[np.ndarray] = utils.raw.load_image(
-                    nbp_file, nbp_basic, t=t, c=channels, r=r, use_z=nbp_basic.use_z
+                    nbp_file, nbp_basic, t=t, c=channels, r=r, use_z=list(nbp_basic.use_z)
                 )
                 for im, c, file_path, file_exists in zip(channel_images, channels, file_paths, files_exist):
                     if file_exists:
