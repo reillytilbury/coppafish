@@ -1,8 +1,11 @@
 import json
 import os
 import time
-from typing import Any, Tuple
+from typing import Any, Dict, Optional, Tuple
 
+import numpy as np
+
+from . import config
 from .. import log, utils
 from .notebook_page import NotebookPage
 
@@ -11,22 +14,25 @@ class Notebook:
     _directory: str
 
     # Attribute names allowed to be set inside the notebook page that are not in _options.
-    _VALID_ATTRIBUTE_NAMES = ("config_path", "_config_path", "_directory", "_time_created", "_version")
+    _VALID_ATTRIBUTE_NAMES = ("config_path", "_config_path", "_init_config", "_directory", "_time_created", "_version")
 
-    _metadata_name: str = "_metadata.json"
-
-    _time_created: float
-    _time_created_key: str = "time_created"
-    _version: str
-    _version_key: str = "version"
-
-    _config_path: str
-    _config_path_key: str = "config_path"
+    _config_path: Optional[str]
 
     def get_config_path(self) -> str:
         return self._config_path
 
     config_path = property(get_config_path)
+
+    _metadata_name: str = "_metadata.json"
+
+    # The notebook stores the config as a dict from when it was first instantiated. This way any changes to a page's
+    # config can be detected when comparing to the config on disk that the user may have modified.
+    _init_config: Dict[str, Dict[str, Any]]
+    _init_config_key: str = "initial_config"
+    _time_created: float
+    _time_created_key: str = "time_created"
+    _version: str
+    _version_key: str = "version"
 
     _options = {
         "basic_info": [
@@ -73,19 +79,25 @@ class Notebook:
         ],
     }
 
-    def __init__(self, notebook_dir: str, config_path: str = None, /) -> None:
+    def __init__(self, notebook_dir: str, config_path: str = Optional[None], /) -> None:
         """
         Load the notebook found at the given directory. Or, if the directory does not exist, create the directory.
         """
         assert type(notebook_dir) is str
+        assert config_path is None or type(config_path) is str
 
-        self._config_path = os.path.abspath(config_path) if config_path is not None else None
+        self._config_path = None
+        if config_path is not None:
+            self._config_path = os.path.abspath(config_path)
         self._directory = os.path.abspath(notebook_dir)
         self._time_created = time.time()
         self._version = utils.system.get_software_version()
         if not os.path.isdir(self._directory):
+            if self._config_path is None:
+                raise ValueError(f"To create a new notebook, config_path must be specified")
             log.info(f"Creating notebook at {self._directory}")
             os.mkdir(self._directory)
+            self._init_config = config.get_config(self._config_path)
             self._save()
         self._load()
 
@@ -93,6 +105,10 @@ class Notebook:
         """
         Add and save a new page to the notebook using syntax notebook += notebook_page.
         """
+        if self._config_path is None:
+            raise ValueError(f"The notebook must have a specified config path when instantiated to add notebook pages.")
+        if not os.path.isfile(self._config_path):
+            raise FileNotFoundError(f"Could not add page since config at {self._config_path} was not found")
         if type(page) is not NotebookPage:
             raise TypeError(f"Cannot add type {type(page)} to the notebook")
         unset_variables = page.get_unset_variables()
@@ -102,6 +118,12 @@ class Notebook:
                 + f"Variable(s) unset: {', '.join(unset_variables)}"
             )
 
+        if len(self._get_modified_config_variables()) > 0:
+            log.warn(
+                f"The config at {self.config_path} has modified variables: "
+                + ", ".join(self._get_modified_config_variables())
+                + " since the pipeline was first started. Continue at your own risk."
+            )
         self.__setattr__(page.name, page)
         self._save()
         return self
@@ -207,6 +229,40 @@ class Notebook:
 
         return str(os.path.join(self._directory, page_name))
 
+    def _get_modified_config_variables(self) -> Tuple[str]:
+        assert self.config_path is not None
+
+        modified_variables = tuple()
+        version_mismatch_msg = "Is the notebook for a different software version?"
+        config_on_disk = config.get_config(self.config_path)
+
+        for config_section in self._init_config.keys():
+            if config_section not in config_on_disk:
+                raise ValueError(
+                    f"Config at {self.config_path} is missing section {config_section}. " + version_mismatch_msg
+                )
+            for config_variable_name, value in self._init_config[config_section].items():
+                is_equal = False
+                if config_variable_name not in config_on_disk[config_section].keys():
+                    raise ValueError(
+                        f"Config at {self.config_path} is missing the variable named {config_variable_name} in section "
+                        + f"{config_section}. {version_mismatch_msg}"
+                    )
+                config_variable = config_on_disk[config_section][config_variable_name]
+                if value == config_variable:
+                    is_equal = True
+                if type(value) is list:
+                    array_0 = np.array(value)
+                    array_1 = np.array(config_variable)
+                    # This is dumb. But, it works.
+                    if isinstance(array_0.dtype.type(), (str, np.str_)):
+                        is_equal = (array_0 == array_1).all()
+                    else:
+                        is_equal = np.allclose(array_0, array_1)
+                if not is_equal:
+                    modified_variables += (config_variable_name,)
+        return modified_variables
+
     def _save_metadata(self) -> None:
         assert os.path.isdir(self._directory)
 
@@ -214,9 +270,9 @@ class Notebook:
         if os.path.isfile(file_path):
             return
         metadata = {
-            self._config_path_key: self._config_path,
             self._time_created_key: self._time_created,
             self._version_key: self._version,
+            self._init_config_key: self._init_config,
         }
         with open(file_path, "x") as file:
             file.write(json.dumps(metadata, indent=4))
@@ -230,9 +286,9 @@ class Notebook:
         metadata = dict()
         with open(file_path, "r") as file:
             metadata = json.loads(file.read())
-        self._config_path = metadata[self._config_path_key]
         self._version = metadata[self._version_key]
         self._time_created = metadata[self._time_created_key]
+        self._init_config = metadata[self._init_config_key]
 
     def _get_metadata_path(self) -> str:
         return os.path.join(self._directory, self._metadata_name)

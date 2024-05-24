@@ -19,6 +19,7 @@ def test_notebook_creation() -> None:
     nb = Notebook(nb_path, config_path)
 
     assert nb.has_page("debug") == False
+    assert nb.config_path == config_path
 
     nb_page: NotebookPage = NotebookPage("debug")
 
@@ -39,7 +40,6 @@ def test_notebook_creation() -> None:
     n = rng.randint(200, size=(7, 8), dtype=np.uint32)
 
     def _check_variables(nb: Notebook):
-        assert nb.config_path == config_path
         assert nb.has_page("debug")
         assert np.allclose(nb.debug.a, a)
         assert np.allclose(nb.debug.b, b)
@@ -158,7 +158,3 @@ def test_notebook_creation() -> None:
     print(f"Loading notebook back in from disk")
     nb = Notebook(nb_path)
     _check_variables(nb)
-
-
-if __name__ == "__main__":
-    test_notebook_creation()
