@@ -156,7 +156,7 @@ def find_spots(
 
     # Phase 3: Save results to notebook page
     nbp.spot_yxz = spot_info["spot_yxz"]
-    nbp.spot_no = spot_info["spot_no"].astype(np.int16)
+    nbp.spot_no = spot_info["spot_no"].astype(np.int32)
     nbp.isolated_spots = spot_info["isolated"]
     log.debug("Find spots complete")
 

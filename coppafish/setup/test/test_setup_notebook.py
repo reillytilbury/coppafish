@@ -15,14 +15,8 @@ def test_notebook_creation() -> None:
     nb_path = os.path.join(os.getcwd(), ".notebook_test")
     if os.path.isdir(nb_path):
         shutil.rmtree(nb_path)
-    nb = Notebook(nb_path)
-
-    nb.config_path = "blahalbshkglvsf"
-    try:
-        nb.config_path = "djfhdersd"
-        assert False, "Should not be allowed to set the config path twice"
-    except ValueError:
-        pass
+    config_path = "dfjdkf"
+    nb = Notebook(nb_path, config_path)
 
     assert nb.has_page("debug") == False
 
@@ -43,6 +37,29 @@ def test_notebook_creation() -> None:
     m = np.zeros(3, dtype=str)
     m[0] = "blah"
     n = rng.randint(200, size=(7, 8), dtype=np.uint32)
+
+    def _check_variables(nb: Notebook):
+        assert nb.config_path == config_path
+        assert nb.has_page("debug")
+        assert np.allclose(nb.debug.a, a)
+        assert np.allclose(nb.debug.b, b)
+        assert np.allclose(nb.debug.c, c)
+        assert np.allclose(nb.debug.d, d)
+        assert type(nb.debug.d) is tuple
+        assert nb.debug.e == e
+        assert type(nb.debug.e) is tuple
+        assert np.allclose(nb.debug.f, f)
+        assert nb.debug.g is g
+        assert np.allclose(nb.debug.h, h)
+        assert nb.debug.i == i
+        assert np.allclose(nb.debug.j, j)
+        assert np.allclose(nb.debug.k, k)
+        assert np.allclose(nb.debug.l, l)
+        assert (nb.debug.m == m).all()
+        assert np.allclose(nb.debug.n, n)
+        assert os.path.isdir(nb.debug.o)
+        assert len(os.listdir(nb.debug.o)) > 0
+        assert PurePath(nb_path) in PurePath(nb.debug.o).parents
 
     nb_page.a = a
     try:
@@ -124,44 +141,23 @@ def test_notebook_creation() -> None:
     except ValueError:
         pass
 
-    def check_variables():
-        assert nb.has_page("debug")
-        assert np.allclose(nb.debug.a, a)
-        assert np.allclose(nb.debug.b, b)
-        assert np.allclose(nb.debug.c, c)
-        assert np.allclose(nb.debug.d, d)
-        assert type(nb.debug.d) is tuple
-        assert nb.debug.e == e
-        assert type(nb.debug.e) is tuple
-        assert np.allclose(nb.debug.f, f)
-        assert nb.debug.g is g
-        assert np.allclose(nb.debug.h, h)
-        assert nb.debug.i == i
-        assert np.allclose(nb.debug.j, j)
-        assert np.allclose(nb.debug.k, k)
-        assert np.allclose(nb.debug.l, l)
-        assert (nb.debug.m == m).all()
-        assert np.allclose(nb.debug.n, n)
-        assert os.path.isdir(nb.debug.o)
-        assert len(os.listdir(nb.debug.o)) > 0
-        assert PurePath(nb_path) in PurePath(nb.debug.o).parents
-
     nb > "debug"
     nb_page > "o"
 
-    check_variables()
+    _check_variables(nb)
     del nb_page
     nb.resave()
-    check_variables()
+    _check_variables(nb)
     del nb.debug.a
     a = 10
     nb.debug.a = a
     nb.resave()
-    check_variables()
+    _check_variables(nb)
 
     del nb
+    print(f"Loading notebook back in from disk")
     nb = Notebook(nb_path)
-    check_variables()
+    _check_variables(nb)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,6 @@
-import pytest
 import numpy as np
 
 
-@pytest.mark.pytorch
 def test_wiener_deconvolve_equality():
     rng = np.random.RandomState(0)
     im_y = 20
@@ -18,7 +16,3 @@ def test_wiener_deconvolve_equality():
 
     output = wiener_deconvolve(image, im_pad_shape, filter)
     assert np.allclose(output, output_2)
-
-
-if __name__ == "__main__":
-    test_wiener_deconvolve_equality()

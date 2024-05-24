@@ -85,7 +85,7 @@ class NotebookPage:
             "channel_camera": [
                 "ndarray[int]",
                 "`channel_camera[i]` is the wavelength in *nm* of the camera on channel $i$."
-                + "`none` if `dye_names = none`.",
+                + " Empty array if `dye_names = none`.",
             ],
             "channel_laser": [
                 "ndarray[int]",

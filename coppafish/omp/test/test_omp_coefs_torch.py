@@ -1,13 +1,11 @@
-import torch
-import scipy
 import numpy as np
-import pytest
+import scipy
+import torch
 from typing_extensions import assert_type
 
 from coppafish.omp import coefs_torch
 
 
-@pytest.mark.pytorch
 def test_compute_omp_coefficients() -> None:
     torch.manual_seed(0)
     im_y, im_x, im_z = 7, 8, 9

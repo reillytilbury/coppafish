@@ -76,10 +76,10 @@ def register(
     # Part 1: Channel registration
     if registration_data["channel_registration"]["transform"].max() == 0:
         log.info("Running channel registration")
-        if not nbp_basic.channel_camera:
+        if nbp_basic.channel_camera.size == 0:
             cameras = [0] * n_channels
         else:
-            cameras = list(set(nbp_basic.channel_camera))
+            cameras = list(set(nbp_basic.channel_camera.tolist()))
 
         cameras.sort()
         anchor_cam_idx = cameras.index(nbp_basic.channel_camera[nbp_basic.anchor_channel])
@@ -109,7 +109,7 @@ def register(
             r=nbp_basic.anchor_round,
             c=nbp_basic.dapi_channel,
         )
-        use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
+        use_rounds = list(nbp_basic.use_rounds) + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
         for r in tqdm(use_rounds, desc="Round", total=len(use_rounds)):
             round_image = tiles_io.load_image(
                 nbp_file,

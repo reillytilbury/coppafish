@@ -26,14 +26,7 @@ class Notebook:
     def get_config_path(self) -> str:
         return self._config_path
 
-    def set_config_path(self, path: str) -> str:
-        assert type(path) is str
-        if self._config_path is not None:
-            raise ValueError(f"Cannot set config_path, already set to {self._config_path}")
-
-        self._config_path = path
-
-    config_path = property(get_config_path, set_config_path)
+    config_path = property(get_config_path)
 
     _options = {
         "basic_info": [
@@ -80,14 +73,14 @@ class Notebook:
         ],
     }
 
-    def __init__(self, notebook_dir: str, /) -> None:
+    def __init__(self, notebook_dir: str, config_path: str = None, /) -> None:
         """
         Load the notebook found at the given directory. Or, if the directory does not exist, create the directory.
         """
         assert type(notebook_dir) is str
 
-        self._config_path = None
-        self._directory = notebook_dir
+        self._config_path = os.path.abspath(config_path) if config_path is not None else None
+        self._directory = os.path.abspath(notebook_dir)
         self._time_created = time.time()
         self._version = utils.system.get_software_version()
         if not os.path.isdir(self._directory):
@@ -95,18 +88,6 @@ class Notebook:
             os.mkdir(self._directory)
             self._save()
         self._load()
-        # Check directory for existing notebook pages and load them in.
-        for page_name in os.listdir(self._directory):
-            if page_name == self._metadata_name:
-                continue
-            page_path = os.path.join(self._directory, page_name)
-            if os.path.isfile(page_path):
-                raise FileExistsError(f"Unexpected file {page_path} inside the notebook")
-            if page_name not in self._options.keys():
-                raise IsADirectoryError(f"Unexpected directory at {page_path} inside the notebook")
-            loaded_page = NotebookPage(page_name)
-            loaded_page.load(page_path)
-            self.__setattr__(page_name, loaded_page)
 
     def __iadd__(self, page: NotebookPage):
         """
@@ -201,6 +182,18 @@ class Notebook:
 
     def _load(self) -> None:
         self._load_metadata()
+        # Check directory for existing notebook pages and load them in.
+        for page_name in os.listdir(self._directory):
+            if page_name == self._metadata_name:
+                continue
+            page_path = self._get_page_directory(page_name)
+            if os.path.isfile(page_path):
+                raise FileExistsError(f"Unexpected file {page_path} inside the notebook")
+            if page_name not in self._options.keys():
+                raise IsADirectoryError(f"Unexpected directory at {page_path} inside the notebook")
+            loaded_page = NotebookPage(page_name)
+            loaded_page.load(page_path)
+            self.__setattr__(page_name, loaded_page)
 
     def _get_existing_pages(self) -> Tuple[NotebookPage]:
         pages = []

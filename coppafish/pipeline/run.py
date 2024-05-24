@@ -86,8 +86,7 @@ def initialize_nb(config_path: str) -> Notebook:
     config_file = config["file_names"]
 
     nb_path = os.path.join(config_file["output_dir"], config_file["notebook_name"])
-    nb = Notebook(nb_path)
-    nb.config_path = config_path
+    nb = Notebook(nb_path, config_path)
 
     log.base.set_log_config(
         config_basic["minimum_print_severity"],

@@ -1,10 +1,8 @@
 import numpy as np
-import pytest
+import torch
 
 
-@pytest.mark.pytorch
 def test_detect_spots_equality() -> None:
-    import torch
     from coppafish.find_spots import detect, detect_torch
 
     rng = np.random.RandomState(0)
