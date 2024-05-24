@@ -794,40 +794,109 @@ def view_camera_correction(nb: Notebook):
         mid_z = fluorescent_beads.shape[0] // 2
         fluorescent_beads = fluorescent_beads[mid_z, :, :, :]
     # if fluorescent bead images are for all channels, just take one from each camera
-    cam_channels = [0, 9, 18, 23]
+    cam_channels =[0, 9, 18, 23]
     if len(fluorescent_beads) == 28:
         fluorescent_beads = fluorescent_beads[cam_channels]
-    transform = nb.register_debug.channel_transform_initial[cam_channels]
-    linear_transform = transform[:, :2, :2]
-    shift = transform[:, 3, :2]
-    # put these together to form the full transform
-    transform = np.zeros((4, 3, 3))
-    transform[:, :2, :2] = linear_transform
-    transform[:, :2, 2] = shift
-    transform[:, 2, 2] = 1
+
+    # set the beads to const intensity
+    for i in range(4):
+        threshold = skimage.filters.threshold_isodata(fluorescent_beads[i])
+        bead_pixels = fluorescent_beads[i] > threshold
+        fluorescent_beads[i][bead_pixels] = threshold
+
+    # obtain the initial transform for each channel
+    transform = np.repeat(np.eye(2, 3)[None, :, :], 4, axis=0)
+    for i, c in enumerate(cam_channels):
+        transform[i][:2, :2] = nb.register_debug.channel_transform_initial[c][:2, :2].T
+        transform[i][:2, -1] = nb.register_debug.channel_transform_initial[c][-1, :2]
+
+    # get the spots from the circle detection
+    bead_point_clouds = []
+    bead_radii = nb.get_config()['register']['bead_radii']
+    for i in range(4):
+        edges = skimage.feature.canny(fluorescent_beads[i], sigma=3, low_threshold=10, high_threshold=50)
+        hough_res = skimage.transform.hough_circle(edges, bead_radii)
+        accums, cx, cy, radii = skimage.transform.hough_circle_peaks(
+            hough_res, bead_radii, min_xdistance=10, min_ydistance=10
+        )
+        cy, cx = cy.astype(int), cx.astype(int)
+        values = fluorescent_beads[i][cy, cx]
+        cy_rand, cx_rand = (np.random.randint(0, fluorescent_beads[i].shape[0] - 1, 100),
+                            np.random.randint(0, fluorescent_beads[i].shape[1] - 1, 100))
+        noise = np.mean(fluorescent_beads[i][cy_rand, cx_rand])
+        keep = values > noise
+        cy, cx = cy[keep], cx[keep]
+        bead_point_clouds.append(np.vstack((cy, cx)).T)
 
     # Apply the transform to the fluorescent bead images
     fluorescent_beads_transformed = np.zeros(fluorescent_beads.shape)
-    for c in range(4):
+    for c in range(3):
         fluorescent_beads_transformed[c] = affine_transform(fluorescent_beads[c], transform[c], order=3)
+    # The last channel is the anchor channel (no transform)
+    fluorescent_beads_transformed[3] = np.copy(fluorescent_beads[3])
+
+    # Transform the bead point clouds to the anchor frame of reference
+    bead_point_clouds_transformed = []
+    for i in range(3):
+        points = np.hstack((bead_point_clouds[c], np.ones((bead_point_clouds[c].shape[0], 1))))
+        affine = np.linalg.inv(np.vstack((transform[c], [0, 0, 1])))
+        points_transformed = points @ affine.T
+        bead_point_clouds_transformed.append(points_transformed)
 
     # Add the images to napari
-    colours = ["yellow", "red", "green", "blue"]
-    for c in range(1, 4):
+    colours = ["red", "green", "blue"]
+    for c in range(1, 3):
+        # add unregistered points and images
         viewer.add_image(
             fluorescent_beads[c],
-            name="Camera " + str(cam_channels[c]),
+            name=f'Camera {cam_channels[c]} image',
             colormap=colours[c],
             blending="additive",
             visible=False,
         )
+        viewer.add_points(
+            bead_point_clouds[c],
+            name=f'Camera {cam_channels[c]} points',
+            face_color=colours[c],
+            symbol='o',
+            size=5,
+            blending="additive",
+            visible=False,
+        )
+        # add registered points and images
         viewer.add_image(
             fluorescent_beads_transformed[c],
-            name="Camera " + str(cam_channels[c]) + " transformed",
+            name=f'Camera {cam_channels[c]} transformed image',
             colormap=colours[c],
             blending="additive",
             visible=True,
         )
+        viewer.add_points(
+            bead_point_clouds_transformed[c],
+            name=f'Camera {cam_channels[c]} transformed points',
+            face_color=colours[c],
+            symbol='x',
+            size=5,
+            blending="additive",
+            visible=True,
+        )
+    # Add the anchor channel image and points
+    viewer.add_image(
+        fluorescent_beads[-1],
+        name=f'Camera {cam_channels[-1]} image',
+        colormap=colours[-1],
+        blending="additive",
+        visible=False,
+    )
+    viewer.add_points(
+        bead_point_clouds[-1],
+        name=f'Camera {cam_channels[-1]} points',
+        face_color='white',
+        symbol='o',
+        size=5,
+        blending="additive",
+        visible=False,
+    )
 
     napari.run()
 

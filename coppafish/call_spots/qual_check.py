@@ -107,7 +107,7 @@ def quality_threshold(
     if method_omp:
         score = omp_spot_score(nb.omp)
     elif method_anchor:
-        score = nb.ref_spots.score
+        score = nb.ref_spots.scores
     elif method_prob:
         score = np.max(nb.ref_spots.gene_probs, axis=1)
     qual_ok = np.array([score > score_thresh, intensity > intensity_thresh]).all(axis=0)

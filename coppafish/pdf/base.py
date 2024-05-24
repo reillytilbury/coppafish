@@ -246,7 +246,7 @@ class BuildPDF:
                 for t in nb.basic_info.use_tiles:
                     keep = nb.ref_spots.tile == t
                     fig = self.create_positions_histograms(
-                        nb.ref_spots.score[keep],
+                        nb.ref_spots.scores[keep],
                         nb.ref_spots.local_yxz[keep],
                         DEFAULT_REF_SCORE_THRESHOLD,
                         title=f"Spot position histograms for {t=}, scores "
@@ -259,9 +259,9 @@ class BuildPDF:
                 gene_probs = nb.ref_spots.gene_probs
                 # bg colour was subtracted if use_preseq
                 scores = (
-                    nb.ref_spots.colors[
+                    nb.ref_spots.colours[
                         np.ix_(
-                            range(nb.ref_spots.colors.shape[0]),
+                            range(nb.ref_spots.colours.shape[0]),
                             nb.basic_info.use_rounds,
                             nb.basic_info.use_channels,
                         )

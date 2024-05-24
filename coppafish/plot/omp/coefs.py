@@ -140,7 +140,7 @@ class view_omp(ColorPlotBase):
             spot_score = omp_spot_score(nb.omp, spot_no)
         else:
             page_name = "ref_spots"
-            spot_score = nb.ref_spots.score[spot_no]
+            spot_score = nb.ref_spots.scores[spot_no]
         gene_no = nb.__getattribute__(page_name).gene_no[spot_no]
         t = nb.__getattribute__(page_name).tile[spot_no]
         spot_yxz = nb.__getattribute__(page_name).local_yxz[spot_no]
