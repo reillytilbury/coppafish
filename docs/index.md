@@ -55,16 +55,7 @@ Our latest coppafish release can be cloned locally
 git clone --depth 1 https://github.com/reillytilbury/coppafish
 ```
 
-to install the optimised, [pytorch](https://github.com/pytorch) GPU and CPU support
-```console
-cd coppafish
-python -m pip install --upgrade pip
-python -m pip install -r requirements-gpu.txt
-python -m pip install -e .
-```
-
-By default, the GPU will be used if available, otherwise coppafish will revert back to the CPU. For the optimised, 
-[pytorch](https://github.com/pytorch) CPU-only support
+install package dependencies and coppafish by
 ```console
 cd coppafish
 python -m pip install --upgrade pip
@@ -72,7 +63,7 @@ python -m pip install -r requirements.txt
 python -m pip install -e .
 ```
 
-If you do not wish to keep a local copy of coppafish (i.e. not interested in `git pull`ing higher coppafish versions
+If you do not wish to keep a local copy of coppafish (i.e. you not interested in `git pull`ing higher coppafish versions
 later) then remove the `-e` option. The source code can then be deleted after installing.
 
 ## Updating
