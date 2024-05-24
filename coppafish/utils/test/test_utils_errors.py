@@ -36,8 +36,8 @@ def test_check_color_nan():
     nbp_basic = NotebookPage("basic_info")
     for name, value in {
         "tile_pixel_value_shift": 10,
-        "use_rounds": [0, 1, 2, 4],
-        "use_channels": [1, 6, 7],
+        "use_rounds": (0, 1, 2, 4),
+        "use_channels": (1, 6, 7),
         "n_rounds": n_rounds,
         "n_channels": n_channels,
     }.items():
