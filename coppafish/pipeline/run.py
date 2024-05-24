@@ -200,43 +200,10 @@ def run_stitch(nb: Notebook) -> None:
     """
     config = nb.get_config()
     if not nb.has_page("stitch"):
-        nbp_debug = stitch.stitch(config["stitch"], nb.basic_info, nb.find_spots.spot_yxz, nb.find_spots.spot_no)
+        nbp_debug = stitch.stitch(nbp_basic=nb.basic_info, nbp_file=nb.file_names, config_stitch=config["stitch"])
         nb += nbp_debug
     else:
         log.warn(utils.warnings.NotebookPageWarning("stitch"))
-    # Two conditions below:
-    # 1. Check if there is a big dapi_image
-    # 2. Check if there is NOT a file in the path directory for the dapi image
-    if nb.file_names.big_dapi_image is not None and not os.path.isfile(nb.file_names.big_dapi_image):
-        # save stitched dapi
-        # Will load in from nd2 file if nb.filter_debug.r_dapi is None i.e. if no DAPI filtering performed.
-        utils.tiles_io.save_stitched(
-            nb.file_names.big_dapi_image,
-            nb.file_names,
-            nb.basic_info,
-            nb.extract,
-            nb.stitch.tile_origin,
-            nb.basic_info.anchor_round,
-            nb.basic_info.dapi_channel,
-            nb.filter_debug.r_dapi is None,
-            config["stitch"]["save_image_zero_thresh"],
-            config["filter"]["num_rotations"],
-        )
-    
-    if nb.file_names.big_anchor_image is not None and not os.path.isfile(nb.file_names.big_anchor_image):
-        # save stitched reference round/channel
-        utils.tiles_io.save_stitched(
-            nb.file_names.big_anchor_image,
-            nb.file_names,
-            nb.basic_info,
-            nb.extract,
-            nb.stitch.tile_origin,
-            nb.basic_info.anchor_round,
-            nb.basic_info.anchor_channel,
-            False,
-            config["stitch"]["save_image_zero_thresh"],
-            config["filter"]["num_rotations"],
-        )
 
 
 def run_register(nb: Notebook) -> None:
