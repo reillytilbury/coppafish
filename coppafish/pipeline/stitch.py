@@ -6,13 +6,15 @@ from ..setup import NotebookPage
 from ..utils import system, tiles_io
 
 
-def stitch(nbp_basic: NotebookPage, nbp_file: NotebookPage, config_stitch: dict) -> NotebookPage:
+def stitch(nbp_basic: NotebookPage, nbp_file: NotebookPage, config_stitch: dict,
+           file_type: str = '.zarr') -> NotebookPage:
     """
 
     Args:
         nbp_basic:
         nbp_file:
         config_stitch:
+        file_type:
 
     Returns:
 
@@ -24,14 +26,15 @@ def stitch(nbp_basic: NotebookPage, nbp_file: NotebookPage, config_stitch: dict)
 
     # initialize the variables
     overlap = config_stitch["expected_overlap"]
-    use_tiles, dapi_channel = nbp_basic.use_tiles, nbp_basic.dapi_channel
+    use_tiles, anchor_round, dapi_channel = nbp_basic.use_tiles, nbp_basic.anchor_round, nbp_basic.dapi_channel
     tilepos_yx, n_tiles = nbp_basic.tilepos_yx, nbp_basic.n_tiles
     # Build the tensors that we will use to compute the shifts
     shift = np.zeros((n_tiles, n_tiles, 3))
     score = np.zeros((n_tiles, n_tiles))
 
     # import the tile stack and the tile positions
-    tiles = [tiles_io.load_image(nbp_file, use_tiles, dapi_channel, t) for t in range(n_tiles) if t in use_tiles]
+    tiles = [tiles_io.load_image(nbp_file=nbp_file, nbp_basic=nbp_basic, file_type=file_type,
+                                 t=t, r=anchor_round, c=dapi_channel) for t in range(n_tiles) if t in use_tiles]
 
     # fill the shift and score matrices
     for i, j in tqdm(np.ndindex(n_tiles, n_tiles), total=n_tiles**2, desc='Computing shifts between tiles'):
@@ -42,22 +45,9 @@ def stitch(nbp_basic: NotebookPage, nbp_file: NotebookPage, config_stitch: dict)
                                                              t1_pos=tilepos_yx[i], t2_pos=tilepos_yx[j],
                                                              overlap=overlap)
     score = score ** 2
-    # we need to build the n_tiles x n_tiles matrix A and the n_tiles x 2 matrix b that will be used to solve the linear
-    # system of equations: Ax = b, where x is our final shift matrix (n_tiles x 2)
-    A = np.zeros((n_tiles, n_tiles))
-    b = np.zeros((n_tiles, 3))
-    # fill the A matrix
-    for i, j in np.ndindex(n_tiles, n_tiles):
-        if i == j:
-            A[i, j] = np.sum(score[i, :])
-        else:
-            A[i, j] = -score[i, j]
-    # fill the b matrix
-    for i in range(n_tiles):
-        b[i] = np.sum(score[i, :, np.newaxis] * shift[i], axis=0)
 
-    # solve the linear system of equations
-    shifts_final = np.linalg.lstsq(A, b, rcond=None)[0]
+    # compute the final shifts using a minimisation of a quadratic loss function
+    shifts_final = stitch_base.compute_final_shifts(shift=shift, score=score)
 
     # apply the shifts to the tiles
     tile_origins = np.zeros((n_tiles, 3))
@@ -68,7 +58,8 @@ def stitch(nbp_basic: NotebookPage, nbp_file: NotebookPage, config_stitch: dict)
         tile_origins[t] = nominal_origin + shifts_final[t]
 
     # fuse the tiles
-    fused_image = stitch_base.fuse_tiles(tiles=tiles, tile_origins=tile_origins, tilepos_yx=tilepos_yx)
+    fused_image = stitch_base.fuse_tiles(tiles=tiles, tile_origins=tile_origins, tilepos_yx=tilepos_yx,
+                                         overlap=overlap)
     np.save(r"C:\Users\reill\Desktop\local_datasets\daphne\fused_image.npy", fused_image)
     log.debug("Stitch finished")
     return nbp

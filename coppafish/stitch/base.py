@@ -202,3 +202,33 @@ def taper_image(image: np.ndarray, tile_start: np.ndarray, tile_end: np.ndarray,
 
     return image.astype(np.uint16)
 
+
+def compute_final_shifts(shift: np.ndarray, score: np.ndarray) -> np.ndarray:
+    """
+
+    Args:
+        shift:
+        score:
+
+    Returns:
+
+    """
+    n_tiles = shift.shape[0]
+    # we need to build the n_tiles x n_tiles matrix A and the n_tiles x 3 matrix b that will be used to solve the linear
+    # system of equations: Ax = b, where x is our final shift matrix (n_tiles x 3)
+    A = np.zeros((n_tiles, n_tiles))
+    b = np.zeros((n_tiles, 3))
+    # fill the A matrix
+    for i, j in np.ndindex(n_tiles, n_tiles):
+        if i == j:
+            A[i, j] = np.sum(score[i, :])
+        else:
+            A[i, j] = -score[i, j]
+    # fill the b matrix
+    for i in range(n_tiles):
+        b[i] = np.sum(score[i, :, np.newaxis] * shift[i], axis=0)
+
+    # solve the linear system of equations
+    shifts_final = np.linalg.lstsq(A, b, rcond=None)[0]
+
+    return shifts_final
