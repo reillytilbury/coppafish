@@ -16,11 +16,11 @@ def test_tiles_io_save_load_tile():
         array_2 = rng.randint(2**16, size=(2, 4, 4), dtype=np.int32)
 
         nbp_file_3d = NotebookPage("file_names")
-        for name, value in {"tile": [[[os.path.join(directory, f"array{file_type}")]]]}.items():
+        for name, value in {"tile": (((os.path.join(directory, f"array{file_type}"),)))}.items():
             nbp_file_3d.__setattr__(name, value)
 
         nbp_file_2d = NotebookPage("file_names")
-        for name, value in {"tile": [[os.path.join(directory, f"array{file_type}")]]}.items():
+        for name, value in {"tile": ((os.path.join(directory, f"array{file_type}"),))}.items():
             nbp_file_2d.__setattr__(name, value)
 
         nbp_basic_3d = NotebookPage("basic_info")
