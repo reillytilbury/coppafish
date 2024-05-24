@@ -5,19 +5,19 @@ import itertools
 import numpy as np
 from pathlib import PurePath
 import numpy.typing as npt
-from typing import Any, Iterable, Tuple, Union, Dict, List, Optional
+from typing import Any, Callable, Iterable, Tuple, Union, Dict, List, Optional
 
 from ..setup import Notebook
 from .. import log
 
 
-def to_deep_tuple(value: Iterable[Any]) -> Tuple[Any]:
+def to_deep_tuple(value: Iterable[Any], conversion: Callable = tuple) -> Tuple[Any]:
     """
-    Convert the iterable and all nested iterables inside into tuples.
+    Convert the iterable and all nested iterables inside into datatype specified by the given conversion function.
     """
     assert hasattr(value, "__iter__"), "value must be iterable to convert to a tuple"
 
-    result = tuple()
+    result = conversion()
     for subvalue in value:
         if hasattr(subvalue, "__iter__") and type(subvalue) is not str:
             result += (to_deep_tuple(subvalue),)

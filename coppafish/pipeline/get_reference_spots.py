@@ -11,7 +11,7 @@ def get_reference_spots(
     nbp_basic: NotebookPage,
     nbp_find_spots: NotebookPage,
     nbp_extract: NotebookPage,
-    nbp_filter: NotebookPage,
+    nbp_register: NotebookPage,
     tile_origin: np.ndarray,
     icp_correction: np.ndarray,
 ) -> NotebookPage:
@@ -57,9 +57,9 @@ def get_reference_spots(
     c = nbp_basic.anchor_channel
     log.debug("Get ref spots started")
     use_tiles, use_rounds, use_channels = (
-        np.array(nbp_basic.use_tiles.copy()),
-        nbp_basic.use_rounds.copy(),
-        nbp_basic.use_channels.copy(),
+        np.array(nbp_basic.use_tiles),
+        list(nbp_basic.use_rounds),
+        list(nbp_basic.use_channels),
     )
 
     # all means all spots found on the reference round / channel
@@ -83,7 +83,7 @@ def get_reference_spots(
 
     # find duplicate spots as those detected on a tile which is not tile centre they are closest to
     not_duplicate = call_spots_base.get_non_duplicate(
-        tile_origin, nbp_basic.use_tiles, nbp_basic.tile_centre, all_local_yxz, all_local_tile
+        tile_origin, list(nbp_basic.use_tiles), nbp_basic.tile_centre, all_local_yxz, all_local_tile
     )
 
     # nd means all spots that are not duplicate
@@ -110,7 +110,7 @@ def get_reference_spots(
             yxz_base=nd_local_yxz[in_tile],
             t=t,
             transform=transform,
-            bg_scale=nbp_filter.bg_scale,
+            bg_scale=nbp_register.bg_scale,
             file_type=nbp_extract.file_type,
             nbp_file=nbp_file,
             nbp_basic=nbp_basic,

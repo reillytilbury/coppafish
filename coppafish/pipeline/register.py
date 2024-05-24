@@ -150,11 +150,11 @@ def register(
     channel_correction = np.zeros((n_tiles, n_channels, 4, 3))
     # Initialise variables for ICP step
     # 1. round icp stats
-    n_matches_round = np.zeros((n_tiles, n_rounds, config["icp_max_iter"]))
+    n_matches_round = np.zeros((n_tiles, n_rounds, config["icp_max_iter"]), dtype=np.int64)
     mse_round = np.zeros((n_tiles, n_rounds, config["icp_max_iter"]))
     converged_round = np.zeros((n_tiles, n_rounds), dtype=bool)
     # 2. channel icp stats
-    n_matches_channel = np.zeros((n_tiles, n_channels, config["icp_max_iter"]))
+    n_matches_channel = np.zeros((n_tiles, n_channels, config["icp_max_iter"]), dtype=np.int64)
     mse_channel = np.zeros((n_tiles, n_channels, config["icp_max_iter"]))
     converged_channel = np.zeros((n_tiles, n_channels), dtype=bool)
     for t in tqdm(use_tiles, desc="ICP on all tiles", total=len(use_tiles)):
@@ -269,7 +269,7 @@ def register(
             log.info(f"Tile: {t}, Channel: {c}, Converged: {converged_channel[t, c]}")
 
         # combine these corrections into the icp_correction
-        use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
+        use_rounds = list(nbp_basic.use_rounds) + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
         for t, r, c in itertools.product(use_tiles, use_rounds, use_channels):
             round_correction_matrix = np.hstack((round_correction[t, r], np.array([0, 0, 0, 1])[:, None]))
             channel_correction_matrix = np.hstack((channel_correction[t, c], np.array([0, 0, 0, 1])[:, None]))

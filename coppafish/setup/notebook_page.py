@@ -886,7 +886,11 @@ class NotebookPage:
             raise NameError(f"Cannot set variable {name} in {self._name} page. It is not inside _options")
         expected_types = self._get_expected_types(name)
         if not self._is_types(value, expected_types):
-            raise TypeError(f"Failed to set variable {name} to type {type(value)}. Expected type(s) {expected_types}")
+            added_msg = ""
+            if type(value) is np.ndarray:
+                added_msg += f"with type {value.dtype.type}"
+            msg = f"Cannot set variable {name} to type {type(value)} {added_msg}. Expected type(s) {expected_types}"
+            raise TypeError(msg)
 
         object.__setattr__(self, name, value)
 

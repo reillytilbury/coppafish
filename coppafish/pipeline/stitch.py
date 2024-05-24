@@ -31,8 +31,6 @@ def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no
             global coordinates.
     """
     nbp_debug = NotebookPage("stitch")
-    nbp_debug.software_version = utils.system.get_software_version()
-    nbp_debug.revision_hash = utils.system.get_software_hash()
     directions = ["north", "east"]
     coords = ["y", "x", "z"]
     shifts = stitch_starting_shifts.get_shifts_to_search(config, nbp_basic, nbp_debug)
@@ -165,7 +163,7 @@ def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no
     # get tile origins in global coordinates.
     # global coordinates are built about central tile so find this first
     tile_dist_to_centre = np.linalg.norm(
-        nbp_basic.tilepos_yx[nbp_basic.use_tiles] - np.mean(nbp_basic.tilepos_yx, axis=0), axis=1
+        nbp_basic.tilepos_yx[list(nbp_basic.use_tiles)] - np.mean(nbp_basic.tilepos_yx, axis=0), axis=1
     )
     centre_tile = nbp_basic.use_tiles[tile_dist_to_centre.argmin()]
 
@@ -174,11 +172,11 @@ def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no
     for t in nbp_basic.use_tiles:
         # find the min distance between this tile and all other tiles used
         hamming_dist = np.sum(
-            np.abs(nbp_basic.tilepos_yx[t] - nbp_basic.tilepos_yx[nbp_basic.use_tiles]), axis=1
+            np.abs(nbp_basic.tilepos_yx[t] - nbp_basic.tilepos_yx[list(nbp_basic.use_tiles)]), axis=1
         ).astype(float)
         hamming_dist[hamming_dist == 0] = np.inf
         min_hamming_dist[t] = np.min(hamming_dist)
-    min_hamming_dist = min_hamming_dist[nbp_basic.use_tiles]
+    min_hamming_dist = min_hamming_dist[list(nbp_basic.use_tiles)]
     all_tiles_connected = np.all(min_hamming_dist == 1)
     no_tiles_connected = np.all(min_hamming_dist > 1)
 
@@ -202,7 +200,7 @@ def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no
         tile_origin[:, :2] = nbp_basic.tilepos_yx * (1 - config["expected_overlap"]) * nbp_basic.tile_sz
         tile_origin = tile_origin - tile_origin[centre_tile]
         # set unused tiles to nan
-        unused_tiles = np.setdiff1d(np.arange(nbp_basic.n_tiles), nbp_basic.use_tiles)
+        unused_tiles = np.setdiff1d(np.arange(nbp_basic.n_tiles), list(nbp_basic.use_tiles))
         tile_origin[unused_tiles, :] = np.nan
 
     else:

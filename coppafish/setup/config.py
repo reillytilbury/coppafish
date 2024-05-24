@@ -297,6 +297,9 @@ class InvalidConfigError(Exception):
 
 def get_config(ini_file) -> Dict[str, Any]:
     """Return the configuration as a dictionary"""
+    if not os.path.isfile(ini_file):
+        raise FileNotFoundError(f"Failed to find config file at {ini_file}")
+
     # Read the settings files, overwriting the default settings with any settings
     # in the user-editable settings file.  We use .ini files without sections, and
     # add the section (named "config") manually.

@@ -35,25 +35,25 @@ def get_compressor_and_chunks(
         image_z_index = np.argmin(image_shape).item()
     if optimised_for == OptimisedFor.FULL_READ_AND_WRITE:
         compressor = Blosc(cname="lz4", clevel=2, shuffle=Blosc.BITSHUFFLE)
-        chunk_count_z = image_shape[image_z_index] // 2
-        chunk_count_yx = min(288, np.max(image_shape).item())
+        chunk_size_z = image_shape[image_z_index] // 2
+        chunk_size_yx = min(288, np.max(image_shape).item())
     elif optimised_for == OptimisedFor.Z_PLANE_READ:
         compressor = Blosc(cname="lz4", clevel=4, shuffle=Blosc.SHUFFLE)
-        chunk_count_z = image_shape[0] // 2
-        chunk_count_yx = min(576, np.max(image_shape).item())
+        chunk_size_z = image_shape[0] // 2
+        chunk_size_yx = min(576, np.max(image_shape).item())
     else:
         raise ValueError(f"Unknown OptimisedFor value of {optimised_for}")
     if len(image_shape) >= 3:
         chunks = tuple()
         for i in range(len(image_shape)):
-            if image_shape[i] < 4:
-                chunks += (image_shape[i],)
+            if image_shape[i] < 10:
+                chunks += (None,)
             elif i == image_z_index:
-                chunks += (chunk_count_z,)
+                chunks += (chunk_size_z,)
             else:
-                chunks += (chunk_count_yx,)
+                chunks += (chunk_size_yx,)
     elif len(image_shape) == 2:
-        chunks = (chunk_count_yx, chunk_count_yx)
+        chunks = (chunk_size_yx, chunk_size_yx)
     else:
         raise ValueError(f"Got image_shape with {len(image_shape)} dimensions: {image_shape}")
     return compressor, chunks

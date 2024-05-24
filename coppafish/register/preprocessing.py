@@ -420,9 +420,9 @@ def generate_reg_images(nb: Notebook):
         nb: notebook.
     """
     use_tiles, use_rounds, use_channels = (
-        nb.basic_info.use_tiles.copy(),
-        nb.basic_info.use_rounds.copy(),
-        nb.basic_info.use_channels.copy(),
+        list(nb.basic_info.use_tiles),
+        list(nb.basic_info.use_rounds),
+        list(nb.basic_info.use_channels),
     )
     if nb.basic_info.pre_seq_round is not None:
         use_rounds += [nb.basic_info.pre_seq_round]

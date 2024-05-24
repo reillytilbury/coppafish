@@ -15,8 +15,8 @@ def test_notebook_creation() -> None:
     nb_path = os.path.join(os.getcwd(), ".notebook_test")
     if os.path.isdir(nb_path):
         shutil.rmtree(nb_path)
-    config_path = "dfjdkf"
-    nb = Notebook(nb_path, config_path)
+    config_path = os.path.abspath("dslkhgdsjlgh")
+    nb = Notebook(nb_path, config_path, True)
 
     assert nb.has_page("debug") == False
     assert nb.config_path == config_path
@@ -113,6 +113,12 @@ def test_notebook_creation() -> None:
     nb_page.m = m
     nb_page.n = n
 
+    try:
+        nb += nb_page
+        assert False, f"Should crash when adding an unfinished notebook page"
+    except ValueError:
+        pass
+
     zarr_path = os.path.join(os.getcwd(), ".test_array.zarr")
     array_saved = np.zeros((4, 8), dtype=np.float32)
     zarr_array_temp = zarr.open_array(
@@ -158,3 +164,7 @@ def test_notebook_creation() -> None:
     print(f"Loading notebook back in from disk")
     nb = Notebook(nb_path)
     _check_variables(nb)
+
+
+if __name__ == "__main__":
+    test_notebook_creation()

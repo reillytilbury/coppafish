@@ -307,7 +307,7 @@ def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None
             nb.basic_info,
             nb.find_spots,
             nb.extract,
-            nb.filter,
+            nb.register,
             nb.stitch.tile_origin,
             nb.register.icp_correction,
         )

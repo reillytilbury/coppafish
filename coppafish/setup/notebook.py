@@ -14,7 +14,8 @@ class Notebook:
     _directory: str
 
     # Attribute names allowed to be set inside the notebook page that are not in _options.
-    _VALID_ATTRIBUTE_NAMES = ("config_path", "_config_path", "_init_config", "_directory", "_time_created", "_version")
+    _valid_attribute_names = ("config_path", "_config_path", "_init_config", "_directory", "_time_created", "_version")
+    _debug_page = ("debug",)
 
     _config_path: Optional[str]
 
@@ -23,16 +24,16 @@ class Notebook:
 
     config_path = property(get_config_path)
 
-    _metadata_name: str = "_metadata.json"
+    _metadata_name = "_metadata.json"
 
     # The notebook stores the config as a dict from when it was first instantiated. This way any changes to a page's
     # config can be detected when comparing to the config on disk that the user may have modified.
     _init_config: Dict[str, Dict[str, Any]]
-    _init_config_key: str = "initial_config"
+    _init_config_key = "initial_config"
     _time_created: float
-    _time_created_key: str = "time_created"
+    _time_created_key = "time_created"
     _version: str
-    _version_key: str = "version"
+    _version_key = "version"
 
     _options = {
         "basic_info": [
@@ -79,7 +80,7 @@ class Notebook:
         ],
     }
 
-    def __init__(self, notebook_dir: str, config_path: str = Optional[None], /) -> None:
+    def __init__(self, notebook_dir: str, config_path: Optional[str] = None, debugging: bool = False, /) -> None:
         """
         Load the notebook found at the given directory. Or, if the directory does not exist, create the directory.
         """
@@ -97,7 +98,10 @@ class Notebook:
                 raise ValueError(f"To create a new notebook, config_path must be specified")
             log.info(f"Creating notebook at {self._directory}")
             os.mkdir(self._directory)
-            self._init_config = config.get_config(self._config_path)
+            if not debugging:
+                self._init_config = config.get_config(self._config_path)
+            else:
+                self._init_config = dict()
             self._save()
         self._load()
 
@@ -107,7 +111,7 @@ class Notebook:
         """
         if self._config_path is None:
             raise ValueError(f"The notebook must have a specified config path when instantiated to add notebook pages.")
-        if not os.path.isfile(self._config_path):
+        if page.name not in self._debug_page and not os.path.isfile(self._config_path):
             raise FileNotFoundError(f"Could not add page since config at {self._config_path} was not found")
         if type(page) is not NotebookPage:
             raise TypeError(f"Cannot add type {type(page)} to the notebook")
@@ -118,7 +122,7 @@ class Notebook:
                 + f"Variable(s) unset: {', '.join(unset_variables)}"
             )
 
-        if len(self._get_modified_config_variables()) > 0:
+        if page.name not in self._debug_page and len(self._get_modified_config_variables()) > 0:
             log.warn(
                 f"The config at {self.config_path} has modified variables: "
                 + ", ".join(self._get_modified_config_variables())
@@ -168,7 +172,7 @@ class Notebook:
         """
         Deals with syntax `notebook.name = value`.
         """
-        if name in self._VALID_ATTRIBUTE_NAMES:
+        if name in self._valid_attribute_names:
             object.__setattr__(self, name, value)
             return
 
