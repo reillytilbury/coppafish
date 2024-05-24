@@ -5,6 +5,7 @@ import numpy as np
 import napari
 import time
 import skimage
+import tifffile
 import warnings
 import matplotlib.pyplot as plt
 from qtpy.QtCore import Qt
@@ -44,6 +45,7 @@ class Viewer:
         background_image_max_intensity_projection: Optional[list] = [False],
         gene_marker_file: Optional[str] = None,
         spot_size: int = 10,
+        downsample_factor: int = 1,
     ) -> None:
         """
         This is the function to view the results of the pipeline i.e. the spots found and which genes they were
@@ -81,6 +83,8 @@ class Viewer:
                 If it is not provided, then the default file *coppafish/plot/results_viewer/legend.gene_color.csv*
                 will be used.
             spot_size: int, size of the spots to be plotted in the napari viewer.
+            downsample_factor: int, factor by which to downsample the images in y and x. Default is 1 which means no
+                downsampling.
         """
         # set up gene legend info
         if gene_marker_file is None:
@@ -103,13 +107,14 @@ class Viewer:
         self.genes = []
         # populate variables
         self.create_gene_list(gene_marker_file=gene_marker_file, nb_gene_names=nb.call_spots.gene_names)
-        self.create_spots_list(nb=nb)
+        self.create_spots_list(nb=nb, downsample_factor=downsample_factor)
         self.load_bg_images(nb=nb, background_image=background_image, background_image_colour=background_image_colour,
-                            max_intensity_projections=background_image_max_intensity_projection)
+                            max_intensity_projections=background_image_max_intensity_projection,
+                            downsample_factor=downsample_factor)
 
         # create napari viewer
         self.viewer = napari.Viewer()
-        self.add_data_to_viewer(spot_size=spot_size)
+        self.add_data_to_viewer(spot_size=spot_size/downsample_factor)
         self.update_status_continually()
         self.format_napari_viewer(gene_legend_info=gene_legend_info, nb=nb)
         self.key_call_functions()
@@ -128,6 +133,9 @@ class Viewer:
 
         # Z-thickness slider
         if nb.basic_info.is_3d:
+            # connect a change in z-plane to the z-thickness slider
+            self.viewer.dims.events.current_step.connect(self.update_z_thick)
+            # connect the z-thickness slider to the update_z_thick function
             self.add_slider(name="z_thick", value=1, slider_range=(0, nb.basic_info.nz), slider_mode="single",
                             slider_variable="z_thick")
 
@@ -154,9 +162,6 @@ class Viewer:
         for i, m in enumerate(self.method["names"]):
             self.method["buttons"].button[m].clicked.connect(lambda _, x=i: self.method_event_handler(x))
         self.viewer.window.add_dock_widget(self.method["buttons"], area="left", name="Method")
-
-        # connect a change in z-plane to the z-thickness slider
-        self.viewer.dims.events.current_step.connect(self.update_z_thick)
 
         # label the axes
         if nb.basic_info.is_3d:
@@ -283,8 +288,9 @@ class Viewer:
         This method updates the z-thickness in the napari viewer to reflect the current state of the Viewer object.
         It will be called when the z-thickness changes, or the z-position of the viewer changes.
         """
+        range_upper = self.viewer.dims.range[0][1].copy()
         z_thick = self.sliders["z_thick"].value()
-        # we will changing the z-coordinates of the spots to the current z-plane if they are within the z-thickness
+        # we will change the z-coordinates of the spots to the current z-plane if they are within the z-thickness
         # of the current z-plane.
         current_z = self.viewer.dims.current_step[0]
         for i, m in enumerate(self.method["names"]):
@@ -296,7 +302,7 @@ class Viewer:
 
         # napari automatically adjusts the size of the z-step when points are scaled, so we undo that below:
         v_range = list(self.viewer.dims.range)
-        v_range[0] = (0, self.nb.basic_info.nz - 1, 1)
+        v_range[0] = (0, range_upper, 1)
         self.viewer.dims.range = tuple(v_range)
 
     def update_status_continually(self):
@@ -463,7 +469,7 @@ class Viewer:
             warnings.warn(f"Genes {invisible_genes} are not in the gene marker file and will not be plotted.")
         self.genes = genes
 
-    def create_spots_list(self, nb: Notebook) -> None:
+    def create_spots_list(self, nb: Notebook, downsample_factor: int) -> None:
         """
         Create a list of spots from the notebook to store information about each spot. This will be saved to the object
         as self.spots. Each element of the list will be a Spots object. So it will contain the location, score, tile,
@@ -476,9 +482,12 @@ class Viewer:
 
         Args:
             nb: Notebook containing at least the `call_spots` page.
+            downsample_factor: int, factor by which to downsample the images in y and x. Default is 1 which means no
+                downsampling.
 
         """
         # define frequently used variables
+        downsample_factor = np.array([1, downsample_factor, downsample_factor])
         n_methods = len(self.method["names"])
         tile_origin = nb.stitch.tile_origin
         use_channels = nb.basic_info.use_channels
@@ -487,6 +496,8 @@ class Viewer:
         tile = [nb.__getattribute__(self.method["pages"][i]).tile for i in range(n_methods)]
         local_loc = [nb.__getattribute__(self.method["pages"][i]).local_yxz for i in range(n_methods)]
         global_loc = [(local_loc[i] + tile_origin[tile[i]])[:, [2, 0, 1]] for i in range(n_methods)]
+        # apply downsample factor
+        global_loc = [loc // downsample_factor for loc in global_loc]
         colours = [nb.__getattribute__(self.method["pages"][i]).colours[:, :, use_channels] for i in range(2)]
         score = [nb.ref_spots.scores, np.max(nb.ref_spots.gene_probs, axis=1)]
         gene_no = [nb.ref_spots.gene_no, np.argmax(nb.ref_spots.gene_probs, axis=1)]
@@ -504,11 +515,11 @@ class Viewer:
             mask = np.isin(gene_no[i], visible_genes)
             spot_indices = np.where(mask)[0]
             self.spots[m] = Spots(location=global_loc[i][mask], score=score[i][mask], tile=tile[i][mask],
-                                  colours=colours[i][mask],gene=gene_no[i][mask], intensity=intensity[i][mask],
+                                  colours=colours[i][mask], gene=gene_no[i][mask], intensity=intensity[i][mask],
                                   notebook_index=spot_indices)
 
     def load_bg_images(self, background_image: list, background_image_colour: list,
-                       max_intensity_projections: list, nb: Notebook) -> None:
+                       max_intensity_projections: list, downsample_factor: int, nb: Notebook) -> None:
         """
         Load background images into the napari viewer and into the Viewer Object.
         Note: napari viewer must be created before calling this function.
@@ -518,9 +529,15 @@ class Viewer:
             background_image_colour: list of names of background colours. Must be same length as background_image
             max_intensity_projections: list of bools. If max_intensity_projections[i] is True, will plot the maximum
                 intensity projection of the background image i. If False, will plot the background_image as is.
+            downsample_factor: int, factor by which to downsample the images in y and x. Default is 1 which means no
+                downsampling.
             nb: Notebook.
 
         """
+        # if background image is None, quit the function
+        if background_image is None:
+            print("No background image given, so not plotting any background images.")
+            return
         # make things lists if not already
         if not isinstance(background_image, list):
             background_image = [background_image]
@@ -528,12 +545,23 @@ class Viewer:
             background_image_colour = [background_image_colour]
         if not isinstance(max_intensity_projections, list):
             max_intensity_projections = [max_intensity_projections]
+        # if only 1 colour has been given, repeat it for all images
+        if len(background_image_colour) == 1 and len(background_image) > 1:
+            print("Only 1 colour given, repeating for all images")
+            background_image_colour = background_image_colour * len(background_image)
+        # if only 1 max_intensity_projection has been given, repeat it for all images
+        if len(max_intensity_projections) == 1 and len(background_image) > 1:
+            print("Only 1 max_intensity_projection preference given, repeating for all images")
+            max_intensity_projections = max_intensity_projections * len(background_image)
+        # now assert that all lists are the same length
         assert len(background_image) == len(background_image_colour) == len(max_intensity_projections), (
             "background_image, background_image_colour and max_intensity_projections must all be the same length."
         )
-        background_image_dir = []
+        # assert that downsample_factor is an integer
+        assert isinstance(downsample_factor, int), "downsample_factor must be an integer."
 
         # load images
+        background_image_dir = []
         # users were allowed to specify a list of strings or images. If a string, assume it is a file name and try to
         # load it. Save file names in background_image_dir and images in background_image.
         for i, b in enumerate(background_image):
@@ -554,13 +582,15 @@ class Viewer:
             if file_name is not None and os.path.isfile(file_name):
                 if file_name.endswith(".npz"):
                     # Assume image is first array if .npz file. Now replace the string with the actual image.
-                    background_image[i] = np.load(file_name)
-                    background_image[i] = background_image[i].f.arr_0
+                    # Note:
+                    background_image[i] = np.load(file_name, mmap_mode="r")["arr_0"]
+                    background_image[i] = background_image[i][:, ::downsample_factor, ::downsample_factor]
                 elif file_name.endswith(".npy"):
-                    # Assume image is first array if .npz file. Now replace the string with the actual image.
-                    background_image[i] = np.load(file_name)
+                    background_image[i] = np.load(file_name, mmap_mode="r")
+                    background_image[i] = background_image[i][:, ::downsample_factor, ::downsample_factor]
                 elif file_name.endswith(".tif"):
-                    background_image[i] = skimage.io.imread(file_name)
+                    with tifffile.TiffFile(file_name) as tif:
+                        background_image[i] = tif.asarray()[:, ::downsample_factor, ::downsample_factor]
                 # If the user specified MIP[i] = True, plot the maximum intensity projection of the image.
                 if max_intensity_projections[i]:
                     background_image[i] = background_image[i].max(axis=0)
@@ -585,7 +615,7 @@ class Viewer:
         self.background_images["names"] = [os.path.basename(background_image_dir[i]).split(".")[0] for i in good]
         self.background_images["colours"] = [background_image_colour[i] for i in good]
 
-    def add_data_to_viewer(self, spot_size: int = 10) -> None:
+    def add_data_to_viewer(self, spot_size: float = 10) -> None:
         """
         Add background images and spots to the napari viewer (they already exist in the Viewer object).
 

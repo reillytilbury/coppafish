@@ -61,7 +61,7 @@ def run_tile_indep_pipeline(nb: Notebook) -> None:
             then merge them together. Default: true if PC has >110GB of available memory. False otherwise.
     """
     run_extract(nb)
-    # BuildPDF(nb)
+    BuildPDF(nb)
     run_filter(nb)
     BuildPDF(nb)
     run_find_spots(nb)
