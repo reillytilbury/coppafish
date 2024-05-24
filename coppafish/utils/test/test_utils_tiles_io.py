@@ -14,34 +14,40 @@ def test_tiles_io_save_load_tile():
         rng = np.random.RandomState(0)
         array_1 = rng.randint(2**16, size=(3, 3, 4), dtype=np.int32)
         array_2 = rng.randint(2**16, size=(2, 4, 4), dtype=np.int32)
-        nbp_file_3d = NotebookPage("file_names", {"tile": [[[os.path.join(directory, f"array{file_type}")]]]})
-        nbp_file_2d = NotebookPage("file_names", {"tile": [[os.path.join(directory, f"array{file_type}")]]})
-        nbp_basic_3d = NotebookPage(
-            "basic_info",
-            {
-                "is_3d": True,
-                "anchor_round": 100,
-                "dapi_channel": 5,
-                "tile_sz": 3,
-                "use_z": [0, 1, 2, 3],
-                "tile_pixel_value_shift": 0,
-                "pre_seq_round": 99,
-            },
-        )
-        nbp_basic_2d = NotebookPage(
-            "basic_info",
-            {
-                "is_3d": False,
-                "anchor_round": 100,
-                "dapi_channel": 5,
-                "tile_sz": 4,
-                "use_z": [0, 1, 2, 3],
-                "tile_pixel_value_shift": 0,
-                "use_channels": [0, 1],
-                "n_channels": 2,
-                "pre_seq_round": 99,
-            },
-        )
+
+        nbp_file_3d = NotebookPage("file_names")
+        for name, value in {"tile": [[[os.path.join(directory, f"array{file_type}")]]]}.items():
+            nbp_file_3d.__setattr__(name, value)
+
+        nbp_file_2d = NotebookPage("file_names")
+        for name, value in {"tile": [[os.path.join(directory, f"array{file_type}")]]}.items():
+            nbp_file_2d.__setattr__(name, value)
+
+        nbp_basic_3d = NotebookPage("basic_info")
+        for name, value in {
+            "is_3d": True,
+            "anchor_round": 100,
+            "dapi_channel": 5,
+            "tile_sz": 3,
+            "use_z": [0, 1, 2, 3],
+            "tile_pixel_value_shift": 0,
+            "pre_seq_round": 99,
+        }.items():
+            nbp_basic_3d.__setattr__(name, value)
+
+        nbp_basic_2d = NotebookPage("basic_info")
+        for name, value in {
+            "is_3d": False,
+            "anchor_round": 100,
+            "dapi_channel": 5,
+            "tile_sz": 4,
+            "use_z": [0, 1, 2, 3],
+            "tile_pixel_value_shift": 0,
+            "use_channels": [0, 1],
+            "n_channels": 2,
+            "pre_seq_round": 99,
+        }.items():
+            nbp_basic_2d.__setattr__(name, value)
         # 3d:
         tiles_io.save_image(nbp_file_3d, nbp_basic_3d, file_type, array_1, 0, 0, 0)
         output = tiles_io.load_image(nbp_file_3d, nbp_basic_3d, file_type, 0, 0, 0, None, apply_shift=False)
