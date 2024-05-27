@@ -18,7 +18,7 @@ def compute_shift(t1: np.ndarray, t2: np.ndarray, t1_pos: np.ndarray, t2_pos: np
 
     Returns:
         shift: np.ndarray, shift in pixels between the two tiles
-        score: float, cross correlation score between the two tiles
+        score: float, square of the correlation coefficient between the reference tile and the shifted tile
 
     """
 
@@ -55,11 +55,52 @@ def compute_shift(t1: np.ndarray, t2: np.ndarray, t1_pos: np.ndarray, t2_pos: np
     t1_shifted = preprocessing.custom_shift(t1, shift.astype(int))
     score = np.corrcoef(t1_shifted.flatten(), t2.flatten())[0, 1]
 
-    return shift, score
+    return shift, score ** 2
+
+
+def minimise_shift_loss(shift: np.ndarray, score: np.ndarray) -> np.ndarray:
+    """
+    We have ~ 2 * n_tiles shifts that have been computed between tiles and only n_tiles shifts that we can apply to the
+    tiles. We need to find the n_tiles shifts that minimise the quadratic loss function between the computed shifts
+    and the shifts that we can apply to the tiles. Taking the derivative of the loss function and setting it to zero
+    gives us a linear system of equations that we can solve to find the optimal shifts.
+
+    Note: The loss function is defined as:
+
+    L(w) = sum_i sum_j score[i, j] * (w[i] - w[j] - shift[i, j])^2,
+    where w is the vector of shifts that we want to find, and shift is the matrix of computed shifts. This sum is over
+    all neighbouring tiles (which is achieved by setting score = 0 for non-neighbouring tiles).
+
+    Args:
+        shift: np.ndarray, [n_tiles, n_tiles, 3] array of the shifts between the tiles
+        score: np.ndarray, [n_tiles, n_tiles] array of the correlation scores between the tiles
+
+    Returns:
+
+    """
+    n_tiles = shift.shape[0]
+    # we need to build the n_tiles x n_tiles matrix A and the n_tiles x 3 matrix b that will be used to solve the linear
+    # system of equations: Ax = b, where x is our final shift matrix (n_tiles x 3)
+    A = np.zeros((n_tiles, n_tiles))
+    b = np.zeros((n_tiles, 3))
+    # fill the A matrix (do the maths on paper to understand this)
+    for i, j in np.ndindex(n_tiles, n_tiles):
+        if i == j:
+            A[i, j] = np.sum(score[i, :])
+        else:
+            A[i, j] = -score[i, j]
+    # fill the b matrix
+    for i in range(n_tiles):
+        b[i] = np.sum(score[i, :, np.newaxis] * shift[i], axis=0)
+
+    # solve the linear system of equations
+    shifts_final = np.linalg.lstsq(A, b, rcond=None)[0]
+
+    return shifts_final
 
 
 def fuse_tiles(tiles: np.ndarray, tile_origins: np.ndarray, tilepos_yx: np.ndarray,
-               overlap: float) -> np.ndarray:
+               overlap: float, save_path: str) -> np.ndarray:
     """
     Fuse a stack of tiles into a single large image, using the tile_origins to determine the position of each tile in
     the large image. The function is not difficult conceptually, as it just involves applying the shifts to each tile
@@ -71,6 +112,7 @@ def fuse_tiles(tiles: np.ndarray, tile_origins: np.ndarray, tilepos_yx: np.ndarr
         tile_origins: np.ndarray, [n_tiles, 3] array of the z, y, x positions of each tile (need to be integers)
         tilepos_yx: np.ndarray, [n_tiles, 2] array of the y, x indices of each tile
         overlap: float, expected overlap between the tiles
+        save_path: str, path to save the fused image
 
     Returns:
         fused_image: np.ndarray, [large_z, large_y, large_x] array of the fused image
@@ -100,6 +142,9 @@ def fuse_tiles(tiles: np.ndarray, tile_origins: np.ndarray, tilepos_yx: np.ndarr
         z_start, y_start, x_start = tile_origins[t]
         z_end, y_end, x_end = tile_origins[t] + np.array(cropped_tiles_list[t].shape)
         large_image[z_start:z_end, y_start:y_end, x_start:x_end] += cropped_tiles_list[t]
+
+    # save the fused image
+    np.save(save_path, large_image)
 
     return large_image
 
@@ -201,34 +246,3 @@ def taper_image(image: np.ndarray, tile_start: np.ndarray, tile_end: np.ndarray,
             image[:, y_start:, :] *= np.linspace(1, 0, - y_start)[None, :, None]
 
     return image.astype(np.uint16)
-
-
-def compute_final_shifts(shift: np.ndarray, score: np.ndarray) -> np.ndarray:
-    """
-
-    Args:
-        shift:
-        score:
-
-    Returns:
-
-    """
-    n_tiles = shift.shape[0]
-    # we need to build the n_tiles x n_tiles matrix A and the n_tiles x 3 matrix b that will be used to solve the linear
-    # system of equations: Ax = b, where x is our final shift matrix (n_tiles x 3)
-    A = np.zeros((n_tiles, n_tiles))
-    b = np.zeros((n_tiles, 3))
-    # fill the A matrix
-    for i, j in np.ndindex(n_tiles, n_tiles):
-        if i == j:
-            A[i, j] = np.sum(score[i, :])
-        else:
-            A[i, j] = -score[i, j]
-    # fill the b matrix
-    for i in range(n_tiles):
-        b[i] = np.sum(score[i, :, np.newaxis] * shift[i], axis=0)
-
-    # solve the linear system of equations
-    shifts_final = np.linalg.lstsq(A, b, rcond=None)[0]
-
-    return shifts_final
