@@ -435,7 +435,7 @@ def optical_flow_single(
     # save the flow
     if loc:
         # save in yxz format
-        zarray = zarr.open_array(store=os.path.dirname(loc), path=os.path.basename(loc), mode="r+")
+        zarray = zarr.open_array(loc, mode="r+")
         zarray[tile, round] = flow_up
     t_end = time.time()
     log.info("Optical flow computation took " + str(t_end - t_start) + " seconds")
@@ -510,10 +510,7 @@ def flow_correlation(
     # save the correlation
     if loc:
         # save in yxz format
-        compressor, chunks = utils.tiles_io.get_compressor_and_chunks(
-            utils.tiles_io.OptimisedFor.Z_PLANE_READ, correlation_up.shape, image_z_index=2
-        )
-        zarray = zarr.open_array(store=os.path.dirname(loc), path=os.path.basename(loc), mode="r+")
+        zarray = zarr.open_array(loc, mode="r+")
         zarray[tile, round] = correlation_up
     t_end = time.time()
     log.info("Computing correlation took " + str(t_end - t_start) + " seconds")
