@@ -66,7 +66,7 @@ def find_spots(
 
     # Phase 1: Load in previous results if they exist
     spot_info = fs.load_spot_info(
-        nbp_file.spot_details_info,
+        None,
         nbp_basic.n_tiles,
         nbp_basic.n_rounds,
         nbp_basic.n_extra_rounds,
@@ -145,14 +145,7 @@ def find_spots(
             assert spot_info["spot_yxz"].shape[0] == np.sum(
                 spot_info["spot_no"]
             ), "spot_yxz and spot_no do not match. Tile {}, round {}, channel {}".format(t, r, c)
-            np.savez(
-                nbp_file.spot_details_info,
-                spot_info["spot_yxz"],
-                spot_info["spot_no"],
-                spot_info["isolated"],
-                spot_info["completed"],
-            )
-            pbar.update(1)
+            pbar.update()
 
     # Phase 3: Save results to notebook page
     nbp.spot_yxz = spot_info["spot_yxz"]
