@@ -65,7 +65,9 @@ def stitch(nbp_basic: NotebookPage, nbp_file: NotebookPage, config_stitch: dict,
         shift_full[t, use_tiles] = shift[i]
         score_full[t, use_tiles] = score[i]
         # fill the tile origins
-        nominal_origin = np.array([tilepos_yx[i][0] * im_size_y, tilepos_yx[i][1] * im_size_x, 0])
+        nominal_origin = np.array([tilepos_yx[i][0] * im_size_y * (1 - overlap),
+                                   tilepos_yx[i][1] * im_size_x * (1 - overlap),
+                                   0])
         tile_origins_full[i] = nominal_origin + shifts_final[i]
 
     # fuse the tiles and save the notebook page variables
