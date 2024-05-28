@@ -108,9 +108,12 @@ def fuse_tiles(tiles: np.ndarray, tile_origins: np.ndarray, tilepos_yx: np.ndarr
     and adding them to the image. Difficulty comes from 2 sources:
     1. Overflow: tiles that are shifted outside of the image need to be cropped
     2. Overlap: tiles that are shifted on top of each other need to be smoothly blended
+
+    Note: Even though the tiles are in the form yxz, the large image is in the form zyx for compatibility with the
+    main viewer
     Args:
-        tiles: np.ndarray, [n_tiles, z_planes, im_size_y, im_size_x] array of the tiles to be fused
-        tile_origins: np.ndarray, [n_tiles, 3] array of the z, y, x positions of each tile (need to be integers)
+        tiles: np.ndarray, [n_tiles, im_size_y, im_size_x, im_szie_z] array of the tiles to be fused
+        tile_origins: np.ndarray, [n_tiles, 3] array of the y, x, z positions of each tile (need to be integers)
         tilepos_yx: np.ndarray, [n_tiles, 2] array of the y, x indices of each tile
         overlap: float, expected overlap between the tiles
         save_path: str, path to save the fused image
@@ -122,7 +125,7 @@ def fuse_tiles(tiles: np.ndarray, tile_origins: np.ndarray, tilepos_yx: np.ndarr
     tile_origins = tile_origins.astype(int)
     n_rows, n_cols = np.max(tilepos_yx, axis=0) + 1
     n_tiles = len(tiles)
-    z_planes, im_size, _ = tiles[0].shape
+    im_size, _, z_planes = tiles[0].shape
     large_im_shape = (z_planes, int(n_rows * im_size * (1 - overlap)), int(n_cols * im_size * (1 - overlap)))
     # create a list of cropped tiles (this cannot be an array as the tiles are of different sizes)
     cropped_tiles_list = []
@@ -140,9 +143,10 @@ def fuse_tiles(tiles: np.ndarray, tile_origins: np.ndarray, tilepos_yx: np.ndarr
     # create the large image
     large_image = np.zeros(large_im_shape, dtype=np.uint16)
     for t in tqdm(range(n_tiles), desc='Adding tiles to the large image', total=n_tiles):
-        z_start, y_start, x_start = tile_origins[t]
-        z_end, y_end, x_end = tile_origins[t] + np.array(cropped_tiles_list[t].shape)
-        large_image[z_start:z_end, y_start:y_end, x_start:x_end] += cropped_tiles_list[t]
+        y_start, x_start, z_start = tile_origins[t]
+        y_end, x_end, z_end = tile_origins[t] + np.array(cropped_tiles_list[t].shape)
+        large_image[z_start:z_end, y_start:y_end, x_start:x_end] += np.moveaxis(cropped_tiles_list[t],
+                                                                                source=2, destination=0)
 
     # save the fused image
     np.save(save_path, large_image)
