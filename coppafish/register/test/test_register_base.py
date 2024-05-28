@@ -76,7 +76,7 @@ def test_interpolate_flow():
     flow[2] = 3
     corr = np.ones((10, 10, 10))
     # interpolate
-    flow_interp = reg_base.interpolate_flow(flow, correlation=corr, upsample_factor_yx=2)
+    flow_interp = reg_base.interpolate_flow(flow, correlation=corr, upsample_factor_yx=2, tile=0, round=0)
     # check that the shape is correct
     assert flow_interp.shape == (3, 20, 20, 10)
     # check that the values are correct
@@ -102,7 +102,7 @@ def test_flow_correlation():
     # correlate
     win_size = np.array([2, 2, 1])
     _, flow_corr = reg_base.flow_correlation(
-        base=base, target=target, flow=flow, win_size=win_size, upsample_factor_yx=2
+        base=base, target=target, flow=flow, win_size=win_size, upsample_factor_yx=2, tile=0, round=0
     )
     # check that the shape is correct
     assert flow_corr.shape == (20, 20, 10)
