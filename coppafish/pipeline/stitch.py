@@ -59,7 +59,7 @@ def stitch(nbp_basic: NotebookPage, nbp_file: NotebookPage, config_stitch: dict,
     shift_full, score_full, tile_origins_full = (np.zeros((n_tiles, n_tiles, 3)) * np.nan,
                                                  np.zeros((n_tiles, n_tiles)) * np.nan,
                                                  np.zeros((n_tiles, 3)) * np.nan)
-    im_size_y, im_size_x = tiles[0].shape[1:]
+    im_size_y, im_size_x = tiles[0].shape[:-1]
     for i, t in enumerate(use_tiles):
         # fill the full shift and score matrices
         shift_full[t, use_tiles] = shift[i]
