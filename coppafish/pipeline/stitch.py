@@ -35,9 +35,13 @@ def stitch(nbp_basic: NotebookPage, nbp_file: NotebookPage, config_stitch: dict,
     shift = np.zeros((n_tiles_use, n_tiles_use, 3))
     score = np.zeros((n_tiles_use, n_tiles_use))
 
-    # import the tile stack and the tile positions
-    tiles = np.array([tiles_io.load_image(nbp_file=nbp_file, nbp_basic=nbp_basic, file_type=file_type,
-                                          t=t, r=anchor_round, c=dapi_channel) for t in use_tiles])
+    # load the tiles
+    tiles = []
+    for t in tqdm(use_tiles, total=n_tiles_use, desc='Loading tiles'):
+        tile = tiles_io.load_image(nbp_file=nbp_file, nbp_basic=nbp_basic, file_type=file_type,
+                                   t=t, r=anchor_round, c=dapi_channel)
+        tiles.append(tile)
+    tiles = np.array(tiles)
 
     # fill the shift and score matrices
     for i, j in tqdm(np.ndindex(n_tiles_use, n_tiles_use), total=n_tiles_use**2, desc='Computing shifts between tiles'):
