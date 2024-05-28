@@ -460,9 +460,20 @@ class NotebookPage:
             ],
         },
         "register": {
-            "flow_dir": [
-                "str",
-                "Directory where the flow files are saved",
+            "correlation": [
+                "zarr",
+                "n_tiles x n_rounds x ",
+                "The optical flow correlations.",
+            ],
+            "flow": [
+                "zarr",
+                "n_tiles x n_rounds x ",
+                "The optical flow shifts for each image pixel after smoothing.",
+            ],
+            "flow_raw": [
+                "zarr",
+                "n_tiles x n_rounds x ",
+                "The optical flow shifts for each image pixel before smoothing.",
             ],
             "icp_correction": [
                 "ndarray[float]",
@@ -574,10 +585,6 @@ class NotebookPage:
             "gene_probs": [
                 "ndarray[float]",
                 "Numpy float array [n_spots x n_genes]. Von-Mises probability that spot $s$ is gene $g$.",
-            ],
-            "dye_strengths": [
-                "ndarray[float]",
-                "Numpy float array [n_spots x n_rounds x n_dyes]. Strength of each dye in each round for each spot.",
             ],
             "bg_colours": [
                 "ndarray[int32]",

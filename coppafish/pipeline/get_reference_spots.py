@@ -114,6 +114,7 @@ def get_reference_spots(
             file_type=nbp_extract.file_type,
             nbp_file=nbp_file,
             nbp_basic=nbp_basic,
+            nbp_register=nbp_register,
         )
         valid = colour_tuple[-1]
         spot_colours = np.append(spot_colours, colour_tuple[0][valid], axis=0)

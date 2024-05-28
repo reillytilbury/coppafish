@@ -5,6 +5,8 @@
  * Images are now rotated during extract instead of filter. Hence, the config parameter `num_rotations` has been moved 
     from the `filter` section to the `extract` section.
  * The notebook has been refactored. It is now faster at saving, can save zarr arrays and has write protections.
+ * Default z_plane_mean_warning 200 -> 125 in extract.
+ * Moved bg_scale from filter page -> register page.
  * Incorrect numpy data types have been fixed within the notebook.
 
 

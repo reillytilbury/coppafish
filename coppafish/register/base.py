@@ -254,13 +254,16 @@ def huber_regression(shift, position, predict_shift=True):
 def optical_flow_register(
     target: np.ndarray,
     base: np.ndarray,
+    tile: int,
+    round: int,
+    raw_loc: str,
+    corr_loc: str,
+    smooth_loc: str,
     sample_factor_yx: int = 4,
     window_radius: int = 5,
     smooth_threshold: float = 0.9,
     smooth_sigma: float = 10,
     clip_val: np.ndarray = np.array([40, 40, 15]),
-    output_dir: str = "",
-    file_name: str = "",
     n_cores: Optional[int] = None,
 ):
     """
@@ -287,14 +290,10 @@ def optical_flow_register(
         file_name: str specifying the file name to save the optical flow information (flow, corr and smooth)
         n_cores (int, optional): maximum cpu cores to use in parallel when computing optical flow. Default: all found
             cpu cores.
-    """
-    # Create the output directory if it does not exist
-    folders = ["raw", "corr", "smooth"]
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-        for folder in folders:
-            os.makedirs(os.path.join(output_dir, folder))
 
+    Returns:
+        Tuple containing path to optical flow, correlation, and smoothed flow zarr arrays respectively.
+    """
     # convert the images to float32
     target = target.astype(np.float32)
     base = base.astype(np.float32)
@@ -309,37 +308,46 @@ def optical_flow_register(
     clip_val = np.array(clip_val, dtype=np.float32)
     clip_val[:2] = clip_val[:2] / sample_factor_yx
 
-    # compute the optical flow
+    # compute the optical flow for each round/channel
     flow = optical_flow_single(
         base=base,
         target=target,
+        tile=tile,
+        round=round,
         window_radius=window_radius,
         clip_val=clip_val,
         chunks_yx=4,
-        loc=os.path.join(output_dir, "raw", file_name),
+        loc=raw_loc,
         n_cores=n_cores,
     )
     # compute the correlation between the base and target images within a small window of each pixel
     correlation, _ = flow_correlation(
         base=base,
         target=target,
+        tile=tile,
+        round=round,
         flow=flow,
         win_size=np.array([6, 6, 2]),
-        loc=os.path.join(output_dir, "corr", file_name),
+        loc=corr_loc,
     )
     # smooth the flow
     interpolate_flow(
         flow,
         correlation,
+        tile=tile,
+        round=round,
         threshold=smooth_threshold,
         sigma=smooth_sigma,
-        loc=os.path.join(output_dir, "smooth", file_name),
+        loc=smooth_loc,
     )
+    return raw_loc, corr_loc, smooth_loc
 
 
 def optical_flow_single(
     base: np.ndarray,
     target: np.ndarray,
+    tile: int,
+    round: int,
     window_radius: int = 5,
     clip_val: np.ndarray = np.array([10, 10, 15]),
     upsample_factor_yx: int = 4,
@@ -362,12 +370,6 @@ def optical_flow_single(
     Returns:
         flow: np.ndarray size [3, n_y, n_x, n_z] of the optical flow
     """
-    if os.path.exists(loc):
-        # load the flow if it exists. As it is saved in the upsampled format, we need to downsample it
-        flow = zarr.load(loc)[:][:, ::upsample_factor_yx, ::upsample_factor_yx]
-        flow = flow.astype(np.float32)
-        flow[:-1] = flow[:-1] / upsample_factor_yx
-        return flow
     t_start = time.time()
     # start by ensuring images are float32
     base = base.astype(np.float32)
@@ -434,19 +436,8 @@ def optical_flow_single(
     # save the flow
     if loc:
         # save in yxz format
-        compressor, chunks = utils.tiles_io.get_compressor_and_chunks(
-            utils.tiles_io.OptimisedFor.Z_PLANE_READ, flow_up.shape, image_z_index=3
-        )
-        zarray = zarr.open(
-            store=loc,
-            shape=flow_up.shape,
-            mode="w",
-            zarr_version=2,
-            chunks=chunks,
-            dtype="|f2",
-            compressor=compressor,
-        )
-        zarray[:] = flow_up
+        zarray = zarr.open_array(store=os.path.dirname(loc), path=os.path.basename(loc), mode="r+")
+        zarray[tile, round] = flow_up
     t_end = time.time()
     log.info("Optical flow computation took " + str(t_end - t_start) + " seconds")
 
@@ -456,6 +447,8 @@ def optical_flow_single(
 def flow_correlation(
     base: np.ndarray,
     target: np.ndarray,
+    tile: int,
+    round: int,
     flow: np.ndarray,
     win_size: np.ndarray,
     upsample_factor_yx: int = 4,
@@ -481,9 +474,6 @@ def flow_correlation(
             correlation is already saved at `loc`.
     """
     t_start = time.time()
-    if os.path.exists(loc):
-        corr = zarr.load(loc)[:][::upsample_factor_yx, ::upsample_factor_yx]
-        return corr.astype(np.float32), None
     ny, nx, nz = target.shape
     # apply the flow to the base image and compute the correlation between th shifted base and the target image
     coords = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing="ij"), dtype=np.float32)
@@ -524,16 +514,8 @@ def flow_correlation(
         compressor, chunks = utils.tiles_io.get_compressor_and_chunks(
             utils.tiles_io.OptimisedFor.Z_PLANE_READ, correlation_up.shape, image_z_index=2
         )
-        zarray = zarr.open(
-            store=loc,
-            shape=correlation_up.shape,
-            mode="w",
-            zarr_version=2,
-            chunks=chunks,
-            dtype="|f2",
-            compressor=compressor,
-        )
-        zarray[:] = correlation_up
+        zarray = zarr.open_array(store=os.path.dirname(loc), path=os.path.basename(loc), mode="r+")
+        zarray[tile, round] = correlation_up
     t_end = time.time()
     log.info("Computing correlation took " + str(t_end - t_start) + " seconds")
     return correlation, correlation_up
@@ -542,6 +524,8 @@ def flow_correlation(
 def interpolate_flow(
     flow: np.ndarray,
     correlation: np.ndarray,
+    tile: int,
+    round: int,
     threshold: float = 0.95,
     sigma: float = 10,
     upsample_factor_yx: int = 4,
@@ -583,19 +567,8 @@ def interpolate_flow(
     # save the flow
     if loc:
         # save in yxz format
-        compressor, chunks = utils.tiles_io.get_compressor_and_chunks(
-            utils.tiles_io.OptimisedFor.Z_PLANE_READ, flow.shape, image_z_index=3
-        )
-        zarray = zarr.open(
-            store=loc,
-            shape=flow.shape,
-            mode="w",
-            zarr_version=2,
-            chunks=chunks,
-            dtype="|f2",
-            compressor=compressor,
-        )
-        zarray[:] = flow
+        zarray = zarr.open_array(store=os.path.dirname(loc), path=os.path.basename(loc), mode="r+")
+        zarray[tile, round] = flow
     time_end = time.time()
     log.info("Interpolating flow took " + str(time_end - time_start) + " seconds")
     return flow
@@ -690,8 +663,10 @@ def channel_registration(
         )
         cy, cx = cy.astype(int), cx.astype(int)
         values = fluorescent_beads[i][cy, cx]
-        cy_rand, cx_rand = (np.random.randint(0, fluorescent_beads[i].shape[0]-1, 100),
-                            np.random.randint(0, fluorescent_beads[i].shape[1]-1, 100))
+        cy_rand, cx_rand = (
+            np.random.randint(0, fluorescent_beads[i].shape[0] - 1, 100),
+            np.random.randint(0, fluorescent_beads[i].shape[1] - 1, 100),
+        )
         noise = np.mean(fluorescent_beads[i][cy_rand, cx_rand])
         keep = values > noise
         cy, cx = cy[keep], cx[keep]

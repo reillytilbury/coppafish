@@ -79,19 +79,18 @@ def load_spot_colours(
         image_r = torch.asarray(np.concatenate(image_r, axis=0, dtype=np.float32))
         image_batch = torch.cat((image_batch, image_r[np.newaxis]), dim=0)
         del image_r
-        flow_dir = os.path.join(nbp_register.flow_dir, "smooth", f"t{tile}_r{r}.npy")
         # Flow_field_r[0] are y shifts, flow_field_r[2] are z shifts.
-        flow_field_r = -zarr.load(flow_dir)[:]
-        flow_field_r[[0, 1, 2]] = flow_field_r[[2, 1, 0]]
+        flow_field_tr = nbp_register.flow[tile, r]
+        flow_field_tr[[0, 1, 2]] = flow_field_tr[[2, 1, 0]]
         # Flow's shape changes (3, im_y, im_x, im_z) -> (1, im_y, im_x, im_z, 3).
-        flow_field_r = torch.asarray(flow_field_r.transpose((1, 2, 3, 0)))[np.newaxis]
+        flow_field_tr = torch.asarray(flow_field_tr.transpose((1, 2, 3, 0)))[np.newaxis]
         # A one in the flow field represents a shift of one pixel on the grid.
-        flow_field_r[..., 0] *= half_pixel_2 * 2
-        flow_field_r[..., 1] *= half_pixel_1 * 2
-        flow_field_r[..., 2] *= half_pixel_0 * 2
-        flow_field_r = base_grid.detach().clone() + flow_field_r
-        grids = torch.cat((grids, flow_field_r), dim=0)
-        del flow_dir, flow_field_r
+        flow_field_tr[..., 0] *= half_pixel_2 * 2
+        flow_field_tr[..., 1] *= half_pixel_1 * 2
+        flow_field_tr[..., 2] *= half_pixel_0 * 2
+        flow_field_tr = base_grid.detach().clone() + flow_field_tr
+        grids = torch.cat((grids, flow_field_tr), dim=0)
+        del flow_field_tr
         if (i + 1) % n_rounds_batch == 0 or r == final_round:
             i_min, i_max = max(i + 1 - grids.shape[0], 0), i + 1
             registered_image_batch = torch.nn.functional.grid_sample(

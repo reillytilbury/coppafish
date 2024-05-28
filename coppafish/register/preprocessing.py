@@ -631,26 +631,27 @@ def load_transformed_image(
         )
     else:
         flow_indices = None
-    flow_dir = os.path.join(nbp_register.flow_dir, "smooth", f"t{t}_r{r}.npy")
-    im = transform_im(im=im, affine=affine_correction, flow_dir=flow_dir, flow_ind=flow_indices)
+    im = transform_im(im=im, affine=affine_correction, flow=nbp_register.flow[t, r], flow_ind=flow_indices)
 
     return im
 
 
-def transform_im(im: np.ndarray, affine: np.ndarray, flow_dir: str, flow_ind: tuple) -> np.ndarray:
+def transform_im(im: np.ndarray, affine: np.ndarray, flow: zarr.Array, flow_ind: tuple) -> np.ndarray:
     """
     Function to apply affine and flow transformations to an image.
 
     Args:
         im: image to transform
         affine: 3 x 4 affine transform
-        flow_dir: directory containing the flow file
+        flow: flow as zarr array
         flow_ind: indices to take from the flow file. If None, return the entire flow file.
         contains_channel_index (bool): true if the first axis of im is the channel axis. All channels have the same
             transformation applied to them.
     """
+    assert type(flow) is zarr.Array or type(flow) is np.ndarray
+
     im = affine_transform(im, affine, order=1, mode="constant", cval=0)
-    flow = zarr.load(flow_dir)[:]
+    flow = flow[:]
     flow = -(flow[flow_ind].astype(np.float32))
     coords = np.meshgrid(
         np.arange(im.shape[0], dtype=np.float32),

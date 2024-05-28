@@ -464,7 +464,7 @@ def call_reference_spots(
 
     # save overwritable variables in nbp_ref_spots
     # delete all variables in ref_spots set to None so can add them later.
-    for var in ["gene_no", "score", "score_diff", "intensity", "background_strength", "gene_probs", "dye_strengths"]:
+    for var in ["gene_no", "score", "score_diff", "intensity", "background_strength", "gene_probs"]:
         if hasattr(nbp_ref_spots, var):
             nbp_ref_spots.__delattr__(var)
     nbp_ref_spots.gene_no = gene_no.astype(np.int16)
@@ -473,7 +473,6 @@ def call_reference_spots(
     nbp_ref_spots.intensity = np.median(np.max(colours, axis=2), axis=1).astype(np.float32)
     nbp_ref_spots.background_strength = bg_codes
     nbp_ref_spots.gene_probs = gene_prob
-    nbp_ref_spots.dye_strengths = np.zeros(0)
 
     # Save variables in nbp
     nbp.use_ge = np.asarray(use_ge)
@@ -508,6 +507,7 @@ def call_reference_spots(
         file_type=nbp_extract.file_type,
         nbp_file=nbp_file,
         nbp_basic=nbp_basic,
+        nbp_register=nbp_register,
         return_in_bounds=True,
     )[0]
     pixel_intensity = call_spots.get_spot_intensity(np.abs(pixel_colours) / colour_norm_factor[central_tile])

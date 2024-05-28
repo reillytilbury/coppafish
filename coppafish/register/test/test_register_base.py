@@ -121,7 +121,7 @@ def test_optical_flow_single():
         base[:, :, i] *= i / 10
     target = reg_pre.custom_shift(base, np.array([3, 2, 0]))
     # calculate the flow
-    flow = reg_base.optical_flow_single(base, target, upsample_factor_yx=1)
+    flow = reg_base.optical_flow_single(base, target, upsample_factor_yx=1, tile=0, round=0)
     # check that the shape is correct
     ny, nx, nz = base.shape
     assert flow.shape == (3, ny, nx, nz)
@@ -133,6 +133,6 @@ def test_optical_flow_single():
     correct_x = flow[1][centre_idx] == -2
     correct_z = flow[2][centre_idx] == -0
     ny, nx, nz = ny // 2, nx // 2, nz // 2
-    assert np.sum(correct_y)/(ny*nx*nz) > 0.9
-    assert np.sum(correct_x)/(ny*nx*nz) > 0.9
-    assert np.sum(correct_z)/(ny*nx*nz) > 0.9
+    assert np.sum(correct_y) / (ny * nx * nz) > 0.9
+    assert np.sum(correct_x) / (ny * nx * nz) > 0.9
+    assert np.sum(correct_z) / (ny * nx * nz) > 0.9

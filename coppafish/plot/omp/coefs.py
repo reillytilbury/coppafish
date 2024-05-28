@@ -66,6 +66,7 @@ def get_coef_images(
             nb.basic_info,
             nb.extract,
             nb.filter,
+            nb.register,
         )[0]
         / color_norm
     )

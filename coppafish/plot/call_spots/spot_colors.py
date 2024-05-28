@@ -419,6 +419,7 @@ class view_spot(ColorPlotBase):
             file_type=nb.extract.file_type,
             nbp_file=nb.file_names,
             nbp_basic=nb.basic_info,
+            nbp_register=nb.register,
         )[0]
         spot_colors = np.moveaxis(spot_colors, 1, 2)  # put round as the last axis to match color_norm
         spot_colors = spot_colors.reshape(im_yxz.shape[0], -1)

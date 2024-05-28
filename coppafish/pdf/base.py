@@ -48,7 +48,7 @@ class BuildPDF:
         log.debug("Creating diagnostic PDF started")
         pbar = tqdm(desc="Creating Diagnostic PDFs", total=9, unit="section")
         pbar.set_postfix_str("Loading notebook")
-        if isinstance(nb, str):
+        if type(nb) is str:
             nb = Notebook(nb)
         pbar.update()
         if output_dir is None:
