@@ -100,9 +100,9 @@ def get_spot_colors(
         channel `c`. (only returned if `return_in_bounds` is `True`).
     """
     if use_rounds is None:
-        use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
+        use_rounds = list(nbp_basic.use_rounds) + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
     if use_channels is None:
-        use_channels = nbp_basic.use_channels
+        use_channels = list(nbp_basic.use_channels)
 
     n_spots = yxz_base.shape[0]
     no_verbose = n_spots < 10000

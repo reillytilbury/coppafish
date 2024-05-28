@@ -75,8 +75,8 @@ class NotebookPage:
             "dye_names": [
                 "tuple[str] or none",
                 "Names of all dyes so for gene with code $360...$,"
-                + "gene appears with `dye_names[3]` in round $0$, `dye_names[6]` in round $1$, `dye_names[0]` in round $2$ etc."
-                + "`none` if each channel corresponds to a different dye.",
+                + "gene appears with `dye_names[3]` in round $0$, `dye_names[6]` in round $1$, `dye_names[0]`"
+                + " in round $2$ etc. `none` if each channel corresponds to a different dye.",
             ],
             "is_3d": [
                 "bool",
@@ -541,7 +541,7 @@ class NotebookPage:
                 "ndarray[int16]",
                 "Numpy array [n_spots]. Tile each spot was found on.",
             ],
-            "colors": [
+            "colours": [
                 "ndarray[int32]",
                 "Numpy array [n_spots x n_rounds x n_channels]. "
                 + "`[s, r, c]` is the intensity of spot $s$ on round $r$, channel $c$."
@@ -850,7 +850,7 @@ class NotebookPage:
                 temp_directories.append(temp_directory)
                 shutil.copytree(variable_path, temp_zarr_path)
                 shutil.rmtree(variable_path)
-                self.__setattr__(variable_name, temp_zarr_path)
+                self.__setattr__(variable_name, zarr.open_array(temp_zarr_path))
                 continue
 
             os.remove(variable_path)
@@ -865,14 +865,18 @@ class NotebookPage:
         Print a variable's description by doing `notebook_page > "variable_name"`.
         """
         assert type(variable_name) is str
+
         if variable_name not in self._get_variables().keys():
             print(f"No variable named {variable_name}")
             return
-        if len(self._get_variables()[variable_name]) <= 1:
-            print(f"No description found for variable {variable_name}")
-            return
 
-        print(f"{self._get_variables()[variable_name][1]}")
+        variable_desc = "No description"
+        valid_types = self._get_expected_types(variable_name)
+        if len(self._get_variables()[variable_name]) > 1:
+            variable_desc = "".join(self._get_variables()[variable_name][1:])
+        print(f"Variable {variable_name} in {self._name}:")
+        print(f"\tValid types: {valid_types}")
+        print(f"\tDescription: {variable_desc}")
 
     def __setattr__(self, name: str, value: Any, /) -> None:
         """
@@ -888,11 +892,14 @@ class NotebookPage:
         if not self._is_types(value, expected_types):
             added_msg = ""
             if type(value) is np.ndarray:
-                added_msg += f"with type {value.dtype.type}"
-            msg = f"Cannot set variable {name} to type {type(value)} {added_msg}. Expected type(s) {expected_types}"
+                added_msg += f" with dtype {value.dtype.type}"
+            msg = f"Cannot set variable {name} to type {type(value)}{added_msg}. Expected type(s) {expected_types}"
             raise TypeError(msg)
 
         object.__setattr__(self, name, value)
+
+    def get_variable_count(self) -> int:
+        return len(self._get_variables())
 
     def _get_variables(self) -> Dict[str, List[str]]:
         # Variable refers to variables that are set during the pipeline, not metadata.
@@ -931,36 +938,34 @@ class NotebookPage:
 
     def _save_variable(self, name: str, value: Any, types_as_str: str, page_directory: str) -> None:
         file_prefix = self._type_str_to_prefix(types_as_str.split(self._datatype_separator)[0])
-        file_path = self._get_variable_path(page_directory, name, file_prefix)
+        new_path = self._get_variable_path(page_directory, name, file_prefix)
 
         if file_prefix == "json":
-            with open(file_path, "x") as file:
+            with open(new_path, "x") as file:
                 file.write(json.dumps({"value": value}, indent=4))
         elif file_prefix == "npz":
             value.setflags(write=False)
-            np.savez_compressed(file_path, value)
+            np.savez_compressed(new_path, value)
         elif file_prefix == "zarr":
-            if not os.path.isdir(value):
-                raise FileNotFoundError(f"Failed to find zarr at {value}")
-            value_zarr: zarr.Array = zarr.open_array(store=value, mode="r")
-            if type(value_zarr) is not zarr.Array:
-                raise TypeError(f"File at {file_path} was of type {type(value_zarr)}, expected zarr array")
+            if type(value) is not zarr.Array:
+                raise TypeError(f"Variable {name} is of type {type(value)}, expected zarr.Array")
             saved_value = zarr.open_array(
-                store=file_path,
+                store=new_path,
                 mode="w",
-                shape=value_zarr.shape,
-                dtype=value_zarr.dtype,
-                order=value_zarr.order,
-                compressor=value_zarr.compressor,
-                chunks=value_zarr.chunks,
+                shape=value.shape,
+                dtype=value.dtype,
+                order=value.order,
+                compressor=value.compressor,
+                chunks=value.chunks,
                 zarr_version=2,
             )
-            saved_value[:] = value_zarr[:]
+            saved_value[:] = value[:]
             saved_value.read_only = True
-            if os.path.normpath(value) != os.path.normpath(file_path):
+            old_path = os.path.abspath(value.store.path)
+            if os.path.normpath(old_path) != os.path.normpath(new_path):
                 # Delete the old location of the zarr array.
-                shutil.rmtree(value)
-            self.__setattr__(name, file_path)
+                shutil.rmtree(old_path)
+            self.__setattr__(name, saved_value)
         else:
             raise NotImplementedError(f"File prefix {file_prefix} is not supported")
 
@@ -979,7 +984,7 @@ class NotebookPage:
         elif file_prefix == "npz":
             return np.load(file_path)["arr_0"]
         elif file_prefix == "zarr":
-            return file_path
+            return zarr.open_array(file_path)
         else:
             raise NotImplementedError(f"File prefix {file_prefix} is not supported")
 
@@ -988,7 +993,7 @@ class NotebookPage:
         assert type(variable_name) is str
         assert type(suffix) is str
 
-        return str(os.path.join(page_directory, f"{variable_name}.{suffix}"))
+        return str(os.path.abspath(os.path.join(page_directory, f"{variable_name}.{suffix}")))
 
     def _sanity_check_options(self) -> None:
         # Only multiple datatypes can be options for the same variable if they save to the same save file type. So, a
@@ -1062,10 +1067,7 @@ class NotebookPage:
         elif type_as_str == "ndarray[bool]":
             return self._is_ndarray_of_dtype(value, (bool, np.bool_))
         elif type_as_str == "zarr":
-            # A zarr is specified by pointing the notebook page to the location of the zarr array. This way the array
-            # does not need to be in memory all the time and the array can be deleted once it is saved within the
-            # notebook page.
-            return type(value) is str and os.path.isdir(value) and value.endswith(".zarr")
+            return type(value) is zarr.Array
         else:
             raise TypeError(f"Unexpected type '{type_as_str}' found in _options in NotebookPage")
 

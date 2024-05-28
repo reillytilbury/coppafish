@@ -132,18 +132,9 @@ def get_reference_spots(
     nbp.local_yxz = local_yxz
     nbp.isolated = isolated
     nbp.tile = tile
-    nbp.colors = spot_colours_full
+    nbp.colours = spot_colours_full
     nbp.bg_colours = bg_colours
 
-    # Set variables added in call_reference_spots to None so can save to Notebook.
-    # I.e. if call_reference_spots hit error, but we did not do this, we would have to run get_reference_spots again.
-    nbp.gene_no = None
-    nbp.score = None
-    nbp.score_diff = None
-    nbp.intensity = None
-    nbp.background_strength = None
-    nbp.gene_probs = None
-    nbp.dye_strengths = None
     log.debug("Get ref spots complete")
 
     return nbp

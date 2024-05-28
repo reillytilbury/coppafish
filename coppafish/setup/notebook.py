@@ -188,11 +188,13 @@ class Notebook:
         Print a page's description by doing `notebook > "page_name"`.
         """
         assert type(page_name) is str
-
         if page_name not in self._options.keys():
             print(f"No page named {page_name}")
             return
-        print(f"{self._options[page_name][0]}")
+
+        print(f"Page name {page_name}:")
+        print(f"\tVariable count: {NotebookPage(page_name).get_variable_count()}")
+        print(f"\tDescription: {self._options[page_name][0]}")
 
     def _save(self) -> None:
         """

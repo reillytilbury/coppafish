@@ -57,9 +57,10 @@ def test_notebook_creation() -> None:
         assert np.allclose(nb.debug.l, l)
         assert (nb.debug.m == m).all()
         assert np.allclose(nb.debug.n, n)
-        assert os.path.isdir(nb.debug.o)
-        assert len(os.listdir(nb.debug.o)) > 0
-        assert PurePath(nb_path) in PurePath(nb.debug.o).parents
+        zarr_path = os.path.abspath(nb.debug.o.store.path)
+        assert os.path.isdir(zarr_path)
+        assert len(os.listdir(zarr_path)) > 0
+        assert PurePath(nb_path) in PurePath(zarr_path).parents
 
     nb_page.a = a
     try:
@@ -125,11 +126,11 @@ def test_notebook_creation() -> None:
         store=zarr_path, shape=array_saved.shape, dtype="|f4", zarr_version=2, chunks=(2, 4), mode="w"
     )
     zarr_array_temp[:] = array_saved.copy()
-    del zarr_array_temp
 
     assert nb_page.get_unset_variables() == ("o",)
 
-    nb_page.o = zarr_path
+    nb_page.o = zarr_array_temp
+    del zarr_array_temp
 
     assert len(nb_page.get_unset_variables()) == 0
     assert nb_page.name == "debug"
@@ -161,9 +162,11 @@ def test_notebook_creation() -> None:
     _check_variables(nb)
 
     del nb
-    print(f"Loading notebook back in from disk")
     nb = Notebook(nb_path)
     _check_variables(nb)
+
+    # Delete the temporary notebook once done testing.
+    shutil.rmtree(nb_path)
 
 
 if __name__ == "__main__":

@@ -240,7 +240,9 @@ class view_codes(ColorPlotBase):
             page_name = "ref_spots"
             spot_score = nb.ref_spots.score[spot_no]
             t = nb.ref_spots.tile[spot_no]
-            self.spot_color = nb.ref_spots.colors[spot_no][np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)]
+            self.spot_color = nb.ref_spots.colours[spot_no][
+                np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
+            ]
 
         if np.ndim(nb.call_spots.color_norm_factor) == 3:
             color_norm = nb.call_spots.color_norm_factor[t][

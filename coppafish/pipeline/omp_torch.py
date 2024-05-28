@@ -77,7 +77,7 @@ def run_omp(
     colour_norm_factor = torch.asarray(colour_norm_factor).float()
     first_computation = True
 
-    subset_z_size: int = max(nbp_basic.use_z.copy())
+    subset_z_size: int = max(nbp_basic.use_z)
     subset_size_xy: int = config["subset_size_xy"]
 
     if subset_size_xy <= spot_radius_xy * 2:
@@ -313,7 +313,7 @@ def run_omp(
 
                 # Remove bad scoring spots (i.e. false gene reads)
                 keep_scores = g_spots_score >= config["score_threshold"]
-                g_spots_local_yxz = g_spots_local_yxz[keep_scores]
+                g_spots_local_yxz = g_spots_local_yxz[keep_scores].to(dtype=torch.int16)
                 g_spots_yxz = g_spots_yxz[keep_scores]
                 g_spots_score = g_spots_score[keep_scores]
                 n_g_spots = g_spots_local_yxz.shape[0]

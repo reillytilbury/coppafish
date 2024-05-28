@@ -19,9 +19,8 @@ def call_reference_spots(
     nbp_basic: NotebookPage,
     nbp_ref_spots: NotebookPage,
     nbp_extract: NotebookPage,
-    nbp_filter: NotebookPage,
+    nbp_register: NotebookPage,
     transform: np.ndarray,
-    overwrite_ref_spots: bool = False,
 ) -> Tuple[NotebookPage, NotebookPage]:
     """
     This produces the bleed matrix and expected code for each gene as well as producing a gene assignment based on a
@@ -38,56 +37,16 @@ def call_reference_spots(
         nbp_file: `file_names` notebook page.
         nbp_basic: `basic_info` notebook page.
         nbp_ref_spots: `ref_spots` notebook page containing all variables produced in `pipeline/reference_spots.py` i.e.
-            `local_yxz`, `isolated`, `tile`, `colors`.
-            `gene_no`, `score`, `score_diff`, `intensity` should all be `None` to add them here, unless
-            `overwrite_ref_spots == True`.
+            `local_yxz`, `isolated`, `tile`, `colours`.
         nbp_extract: `extract` notebook page.
-        nbp_filter: `filter` notebook page.
+        nbp_register: `register` notebook page.
         transform: float [n_tiles x n_rounds x n_channels x 4 x 3] affine transform for each tile, round and channel
-        overwrite_ref_spots: If `True`, the variables:
-            * `gene_no`
-            * `score`
-            * `score_diff`
-            * `intensity`
-
-            in `nbp_ref_spots` will be overwritten if they exist. If this is `False`, they will only be overwritten
-            if they are all set to `None`, otherwise an error will occur.
 
     Returns:
         `NotebookPage[call_spots]` - Page contains bleed matrix and expected code for each gene.
         `NotebookPage[ref_spots]` - Page contains gene assignments and info for spots found on reference round.
             Parameters added are: intensity, score, gene_no, score_diff
     """
-    if overwrite_ref_spots:
-        log.warn(
-            "\noverwrite_ref_spots = True so will overwrite:\ngene_no, gene_score, score_diff, intensity,"
-            "\nbackground_strength in nbp_ref_spots."
-        )
-    else:
-        # Raise error if data in nbp_ref_spots already exists that will be overwritten in this function.
-        error_message = ""
-        for var in [
-            "gene_no",
-            "gene_score",
-            "score_diff",
-            "intensity",
-            "background_strength",
-            "gene_probs",
-            "dye_strengths",
-        ]:
-            if hasattr(nbp_ref_spots, var) and nbp_ref_spots.__getattribute__(var) is not None:
-                error_message += (
-                    f"\nnbp_ref_spots.{var} is not None but this function will overwrite {var}."
-                    f"\nRun with overwrite_ref_spots = True to get past this error."
-                )
-        if len(error_message) > 0:
-            log.error(ValueError(error_message))
-
-    nbp_ref_spots.finalized = False  # So we can add and delete ref_spots page variables
-    # delete all variables in ref_spots set to None so can add them later.
-    for var in ["gene_no", "score", "score_diff", "intensity", "background_strength", "gene_probs", "dye_strengths"]:
-        if hasattr(nbp_ref_spots, var):
-            nbp_ref_spots.__delattr__(var)
     nbp = NotebookPage("call_spots")
     log.debug("Call ref spots started")
 
@@ -347,7 +306,7 @@ def call_reference_spots(
 
     # Load spot colours and background colours
     bleed_matrix = initial_bleed_matrix / np.linalg.norm(initial_bleed_matrix, axis=0)
-    colours = nbp_ref_spots.colors[:, :, nbp_basic.use_channels].astype(float)
+    colours = nbp_ref_spots.colours[:, :, nbp_basic.use_channels].astype(float)
     bg_colours = nbp_ref_spots.bg_colours.astype(float)
     spot_tile = nbp_ref_spots.tile
     n_spots, n_rounds, n_channels_use = colours.shape
@@ -504,14 +463,17 @@ def call_reference_spots(
     )[:3]
 
     # save overwritable variables in nbp_ref_spots
-    nbp_ref_spots.gene_no = gene_no
+    # delete all variables in ref_spots set to None so can add them later.
+    for var in ["gene_no", "score", "score_diff", "intensity", "background_strength", "gene_probs", "dye_strengths"]:
+        if hasattr(nbp_ref_spots, var):
+            nbp_ref_spots.__delattr__(var)
+    nbp_ref_spots.gene_no = gene_no.astype(np.int16)
     nbp_ref_spots.score = gene_score
     nbp_ref_spots.score_diff = gene_score - gene_score_second
     nbp_ref_spots.intensity = np.median(np.max(colours, axis=2), axis=1).astype(np.float32)
     nbp_ref_spots.background_strength = bg_codes
     nbp_ref_spots.gene_probs = gene_prob
-    # nbp_ref_spots.dye_strengths = dye_strength
-    nbp_ref_spots.finalized = True
+    nbp_ref_spots.dye_strengths = np.zeros(0)
 
     # Save variables in nbp
     nbp.use_ge = np.asarray(use_ge)
@@ -533,22 +495,22 @@ def call_reference_spots(
     nbp.gene_efficiency = gene_efficiency
 
     # Extract abs intensity percentile
-    central_tile = filter_base.central_tile(nbp_basic.tilepos_yx, nbp_basic.use_tiles)
+    central_tile = filter_base.central_tile(nbp_basic.tilepos_yx, list(nbp_basic.use_tiles))
     if nbp_basic.is_3d:
         mid_z = int(nbp_basic.use_z[0] + (nbp_basic.use_z[-1] - nbp_basic.use_z[0]) // 2 - min(nbp_basic.use_z))
     else:
         mid_z = None
-    pixel_colors = spot_colors.get_spot_colors(
+    pixel_colours = spot_colors.get_spot_colors(
         yxz_base=spot_colors.all_pixel_yxz(nbp_basic.tile_sz, nbp_basic.tile_sz, mid_z),
         t=central_tile,
         transform=transform,
-        bg_scale=nbp_filter.bg_scale,
+        bg_scale=nbp_register.bg_scale,
         file_type=nbp_extract.file_type,
         nbp_file=nbp_file,
         nbp_basic=nbp_basic,
         return_in_bounds=True,
     )[0]
-    pixel_intensity = call_spots.get_spot_intensity(np.abs(pixel_colors) / colour_norm_factor[central_tile])
+    pixel_intensity = call_spots.get_spot_intensity(np.abs(pixel_colours) / colour_norm_factor[central_tile])
     nbp.abs_intensity_percentile = np.percentile(pixel_intensity, np.arange(1, 101))
     log.debug("Call ref spots complete")
 

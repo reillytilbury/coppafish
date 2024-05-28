@@ -301,8 +301,8 @@ def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None
             in `nb.ref_spots` will be overwritten if they exist. If this is `False`, they will only be overwritten
             if they are all set to `None`, otherwise an error will occur.
     """
-    if not nb.has_page("ref_spots"):
-        nbp = get_reference_spots.get_reference_spots(
+    if not nb.has_page("ref_spots") or not nb.has_page("call_spots"):
+        nbp_ref_spots = get_reference_spots.get_reference_spots(
             nb.file_names,
             nb.basic_info,
             nb.find_spots,
@@ -311,24 +311,20 @@ def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None
             nb.stitch.tile_origin,
             nb.register.icp_correction,
         )
-        nb += nbp  # save to Notebook with gene_no, score, score_diff, intensity = None.
-        # These will be added in call_reference_spots
-    else:
-        log.warn(utils.warnings.NotebookPageWarning("ref_spots"))
-    if not nb.has_page("call_spots"):
         config = setup.config.get_config(nb.config_path)
-        nbp, _ = call_reference_spots.call_reference_spots(
+        nbp_call_spots, nbp_ref_spots = call_reference_spots.call_reference_spots(
             config["call_spots"],
             nb.file_names,
             nb.basic_info,
-            nb.ref_spots,
+            nbp_ref_spots,
             nb.extract,
-            nb.filter,
+            nb.register,
             transform=nb.register.icp_correction,
-            overwrite_ref_spots=overwrite_ref_spots,
         )
-        nb += nbp
+        nb += nbp_ref_spots
+        nb += nbp_call_spots
     else:
+        log.warn(utils.warnings.NotebookPageWarning("ref_spots"))
         log.warn(utils.warnings.NotebookPageWarning("call_spots"))
 
 
