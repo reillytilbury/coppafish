@@ -71,7 +71,7 @@ def stitch(nbp_basic: NotebookPage, nbp_file: NotebookPage, config_stitch: dict,
     # fuse the tiles and save the notebook page variables
     _ = stitch_base.fuse_tiles(tiles=tiles, tile_origins=tile_origins_full[use_tiles], tilepos_yx=tilepos_yx,
                                overlap=overlap, save_path=os.path.join(nbp_file.output_dir, 'fused_dapi.npy'))
-    nbp.tile_origins = tile_origins_full
+    nbp.tile_origin = tile_origins_full
     nbp.shifts = shift_full
     nbp.scores = score_full
     log.debug("Stitch finished")
