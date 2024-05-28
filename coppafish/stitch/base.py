@@ -126,12 +126,14 @@ def fuse_tiles(tiles: np.ndarray, tile_origins: np.ndarray, tilepos_yx: np.ndarr
     n_rows, n_cols = np.max(tilepos_yx, axis=0) + 1
     n_tiles = len(tiles)
     im_size, _, z_planes = tiles[0].shape
-    large_im_shape = (z_planes, int(n_rows * im_size * (1 - overlap)), int(n_cols * im_size * (1 - overlap)))
+    large_im_size_y = im_size * (n_rows * (1 - overlap) + overlap)
+    large_im_size_x = im_size * (n_cols * (1 - overlap) + overlap)
+    large_im_shape = (z_planes, int(large_im_size_y), int(large_im_size_x))
     # create a list of cropped tiles (this cannot be an array as the tiles are of different sizes)
     cropped_tiles_list = []
     for t in tqdm(range(n_tiles), desc='Applying shifts to tiles', total=n_tiles):
         tile_t, tile_origins[t] = crop_image(image=tiles[t], image_origin=tile_origins[t],
-                                             image_bound=large_im_shape)
+                                             image_bound=(large_im_shape[1], large_im_shape[2], large_im_shape[0]))
         cropped_tiles_list.append(tile_t)
     # delete the original tiles to save memory
     del tiles
