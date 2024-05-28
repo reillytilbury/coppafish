@@ -132,7 +132,7 @@ def register(
                 nbp_basic.tile_sz,
                 len(nbp_basic.use_z),
             )
-            raw_smooth_chunks = (None, None, 3, 50, 50, None)
+            raw_smooth_chunks = (None, None, 3, 64, 64, None)
             zarr.open_array(
                 store=corr_loc,
                 mode="w",
