@@ -117,16 +117,16 @@ def set_file_names(nb, nbp):
     if config["big_dapi_image"] is None:
         nbp.big_dapi_image = None
     else:
-        config["big_dapi_image"] = config["big_dapi_image"].replace(".npz", "")
+        config["big_dapi_image"] = config["big_dapi_image"]
         if nb.basic_info.dapi_channel is None:
             nbp.big_dapi_image = None
         else:
-            nbp.big_dapi_image = os.path.join(config["output_dir"], config["big_dapi_image"] + ".npz")
+            nbp.big_dapi_image = os.path.join(config["output_dir"], config["big_dapi_image"] + ".npy")
     if config["big_anchor_image"] is None:
         nbp.big_anchor_image = None
     else:
         config["big_anchor_image"] = config["big_anchor_image"].replace(".npz", "")
-        nbp.big_anchor_image = os.path.join(config["output_dir"], config["big_anchor_image"] + ".npz")
+        nbp.big_anchor_image = os.path.join(config["output_dir"], config["big_anchor_image"] + ".npy")
 
     if config["anchor"] is not None:
         round_files = config["round"] + [config["anchor"]]
