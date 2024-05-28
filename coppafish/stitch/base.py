@@ -24,17 +24,17 @@ def compute_shift(t1: np.ndarray, t2: np.ndarray, t1_pos: np.ndarray, t2_pos: np
 
     # crop the tiles to the overlapping regions of the two tiles
     if (t2_pos[1] - t1_pos[1] == 1) and (t2_pos[0] - t1_pos[0] == 0): # t2 is to the right of t1
-        t1 = t1[:, -int(overlap * t1.shape[2]):]
-        t2 = t2[:, :int(overlap * t2.shape[2])]
+        t1 = t1[:, -int(overlap * t1.shape[1]):]
+        t2 = t2[:, :int(overlap * t2.shape[1])]
     elif (t2_pos[1] - t1_pos[1] == -1) and (t2_pos[0] - t1_pos[0] == 0): # t2 is to the left of t1
-        t1 = t1[:, :int(overlap * t1.shape[2])]
-        t2 = t2[:, -int(overlap * t2.shape[2]):]
+        t1 = t1[:, :int(overlap * t1.shape[1])]
+        t2 = t2[:, -int(overlap * t2.shape[1]):]
     elif (t2_pos[1] - t1_pos[1] == 0) and (t2_pos[0] - t1_pos[0] == 1): # t2 is below t1
-        t1 = t1[-int(overlap * t1.shape[1]):, :]
-        t2 = t2[:int(overlap * t2.shape[1]), :]
+        t1 = t1[-int(overlap * t1.shape[0]):, :]
+        t2 = t2[:int(overlap * t2.shape[0]), :]
     elif (t2_pos[1] - t1_pos[1] == 0) and (t2_pos[0] - t1_pos[0] == -1): # t2 is above t1
-        t1 = t1[:int(overlap * t1.shape[1]), :]
-        t2 = t2[-int(overlap * t2.shape[1]):, :]
+        t1 = t1[:int(overlap * t1.shape[0]), :]
+        t2 = t2[-int(overlap * t2.shape[0]):, :]
     else:
         raise ValueError('Tiles are not adjacent')  # this should never happen
     window = skimage.filters.window('hann', shape=(t1.shape[0], t1.shape[1]))
@@ -53,7 +53,8 @@ def compute_shift(t1: np.ndarray, t2: np.ndarray, t1_pos: np.ndarray, t2_pos: np
                                                          disambiguate=True)[0]
     # compute the score
     t1_shifted = preprocessing.custom_shift(t1, shift.astype(int))
-    score = np.corrcoef(t1_shifted.flatten(), t2.flatten())[0, 1]
+    mask = t1_shifted > 0
+    score = np.corrcoef(t1_shifted[mask].flatten(), t2[mask].flatten())[0, 1]
 
     return shift, score ** 2
 
