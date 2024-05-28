@@ -956,19 +956,10 @@ class NotebookPage:
         elif file_prefix == "zarr":
             if type(value) is not zarr.Array:
                 raise TypeError(f"Variable {name} is of type {type(value)}, expected zarr.Array")
-            saved_value = zarr.open_array(
-                store=new_path,
-                mode="w",
-                shape=value.shape,
-                dtype=value.dtype,
-                order=value.order,
-                compressor=value.compressor,
-                chunks=value.chunks,
-                zarr_version=2,
-            )
-            saved_value[:] = value[:]
-            saved_value.read_only = True
             old_path = os.path.abspath(value.store.path)
+            shutil.copytree(old_path, new_path)
+            saved_value = zarr.open_array(store=new_path, mode="r+")
+            saved_value.read_only = True
             if os.path.normpath(old_path) != os.path.normpath(new_path):
                 # Delete the old location of the zarr array.
                 shutil.rmtree(old_path)

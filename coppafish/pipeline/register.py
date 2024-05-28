@@ -121,9 +121,9 @@ def register(
                 suffix="_raw" if r == nbp_basic.pre_seq_round else "",
             )
             # Now run the registration algorithm on this tile and round
-            corr_loc = os.path.join(nbp_file.output_dir, "flow_0", "corr.zarr")
-            raw_loc = os.path.join(nbp_file.output_dir, "flow_1", "raw.zarr")
-            smooth_loc = os.path.join(nbp_file.output_dir, "flow_2", "smooth.zarr")
+            corr_loc = os.path.join(nbp_file.output_dir, "corr.zarr")
+            raw_loc = os.path.join(nbp_file.output_dir, "raw.zarr")
+            smooth_loc = os.path.join(nbp_file.output_dir, "smooth.zarr")
             raw_smooth_shape = (
                 max(nbp_basic.use_tiles) + 1,
                 max(use_rounds) + 1,
@@ -320,8 +320,6 @@ def register(
             "mse_channel": mse_channel,
             "converged_channel": converged_channel,
         }
-
-    flow_dir = os.path.join(nbp_file.output_dir, "flow")
 
     nbp.icp_correction = registration_data["icp"]["icp_correction"]
 

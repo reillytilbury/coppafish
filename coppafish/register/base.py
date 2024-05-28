@@ -340,7 +340,6 @@ def optical_flow_register(
         sigma=smooth_sigma,
         loc=smooth_loc,
     )
-    return raw_loc, corr_loc, smooth_loc
 
 
 def optical_flow_single(
@@ -541,8 +540,6 @@ def interpolate_flow(
         upsample_factor_yx: int specifying the upsample factor in y and x
         loc: str specifying the location to save/ load the interpolated flow
     """
-    if os.path.exists(loc):
-        return
     time_start = time.time()
     # threshold the correlation
     mask = correlation >= np.quantile(correlation, threshold)
@@ -567,7 +564,7 @@ def interpolate_flow(
     # save the flow
     if loc:
         # save in yxz format
-        zarray = zarr.open_array(store=os.path.dirname(loc), path=os.path.basename(loc), mode="r+")
+        zarray = zarr.open_array(loc, mode="r+")
         zarray[tile, round] = flow
     time_end = time.time()
     log.info("Interpolating flow took " + str(time_end - time_start) + " seconds")
