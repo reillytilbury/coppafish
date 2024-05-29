@@ -17,7 +17,6 @@ import tifffile
 
 from . import legend
 from .. import call_spots as call_spots_plot
-from ...omp.scores import omp_scores_int_to_float
 from ...setup import Notebook
 from ..call_spots import gene_counts, view_bled_codes, view_bleed_matrix, view_codes, view_intensity, view_spot
 from ..call_spots_new import BGNormViewer, GEViewer, ViewAllGeneScores
@@ -547,7 +546,7 @@ class Viewer:
         gene_no = [nb.ref_spots.gene_no, np.argmax(nb.ref_spots.gene_probs, axis=1)]
         intensity = [nb.ref_spots.intensity, nb.ref_spots.intensity]
         if nb.has_page("omp"):
-            score.append(omp_scores_int_to_float(nb.omp.scores))
+            score.append(nb.omp.scores)
             gene_no.append(nb.omp.gene_no)
             omp_colours = nb.omp.colours.copy()
             colour_norm_factor = nb.call_spots.color_norm_factor[
@@ -651,7 +650,7 @@ class Viewer:
                     with tifffile.TiffFile(file_name) as tif:
                         background_image[i] = tif.asarray()[:, ::downsample_factor, ::downsample_factor]
             else:
-                background_image[i] = nb.stitch.__getattribute__(file_name)
+                background_image[i] = nb.stitch.__getattribute__(file_name)[:]
             # If the user specified MIP[i] = True, plot the maximum intensity projection of the image.
             if background_image[i] is not None and max_intensity_projections[i]:
                 background_image[i] = background_image[i].max(axis=0)
