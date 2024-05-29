@@ -37,6 +37,7 @@
  * Stitching: The stitching diagnostics have been replaced with 2 new viewers, one for viewing the image as a
     checkerboard patten in green and red, with overlapping regions in yellow, and the other for viewing the shifts
     computed for each tile.
+ * OMP scores now saved as float16, not int16.
 
 
 2024/05/15 Alpha Update (v0.10.6):
