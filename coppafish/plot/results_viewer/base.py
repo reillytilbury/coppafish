@@ -650,7 +650,9 @@ class Viewer:
                     with tifffile.TiffFile(file_name) as tif:
                         background_image[i] = tif.asarray()[:, ::downsample_factor, ::downsample_factor]
             else:
-                background_image[i] = nb.stitch.__getattribute__(file_name)[:]
+                background_image[i] = nb.stitch.__getattribute__(file_name)[:][
+                    :, ::downsample_factor, ::downsample_factor
+                ]
             # If the user specified MIP[i] = True, plot the maximum intensity projection of the image.
             if background_image[i] is not None and max_intensity_projections[i]:
                 background_image[i] = background_image[i].max(axis=0)
