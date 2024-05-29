@@ -1,5 +1,7 @@
 import os
 
+import zarr
+
 from . import basic_info
 from . import extract_run
 from . import filter_run
@@ -9,7 +11,7 @@ from . import stitch
 from . import get_reference_spots
 from . import call_reference_spots
 from . import omp_torch
-from .. import log, utils, setup
+from .. import log, setup, utils
 from ..find_spots import check_spots
 from ..pdf.base import BuildPDF
 from ..setup import Notebook, file_names
@@ -206,43 +208,12 @@ def run_stitch(nb: Notebook) -> None:
     """
     config = setup.config.get_config(nb.config_path)
     if not nb.has_page("stitch"):
-        nbp_debug = stitch.stitch(config["stitch"], nb.basic_info, nb.find_spots.spot_yxz, nb.find_spots.spot_no)
+        nbp_debug = stitch.stitch(
+            config["stitch"], nb.basic_info, nb.file_names, nb.extract, nb.find_spots.spot_yxz, nb.find_spots.spot_no
+        )
         nb += nbp_debug
     else:
         log.warn(utils.warnings.NotebookPageWarning("stitch"))
-    # Two conditions below:
-    # 1. Check if there is a big dapi_image
-    # 2. Check if there is NOT a file in the path directory for the dapi image
-    if nb.file_names.big_dapi_image is not None and not os.path.isfile(nb.file_names.big_dapi_image):
-        # save stitched dapi
-        # Will load in from nd2 file if nb.filter_debug.r_dapi is None i.e. if no DAPI filtering performed.
-        utils.tiles_io.save_stitched(
-            nb.file_names.big_dapi_image,
-            nb.file_names,
-            nb.basic_info,
-            nb.extract,
-            nb.stitch.tile_origin,
-            nb.basic_info.anchor_round,
-            nb.basic_info.dapi_channel,
-            nb.filter_debug.r_dapi is None,
-            config["stitch"]["save_image_zero_thresh"],
-            config["extract"]["num_rotations"],
-        )
-
-    if nb.file_names.big_anchor_image is not None and not os.path.isfile(nb.file_names.big_anchor_image):
-        # save stitched reference round/channel
-        utils.tiles_io.save_stitched(
-            nb.file_names.big_anchor_image,
-            nb.file_names,
-            nb.basic_info,
-            nb.extract,
-            nb.stitch.tile_origin,
-            nb.basic_info.anchor_round,
-            nb.basic_info.anchor_channel,
-            False,
-            config["stitch"]["save_image_zero_thresh"],
-            config["extract"]["num_rotations"],
-        )
 
 
 def run_register(nb: Notebook) -> None:

@@ -284,6 +284,10 @@ class NotebookPage:
                 "str",
                 "File type used to save tiles after extraction.",
             ],
+            "num_rotations": [
+                "int",
+                "The number of 90 degree anti-clockwise rotations applied to every image.",
+            ],
         },
         "filter": {
             "auto_thresh": [
@@ -457,6 +461,16 @@ class NotebookPage:
                 "Numpy float array [n_east_overlap x 1]"
                 + "If `east_score[i]` was below `east_score_thresh[i]`, `east_shifts[i]` was found again"
                 + "and old score recorded as `east_outlier_score[i]`. Will be zero if this did not happen.",
+            ],
+            "dapi_image": [
+                "zarr",
+                "Numpy uint16 array (n_z x n_y x n_x)",
+                "Stitched dapi image of all tiles.",
+            ],
+            "anchor_image": [
+                "zarr",
+                "Numpy int16 array (n_z x n_y x n_x)",
+                "Stitched anchor image of all tiles.",
             ],
         },
         "register": {

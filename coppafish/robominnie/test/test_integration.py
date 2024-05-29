@@ -1,11 +1,12 @@
 import os
-import numpy as np
 import warnings
+
+import numpy as np
 import pytest
 
-from coppafish import Viewer, BuildPDF, Notebook
-from coppafish.robominnie.robominnie import RoboMinnie
+from coppafish import BuildPDF, Notebook, Viewer
 from coppafish.plot.register.diagnostics import RegistrationViewer
+from coppafish.robominnie.robominnie import RoboMinnie
 
 
 def get_robominnie_scores(rm: RoboMinnie, include_omp: bool = True) -> None:

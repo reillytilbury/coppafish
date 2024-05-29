@@ -1,15 +1,25 @@
-from tqdm import tqdm
-import numpy as np
+import os
 
-from .. import utils, log
+import numpy as np
+from tqdm import tqdm
+import zarr
+
+from .. import log, utils
+from ..find_spots import base as find_spots_base
+from ..setup import NotebookPage
 from ..stitch import starting_shifts as stitch_starting_shifts
 from ..stitch import shift as stich_shift
 from ..stitch import tile_origin as stitch_tile_origin
-from ..find_spots import base as find_spots_base
-from ..setup import NotebookPage
 
 
-def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no: np.ndarray) -> NotebookPage:
+def stitch(
+    config: dict,
+    nbp_basic: NotebookPage,
+    nbp_file: NotebookPage,
+    nbp_extract: NotebookPage,
+    local_yxz: np.ndarray,
+    spot_no: np.ndarray,
+) -> NotebookPage:
     """
     This gets the origin of each tile such that a global coordinate system can be built.
 
@@ -232,5 +242,38 @@ def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no
         )[:, 2]
         for var in shift_info[j].keys():
             nbp_debug.__setattr__(j + "_" + var, shift_info[j][var])
+
+    # save stitched dapi
+    # Will load in from nd2 file if nb.filter_debug.r_dapi is None i.e. if no DAPI filtering performed.
+    dapi_path = os.path.join(nbp_file.output_dir, "dapi_image.zarr")
+    utils.tiles_io.save_stitched(
+        dapi_path,
+        nbp_file,
+        nbp_basic,
+        nbp_extract,
+        nbp_debug.tile_origin,
+        nbp_basic.anchor_round,
+        nbp_basic.dapi_channel,
+        from_raw=True,
+        zero_thresh=config["save_image_zero_thresh"],
+        num_rotations=nbp_extract.num_rotations,
+    )
+    nbp_debug.dapi_image = zarr.open_array(dapi_path, mode="r")
+    # save stitched anchor round/channel
+    anchor_path = os.path.join(nbp_file.output_dir, "anchor_image.zarr")
+    utils.tiles_io.save_stitched(
+        anchor_path,
+        nbp_file,
+        nbp_basic,
+        nbp_extract,
+        nbp_debug.tile_origin,
+        nbp_basic.anchor_round,
+        nbp_basic.anchor_channel,
+        from_raw=False,
+        zero_thresh=config["save_image_zero_thresh"],
+        num_rotations=nbp_extract.num_rotations,
+    )
+    nbp_debug.anchor_image = zarr.open_array(anchor_path, mode="r")
+
     log.debug("Stitch complete")
     return nbp_debug

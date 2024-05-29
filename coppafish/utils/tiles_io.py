@@ -1,6 +1,6 @@
-import os
 import enum
 import numbers
+import os
 from typing import Any, List, Optional, Tuple, Union
 
 from numcodecs import Blosc, blosc
@@ -428,7 +428,7 @@ def save_stitched(
 
     Args:
         im_file (str or none): path to save file. If `None`, stitched `image` is returned (with z axis last) instead of
-            saved.
+            saved. Saved as a zarr array.
         nbp_file (NotebookPage): `file_names` notebook page.
         nbp_basic (NotebookPage): `basic_info` notebook page.
         nbp_extract (NotebookPage): `extract` notebook page.
@@ -522,7 +522,8 @@ def save_stitched(
             stitched_image = np.moveaxis(stitched_image, 0, -1)
         return stitched_image
     else:
-        np.savez_compressed(im_file, stitched_image)
+        zarray = zarr.open_array(im_file, mode="w", shape=stitched_image.shape, dtype=stitched_image.dtype)
+        zarray[:] = stitched_image
 
 
 def offset_pixels_by(image: npt.NDArray[np.uint16], tile_pixel_value_shift: int) -> npt.NDArray[np.int32]:
