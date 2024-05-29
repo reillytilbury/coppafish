@@ -172,9 +172,6 @@ def register(
             nbp.flow_raw = zarr.open_array(raw_loc)
             nbp.correlation = zarr.open_array(corr_loc)
             nbp.flow = zarr.open_array(smooth_loc)
-        # Save the data to file
-        with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
-            pickle.dump(registration_data, f)
     del anchor_image, round_image
 
     # Part 3: ICP
@@ -377,9 +374,6 @@ def register(
             )
 
         registration_data["blur"] = True
-    # # Save registration data externally
-    # with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
-    #     pickle.dump(registration_data, f)
 
     # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
     # fluorescence
