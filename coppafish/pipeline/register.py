@@ -377,9 +377,9 @@ def register(
             )
 
         registration_data["blur"] = True
-    # Save registration data externally
-    with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
-        pickle.dump(registration_data, f)
+    # # Save registration data externally
+    # with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
+    #     pickle.dump(registration_data, f)
 
     # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
     # fluorescence
