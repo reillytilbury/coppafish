@@ -1,37 +1,34 @@
 import copy
 import os
-import pandas as pd
-import numpy as np
-import napari
 import time
-import skimage
-import tifffile
+from typing import Optional, Union
 import warnings
+
+from PyQt5.QtWidgets import QMainWindow, QPushButton
 import matplotlib.pyplot as plt
-from qtpy.QtCore import Qt
-from superqt import QDoubleRangeSlider, QDoubleSlider
-from PyQt5.QtWidgets import QPushButton, QMainWindow
+import napari
 from napari.layers.points import Points
 from napari.layers.points._points_constants import Mode
+import numpy as np
+import pandas as pd
+from qtpy.QtCore import Qt
+from superqt import QDoubleRangeSlider, QDoubleSlider
+import tifffile
+
+from . import legend
+from .. import call_spots as call_spots_plot
+from ...setup import Notebook
+from ..call_spots import gene_counts, view_bled_codes, view_bleed_matrix, view_codes, view_intensity, view_spot
+from ..call_spots_new import BGNormViewer, GEViewer, ViewAllGeneScores
+from ..omp import histogram_score, view_omp
+from ..omp.coefs import view_score
+from .hotkeys import KeyBinds, ViewHotkeys
 
 try:
     import importlib_resources
 except ModuleNotFoundError:
     import importlib.resources as importlib_resources  # Python 3.10 support
-from typing import Optional, Union
 
-from . import legend
-from .hotkeys import KeyBinds, ViewHotkeys
-from ..call_spots import view_codes, view_bleed_matrix, view_bled_codes, view_spot, view_intensity, gene_counts
-from ...call_spots import qual_check
-from .. import call_spots as call_spots_plot
-from ..call_spots_new import GEViewer, ViewBleedCalc, ViewAllGeneScores, BGNormViewer
-from ..omp import view_omp, histogram_score
-from ..omp.coefs import view_score  # gives import error if call from call_spots.dot_product
-from ... import call_spots
-from ... import utils
-from ...setup import Notebook
-from ...omp.scores import omp_scores_int_to_float
 
 # set matplotlib background to dark
 plt.style.use("dark_background")
@@ -109,13 +106,17 @@ class Viewer:
         # populate variables
         self.create_gene_list(gene_marker_file=gene_marker_file, nb_gene_names=nb.call_spots.gene_names)
         self.create_spots_list(nb=nb, downsample_factor=downsample_factor)
-        self.load_bg_images(nb=nb, background_image=background_image, background_image_colour=background_image_colour,
-                            max_intensity_projections=background_image_max_intensity_projection,
-                            downsample_factor=downsample_factor)
+        self.load_bg_images(
+            nb=nb,
+            background_image=background_image,
+            background_image_colour=background_image_colour,
+            max_intensity_projections=background_image_max_intensity_projection,
+            downsample_factor=downsample_factor,
+        )
 
         # create napari viewer
         self.viewer = napari.Viewer()
-        self.add_data_to_viewer(spot_size=spot_size/downsample_factor)
+        self.add_data_to_viewer(spot_size=spot_size / downsample_factor)
         self.update_status_continually()
         self.format_napari_viewer(gene_legend_info=gene_legend_info, nb=nb)
         self.key_call_functions()
@@ -137,8 +138,13 @@ class Viewer:
             # connect a change in z-plane to the z-thickness slider
             self.viewer.dims.events.current_step.connect(self.update_z_thick)
             # connect the z-thickness slider to the update_z_thick function
-            self.add_slider(name="z_thick", value=1, slider_range=(0, nb.basic_info.nz), slider_mode="single",
-                            slider_variable="z_thick")
+            self.add_slider(
+                name="z_thick",
+                value=1,
+                slider_range=(0, nb.basic_info.nz),
+                slider_mode="single",
+                slider_variable="z_thick",
+            )
 
         abs_intensity_thresh = nb.call_spots.abs_intensity_percentile[50]
         # set up sliders to adjust background images contrast
@@ -148,18 +154,30 @@ class Viewer:
                 start_contrast = np.percentile(b[mid_z], [95, 99]).astype(int).tolist()
             else:
                 start_contrast = np.percentile(b, [95, 99]).astype(int).tolist()
-            self.add_slider(name=self.background_images["names"][i], value=start_contrast,
-                            slider_range=(b.min(), b.max()), slider_mode="range", slider_variable="image")
+            self.add_slider(
+                name=self.background_images["names"][i],
+                value=start_contrast,
+                slider_range=(b.min(), b.max()),
+                slider_mode="range",
+                slider_variable="image",
+            )
 
         # Slider to change score_thresh
-        self.add_slider(name="score_range", value=(0.4, 1), slider_range=(0, 1), slider_mode="range",
-                        slider_variable="spot")
+        self.add_slider(
+            name="score_range", value=(0.4, 1), slider_range=(0, 1), slider_mode="range", slider_variable="spot"
+        )
         # Slider to change intensity_thresh
-        self.add_slider(name="intensity_thresh", value=abs_intensity_thresh, slider_range=(0, 1),
-                        slider_mode="single", slider_variable="spot")
+        self.add_slider(
+            name="intensity_thresh",
+            value=abs_intensity_thresh,
+            slider_range=(0, 1),
+            slider_mode="single",
+            slider_variable="spot",
+        )
         # Buttons to change method
-        self.method["buttons"] = Method(active_button=self.method["names"][self.method["active"]],
-                                        has_omp=self.method["names"][-1] == "omp")
+        self.method["buttons"] = Method(
+            active_button=self.method["names"][self.method["active"]], has_omp=self.method["names"][-1] == "omp"
+        )
         for i, m in enumerate(self.method["names"]):
             self.method["buttons"].button[m].clicked.connect(lambda _, x=i: self.method_event_handler(x))
         self.viewer.window.add_dock_widget(self.method["buttons"], area="left", name="Method")
@@ -198,8 +216,14 @@ class Viewer:
         # Add the legend figure to the viewer window
         self.viewer.window.add_dock_widget(self.legend["fig"], area="left", name="Genes")
 
-    def add_slider(self, name: str, value: Union[float, tuple], slider_range: tuple,
-                   slider_mode: str = "single", slider_variable: str = "spot") -> None:
+    def add_slider(
+        self,
+        name: str,
+        value: Union[float, tuple],
+        slider_range: tuple,
+        slider_mode: str = "single",
+        slider_variable: str = "spot",
+    ) -> None:
         """
         Create a slider and add it to the napari viewer.
         Args:
@@ -221,7 +245,7 @@ class Viewer:
         slider.setValue(value)
 
         # connect to show_slider_value to show user the new value of the slider
-        slider.valueChanged.connect(lambda x: self.show_slider_value(string=f'{name}', value=np.array(x)))
+        slider.valueChanged.connect(lambda x: self.show_slider_value(string=f"{name}", value=np.array(x)))
 
         # connect to the appropriate function to update the napari viewer
         if slider_variable == "spot":
@@ -259,7 +283,7 @@ class Viewer:
         active_layer_name = self.method["names"][self.method["active"]]
         active_genes = np.array([g.notebook_index for g in self.genes if g.active])
         mask = np.isin(self.spots[active_layer_name].gene, active_genes)
-        print(f'Gene active: {[g.name for g in np.array(self.genes)[active_genes]]}, num_spots: {np.sum(mask)}')
+        print(f"Gene active: {[g.name for g in np.array(self.genes)[active_genes]]}, num_spots: {np.sum(mask)}")
         self.viewer.layers[active_layer_name].shown = mask
         self.viewer.layers[active_layer_name].refresh()
 
@@ -311,6 +335,7 @@ class Viewer:
         Update the status of the viewer to show the number of spots selected, and if 1 spot is selected, show the gene,
         score and tile of that spot.
         """
+
         def indicate_selected(selectedData):
             if selectedData is not None:
                 n_selected = len(selectedData)
@@ -331,7 +356,7 @@ class Viewer:
         @napari.qt.thread_worker(connect={"yielded": indicate_selected})
         def _watchSelectedData(pointsLayer):
             """
-                Listen to selected data changes
+            Listen to selected data changes
             """
             selectedData = None
             while True:
@@ -341,6 +366,7 @@ class Viewer:
                 if oldSelectedData != selectedData:
                     yield selectedData
                 yield None
+
         active_method_name = self.method["names"][self.method["active"]]
         return _watchSelectedData(self.viewer.layers[active_method_name])
 
@@ -353,15 +379,15 @@ class Viewer:
         # loop through methods, turn off all layers except the active one
         # update the buttons to show only the active method as checked
         for i, m in enumerate(self.method["names"]):
-            self.viewer.layers[m].visible = (i == self.method["active"])
+            self.viewer.layers[m].visible = i == self.method["active"]
             self.method["buttons"].button[m].setChecked(i == self.method["active"])
 
     def legend_event_handler(self, event):
         """
-            Update the genes plotted in the napari viewer based on the gene that was clicked in the legend.
-            When click on a gene in the legend will remove/add that gene to plot.
-            When right-click on a gene, it will only show that gene.
-            When click on a gene which is the only selected gene, it will return to showing all genes.
+        Update the genes plotted in the napari viewer based on the gene that was clicked in the legend.
+        When click on a gene in the legend will remove/add that gene to plot.
+        When right-click on a gene, it will only show that gene.
+        When click on a gene which is the only selected gene, it will return to showing all genes.
         """
         clicked_coordinates = np.array([event.xdata, event.ydata])
         closest_gene_coordinates = np.zeros(2)
@@ -384,12 +410,12 @@ class Viewer:
         if is_gene_active and num_active_genes == 1:
             # If the gene is the only selected gene, clicking it will show all genes
             for gene in self.genes:
-                gene.active = (gene.name in self.legend["gene_names"])
+                gene.active = gene.name in self.legend["gene_names"]
         elif event.button.name == "RIGHT":
             # If right-clicking on a gene, it will select only that gene
             # self.active_genes = np.array([clicked_gene_number])
             for gene in self.genes:
-                gene.active = (gene.notebook_index == clicked_gene_number)
+                gene.active = gene.notebook_index == clicked_gene_number
         elif is_gene_active:
             # If single-clicking on an active gene, it will remove that gene
             self.genes[clicked_gene_number].active = False
@@ -411,7 +437,7 @@ class Viewer:
 
     def get_selected_spot_index(self):
         """
-            Get the index of the selected spot.
+        Get the index of the selected spot.
         """
         n_selected = len(self.viewer.layers[self.viewer.layers.selection.active.name].selected_data)
         if n_selected == 1:
@@ -455,14 +481,30 @@ class Viewer:
                 colour = gene_legend_info[gene_legend_info["GeneNames"] == g][["ColorR", "ColorG", "ColorB"]].values[0]
                 symbol_napari = gene_legend_info[gene_legend_info["GeneNames"] == g]["napari_symbol"].values[0]
                 symbol_mpl = gene_legend_info[gene_legend_info["GeneNames"] == g]["mpl_symbol"].values[0]
-                genes.append(Gene(name=g, notebook_index=i, colour=colour, symbol_mpl=symbol_mpl,
-                                  symbol_napari=symbol_napari, active=True))
+                genes.append(
+                    Gene(
+                        name=g,
+                        notebook_index=i,
+                        colour=colour,
+                        symbol_mpl=symbol_mpl,
+                        symbol_napari=symbol_napari,
+                        active=True,
+                    )
+                )
             else:
                 invisible_colour = np.array([0, 0, 0])
-                invisible_symbol_mpl = 'o'
-                invisible_symbol_napari = 'o'
-                genes.append(Gene(name=g, notebook_index=i, colour=invisible_colour, symbol_mpl=invisible_symbol_mpl,
-                                  symbol_napari=invisible_symbol_napari, active=False))
+                invisible_symbol_mpl = "o"
+                invisible_symbol_napari = "o"
+                genes.append(
+                    Gene(
+                        name=g,
+                        notebook_index=i,
+                        colour=invisible_colour,
+                        symbol_mpl=invisible_symbol_mpl,
+                        symbol_napari=invisible_symbol_napari,
+                        active=False,
+                    )
+                )
 
         # warn if any genes are not in the gene marker file
         invisible_genes = [g.name for g in genes if not g.active]
@@ -504,12 +546,12 @@ class Viewer:
         gene_no = [nb.ref_spots.gene_no, np.argmax(nb.ref_spots.gene_probs, axis=1)]
         intensity = [nb.ref_spots.intensity, nb.ref_spots.intensity]
         if nb.has_page("omp"):
-            score.append(omp_scores_int_to_float(nb.omp.scores))
+            score.append(nb.omp.scores)
             gene_no.append(nb.omp.gene_no)
             omp_colours = nb.omp.colours.copy()
-            colour_norm_factor = nb.call_spots.color_norm_factor[np.ix_(np.arange(nb.basic_info.n_tiles),
-                                                                        nb.basic_info.use_rounds,
-                                                                        nb.basic_info.use_channels)]
+            colour_norm_factor = nb.call_spots.color_norm_factor[
+                np.ix_(np.arange(nb.basic_info.n_tiles), nb.basic_info.use_rounds, nb.basic_info.use_channels)
+            ]
             omp_colours_float = omp_colours / colour_norm_factor[tile[-1]]
             intensity_omp = np.median(np.max(omp_colours_float, axis=-1), axis=-1)
             intensity.append(intensity_omp)
@@ -520,12 +562,24 @@ class Viewer:
         for i, m in enumerate(self.method["names"]):
             mask = np.isin(gene_no[i], visible_genes)
             spot_indices = np.where(mask)[0]
-            self.spots[m] = Spots(location=global_loc[i][mask], score=score[i][mask], tile=tile[i][mask],
-                                  colours=colours[i][mask], gene=gene_no[i][mask], intensity=intensity[i][mask],
-                                  notebook_index=spot_indices)
+            self.spots[m] = Spots(
+                location=global_loc[i][mask],
+                score=score[i][mask],
+                tile=tile[i][mask],
+                colours=colours[i][mask],
+                gene=gene_no[i][mask],
+                intensity=intensity[i][mask],
+                notebook_index=spot_indices,
+            )
 
-    def load_bg_images(self, background_image: list, background_image_colour: list,
-                       max_intensity_projections: list, downsample_factor: int, nb: Notebook) -> None:
+    def load_bg_images(
+        self,
+        background_image: list,
+        background_image_colour: list,
+        max_intensity_projections: list,
+        downsample_factor: int,
+        nb: Notebook,
+    ) -> None:
         """
         Load background images into the napari viewer and into the Viewer Object.
         Note: napari viewer must be created before calling this function.
@@ -560,9 +614,9 @@ class Viewer:
             print("Only 1 max_intensity_projection preference given, repeating for all images")
             max_intensity_projections = max_intensity_projections * len(background_image)
         # now assert that all lists are the same length
-        assert len(background_image) == len(background_image_colour) == len(max_intensity_projections), (
-            "background_image, background_image_colour and max_intensity_projections must all be the same length."
-        )
+        assert (
+            len(background_image) == len(background_image_colour) == len(max_intensity_projections)
+        ), "background_image, background_image_colour and max_intensity_projections must all be the same length."
         # assert that downsample_factor is an integer
         assert isinstance(downsample_factor, int), "downsample_factor must be an integer."
 
@@ -577,10 +631,8 @@ class Viewer:
                 background_image_dir.append(None)
                 continue
             # If we have got this far, b is a string. Check if it is a keyword for a standard image.
-            if b.lower() == "dapi":
-                file_name = nb.file_names.big_dapi_image
-            elif b.lower() == "anchor":
-                file_name = nb.file_names.big_anchor_image
+            if b.lower() in ("dapi", "anchor"):
+                file_name = b.lower() + "_image"
             else:
                 file_name = b
             background_image_dir.append(file_name)
@@ -597,21 +649,19 @@ class Viewer:
                 elif file_name.endswith(".tif"):
                     with tifffile.TiffFile(file_name) as tif:
                         background_image[i] = tif.asarray()[:, ::downsample_factor, ::downsample_factor]
-                # If the user specified MIP[i] = True, plot the maximum intensity projection of the image.
-                if max_intensity_projections[i]:
-                    background_image[i] = background_image[i].max(axis=0)
             else:
-                background_image[i] = None
-                warnings.warn(
-                    f"No file exists with file name =\n\t{file_name}\n so will not be plotted."
-                )
+                background_image[i] = nb.stitch.__getattribute__(file_name)[:][
+                    :, ::downsample_factor, ::downsample_factor
+                ]
+            # If the user specified MIP[i] = True, plot the maximum intensity projection of the image.
+            if background_image[i] is not None and max_intensity_projections[i]:
+                background_image[i] = background_image[i].max(axis=0)
             # Check if background image is constant. If so, don't plot it.
             if background_image[i] is not None and np.allclose(
-                    [background_image[i].max()], [background_image[i].min()]
+                [background_image[i].max()], [background_image[i].min()]
             ):
                 warnings.warn(
-                    f"Background image with file name =\n\t{file_name}"
-                    + "\ncontains constant values, so not plotting"
+                    f"Background image with file name =\n\t{file_name}" + "\ncontains constant values, so not plotting"
                 )
                 background_image[i] = None
 
@@ -633,8 +683,12 @@ class Viewer:
         """
         # Loop through all background images and add them to the viewer.
         for i, b in enumerate(self.background_images["images"]):
-            self.viewer.add_image(b, blending="additive", colormap=self.background_images["colours"][i],
-                                  name=self.background_images["names"][i])
+            self.viewer.add_image(
+                b,
+                blending="additive",
+                colormap=self.background_images["colours"][i],
+                name=self.background_images["names"][i],
+            )
             self.viewer.layers[i].contrast_limits_range = [b.min(), b.max()]
 
         # add a single layer of spots to viewer for each method
@@ -654,14 +708,16 @@ class Viewer:
             mask_score = (self.spots[m].score >= 0.4) & (self.spots[m].score <= 1)
             mask_intensity = self.spots[m].intensity >= 0.25
             mask = mask_gene & mask_score & mask_intensity
-            self.viewer.add_points(data=point_loc,
-                                   size=spot_size,
-                                   face_color=face_colour,
-                                   symbol=face_symbol,
-                                   name=m,
-                                   out_of_slice_display=False,
-                                   visible=(i == self.method["active"]),
-                                   shown=mask)
+            self.viewer.add_points(
+                data=point_loc,
+                size=spot_size,
+                face_color=face_colour,
+                symbol=face_symbol,
+                name=m,
+                out_of_slice_display=False,
+                visible=(i == self.method["active"]),
+                shown=mask,
+            )
         self.viewer.layers.selection.active = self.viewer.layers[self.method["names"][self.method["active"]]]
 
     def key_call_functions(self):
@@ -685,7 +741,8 @@ class Viewer:
             # Make background image visible / remove it
             for i in range(len(self.background_image)):
                 self.viewer.layers[self.background_image_name[i]].visible = not self.viewer.layers[
-                    self.background_image_name[i]].visible
+                    self.background_image_name[i]
+                ].visible
 
         @self.viewer.bind_key(KeyBinds.view_bleed_matrix)
         def call_to_view_bm(viewer):
@@ -714,8 +771,8 @@ class Viewer:
 
         @self.viewer.bind_key(KeyBinds.view_gene_counts)
         def call_to_gene_counts(viewer):
-            score_thresh = self.sliders['score_range'].value()[0]
-            intensity_thresh = self.sliders['intensity_thresh'].value()
+            score_thresh = self.sliders["score_range"].value()[0]
+            intensity_thresh = self.sliders["intensity_thresh"].value()
             gene_counts(self.nb, None, None, score_thresh, intensity_thresh)
 
         @self.viewer.bind_key(KeyBinds.view_histogram_scores)
@@ -805,8 +862,17 @@ class Spots:
     Class to hold different spot information. In the Viewer class we will have a list of lists of Spots objects, one
     for each gene within each method.
     """
-    def __init__(self, location: np.ndarray, colours: np.ndarray, score: np.ndarray, tile: np.ndarray,
-                 intensity: np.ndarray, gene: np.ndarray, notebook_index: np.ndarray):
+
+    def __init__(
+        self,
+        location: np.ndarray,
+        colours: np.ndarray,
+        score: np.ndarray,
+        tile: np.ndarray,
+        intensity: np.ndarray,
+        gene: np.ndarray,
+        notebook_index: np.ndarray,
+    ):
         """
         Create object for spots of a single gene within a single method.
         Args:
@@ -818,8 +884,15 @@ class Spots:
             gene: (np.ndarray) of shape (n_spots,) with the gene number of each spot. (int16)
             notebook_index: (np.ndarray) of shape (n_spots,) with the index of each spot in the notebook. (int16)
         """
-        assert len(location) == len(colours) == len(score) == len(tile) == len(intensity) == len(gene) == len(
-            notebook_index), "All arrays must be the same length."
+        assert (
+            len(location)
+            == len(colours)
+            == len(score)
+            == len(tile)
+            == len(intensity)
+            == len(gene)
+            == len(notebook_index)
+        ), "All arrays must be the same length."
         self.location = location
         self.colours = colours
         self.score = score
@@ -834,8 +907,16 @@ class Gene:
     Class to hold gene information. In the Viewer class we will have a list of Gene objects, one for each gene.
     This will store the gene name, index, colour and symbol.
     """
-    def __init__(self, name: str, notebook_index: int, colour: Union[np.ndarray, None], symbol_mpl: Union[str, None],
-                 symbol_napari: Union[str, None], active: bool = True):
+
+    def __init__(
+        self,
+        name: str,
+        notebook_index: int,
+        colour: Union[np.ndarray, None],
+        symbol_mpl: Union[str, None],
+        symbol_napari: Union[str, None],
+        active: bool = True,
+    ):
         """
         Create object for a single gene.
         Args:

@@ -1,18 +1,18 @@
+import math as maths
 import sys
+from typing import Optional, Tuple, Union
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import math as maths
-import matplotlib.pyplot as plt
-from typing import Optional, Union, Tuple
+
+from ... import log
+from ...setup.notebook import Notebook
 
 try:
     import importlib_resources
 except ModuleNotFoundError:
     import importlib.resources as importlib_resources  # Python 3.10 support
-
-from ...omp import scores as omp_scores
-from ... import log
-from ...setup.notebook import Notebook
 
 
 class Viewer2D:
@@ -167,7 +167,7 @@ class Viewer2D:
         if self.omp_available:
             self.omp_global_yxz = nb.omp.local_yxz + nb.stitch.tile_origin[nb.omp.tile]
             self.omp_gene_no = nb.omp.gene_no
-            self.omp_score = omp_scores.omp_scores_int_to_float(nb.omp.scores)
+            self.omp_score = nb.omp.scores
         tile_shape = np.array([nb.basic_info.tile_sz, nb.basic_info.tile_sz, len(nb.basic_info.use_z)])
         self.minimum_global_yxz = np.nanmin(nb.stitch.tile_origin, axis=0)
         self.maximum_global_yxz = np.nanmax(nb.stitch.tile_origin, axis=0) + tile_shape

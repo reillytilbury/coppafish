@@ -1,16 +1,15 @@
-import os
 import enum
 import numbers
+import os
 from typing import Any, List, Optional, Tuple, Union
 
 from numcodecs import Blosc, blosc
 import numpy as np
 import numpy.typing as npt
 import numpy_indexed
-from tqdm import tqdm
 import zarr
 
-from .. import extract, log, utils
+from .. import log, utils
 from ..setup import NotebookPage
 
 
@@ -35,25 +34,25 @@ def get_compressor_and_chunks(
         image_z_index = np.argmin(image_shape).item()
     if optimised_for == OptimisedFor.FULL_READ_AND_WRITE:
         compressor = Blosc(cname="lz4", clevel=2, shuffle=Blosc.BITSHUFFLE)
-        chunk_count_z = image_shape[image_z_index] // 2
-        chunk_count_yx = min(288, np.max(image_shape).item())
+        chunk_size_z = image_shape[image_z_index] // 2
+        chunk_size_yx = 288
     elif optimised_for == OptimisedFor.Z_PLANE_READ:
         compressor = Blosc(cname="lz4", clevel=4, shuffle=Blosc.SHUFFLE)
-        chunk_count_z = image_shape[0] // 2
-        chunk_count_yx = min(576, np.max(image_shape).item())
+        chunk_size_z = image_shape[image_z_index] // 2
+        chunk_size_yx = 576
     else:
         raise ValueError(f"Unknown OptimisedFor value of {optimised_for}")
     if len(image_shape) >= 3:
         chunks = tuple()
         for i in range(len(image_shape)):
-            if image_shape[i] < 4:
-                chunks += (image_shape[i],)
+            if image_shape[i] < 10:
+                chunks += (1,)
             elif i == image_z_index:
-                chunks += (chunk_count_z,)
+                chunks += (chunk_size_z,)
             else:
-                chunks += (chunk_count_yx,)
+                chunks += (chunk_size_yx,)
     elif len(image_shape) == 2:
-        chunks = (chunk_count_yx, chunk_count_yx)
+        chunks = (chunk_size_yx, chunk_size_yx)
     else:
         raise ValueError(f"Got image_shape with {len(image_shape)} dimensions: {image_shape}")
     return compressor, chunks
@@ -190,7 +189,6 @@ def save_image(
     t: int,
     r: int,
     c: Optional[int] = None,
-    num_rotations: int = 0,
     suffix: str = "",
     apply_shift: bool = True,
     percent_clip_warn: float = None,
@@ -210,8 +208,6 @@ def save_image(
         t (int): npy tile index considering.
         r (int): round considering.
         c (int, optional): channel considering. Default: not given, raises error when `nbp_basic.is_3d == True`.
-        num_rotations (int, optional): number of `90` degree clockwise rotations to apply to image before saving.
-            Applied to the `x` and `y` axes, to 3d `image` data only. Default: `0`.
         suffix (str, optional): suffix to add to file name before the file extension. Default: empty.
         apply_shift (bool, optional): if true and saving a non-dapi channel, will apply the shift to the image.
         n_clip_warn (int, optional): if the number of pixels clipped off by saving is at least this number, a warning
@@ -261,9 +257,6 @@ def save_image(
         image = np.swapaxes(image, 2, 0)
         # zxy -> zyx
         image = np.swapaxes(image, 1, 2)
-        # Now rotate image
-        if num_rotations != 0:
-            image = np.rot90(image, k=num_rotations, axes=(1, 2))
         file_path = nbp_file.tile[t][r][c]
         file_path = file_path[: file_path.index(file_type)] + suffix + file_type
         _save_image(image, file_path, file_type, optimised_for=OptimisedFor.Z_PLANE_READ)

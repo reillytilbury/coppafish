@@ -49,6 +49,7 @@ setup(
             "notebook_comments.json",
             "dye_camera_laser_raw_intensity.csv",
             "default_bleed.npy",
+            "default_psf.npz",
         ],
         "coppafish.plot.results_viewer": ["cell_color.csv", "cellClassColors.json", "gene_color.csv"],
     },

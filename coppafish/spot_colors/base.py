@@ -57,6 +57,7 @@ def get_spot_colors(
     file_type: str,
     nbp_file: NotebookPage,
     nbp_basic: NotebookPage,
+    nbp_register: NotebookPage,
     use_rounds: Optional[List[int]] = None,
     use_channels: Optional[List[int]] = None,
     return_in_bounds: bool = False,
@@ -100,9 +101,9 @@ def get_spot_colors(
         channel `c`. (only returned if `return_in_bounds` is `True`).
     """
     if use_rounds is None:
-        use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
+        use_rounds = list(nbp_basic.use_rounds) + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
     if use_channels is None:
-        use_channels = nbp_basic.use_channels
+        use_channels = list(nbp_basic.use_channels)
 
     n_spots = yxz_base.shape[0]
     no_verbose = n_spots < 10000
@@ -120,14 +121,14 @@ def get_spot_colors(
     with tqdm(total=n_use_rounds * n_use_channels, disable=no_verbose) as pbar:
         pbar.set_description(f"Reading {n_spots} spot_colors from {file_type} files")
         for i, r in enumerate(use_rounds):
-            flow_r = zarr.load(os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy"))[:]
+            flow_tr = nbp_register.flow[t, r]
             for j, c in enumerate(use_channels):
                 transform_rc = transform[t, r, c]
                 pbar.set_postfix({"round": r, "channel": c})
                 if transform_rc[0, 0] == 0:
                     raise ValueError(f"Transform for tile {t}, round {r}, channel {c} is zero:" f"\n{transform_rc}")
 
-                yxz_transform, in_range = apply_transform(yxz_base, flow_r, transform_rc, tile_sz)
+                yxz_transform, in_range = apply_transform(yxz_base, flow_tr, transform_rc, tile_sz)
                 yxz_transform, in_range = np.asarray(yxz_transform), np.asarray(in_range)
                 yxz_transform = yxz_transform[in_range]
                 # if no spots in range, then continue
@@ -140,7 +141,7 @@ def get_spot_colors(
                     nbp_file, nbp_basic, file_type, t, r, c, yxz_transform, apply_shift=False
                 )
                 pbar.update(1)
-            del flow_r
+            del flow_tr
 
     # Remove shift so now spots outside bounds have color equal to - nbp_basic.tile_pixel_shift_value.
     # It is impossible for any actual spot color to be this due to clipping at the extract stage.

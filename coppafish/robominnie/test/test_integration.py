@@ -1,11 +1,12 @@
 import os
-import numpy as np
 import warnings
+
+import numpy as np
 import pytest
 
-from coppafish import Viewer, BuildPDF, Notebook
-from coppafish.robominnie.robominnie import RoboMinnie
+from coppafish import BuildPDF, Notebook, Viewer
 from coppafish.plot.register.diagnostics import RegistrationViewer
+from coppafish.robominnie.robominnie import RoboMinnie
 
 
 def get_robominnie_scores(rm: RoboMinnie, include_omp: bool = True) -> None:
@@ -175,7 +176,7 @@ def test_bg_subtraction() -> None:
         spot_amplitude_dapi=0.05,
     )
     robominnie.save_raw_images(output_dir=output_dir, register_with_dapi=False)
-    nb = robominnie.run_coppafish()
+    robominnie.run_coppafish()
     get_robominnie_scores(robominnie)
     del robominnie
 
@@ -210,10 +211,10 @@ def test_pdf_builder() -> None:
         - Requires a robominnie instance to have run through first to retrieve the notebook file.
     """
     notebook_path = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), ".integration_dir/output_coppafish/notebook.npz"
+        os.path.dirname(os.path.realpath(__file__)), ".integration_dir/output_coppafish/notebook"
     )
     for file_name in os.listdir(os.path.dirname(notebook_path)):
-        if file_name[-4:].lower() == ".pdf":
+        if file_name.endswith(".pdf"):
             os.remove(os.path.join(os.path.dirname(notebook_path), file_name))
     BuildPDF(notebook_path, auto_open=False)
 

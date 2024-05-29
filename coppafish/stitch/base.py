@@ -1,11 +1,16 @@
+from typing import Tuple
+
 import numpy as np
 import skimage
-from ..register import preprocessing
 from tqdm import tqdm
+import zarr
+
+from ..register import preprocessing
 
 
-def compute_shift(t1: np.ndarray, t2: np.ndarray, t1_pos: np.ndarray, t2_pos: np.ndarray,
-                  overlap: float) -> [np.ndarray, float]:
+def compute_shift(
+    t1: np.ndarray, t2: np.ndarray, t1_pos: np.ndarray, t2_pos: np.ndarray, overlap: float
+) -> Tuple[np.ndarray, float]:
     """
     Compute the boundary shift between two tiles t1 and t2. The shift is computed by comparing the overlapping regions
     of the two tiles, and using a phase cross correlation algorithm to find any deviation from the expected overlap.
@@ -23,40 +28,39 @@ def compute_shift(t1: np.ndarray, t2: np.ndarray, t1_pos: np.ndarray, t2_pos: np
     """
 
     # crop the tiles to the overlapping regions of the two tiles
-    if (t2_pos[1] - t1_pos[1] == 1) and (t2_pos[0] - t1_pos[0] == 0): # t2 is to the right of t1
-        t1 = t1[:, -int(overlap * t1.shape[1]):]
-        t2 = t2[:, :int(overlap * t2.shape[1])]
-    elif (t2_pos[1] - t1_pos[1] == -1) and (t2_pos[0] - t1_pos[0] == 0): # t2 is to the left of t1
-        t1 = t1[:, :int(overlap * t1.shape[1])]
-        t2 = t2[:, -int(overlap * t2.shape[1]):]
-    elif (t2_pos[1] - t1_pos[1] == 0) and (t2_pos[0] - t1_pos[0] == 1): # t2 is below t1
-        t1 = t1[-int(overlap * t1.shape[0]):, :]
-        t2 = t2[:int(overlap * t2.shape[0]), :]
-    elif (t2_pos[1] - t1_pos[1] == 0) and (t2_pos[0] - t1_pos[0] == -1): # t2 is above t1
-        t1 = t1[:int(overlap * t1.shape[0]), :]
-        t2 = t2[-int(overlap * t2.shape[0]):, :]
+    if (t2_pos[1] - t1_pos[1] == 1) and (t2_pos[0] - t1_pos[0] == 0):  # t2 is to the right of t1
+        t1 = t1[:, -int(overlap * t1.shape[1]) :]
+        t2 = t2[:, : int(overlap * t2.shape[1])]
+    elif (t2_pos[1] - t1_pos[1] == -1) and (t2_pos[0] - t1_pos[0] == 0):  # t2 is to the left of t1
+        t1 = t1[:, : int(overlap * t1.shape[1])]
+        t2 = t2[:, -int(overlap * t2.shape[1]) :]
+    elif (t2_pos[1] - t1_pos[1] == 0) and (t2_pos[0] - t1_pos[0] == 1):  # t2 is below t1
+        t1 = t1[-int(overlap * t1.shape[0]) :, :]
+        t2 = t2[: int(overlap * t2.shape[0]), :]
+    elif (t2_pos[1] - t1_pos[1] == 0) and (t2_pos[0] - t1_pos[0] == -1):  # t2 is above t1
+        t1 = t1[: int(overlap * t1.shape[0]), :]
+        t2 = t2[-int(overlap * t2.shape[0]) :, :]
     else:
-        raise ValueError('Tiles are not adjacent')  # this should never happen
-    window = skimage.filters.window('hann', shape=(t1.shape[0], t1.shape[1]))
+        raise ValueError("Tiles are not adjacent")  # this should never happen
+    window = skimage.filters.window("hann", shape=(t1.shape[0], t1.shape[1]))
     # extend the window in z, but as we don't have many z-planes, fade first and last quarter of the planes
     z_planes = t1.shape[-1]
     n_z_fade = z_planes // 4
-    window_z = np.concatenate((np.linspace(0, 1, n_z_fade),
-                             np.ones(z_planes - 2 * n_z_fade),
-                             np.linspace(1, 0, n_z_fade)))
+    window_z = np.concatenate(
+        (np.linspace(0, 1, n_z_fade), np.ones(z_planes - 2 * n_z_fade), np.linspace(1, 0, n_z_fade))
+    )
     window = window[:, :, np.newaxis] * window_z[np.newaxis, np.newaxis, :]
 
     # compute the shift
-    shift = skimage.registration.phase_cross_correlation(reference_image=t2 * window,
-                                                         moving_image=t1 * window,
-                                                         overlap_ratio=0.5,
-                                                         disambiguate=True)[0]
+    shift = skimage.registration.phase_cross_correlation(
+        reference_image=t2 * window, moving_image=t1 * window, overlap_ratio=0.5, disambiguate=True
+    )[0]
     # compute the score
     t1_shifted = preprocessing.custom_shift(t1, shift.astype(int))
     mask = t1_shifted > 0
     score = np.corrcoef(t1_shifted[mask].flatten(), t2[mask].flatten())[0, 1]
 
-    return shift, score ** 2
+    return shift, score**2
 
 
 def minimise_shift_loss(shift: np.ndarray, score: np.ndarray) -> np.ndarray:
@@ -101,8 +105,9 @@ def minimise_shift_loss(shift: np.ndarray, score: np.ndarray) -> np.ndarray:
     return shifts_final
 
 
-def fuse_tiles(tiles: np.ndarray, tile_origins: np.ndarray, tilepos_yx: np.ndarray,
-               overlap: float, save_path: str) -> np.ndarray:
+def fuse_tiles(
+    tiles: np.ndarray, tile_origins: np.ndarray, tilepos_yx: np.ndarray, overlap: float, save_path: str
+) -> np.ndarray:
     """
     Fuse a stack of tiles into a single large image, using the tile_origins to determine the position of each tile in
     the large image. The function is not difficult conceptually, as it just involves applying the shifts to each tile
@@ -113,11 +118,11 @@ def fuse_tiles(tiles: np.ndarray, tile_origins: np.ndarray, tilepos_yx: np.ndarr
     Note: Even though the tiles are in the form yxz, the large image is in the form zyx for compatibility with the
     main viewer
     Args:
-        tiles: np.ndarray, [n_tiles, im_size_y, im_size_x, im_szie_z] array of the tiles to be fused
+        tiles: np.ndarray, [n_tiles, im_size_y, im_size_x, im_size_z] array of the tiles to be fused
         tile_origins: np.ndarray, [n_tiles, 3] array of the y, x, z positions of each tile (need to be integers)
         tilepos_yx: np.ndarray, [n_tiles, 2] array of the y, x indices of each tile
         overlap: float, expected overlap between the tiles
-        save_path: str, path to save the fused image
+        save_path: str, path to save the fused image as a zarr array. Overwrites any existing file.
 
     Returns:
         fused_image: np.ndarray, [large_z, large_y, large_x] array of the fused image
@@ -132,32 +137,41 @@ def fuse_tiles(tiles: np.ndarray, tile_origins: np.ndarray, tilepos_yx: np.ndarr
     large_im_shape = (z_planes, int(large_im_size_y), int(large_im_size_x))
     # create a list of cropped tiles (this cannot be an array as the tiles are of different sizes)
     cropped_tiles_list = []
-    for t in tqdm(range(n_tiles), desc='Applying shifts to tiles', total=n_tiles):
-        tile_t, tile_origins[t] = crop_image(image=tiles[t], image_origin=tile_origins[t],
-                                             image_bound=(large_im_shape[1], large_im_shape[2], large_im_shape[0]))
+    for t in tqdm(range(n_tiles), desc="Applying shifts to tiles", total=n_tiles):
+        tile_t, tile_origins[t] = crop_image(
+            image=tiles[t],
+            image_origin=tile_origins[t],
+            image_bound=(large_im_shape[1], large_im_shape[2], large_im_shape[0]),
+        )
         cropped_tiles_list.append(tile_t)
     # delete the original tiles to save memory
     del tiles
     # taper the edges of the tiles
-    for t in tqdm(range(n_tiles), desc='Tapering tile edges', total=n_tiles):
-        cropped_tiles_list[t] = taper_image(image=cropped_tiles_list[t], tile_start=tile_origins,
-                                            tile_end=tile_origins + np.array([tile.shape for tile in cropped_tiles_list]),
-                                            tilepos_yx=tilepos_yx, current_tile=t)
+    for t in tqdm(range(n_tiles), desc="Tapering tile edges", total=n_tiles):
+        cropped_tiles_list[t] = taper_image(
+            image=cropped_tiles_list[t],
+            tile_start=tile_origins,
+            tile_end=tile_origins + np.array([tile.shape for tile in cropped_tiles_list]),
+            tilepos_yx=tilepos_yx,
+            current_tile=t,
+        )
     # create the large image
     large_image = np.zeros(large_im_shape, dtype=np.uint16)
-    for t in tqdm(range(n_tiles), desc='Adding tiles to the large image', total=n_tiles):
+    for t in tqdm(range(n_tiles), desc="Adding tiles to the large image", total=n_tiles):
         y_start, x_start, z_start = tile_origins[t]
         y_end, x_end, z_end = tile_origins[t] + np.array(cropped_tiles_list[t].shape)
-        large_image[z_start:z_end, y_start:y_end, x_start:x_end] += np.moveaxis(cropped_tiles_list[t],
-                                                                                source=2, destination=0)
+        large_image[z_start:z_end, y_start:y_end, x_start:x_end] += np.moveaxis(
+            cropped_tiles_list[t], source=2, destination=0
+        )
 
     # save the fused image
-    np.save(save_path, large_image)
+    zarray = zarr.open_array(store=save_path, mode="w", shape=large_image.shape, dtype=large_image.dtype)
+    zarray[:] = large_image
 
     return large_image
 
 
-def crop_image(image: np.ndarray, image_origin: np.ndarray, image_bound: tuple) -> [np.ndarray, np.ndarray]:
+def crop_image(image: np.ndarray, image_origin: np.ndarray, image_bound: tuple) -> Tuple[np.ndarray, np.ndarray]:
     """
     Crop an image to the region defined by image_origin and image_bound.
     Args:
@@ -189,21 +203,22 @@ def crop_image(image: np.ndarray, image_origin: np.ndarray, image_bound: tuple) 
     # correct for overflow (on the positive side)
     if y_end > image_bound[0]:
         y_end = image_bound[0]
-        image = image[:y_end - y_start, :, :]
+        image = image[: y_end - y_start, :, :]
     if x_end > image_bound[1]:
         x_end = image_bound[1]
-        image = image[:, :x_end - x_start, :]
+        image = image[:, : x_end - x_start, :]
     if z_end > image_bound[2]:
         z_end = image_bound[2]
-        image = image[:, :, :z_end - z_start]
+        image = image[:, :, : z_end - z_start]
 
     # keep a copy of the new corner coords
     bottom_left_corner = np.array([y_start, x_start, z_start])
     return image, bottom_left_corner
 
 
-def taper_image(image: np.ndarray, tile_start: np.ndarray, tile_end: np.ndarray, tilepos_yx: np.ndarray,
-                current_tile: int) -> np.ndarray:
+def taper_image(
+    image: np.ndarray, tile_start: np.ndarray, tile_end: np.ndarray, tilepos_yx: np.ndarray, current_tile: int
+) -> np.ndarray:
     """
     Taper the edges of the tiles to avoid visible seams in the final image. The tapering is done by applying a
     linear ramp to the edges of the tiles. The start point of this ramp is determined by the start point of the
@@ -231,7 +246,7 @@ def taper_image(image: np.ndarray, tile_start: np.ndarray, tile_end: np.ndarray,
 
     # if there are no adjacent tiles, we skip the tapering
     if len(adjacent_tiles) == 0:
-        print(f'Tile {current_tile} has no adjacent tiles. Skipping tapering.')
+        print(f"Tile {current_tile} has no adjacent tiles. Skipping tapering.")
         return image.astype(np.uint16)
 
     # taper the edges where we are adjacent to another tile
@@ -243,7 +258,7 @@ def taper_image(image: np.ndarray, tile_start: np.ndarray, tile_end: np.ndarray,
         elif tilepos_current[1] == tilepos_yx[t][1] - 1:
             # current tile is to the left of t
             x_start = tile_start[t, 1] - tile_end[current_tile, 1]
-            image[:, x_start:] *= np.linspace(1, 0, - x_start)[None, :, None]
+            image[:, x_start:] *= np.linspace(1, 0, -x_start)[None, :, None]
         elif tilepos_current[0] == tilepos_yx[t][0] + 1:
             # current tile is below t
             y_end = tile_end[t, 0] - tile_start[current_tile, 0]
@@ -251,6 +266,6 @@ def taper_image(image: np.ndarray, tile_start: np.ndarray, tile_end: np.ndarray,
         elif tilepos_current[0] == tilepos_yx[t][0] - 1:
             # current tile is above t
             y_start = tile_start[t, 0] - tile_end[current_tile, 0]
-            image[y_start:, :] *= np.linspace(1, 0, - y_start)[:, None, None]
+            image[y_start:, :] *= np.linspace(1, 0, -y_start)[:, None, None]
 
     return image.astype(np.uint16)

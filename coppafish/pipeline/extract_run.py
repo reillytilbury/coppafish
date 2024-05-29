@@ -5,7 +5,7 @@ import numpy as np
 from tqdm import tqdm
 
 from .. import log, utils
-from ..setup.notebook import NotebookPage
+from ..setup import NotebookPage
 from ..utils import indexing, tiles_io
 
 
@@ -35,9 +35,8 @@ def run_extract(
         )
 
     nbp = NotebookPage("extract")
-    nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_software_hash()
     nbp.file_type = config["file_type"]
+    nbp.num_rotations = config["num_rotations"]
 
     log.debug("Extraction started")
 
@@ -94,7 +93,7 @@ def run_extract(
                     continue
 
                 channel_images: tuple[np.ndarray] = utils.raw.load_image(
-                    nbp_file, nbp_basic, t=t, c=channels, r=r, use_z=nbp_basic.use_z
+                    nbp_file, nbp_basic, t=t, c=channels, r=r, use_z=list(nbp_basic.use_z)
                 )
                 for im, c, file_path, file_exists in zip(channel_images, channels, file_paths, files_exist):
                     if file_exists:
@@ -103,11 +102,14 @@ def run_extract(
                         im = im.astype(np.uint16, casting="safe")
                         # yxz -> zyx
                         im = im.transpose((2, 0, 1))
-                        if (im.mean((1, 2)) < config["z_plane_mean_warning"]).any():
+                        im = np.rot90(im, k=config["num_rotations"], axes=(1, 2))
+                        z_plane_means = im.mean((1, 2))
+                        if (z_plane_means < config["z_plane_mean_warning"]).any():
                             log.warn(
-                                f"Raw image {t=}, {r=}, {c=} has dim z plane(s). You may wish to remove the affected image by"
-                                + f" setting `bad_trc = ({t}, {r}, {c}), (...` in the basic_info config and re-run the pipeline"
-                                + " with an empty output directory."
+                                f"Raw image {t=}, {r=}, {c=} has dim z plane(s) at "
+                                + f"{np.where(z_plane_means < config['z_plane_mean_warning'])[0].tolist()}. You may "
+                                + f"wish to remove the affected image by setting `bad_trc = ({t}, {r}, {c}), (...` in "
+                                + f"the basic_info config then re-run the pipeline with an empty output directory."
                             )
                         tiles_io._save_image(im, file_path, config["file_type"])
                     # Compute the counts of each possible uint16 pixel value for the image.

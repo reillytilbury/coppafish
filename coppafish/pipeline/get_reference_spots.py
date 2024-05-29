@@ -2,8 +2,8 @@ import numpy as np
 from ..spot_colors import base as spot_colors_base
 from ..call_spots import base as call_spots_base
 from .. import find_spots as fs
-from .. import utils, log
-from ..setup.notebook import NotebookPage
+from .. import log
+from ..setup import NotebookPage
 
 
 def get_reference_spots(
@@ -11,7 +11,7 @@ def get_reference_spots(
     nbp_basic: NotebookPage,
     nbp_find_spots: NotebookPage,
     nbp_extract: NotebookPage,
-    nbp_filter: NotebookPage,
+    nbp_register: NotebookPage,
     tile_origin: np.ndarray,
     icp_correction: np.ndarray,
 ) -> NotebookPage:
@@ -51,17 +51,15 @@ def get_reference_spots(
     # We create a notebook page for ref_spots which stores information like local coords, isolated info, tile_no of each
     # spot and much more.
     nbp = NotebookPage("ref_spots")
-    nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_software_hash()
     # The code is going to loop through all tiles, as we expect some anchor spots on each tile but r and c should stay
     # fixed as the value of the reference round and reference channel
     r = nbp_basic.anchor_round
     c = nbp_basic.anchor_channel
     log.debug("Get ref spots started")
     use_tiles, use_rounds, use_channels = (
-        np.array(nbp_basic.use_tiles.copy()),
-        nbp_basic.use_rounds.copy(),
-        nbp_basic.use_channels.copy(),
+        np.array(nbp_basic.use_tiles),
+        list(nbp_basic.use_rounds),
+        list(nbp_basic.use_channels),
     )
 
     # all means all spots found on the reference round / channel
@@ -85,7 +83,7 @@ def get_reference_spots(
 
     # find duplicate spots as those detected on a tile which is not tile centre they are closest to
     not_duplicate = call_spots_base.get_non_duplicate(
-        tile_origin, nbp_basic.use_tiles, nbp_basic.tile_centre, all_local_yxz, all_local_tile
+        tile_origin, list(nbp_basic.use_tiles), nbp_basic.tile_centre, all_local_yxz, all_local_tile
     )
 
     # nd means all spots that are not duplicate
@@ -112,10 +110,11 @@ def get_reference_spots(
             yxz_base=nd_local_yxz[in_tile],
             t=t,
             transform=transform,
-            bg_scale=nbp_filter.bg_scale,
+            bg_scale=nbp_register.bg_scale,
             file_type=nbp_extract.file_type,
             nbp_file=nbp_file,
             nbp_basic=nbp_basic,
+            nbp_register=nbp_register,
         )
         valid = colour_tuple[-1]
         spot_colours = np.append(spot_colours, colour_tuple[0][valid], axis=0)
@@ -136,16 +135,6 @@ def get_reference_spots(
     nbp.tile = tile
     nbp.colours = spot_colours_full
     nbp.bg_colours = bg_colours
-
-    # Set variables added in call_reference_spots to None so can save to Notebook.
-    # I.e. if call_reference_spots hit error, but we did not do this, we would have to run get_reference_spots again.
-    nbp.gene_no = None
-    nbp.scores = None
-    nbp.score_diff = None
-    nbp.intensity = None
-    nbp.background_strength = None
-    nbp.gene_probs = None
-    nbp.dye_strengths = None
     log.debug("Get ref spots complete")
 
     return nbp

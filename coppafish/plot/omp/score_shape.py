@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import TextBox
 import warnings
-from ...setup.notebook import Notebook
+from ...setup import Notebook
 from .coefs import get_coef_images
 from ...call_spots import omp_spot_score
 from typing import Optional

@@ -1,19 +1,28 @@
-2024/05/28 Alpha Update (v0.11.0):
- * Viewer refactor: Viewer is now much faster and less laggy, due to the removal of a transparent copy of the spots, and
-    the removal of spots not in the legend. The spots are also organised into 3 layers (1 for each method) instead of
-    the old method of a layer for each symbol, which was slow.
+2024/05/29 Alpha Update (v0.11.0):
  * Viewer refactor: The viewer is more customisable, and users can now toggle whether they want each image shown to be
     a max intensity projection or not, which is achieved by setting the max_intensity_projection variable in the viewer
     to True or False.
+ * All output variables are now stored within the notebook except for extract and filter images.
+ * The PSF used for image filtering is not computed anymore. It is given as an input. There is a default PSF located at 
+    coppafish/setup/default_psf.npz.
+ * Images are now rotated during extract instead of filter. Hence, the config parameter `num_rotations` has been moved 
+    from the `filter` section to the `extract` section.
+ * The notebook has been refactored. It is now faster at saving, can save zarr arrays and has write protections.
+ * Default z_plane_mean_warning 200 -> 125 in extract.
+ * Moved bg_scale from filter page -> register page.
+ * Incorrect numpy data types have been fixed within the notebook.
+ * Viewer refactor: Viewer is now much faster and less laggy, due to the removal of a transparent copy of the spots, and
+    the removal of spots not in the legend. The spots are also organised into 3 layers (1 for each method) instead of
+    the old method of a layer for each symbol, which was slow.
  * Viewer refactor: The viewer now has a new feature where the user can adjust the size of the spots in the viewer.
  * Viewer refactor: The viewer now has a new feature where the user can adjust the downsample_yx factor of the images in
     the viewer. For NPY files, a downsample of 4 is recommended as it greatly speeds up the loading of the viewer (30
     seconds -> 5 seconds), and the images are still of high enough quality to see the nuclei.
- * Viewer refactor: Napari is now at the correct version: 0.4.19, which removes previous Qt warnings.
+ * Viewer refactor: Napari is now at the latest version: 0.4.19, which removes previous Qt warnings.
  * Channel Registration: An index error in channel registration, leading to the wrong channel corrections being applied,
     has been fixed.
  * Channel Registration: now done more thoroughly, with the bead images being shift corrected with a phase correlation
- before any registration begins. This is to make the job of ICP easier.
+    before any registration begins. This is to make the job of ICP easier.
  * Channel Registration: The fluorescent bead images are now isodata thresholded before circle detection, to make the
     circle detection more robust. The impact of this has been that the circle centres are much more accurate and closer
     to the true centre of the bead.
@@ -25,9 +34,12 @@
     and the reference image in the overlapping region. This score is then used in the computation of the final shifts,
     where we deal with the fact that our problem is overspecified. The scoring is used as a weight and the results are
     much better than before.
-    * Stitching: The stitching diagnostics have been replaced with 2 new viewers, one for viewing the image as a
+ * Stitching: The stitching diagnostics have been replaced with 2 new viewers, one for viewing the image as a
     checkerboard patten in green and red, with overlapping regions in yellow, and the other for viewing the shifts
     computed for each tile.
+ * OMP score threshold default 0.2 -> 0.3.
+ * OMP scores now saved as float16, not int16.
+
 
 2024/05/15 Alpha Update (v0.10.6):
  * Disk loading of ND2 files is now faster during extract.

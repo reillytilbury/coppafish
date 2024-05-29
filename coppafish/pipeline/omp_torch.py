@@ -7,11 +7,11 @@ import torch
 import numpy as np
 from typing_extensions import assert_type
 
-from .. import log, utils
+from .. import log
 from ..call_spots import background_pytorch, qual_check_torch
 from ..find_spots import detect_torch
 from ..omp import base, coefs_torch, scores_torch, spots_torch
-from ..setup.notebook import NotebookPage
+from ..setup import NotebookPage
 
 
 def run_omp(
@@ -59,8 +59,6 @@ def run_omp(
     log.debug(f"{config['force_cpu']=}")
 
     nbp = NotebookPage("omp")
-    nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_software_hash()
 
     # We want exact, reproducible results.
     torch.backends.cudnn.deterministic = True
@@ -79,7 +77,7 @@ def run_omp(
     colour_norm_factor = torch.asarray(colour_norm_factor).float()
     first_computation = True
 
-    subset_z_size: int = max(nbp_basic.use_z.copy())
+    subset_z_size: int = max(nbp_basic.use_z)
     subset_size_xy: int = config["subset_size_xy"]
 
     if subset_size_xy <= spot_radius_xy * 2:
@@ -109,7 +107,7 @@ def run_omp(
     spots_local_yxz = torch.zeros((0, 3), dtype=torch.int16)
     spots_tile = torch.zeros(0, dtype=torch.int16)
     spots_gene_no = torch.zeros(0, dtype=torch.int16)
-    spots_score = torch.zeros(0, dtype=torch.int16)
+    spots_score = torch.zeros(0, dtype=torch.float16)
     spots_colours = torch.zeros((0, n_rounds_use, n_channels_use), dtype=torch.int32)
 
     for t in nbp_basic.use_tiles:
@@ -315,14 +313,13 @@ def run_omp(
 
                 # Remove bad scoring spots (i.e. false gene reads)
                 keep_scores = g_spots_score >= config["score_threshold"]
-                g_spots_local_yxz = g_spots_local_yxz[keep_scores]
+                g_spots_local_yxz = g_spots_local_yxz[keep_scores].to(dtype=torch.int16)
                 g_spots_yxz = g_spots_yxz[keep_scores]
-                g_spots_score = g_spots_score[keep_scores]
+                g_spots_score = g_spots_score[keep_scores].to(dtype=torch.float16)
                 n_g_spots = g_spots_local_yxz.shape[0]
                 if n_g_spots == 0:
                     continue
 
-                g_spots_score = scores_torch.omp_scores_float_to_int(g_spots_score)
                 g_spots_tile = torch.ones(n_g_spots, dtype=torch.int16) * t
                 g_spots_gene_no = torch.ones(n_g_spots, dtype=torch.int16) * g
 

@@ -1,15 +1,16 @@
 import os
 import time
-import numpy as np
-from tqdm import tqdm
-import numpy.typing as npt
 from typing import Optional, Tuple
 
-from .. import utils, extract, log, filter
-from ..utils import tiles_io, indexing
+import numpy as np
+import numpy.typing as npt
+from tqdm import tqdm
+
+from .. import extract, filter, log, utils
 from ..filter import deconvolution
 from ..filter import base as filter_base
-from ..setup.notebook import NotebookPage
+from ..setup import NotebookPage
+from ..utils import indexing, tiles_io
 
 
 def run_filter(
@@ -43,8 +44,6 @@ def run_filter(
 
     nbp = NotebookPage("filter")
     nbp_debug = NotebookPage("filter_debug")
-    nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_software_hash()
 
     log.debug("Filter started")
     start_time = time.time()
@@ -92,33 +91,9 @@ def run_filter(
         smooth_kernel = smooth_kernel / np.sum(smooth_kernel)
     if config["deconvolve"]:
         if not os.path.isfile(nbp_file.psf):
-            (
-                spot_images,
-                config["psf_intensity_thresh"],
-                psf_tiles_used,
-            ) = deconvolution.get_psf_spots(
-                nbp_file,
-                nbp_basic,
-                nbp_extract,
-                nbp_basic.anchor_round,
-                nbp_basic.use_tiles,
-                nbp_basic.anchor_channel,
-                nbp_basic.use_z,
-                config["psf_detect_radius_xy"],
-                config["psf_detect_radius_z"],
-                config["psf_min_spots"],
-                config["psf_intensity_thresh"],
-                config["auto_thresh_multiplier"],
-                config["psf_isolation_dist"],
-                config["psf_shape"],
-                config["psf_max_spots"],
-            )
-            psf = deconvolution.get_psf(spot_images, config["psf_annulus_width"])
-            np.save(nbp_file.psf, np.moveaxis(psf, 2, 0))  # save with z as first axis
+            raise FileNotFoundError(f"Could not find the PSF at location {nbp_file.psf}")
         else:
-            # Know psf only computed for 3D pipeline hence know ndim=3
-            psf = np.moveaxis(np.load(nbp_file.psf), 0, 2)  # Put z to last index
-            psf_tiles_used = None
+            psf = np.moveaxis(np.load(nbp_file.psf)["arr_0"], 0, 2)  # Put z to last index
         # normalise psf so min is 0 and max is 1.
         psf = psf - psf.min()
         psf = psf / psf.max()
@@ -128,14 +103,8 @@ def run_filter(
         )
         wiener_filter = deconvolution.get_wiener_filter(psf, pad_im_shape, config["wiener_constant"])
         nbp_debug.psf = psf
-        if config["psf_intensity_thresh"] is not None:
-            config["psf_intensity_thresh"] = int(config["psf_intensity_thresh"])
-        nbp_debug.psf_intensity_thresh = config["psf_intensity_thresh"]
-        nbp_debug.psf_tiles_used = psf_tiles_used
     else:
         nbp_debug.psf = None
-        nbp_debug.psf_intensity_thresh = None
-        nbp_debug.psf_tiles_used = None
     compute_scale = True
     if os.path.isfile(nbp_file.scale):
         scale = float(filter_base.get_scale_from_txt(nbp_file.scale)[0])
@@ -226,7 +195,7 @@ def run_filter(
                     scale = np.abs(min_pixel_value) / np.abs(im_filtered.min())
                     scale = min([scale, max_pixel_value / im_filtered.max()])
                     # A margin for max/min pixel variability between images. Scale can never be below 1.
-                    scale = max([config["scale_multiplier"] * float(scale), 1])
+                    scale = max([config["scale_multiplier"] * float(scale), 1.0])
                     log.debug(f"{scale=} computed from {t=}, {r=}, {c=}")
                     # Save scale in case need to re-run without the notebook
                     filter_base.save_scale(nbp_file.scale, scale, scale)
@@ -247,7 +216,6 @@ def run_filter(
                 r,
                 c,
                 suffix="_raw" if r == nbp_basic.pre_seq_round else "",
-                num_rotations=config["num_rotations"],
                 percent_clip_warn=config["percent_clip_warn"],
                 percent_clip_error=config["percent_clip_error"],
             )
@@ -271,7 +239,6 @@ def run_filter(
                 t,
                 r,
                 c,
-                num_rotations=config["num_rotations"],
                 percent_clip_warn=config["percent_clip_warn"],
                 percent_clip_error=config["percent_clip_error"],
             )
@@ -279,8 +246,6 @@ def run_filter(
 
     nbp.auto_thresh = auto_thresh
     nbp.image_scale = scale
-    # Add a variable for bg_scale (actually computed in register)
-    nbp.bg_scale = None
     end_time = time.time()
     nbp_debug.time_taken = end_time - start_time
     log.debug("Filter complete")

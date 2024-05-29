@@ -1,9 +1,7 @@
-import pytest
+import torch
 
 
-@pytest.mark.pytorch
 def test_score_coefficient_image() -> None:
-    import torch
     from coppafish.omp import scores_torch
 
     im_y, im_x, im_z = 4, 5, 6

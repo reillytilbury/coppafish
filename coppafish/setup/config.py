@@ -23,58 +23,39 @@
 import configparser
 import os
 import re
+from typing import Any, Dict
+
+from .. import log
 
 try:
     import importlib_resources
 except ModuleNotFoundError:
     import importlib.resources as importlib_resources
 
-from .. import log
-
-
-def convert_tuple_to_list(x: str) -> list:
-    """
-    Convert a string representation of a list of tuples to a list of lists.
-
-    Args:
-        x (str): string representation of a list of tuples
-
-    Returns:
-        list: list of lists
-    """
-    y = []
-    while x:
-        left_idx = x.find("(")
-        right_idx = x.find(")")
-        string = x[left_idx + 1 : right_idx]
-        y.append(string)
-        x = x[right_idx + 1 :]
-    return y
-
 
 # List of options and their type.  If you change this, update the
 # config.default.ini file too.  Make sure the type is valid.
 _options = {
     "basic_info": {
-        "use_tiles": "maybe_list_int",
-        "use_rounds": "maybe_list_int",
-        "use_channels": "maybe_list_int",
-        "use_z": "maybe_list_int",
-        "use_dyes": "maybe_list_int",
+        "use_tiles": "maybe_tuple_int",
+        "use_rounds": "maybe_tuple_int",
+        "use_channels": "maybe_tuple_int",
+        "use_z": "maybe_tuple_int",
+        "use_dyes": "maybe_tuple_int",
         "use_anchor": "bool",
         "anchor_round": "maybe_int",
         "anchor_channel": "maybe_int",
         "dapi_channel": "maybe_int",
         "tile_pixel_value_shift": "int",
-        "dye_names": "list_str",
+        "dye_names": "tuple_str",
         "is_3d": "bool",
         "ignore_first_z_plane": "bool",
         "minimum_print_severity": "int",
-        "bad_trc": "maybe_list_tuple_int",
+        "bad_trc": "maybe_tuple_tuple_int",
         # From here onwards these are not compulsory to enter and will be taken from the metadata
         # Only leaving them here to have backwards compatibility as Max thinks the user should influence these
-        "channel_camera": "maybe_list_int",
-        "channel_laser": "maybe_list_int",
+        "channel_camera": "maybe_tuple_int",
+        "channel_laser": "maybe_tuple_int",
         "ref_round": "maybe_int",
         "ref_channel": "maybe_int",
         "sender_email": "maybe_str",
@@ -86,21 +67,15 @@ _options = {
         "input_dir": "str",  # all these directories used to be of type 'dir' but you may want to load the notebook
         "output_dir": "str",  # while not being connected to server where data is
         "tile_dir": "str",
-        "round": "maybe_list_str",  #
+        "round": "maybe_tuple_str",  #
         "anchor": "maybe_str",
         "raw_extension": "str",
         "raw_metadata": "maybe_str",
         "dye_camera_laser": "maybe_file",
         "code_book": "str",
         "scale": "str",
-        "spot_details_info": "str",
-        "psf": "str",
-        "omp_spot_shape": "str",
-        "omp_spot_info": "str",
-        "omp_spot_coef": "str",
-        "big_dapi_image": "maybe_str",
-        "big_anchor_image": "maybe_str",
-        "pciseq": "list_str",
+        "psf": "maybe_str",
+        "pciseq": "tuple_str",
         "fluorescent_bead_path": "maybe_str",
         "pre_seq": "maybe_str",
         "initial_bleed_matrix": "maybe_str",
@@ -108,7 +83,7 @@ _options = {
     },
     "extract": {
         "file_type": "str",
-        "wait_time": "int",
+        "num_rotations": "int",
         "z_plane_mean_warning": "number",
     },
     "filter": {
@@ -116,22 +91,13 @@ _options = {
         "r_dapi_auto_microns": "maybe_number",
         "auto_thresh_multiplier": "number",
         "deconvolve": "bool",
-        "psf_detect_radius_xy": "int",
-        "psf_detect_radius_z": "int",
-        "psf_intensity_thresh": "maybe_number",
-        "psf_isolation_dist": "number",
-        "psf_min_spots": "int",
-        "psf_max_spots": "maybe_int",
-        "psf_shape": "list_int",
-        "psf_annulus_width": "number",
         "wiener_constant": "number",
-        "wiener_pad_shape": "list_int",
-        "r_smooth": "maybe_list_int",
+        "wiener_pad_shape": "tuple_int",
+        "r_smooth": "maybe_tuple_int",
         "r1": "maybe_int",
         "r2": "maybe_int",
         "r1_auto_microns": "number",
         "difference_of_hanning": "bool",
-        "num_rotations": "int",
         "pre_seq_blur_radius": "maybe_int",
         "scale_multiplier": "number",
         "percent_clip_warn": "number",
@@ -154,14 +120,14 @@ _options = {
         "expected_overlap": "number",
     },
     "register": {  # this parameter is for channel registration
-        "bead_radii": "maybe_list_number",
+        "bead_radii": "maybe_tuple_number",
         # these parameters are for round registration
         "sample_factor_yx": "int",
         "window_radius": "int",
-        "smooth_sigma": "list_number",
+        "smooth_sigma": "tuple_number",
         "smooth_thresh": "number",
         "flow_cores": "maybe_int",
-        "flow_clip": "maybe_list_number",
+        "flow_clip": "maybe_tuple_number",
         # these parameters are for icp
         "neighb_dist_thresh_yx": "number",
         "neighb_dist_thresh_z": "maybe_number",
@@ -197,7 +163,7 @@ _options = {
         "coefficient_threshold": "number",
         "radius_xy": "int",
         "radius_z": "int",
-        "spot_shape": "list_int",
+        "spot_shape": "tuple_int",
         "spot_shape_max_spots": "int",
         "shape_isolation_distance_yx": "int",
         "shape_isolation_distance_z": "maybe_int",
@@ -237,24 +203,23 @@ _options = {
 # In practice, this means the option is optional.
 _option_type_checkers = {
     "int": lambda x: re.match("-?[0-9]+", x) is not None,
-    "number": lambda x: re.match("-?[0-9]+(\\.[0-9]+)?$", "-123") is not None,
+    "number": lambda _: re.match("-?[0-9]+(\\.[0-9]+)?$", "-123") is not None,
     "str": lambda x: len(x) > 0,
     "bool": lambda x: re.match("True|true|False|false", x) is not None,
     "file": lambda x: os.path.isfile(x),
     "dir": lambda x: os.path.isdir(x),
-    "list": lambda x: True,
-    "list_int": lambda x: all([_option_type_checkers["int"](s.strip()) for s in x.split(",")]),
-    "list_number": lambda x: all([_option_type_checkers["number"](s.strip()) for s in x.split(",")]),
-    "list_str": lambda x: all([_option_type_checkers["str"](s.strip()) for s in x.split(",")]),
+    "tuple": lambda _: True,
+    "tuple_int": lambda x: all([_option_type_checkers["int"](s.strip()) for s in x.split(",")]),
+    "tuple_number": lambda x: all([_option_type_checkers["number"](s.strip()) for s in x.split(",")]),
+    "tuple_str": lambda x: all([_option_type_checkers["str"](s.strip()) for s in x.split(",")]),
     "maybe_int": lambda x: x.strip() == "" or _option_type_checkers["int"](x),
     "maybe_number": lambda x: x.strip() == "" or _option_type_checkers["number"](x),
-    "maybe_list_int": lambda x: x.strip() == "" or _option_type_checkers["list_int"](x),
-    "maybe_list_number": lambda x: x.strip() == "" or _option_type_checkers["list_number"](x),
+    "maybe_tuple_int": lambda x: x.strip() == "" or _option_type_checkers["tuple_int"](x),
+    "maybe_tuple_number": lambda x: x.strip() == "" or _option_type_checkers["tuple_number"](x),
     "maybe_str": lambda x: x.strip() == "" or _option_type_checkers["str"](x),
-    "maybe_list_str": lambda x: x.strip() == "" or _option_type_checkers["list_str"](x),
+    "maybe_tuple_str": lambda x: x.strip() == "" or _option_type_checkers["tuple_str"](x),
     "maybe_file": lambda x: x.strip() == "" or _option_type_checkers["file"](x),
-    "maybe_list_tuple_int": lambda x: x.strip() == ""
-    or all([_option_type_checkers["list_int"](y) for y in convert_tuple_to_list(x)]),
+    "maybe_tuple_tuple_int": lambda x: x.strip() == "" or all([_option_type_checkers["tuple_int"](y) for y in x]),
 }
 _option_formatters = {
     "int": lambda x: int(x),
@@ -263,19 +228,19 @@ _option_formatters = {
     "bool": lambda x: True if "rue" in x else False,
     "file": lambda x: x,
     "dir": lambda x: x,
-    "list": lambda x: [s.strip() for s in x.split(",")],
-    "list_int": lambda x: [_option_formatters["int"](s.strip()) for s in x.split(",")],
-    "list_number": lambda x: [_option_formatters["number"](s.strip()) for s in x.split(",")],
-    "list_str": lambda x: [_option_formatters["str"](s.strip()) for s in x.split(",")],
+    "tuple": lambda x: tuple([s.strip() for s in x.split(",")]),
+    "tuple_int": lambda x: tuple([_option_formatters["int"](s.strip()) for s in x.split(",")]),
+    "tuple_number": lambda x: tuple([_option_formatters["number"](s.strip()) for s in x.split(",")]),
+    "tuple_str": lambda x: tuple([_option_formatters["str"](s.strip()) for s in x.split(",")]),
     "maybe_int": lambda x: None if x == "" else _option_formatters["int"](x),
     "maybe_number": lambda x: None if x == "" else _option_formatters["number"](x),
-    "maybe_list_int": lambda x: None if x == "" else _option_formatters["list_int"](x),
-    "maybe_list_number": lambda x: None if x == "" else _option_formatters["list_number"](x),
+    "maybe_tuple_int": lambda x: None if x == "" else _option_formatters["tuple_int"](x),
+    "maybe_tuple_number": lambda x: None if x == "" else _option_formatters["tuple_number"](x),
     "maybe_str": lambda x: None if x == "" else _option_formatters["str"](x),
-    "maybe_list_str": lambda x: None if x == "" else _option_formatters["list_str"](x),
+    "maybe_tuple_str": lambda x: None if x == "" else _option_formatters["tuple_str"](x),
     "maybe_file": lambda x: None if x == "" else _option_formatters["file"](x),
-    "maybe_list_tuple_int": lambda x: (
-        None if x == "" else [tuple(_option_formatters["list_int"](y)) for y in convert_tuple_to_list(x)]
+    "maybe_tuple_tuple_int": lambda x: (
+        None if x == "" else tuple([tuple(_option_formatters["tuple_int"](y)) for y in x])
     ),
 }
 
@@ -306,8 +271,11 @@ class InvalidConfigError(Exception):
         super().__init__(error)
 
 
-def get_config(ini_file):
+def get_config(ini_file) -> Dict[str, Any]:
     """Return the configuration as a dictionary"""
+    if not os.path.isfile(ini_file):
+        raise FileNotFoundError(f"Failed to find config file at {ini_file}")
+
     # Read the settings files, overwriting the default settings with any settings
     # in the user-editable settings file.  We use .ini files without sections, and
     # add the section (named "config") manually.
@@ -364,50 +332,3 @@ def get_config(ini_file):
         for name, val in _parser[section].items():
             out_dict[section][name] = _option_formatters[_options[section][name]](_parser[section][name])
     return out_dict
-
-
-def split_config(config_file):
-    """
-    This function will be used to split the config file into one config file for each tile when in parallel mode.
-
-    Args:
-        config_file: Path to global config file given.
-    Returns:
-        config_file_path: (n_tiles) path to each config file.
-    """
-    config_file_path = []
-    # We will create the various config files for each tile. It is easier to read info from the config dict than the
-    # ini file so use this where necessary
-    config_dict = get_config(config_file)
-    use_tiles = config_dict["basic_info"]["use_tiles"]
-
-    # Create the output directory for the parallel run
-    par_dir = os.path.join(config_dict["file_names"]["output_dir"], "par")
-    if not os.path.exists(par_dir):
-        os.mkdir(par_dir)
-
-    for t in use_tiles:
-        # Need to load in the config file
-        cfg = configparser.ConfigParser()
-        cfg.read(config_file)
-
-        # Need to change the file_names section.
-        # First create new folder for each tile notebook
-        tile_dir = os.path.join(par_dir, "tile" + str(t))
-        # If this path doesn't already exist, make the path
-        if not os.path.exists(tile_dir):
-            os.mkdir(tile_dir)
-        # Update the value in the file_names section
-        cfg.set(section="file_names", option="output_dir", value=tile_dir)
-
-        # Now update the basic_info, change use_tiles to tile t
-        cfg.set(section="basic_info", option="use_tiles", value=str(t))
-
-        # Now write this to a new config file
-        new_config_file = os.path.join(tile_dir, "config" + str(t) + ".ini")
-        with open(new_config_file, "w") as file_path:
-            cfg.write(file_path)
-
-        config_file_path.append(new_config_file)
-
-    return config_file_path

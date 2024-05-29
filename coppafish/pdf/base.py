@@ -48,7 +48,7 @@ class BuildPDF:
         log.debug("Creating diagnostic PDF started")
         pbar = tqdm(desc="Creating Diagnostic PDFs", total=9, unit="section")
         pbar.set_postfix_str("Loading notebook")
-        if isinstance(nb, str):
+        if type(nb) is str:
             nb = Notebook(nb)
         pbar.update()
         if output_dir is None:
@@ -62,17 +62,17 @@ class BuildPDF:
             c for c in [nb.basic_info.dapi_channel, nb.basic_info.anchor_channel] if c is not None
         ]
         self.use_channels_anchor.sort()
-        self.use_channels_plus_dapi = nb.basic_info.use_channels.copy()
+        self.use_channels_plus_dapi = list(nb.basic_info.use_channels)
         if nb.basic_info.dapi_channel is not None:
             self.use_channels_plus_dapi += [nb.basic_info.dapi_channel]
         self.use_channels_plus_dapi.sort()
-        self.use_channels_all = self.use_channels_plus_dapi.copy()
+        self.use_channels_all = list(self.use_channels_plus_dapi)
         if nb.basic_info.anchor_channel is not None:
             self.use_channels_all += [nb.basic_info.anchor_channel]
         self.use_channels_all = list(set(self.use_channels_all))
         self.use_channels_all.sort()
         self.use_rounds_all = (
-            nb.basic_info.use_rounds.copy()
+            list(nb.basic_info.use_rounds)
             + nb.basic_info.use_anchor * [nb.basic_info.anchor_round]
             + nb.basic_info.use_preseq * [nb.basic_info.pre_seq_round]
         )
@@ -207,7 +207,7 @@ class BuildPDF:
                                     if c is not None
                                 ]
                             else:
-                                use_channels = nb.basic_info.use_channels.copy()
+                                use_channels = list(nb.basic_info.use_channels)
                             for c in use_channels:
                                 X[r, channels_to_index[c]] = nb.find_spots.spot_no[t, r, c]
                                 ticks_channels_labels[channels_to_index[c]] = f"{c}"
@@ -519,14 +519,14 @@ class BuildPDF:
         assert (pixel_max - pixel_min + 1) % bin_size == 0
 
         figures = []
-        use_channels = nb.basic_info.use_channels.copy()
+        use_channels = list(nb.basic_info.use_channels)
         if nb.basic_info.dapi_channel is not None:
             use_channels += [nb.basic_info.dapi_channel]
             use_channels.sort()
         use_channels_all = list(set(use_channels + self.use_channels_anchor))
         use_channels_all.sort()
         first_channel = use_channels[0]
-        use_rounds_all = nb.basic_info.use_rounds.copy()
+        use_rounds_all = list(nb.basic_info.use_rounds)
         if nb.basic_info.use_anchor:
             use_rounds_all += [nb.basic_info.anchor_round]
         if nb.basic_info.use_preseq:
@@ -554,7 +554,7 @@ class BuildPDF:
                 if r == nb.basic_info.anchor_round:
                     use_channels_r = self.use_channels_anchor
                 else:
-                    use_channels_r = nb.basic_info.use_channels.copy()
+                    use_channels_r = list(nb.basic_info.use_channels)
                     if nb.basic_info.dapi_channel is not None:
                         use_channels_r += [nb.basic_info.dapi_channel]
                 for j, c in enumerate(use_channels_all):
@@ -653,7 +653,7 @@ class BuildPDF:
         bar_x = np.arange(0, median_scores.size, dtype=float) + 0.5
         ticks = []
         labels = []
-        scores: np.ndarray = omp_scores.omp_scores_int_to_float(omp_page.scores)
+        scores: np.ndarray = omp_page.scores
         tile: np.ndarray = omp_page.tile
         local_z: np.ndarray = omp_page.local_yxz[:, 2]
         i = 0
@@ -776,7 +776,7 @@ class BuildPDF:
         else:
             gene_names = [f"gene_{g}" for g in range(n_genes)]
 
-        scores = omp_scores.omp_scores_int_to_float(omp_page.scores)
+        scores = omp_page.scores
         gene_numbers = omp_page.gene_no[scores >= score_threshold]
         unique_genes, counts = np.unique(gene_numbers, return_counts=True)
         for g, gene_name in enumerate(gene_names):

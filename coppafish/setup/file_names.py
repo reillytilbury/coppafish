@@ -1,15 +1,19 @@
 import os
 
+from .. import log
+from .. import setup
+from .. import utils
+from ..setup import Notebook
+from ..setup import NotebookPage
+from .tile_details import get_tile_file_names
+
 try:
     import importlib_resources
 except ModuleNotFoundError:
     import importlib.resources as importlib_resources
 
-from .. import log
-from .tile_details import get_tile_file_names
 
-
-def set_file_names(nb, nbp):
+def get_file_names(nb: Notebook):
     """
     Function to set add `file_names` page to notebook. It requires notebook to be able to access a
     config file containing a `file_names` section and also the notebook to contain a `basic_info` page.
@@ -20,12 +24,9 @@ def set_file_names(nb, nbp):
 
     Args:
         nb: *Notebook* containing at least the `basic_info` page.
-        nbp: *NotebookPage* with no variables added.
-            This is just to avoid initialising it within the function which would cause a circular import.
-
     """
-    config = nb.get_config()["file_names"]
-    nbp.name = "file_names"  # make sure name is correct
+    config = setup.config.get_config(nb.config_path)["file_names"]
+    nbp = NotebookPage("file_names")
     # Copy some variables that are in config to page.
     nbp.input_dir = config["input_dir"]
     nbp.output_dir = config["output_dir"]
@@ -41,29 +42,32 @@ def set_file_names(nb, nbp):
             all_files.sort()  # Sort files by ascending number
             n_tiles = int(len(all_files) / 7 / 9)
             config["pre_seq"] = [r.replace(".nd2", "") for r in all_files[: n_tiles * 7]]
-            config["round"] = [
-                [f.replace(".nd2", "") for f in all_files[n_tiles * r * 7 : n_tiles * (r + 1) * 7]] for r in range(1, 8)
-            ]
+            config["round"] = tuple(
+                [
+                    [f.replace(".nd2", "") for f in all_files[n_tiles * r * 7 : n_tiles * (r + 1) * 7]]
+                    for r in range(1, 8)
+                ]
+            )
             # TODO replace range(7) by the by the number of rounds?
-            config["anchor"] = [r.replace(".nd2", "") for r in all_files[n_tiles * 8 * 7 :]]
+            config["anchor"] = tuple([r.replace(".nd2", "") for r in all_files[n_tiles * 8 * 7 :]])
 
         else:
             all_files = os.listdir(config["input_dir"])
             all_files.sort()  # Sort files by ascending number
             n_tiles = int(len(all_files) / 7 / 8)
             # FIXME: r is not defined within the scope of the square brackets, this will probably cause a runtime error
-            config["round"] = [
-                f.replace(".nd2", "") for f in all_files[n_tiles * r * 7 : n_tiles * (r + 1) * 7] for r in range(7)
-            ]
+            config["round"] = tuple(
+                [f.replace(".nd2", "") for f in all_files[n_tiles * r * 7 : n_tiles * (r + 1) * 7] for r in range(7)]
+            )
             # TODO replace range(7) by the by the number of rounds?
-            config["anchor"] = [r.replace(".nd2", "") for r in all_files[n_tiles * 7 * 7 :]]
+            config["anchor"] = tuple([r.replace(".nd2", "") for r in all_files[n_tiles * 7 * 7 :]])
 
     else:
         if config["round"] is None:
             if config["anchor"] is None:
                 log.error(ValueError(f"Neither imaging rounds nor anchor_round provided"))
-            config["round"] = []  # Sometimes the case where just want to run the anchor round.
-        config["round"] = [r.replace(config["raw_extension"], "") for r in config["round"]]
+            config["round"] = tuple()  # Sometimes the case where just want to run the anchor round.
+        config["round"] = tuple([r.replace(config["raw_extension"], "") for r in config["round"]])
 
         if config["anchor"] is not None:
             config["anchor"] = config["anchor"].replace(config["raw_extension"], "")
@@ -98,43 +102,21 @@ def set_file_names(nb, nbp):
     config["scale"] = config["scale"].replace(".txt", "")
     nbp.scale = os.path.join(config["tile_dir"], config["scale"] + ".txt")
 
-    # where to save psf, indicating average spot shape in raw image. Only ever needed in 3D.
-    if nb.basic_info.is_3d:
-        config["psf"] = config["psf"].replace(".npy", "")
-        nbp.psf = os.path.join(config["output_dir"], config["psf"] + ".npy")
-    else:
-        nbp.psf = None
-
-    # Add files to save find_spot results after each tile as security if hit any bugs
-    config["spot_details_info"] = config["spot_details_info"].replace(".npy", "")
-    nbp.spot_details_info = os.path.join(config["output_dir"], config["spot_details_info"] + ".npz")
+    if config["psf"] is None:
+        config["psf"] = str(importlib_resources.files("coppafish.setup").joinpath("default_psf.npz"))
+    nbp.psf = config["psf"]
 
     # Add files so save plotting information for pciseq
-    config["pciseq"] = [val.replace(".csv", "") for val in config["pciseq"]]
-    nbp.pciseq = [os.path.join(config["output_dir"], val + ".csv") for val in config["pciseq"]]
-
-    # add dapi channel and anchor channel to notebook even if set to None.
-    if config["big_dapi_image"] is None:
-        nbp.big_dapi_image = None
-    else:
-        config["big_dapi_image"] = config["big_dapi_image"]
-        if nb.basic_info.dapi_channel is None:
-            nbp.big_dapi_image = None
-        else:
-            nbp.big_dapi_image = os.path.join(config["output_dir"], config["big_dapi_image"] + ".npy")
-    if config["big_anchor_image"] is None:
-        nbp.big_anchor_image = None
-    else:
-        config["big_anchor_image"] = config["big_anchor_image"].replace(".npz", "")
-        nbp.big_anchor_image = os.path.join(config["output_dir"], config["big_anchor_image"] + ".npy")
+    config["pciseq"] = tuple([val.replace(".csv", "") for val in config["pciseq"]])
+    nbp.pciseq = tuple([os.path.join(config["output_dir"], val + ".csv") for val in config["pciseq"]])
 
     if config["anchor"] is not None:
-        round_files = config["round"] + [config["anchor"]]
+        round_files = config["round"] + (config["anchor"],)
     else:
         round_files = config["round"]
 
     if config["pre_seq"] is not None:
-        round_files = round_files + [config["pre_seq"]]
+        round_files = round_files + (config["pre_seq"],)
 
     if config["raw_extension"] == "jobs":
         if nb.basic_info.is_3d:
@@ -157,7 +139,7 @@ def set_file_names(nb, nbp):
                 nbp.tile_unfiltered_dir,
                 round_files,
                 nb.basic_info.n_tiles,
-                nb.get_config()["extract"]["file_type"],
+                setup.config.get_config(nb.config_path)["extract"]["file_type"],
                 nb.basic_info.n_channels,
             )
         else:
@@ -166,9 +148,9 @@ def set_file_names(nb, nbp):
                 nbp.tile_unfiltered_dir,
                 round_files,
                 nb.basic_info.n_tiles,
-                nb.get_config()["extract"]["file_type"],
+                setup.config.get_config(nb.config_path)["extract"]["file_type"],
             )
 
-    nbp.tile = tile_names.tolist()  # npy or zarr tile file paths list [n_tiles x n_rounds (x n_channels if 3D)]
-    nbp.tile_unfiltered = tile_names_unfiltered.tolist()
-    nb += nbp
+    nbp.tile = utils.base.to_deep_tuple(tile_names.tolist())
+    nbp.tile_unfiltered = utils.base.to_deep_tuple(tile_names_unfiltered.tolist())
+    return nbp
