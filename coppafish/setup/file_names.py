@@ -106,28 +106,9 @@ def get_file_names(nb: Notebook):
         config["psf"] = str(importlib_resources.files("coppafish.setup").joinpath("default_psf.npz"))
     nbp.psf = config["psf"]
 
-    # Add files to save find_spot results after each tile as security if hit any bugs
-    config["spot_details_info"] = config["spot_details_info"].replace(".npy", "")
-    nbp.spot_details_info = os.path.join(config["output_dir"], config["spot_details_info"] + ".npz")
-
     # Add files so save plotting information for pciseq
     config["pciseq"] = tuple([val.replace(".csv", "") for val in config["pciseq"]])
     nbp.pciseq = tuple([os.path.join(config["output_dir"], val + ".csv") for val in config["pciseq"]])
-
-    # add dapi channel and anchor channel to notebook even if set to None.
-    if config["big_dapi_image"] is None:
-        nbp.big_dapi_image = None
-    else:
-        config["big_dapi_image"] = config["big_dapi_image"].replace(".npz", "")
-        if nb.basic_info.dapi_channel is None:
-            nbp.big_dapi_image = None
-        else:
-            nbp.big_dapi_image = os.path.join(config["output_dir"], config["big_dapi_image"] + ".npz")
-    if config["big_anchor_image"] is None:
-        nbp.big_anchor_image = None
-    else:
-        config["big_anchor_image"] = config["big_anchor_image"].replace(".npz", "")
-        nbp.big_anchor_image = os.path.join(config["output_dir"], config["big_anchor_image"] + ".npz")
 
     if config["anchor"] is not None:
         round_files = config["round"] + (config["anchor"],)

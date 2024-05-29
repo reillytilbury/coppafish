@@ -222,27 +222,9 @@ class NotebookPage:
                 + "If the extract step of the pipeline is re-run with `extract['scale']` or "
                 + "`extract['scale_anchor']` different to values saved here, an error will be raised.",
             ],
-            "spot_details_info": [
-                "file",
-                "After each tile is finished in find_spots, information about spots found is saved as array to *npz* file:"
-                + "We save this info as an npz because we're saving a collection of arrays. We have an int16 array [n_spots x 3]"
-                + "containing $y$, $x$, $z$, called spot_details. We have an int16 array called spot_no [n_tiles * n_rounds * "
-                + "n_channels] which gives number of spots found on that [t,r,c]. We also have an [n_anchor_spots * 1] boolean"
-                + "array named isolated_spots which gives 1 if anchor_spot[s] isolated, 0 o/w",
-            ],
             "psf": [
                 "file",
                 "*npy* file location indicating the average spot shape" + "This will have the shape `n_z x n_y x n_x`.",
-            ],
-            "big_dapi_image": [
-                "file or none",
-                "*npz* file of stitched *DAPI* image. none if `nb.basic_info.dapi_channel = none`"
-                + "If *3D*, 1st axis in *npz* file is z.",
-            ],
-            "big_anchor_image": [
-                "file",
-                "*npz* file of stitched image of `ref_round`/`ref_channel`. Will be stitched anchor if anchor used."
-                + "If *3D*, 1st axis in *npz* file is z.",
             ],
             "pciseq": [
                 "tuple[file]",

@@ -49,39 +49,14 @@ def set_notebook_output_dir(notebook_path: str, new_output_dir: str) -> None:
 
     nb = Notebook(notebook_path)
     # Set the copied notebook variables to the right output directory.
-    nb.file_names.finalized = False
     del nb.file_names.output_dir
     nb.file_names.output_dir = new_output_dir
 
-    old_name = PurePath(nb.file_names.spot_details_info).name
-    del nb.file_names.spot_details_info
-    nb.file_names.spot_details_info = os.path.join(new_output_dir, old_name)
     old_name = PurePath(nb.file_names.psf).name
     del nb.file_names.psf
     nb.file_names.psf = os.path.join(new_output_dir, old_name)
 
-    old_name = PurePath(nb.file_names.omp_spot_shape).name
-    del nb.file_names.omp_spot_shape
-    nb.file_names.omp_spot_shape = os.path.join(new_output_dir, old_name)
-    old_name = PurePath(nb.file_names.omp_spot_shape_float).name
-    del nb.file_names.omp_spot_shape_float
-    nb.file_names.omp_spot_shape_float = os.path.join(new_output_dir, old_name)
-    old_name = PurePath(nb.file_names.omp_spot_info).name
-    del nb.file_names.omp_spot_info
-    nb.file_names.omp_spot_info = os.path.join(new_output_dir, old_name)
-    old_name = PurePath(nb.file_names.omp_spot_coef).name
-    del nb.file_names.omp_spot_coef
-    nb.file_names.omp_spot_coef = os.path.join(new_output_dir, old_name)
-
-    old_name = PurePath(nb.file_names.big_dapi_image).name
-    del nb.file_names.big_dapi_image
-    nb.file_names.big_dapi_image = os.path.join(new_output_dir, old_name)
-    old_name = PurePath(nb.file_names.big_anchor_image).name
-    del nb.file_names.big_anchor_image
-    nb.file_names.big_anchor_image = os.path.join(new_output_dir, old_name)
-
-    nb.file_names.finalized = True
-    nb.save(notebook_path)
+    nb.resave(notebook_path)
 
 
 def set_notebook_tile_dir(notebook_path: str, new_tile_dir: str) -> None:
@@ -99,7 +74,6 @@ def set_notebook_tile_dir(notebook_path: str, new_tile_dir: str) -> None:
     new_tile_dir = os.path.normpath(new_tile_dir)
 
     nb = Notebook(notebook_path)
-    nb.file_names.finalized = False
 
     del nb.file_names.tile_dir
     nb.file_names.tile_dir = os.path.join(new_tile_dir, "filter")
@@ -124,8 +98,7 @@ def set_notebook_tile_dir(notebook_path: str, new_tile_dir: str) -> None:
     del nb.file_names.tile_unfiltered
     nb.file_names.tile_unfiltered = new_tile_unfiltered
 
-    nb.file_names.finalized = True
-    nb.save(notebook_path)
+    nb.resave(notebook_path)
 
 
 def round_any(x: Union[float, npt.NDArray], base: float, round_type: str = "round") -> Union[float, npt.NDArray]:
