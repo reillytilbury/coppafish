@@ -474,20 +474,22 @@ class NotebookPage:
             ],
         },
         "register": {
-            "correlation": [
-                "zarr",
-                "n_tiles x n_rounds x ",
-                "The optical flow correlations.",
-            ],
             "flow": [
                 "zarr",
-                "n_tiles x n_rounds x ",
-                "The optical flow shifts for each image pixel after smoothing.",
+                "n_tiles x n_rounds x 3 x tile_sz x tile_sz x len(use_z)",
+                "The optical flow shifts for each image pixel after smoothing. The third axis is for the different "
+                + "image directions. 0 is the y shifts, 1 is the x shifts, 2 is the z shifts.",
+            ],
+            "correlation": [
+                "zarr",
+                "n_tiles x n_rounds x tile_sz x tile_sz x len(use_z)",
+                "The optical flow correlations.",
             ],
             "flow_raw": [
                 "zarr",
-                "n_tiles x n_rounds x ",
-                "The optical flow shifts for each image pixel before smoothing.",
+                "n_tiles x n_rounds x 3 x tile_sz x tile_sz x len(use_z)",
+                "The optical flow shifts for each image pixel before smoothing. The third axis is for the different "
+                + "image directions. 0 is the y shifts, 1 is the x shifts, 2 is the z shifts.",
             ],
             "icp_correction": [
                 "ndarray[float]",
