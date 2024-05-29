@@ -26,11 +26,12 @@ from ..call_spots import view_codes, view_bleed_matrix, view_bled_codes, view_sp
 from ...call_spots import qual_check
 from .. import call_spots as call_spots_plot
 from ..call_spots_new import GEViewer, ViewBleedCalc, ViewAllGeneScores, BGNormViewer
-from ..omp import view_omp, view_omp_score, histogram_score
+from ..omp import view_omp, histogram_score
 from ..omp.coefs import view_score  # gives import error if call from call_spots.dot_product
 from ... import call_spots
 from ... import utils
 from ...setup import Notebook
+from ...omp.scores import omp_scores_int_to_float
 
 # set matplotlib background to dark
 plt.style.use("dark_background")
@@ -151,7 +152,7 @@ class Viewer:
                             slider_range=(b.min(), b.max()), slider_mode="range", slider_variable="image")
 
         # Slider to change score_thresh
-        self.add_slider(name="score_range", value=(0.3, 1), slider_range=(0, 1), slider_mode="range",
+        self.add_slider(name="score_range", value=(0.4, 1), slider_range=(0, 1), slider_mode="range",
                         slider_variable="spot")
         # Slider to change intensity_thresh
         self.add_slider(name="intensity_thresh", value=abs_intensity_thresh, slider_range=(0, 1),
@@ -503,9 +504,14 @@ class Viewer:
         gene_no = [nb.ref_spots.gene_no, np.argmax(nb.ref_spots.gene_probs, axis=1)]
         intensity = [nb.ref_spots.intensity, nb.ref_spots.intensity]
         if nb.has_page("omp"):
-            score.append(nb.omp.scores)
+            score.append(omp_scores_int_to_float(nb.omp.scores))
             gene_no.append(nb.omp.gene_no)
-            intensity_omp = np.median(np.max(nb.omp.colours, axis=-1), axis=-1)
+            omp_colours = nb.omp.colours.copy()
+            colour_norm_factor = nb.call_spots.color_norm_factor[np.ix_(np.arange(nb.basic_info.n_tiles),
+                                                                        nb.basic_info.use_rounds,
+                                                                        nb.basic_info.use_channels)]
+            omp_colours_float = omp_colours / colour_norm_factor[tile[-1]]
+            intensity_omp = np.median(np.max(omp_colours_float, axis=-1), axis=-1)
             intensity.append(intensity_omp)
             colours.append(nb.omp.colours)
 
@@ -644,7 +650,10 @@ class Viewer:
             # face_colour is an array of shape (n_spots, 4) where the last dimension is the rgba values.
             # Set final row to all 1s
             face_colour = np.hstack((face_colour, np.ones((face_colour.shape[0], 1))))
-            mask = np.isin(gene_no, active_genes)
+            mask_gene = np.isin(gene_no, active_genes)
+            mask_score = (self.spots[m].score >= 0.4) & (self.spots[m].score <= 1)
+            mask_intensity = self.spots[m].intensity >= 0.25
+            mask = mask_gene & mask_score & mask_intensity
             self.viewer.add_points(data=point_loc,
                                    size=spot_size,
                                    face_color=face_colour,
