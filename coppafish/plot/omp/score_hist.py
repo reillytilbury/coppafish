@@ -55,11 +55,11 @@ class histogram_score:
 
         # Get spot colors
         spot_colors_no_background = (
-            nb.ref_spots.colors[:, :, nb.basic_info.use_channels] - nb.ref_spots.background_strength
+            nb.ref_spots.colours[:, :, nb.basic_info.use_channels] - nb.ref_spots.background_strength
         )
         spot_colors = spot_colors_no_background / nb.call_spots.color_norm_factor[trc_index]
         spot_colors_background = (
-            nb.ref_spots.colors[:, :, nb.basic_info.use_channels] / nb.call_spots.color_norm_factor[trc_index]
+            nb.ref_spots.colours[:, :, nb.basic_info.use_channels] / nb.call_spots.color_norm_factor[trc_index]
         )
         grc_ind = np.ix_(np.arange(self.n_genes), nb.basic_info.use_rounds, nb.basic_info.use_channels)
         # Bled codes saved to Notebook should already have L2 norm = 1 over used_channels and rounds

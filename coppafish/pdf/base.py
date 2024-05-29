@@ -48,7 +48,7 @@ class BuildPDF:
         log.debug("Creating diagnostic PDF started")
         pbar = tqdm(desc="Creating Diagnostic PDFs", total=9, unit="section")
         pbar.set_postfix_str("Loading notebook")
-        if isinstance(nb, str):
+        if type(nb) is str:
             nb = Notebook(nb)
         pbar.update()
         if output_dir is None:
@@ -62,17 +62,17 @@ class BuildPDF:
             c for c in [nb.basic_info.dapi_channel, nb.basic_info.anchor_channel] if c is not None
         ]
         self.use_channels_anchor.sort()
-        self.use_channels_plus_dapi = nb.basic_info.use_channels.copy()
+        self.use_channels_plus_dapi = list(nb.basic_info.use_channels)
         if nb.basic_info.dapi_channel is not None:
             self.use_channels_plus_dapi += [nb.basic_info.dapi_channel]
         self.use_channels_plus_dapi.sort()
-        self.use_channels_all = self.use_channels_plus_dapi.copy()
+        self.use_channels_all = list(self.use_channels_plus_dapi)
         if nb.basic_info.anchor_channel is not None:
             self.use_channels_all += [nb.basic_info.anchor_channel]
         self.use_channels_all = list(set(self.use_channels_all))
         self.use_channels_all.sort()
         self.use_rounds_all = (
-            nb.basic_info.use_rounds.copy()
+            list(nb.basic_info.use_rounds)
             + nb.basic_info.use_anchor * [nb.basic_info.anchor_round]
             + nb.basic_info.use_preseq * [nb.basic_info.pre_seq_round]
         )
@@ -207,7 +207,7 @@ class BuildPDF:
                                     if c is not None
                                 ]
                             else:
-                                use_channels = nb.basic_info.use_channels.copy()
+                                use_channels = list(nb.basic_info.use_channels)
                             for c in use_channels:
                                 X[r, channels_to_index[c]] = nb.find_spots.spot_no[t, r, c]
                                 ticks_channels_labels[channels_to_index[c]] = f"{c}"
@@ -259,9 +259,9 @@ class BuildPDF:
                 gene_probs = nb.ref_spots.gene_probs
                 # bg colour was subtracted if use_preseq
                 scores = (
-                    nb.ref_spots.colors[
+                    nb.ref_spots.colours[
                         np.ix_(
-                            range(nb.ref_spots.colors.shape[0]),
+                            range(nb.ref_spots.colours.shape[0]),
                             nb.basic_info.use_rounds,
                             nb.basic_info.use_channels,
                         )
@@ -519,14 +519,14 @@ class BuildPDF:
         assert (pixel_max - pixel_min + 1) % bin_size == 0
 
         figures = []
-        use_channels = nb.basic_info.use_channels.copy()
+        use_channels = list(nb.basic_info.use_channels)
         if nb.basic_info.dapi_channel is not None:
             use_channels += [nb.basic_info.dapi_channel]
             use_channels.sort()
         use_channels_all = list(set(use_channels + self.use_channels_anchor))
         use_channels_all.sort()
         first_channel = use_channels[0]
-        use_rounds_all = nb.basic_info.use_rounds.copy()
+        use_rounds_all = list(nb.basic_info.use_rounds)
         if nb.basic_info.use_anchor:
             use_rounds_all += [nb.basic_info.anchor_round]
         if nb.basic_info.use_preseq:
@@ -554,7 +554,7 @@ class BuildPDF:
                 if r == nb.basic_info.anchor_round:
                     use_channels_r = self.use_channels_anchor
                 else:
-                    use_channels_r = nb.basic_info.use_channels.copy()
+                    use_channels_r = list(nb.basic_info.use_channels)
                     if nb.basic_info.dapi_channel is not None:
                         use_channels_r += [nb.basic_info.dapi_channel]
                 for j, c in enumerate(use_channels_all):

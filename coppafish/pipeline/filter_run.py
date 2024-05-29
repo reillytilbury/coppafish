@@ -9,7 +9,7 @@ from tqdm import tqdm
 from .. import extract, filter, log, utils
 from ..filter import deconvolution
 from ..filter import base as filter_base
-from ..setup.notebook import NotebookPage
+from ..setup import NotebookPage
 from ..utils import indexing, tiles_io
 
 
@@ -44,8 +44,6 @@ def run_filter(
 
     nbp = NotebookPage("filter")
     nbp_debug = NotebookPage("filter_debug")
-    nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_software_hash()
 
     log.debug("Filter started")
     start_time = time.time()
@@ -197,7 +195,7 @@ def run_filter(
                     scale = np.abs(min_pixel_value) / np.abs(im_filtered.min())
                     scale = min([scale, max_pixel_value / im_filtered.max()])
                     # A margin for max/min pixel variability between images. Scale can never be below 1.
-                    scale = max([config["scale_multiplier"] * float(scale), 1])
+                    scale = max([config["scale_multiplier"] * float(scale), 1.0])
                     log.debug(f"{scale=} computed from {t=}, {r=}, {c=}")
                     # Save scale in case need to re-run without the notebook
                     filter_base.save_scale(nbp_file.scale, scale, scale)
@@ -248,8 +246,6 @@ def run_filter(
 
     nbp.auto_thresh = auto_thresh
     nbp.image_scale = scale
-    # Add a variable for bg_scale (actually computed in register)
-    nbp.bg_scale = None
     end_time = time.time()
     nbp_debug.time_taken = end_time - start_time
     log.debug("Filter complete")

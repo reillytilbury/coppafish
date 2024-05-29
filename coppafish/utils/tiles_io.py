@@ -1,6 +1,6 @@
-import os
 import enum
 import numbers
+import os
 from typing import Any, List, Optional, Tuple, Union
 
 from numcodecs import Blosc, blosc
@@ -35,25 +35,25 @@ def get_compressor_and_chunks(
         image_z_index = np.argmin(image_shape).item()
     if optimised_for == OptimisedFor.FULL_READ_AND_WRITE:
         compressor = Blosc(cname="lz4", clevel=2, shuffle=Blosc.BITSHUFFLE)
-        chunk_count_z = image_shape[image_z_index] // 2
-        chunk_count_yx = min(288, np.max(image_shape).item())
+        chunk_size_z = image_shape[image_z_index] // 2
+        chunk_size_yx = min(288, np.max(image_shape).item())
     elif optimised_for == OptimisedFor.Z_PLANE_READ:
         compressor = Blosc(cname="lz4", clevel=4, shuffle=Blosc.SHUFFLE)
-        chunk_count_z = image_shape[0] // 2
-        chunk_count_yx = min(576, np.max(image_shape).item())
+        chunk_size_z = image_shape[0] // 2
+        chunk_size_yx = min(576, np.max(image_shape).item())
     else:
         raise ValueError(f"Unknown OptimisedFor value of {optimised_for}")
     if len(image_shape) >= 3:
         chunks = tuple()
         for i in range(len(image_shape)):
-            if image_shape[i] < 4:
-                chunks += (image_shape[i],)
+            if image_shape[i] < 10:
+                chunks += (None,)
             elif i == image_z_index:
-                chunks += (chunk_count_z,)
+                chunks += (chunk_size_z,)
             else:
-                chunks += (chunk_count_yx,)
+                chunks += (chunk_size_yx,)
     elif len(image_shape) == 2:
-        chunks = (chunk_count_yx, chunk_count_yx)
+        chunks = (chunk_size_yx, chunk_size_yx)
     else:
         raise ValueError(f"Got image_shape with {len(image_shape)} dimensions: {image_shape}")
     return compressor, chunks
@@ -428,7 +428,7 @@ def save_stitched(
 
     Args:
         im_file (str or none): path to save file. If `None`, stitched `image` is returned (with z axis last) instead of
-            saved.
+            saved. Saved as a zarr array.
         nbp_file (NotebookPage): `file_names` notebook page.
         nbp_basic (NotebookPage): `basic_info` notebook page.
         nbp_extract (NotebookPage): `extract` notebook page.
@@ -466,7 +466,7 @@ def save_stitched(
     with tqdm(total=z_size * len(nbp_basic.use_tiles), desc="Saving stitched image") as pbar:
         for t in nbp_basic.use_tiles:
             if from_raw:
-                (image_t,) = utils.raw.load_image(nbp_file, nbp_basic, t, c, round_dask_array, r, nbp_basic.use_z)
+                (image_t,) = utils.raw.load_image(nbp_file, nbp_basic, t, c, round_dask_array, r, list(nbp_basic.use_z))
                 # replicate non-filtering procedure in extract_and_filter
                 if not nbp_basic.is_3d:
                     image_t = extract.focus_stack(image_t)
@@ -522,7 +522,8 @@ def save_stitched(
             stitched_image = np.moveaxis(stitched_image, 0, -1)
         return stitched_image
     else:
-        np.savez_compressed(im_file, stitched_image)
+        zarray = zarr.open_array(im_file, mode="w", shape=stitched_image.shape, dtype=stitched_image.dtype)
+        zarray[:] = stitched_image
 
 
 def offset_pixels_by(image: npt.NDArray[np.uint16], tile_pixel_value_shift: int) -> npt.NDArray[np.int32]:

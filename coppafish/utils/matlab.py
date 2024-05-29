@@ -3,7 +3,7 @@ import numpy as np
 from scipy import io
 from typing import Union, List
 
-from ..setup.notebook import Notebook, NotebookPage
+from ..setup import Notebook, NotebookPage
 from ..call_spots import qual_check
 from .. import log
 

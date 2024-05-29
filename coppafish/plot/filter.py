@@ -4,7 +4,7 @@ from typing import Optional, List
 
 from .. import log
 from ..utils import tiles_io
-from ..setup.notebook import Notebook
+from ..setup import Notebook
 
 
 def view_filtered_images(

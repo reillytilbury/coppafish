@@ -12,7 +12,7 @@ from .. import find_spots, log
 from ..register import preprocessing
 from ..register import base as register_base
 from ..setup import NotebookPage
-from ..utils import system, tiles_io
+from ..utils import tiles_io
 
 
 def register(
@@ -56,13 +56,12 @@ def register(
     # Part 0: Initialisation
     # Initialise frequently used variables
     log.debug("Register started")
-    nbp, nbp_debug = NotebookPage("register"), NotebookPage("register_debug")
-    nbp.software_version = system.get_software_version()
-    nbp.revision_hash = system.get_software_hash()
+    nbp = NotebookPage("register")
+    nbp_debug = NotebookPage("register_debug")
     use_tiles, use_rounds, use_channels = (
-        nbp_basic.use_tiles.copy(),
-        nbp_basic.use_rounds.copy(),
-        nbp_basic.use_channels.copy(),
+        list(nbp_basic.use_tiles),
+        list(nbp_basic.use_rounds),
+        list(nbp_basic.use_channels),
     )
     n_tiles, n_rounds, n_channels = nbp_basic.n_tiles, nbp_basic.n_rounds, nbp_basic.n_channels
     # Initialise variable for ICP step
@@ -77,10 +76,10 @@ def register(
     # Part 1: Channel registration
     if registration_data["channel_registration"]["transform"].max() == 0:
         log.info("Running channel registration")
-        if not nbp_basic.channel_camera:
+        if nbp_basic.channel_camera.size == 0:
             cameras = [0] * n_channels
         else:
-            cameras = list(set(nbp_basic.channel_camera))
+            cameras = list(set(nbp_basic.channel_camera.tolist()))
 
         cameras.sort()
         anchor_cam_idx = cameras.index(nbp_basic.channel_camera[nbp_basic.anchor_channel])
@@ -99,6 +98,40 @@ def register(
             )
 
     # Part 2: Round registration
+    use_rounds = list(nbp_basic.use_rounds) + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
+    corr_loc = os.path.join(nbp_file.output_dir, "corr.zarr")
+    raw_loc = os.path.join(nbp_file.output_dir, "raw.zarr")
+    smooth_loc = os.path.join(nbp_file.output_dir, "smooth.zarr")
+    raw_smooth_shape = (
+        max(nbp_basic.use_tiles) + 1,
+        max(use_rounds) + 1,
+        3,
+        nbp_basic.tile_sz,
+        nbp_basic.tile_sz,
+        len(nbp_basic.use_z),
+    )
+    raw_smooth_chunks = (1, 1, None, None, None, None)
+    zarr.open_array(
+        store=corr_loc,
+        mode="w",
+        shape=raw_smooth_shape[:2] + raw_smooth_shape[3:],
+        dtype=np.float16,
+        chunks=raw_smooth_chunks[:2] + raw_smooth_chunks[3:],
+    )
+    zarr.open_array(
+        store=raw_loc,
+        mode="w",
+        shape=raw_smooth_shape,
+        dtype=np.float16,
+        chunks=raw_smooth_chunks,
+    )
+    zarr.open_array(
+        store=smooth_loc,
+        shape=raw_smooth_shape,
+        mode="w",
+        dtype=np.float16,
+        chunks=raw_smooth_chunks,
+    )
     for t in tqdm(use_tiles, desc="Optical Flow on uncompleted tiles", total=len(use_tiles)):
         # Load in the anchor image and the round images. Note that here anchor means anchor round, not necessarily
         # anchor channel
@@ -110,7 +143,6 @@ def register(
             r=nbp_basic.anchor_round,
             c=nbp_basic.dapi_channel,
         )
-        use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
         for r in tqdm(use_rounds, desc="Round", total=len(use_rounds)):
             round_image = tiles_io.load_image(
                 nbp_file,
@@ -125,15 +157,21 @@ def register(
             register_base.optical_flow_register(
                 target=round_image,
                 base=anchor_image,
+                tile=t,
+                round=r,
+                raw_loc=raw_loc,
+                corr_loc=corr_loc,
+                smooth_loc=smooth_loc,
                 sample_factor_yx=config["sample_factor_yx"],
                 window_radius=config["window_radius"],
                 smooth_sigma=config["smooth_sigma"],
                 smooth_threshold=config["smooth_thresh"],
                 clip_val=config["flow_clip"],
-                output_dir=os.path.join(nbp_file.output_dir, "flow"),
-                file_name=f"t{t}_r{r}.npy",
                 n_cores=config["flow_cores"],
             )
+            nbp.flow_raw = zarr.open_array(raw_loc)
+            nbp.correlation = zarr.open_array(corr_loc)
+            nbp.flow = zarr.open_array(smooth_loc)
         # Save the data to file
         with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
             pickle.dump(registration_data, f)
@@ -151,11 +189,11 @@ def register(
     channel_correction = np.zeros((n_tiles, n_channels, 4, 3))
     # Initialise variables for ICP step
     # 1. round icp stats
-    n_matches_round = np.zeros((n_tiles, n_rounds, config["icp_max_iter"]))
+    n_matches_round = np.zeros((n_tiles, n_rounds, config["icp_max_iter"]), dtype=np.int64)
     mse_round = np.zeros((n_tiles, n_rounds, config["icp_max_iter"]))
     converged_round = np.zeros((n_tiles, n_rounds), dtype=bool)
     # 2. channel icp stats
-    n_matches_channel = np.zeros((n_tiles, n_channels, config["icp_max_iter"]))
+    n_matches_channel = np.zeros((n_tiles, n_channels, config["icp_max_iter"]), dtype=np.int64)
     mse_channel = np.zeros((n_tiles, n_channels, config["icp_max_iter"]))
     converged_channel = np.zeros((n_tiles, n_channels), dtype=bool)
     for t in tqdm(use_tiles, desc="ICP on all tiles", total=len(use_tiles)):
@@ -170,9 +208,7 @@ def register(
                 log.info(f"Tile {t}, round {r}, channel {c_ref} has too few spots to run ICP.")
                 round_correction[t, r][:3, :3] = np.eye(3)
                 continue
-            # load in flow
-            flow_loc = os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy")
-            flow_tr = zarr.load(flow_loc)[:]
+            flow_tr = nbp.flow[t, r]
             # load in spots
             ref_spots_tr = find_spots.spot_yxz(nbp_find_spots.spot_yxz, t, r, c_ref, nbp_find_spots.spot_no)
             # put ref_spots from round r frame into the anchor frame. This is done by applying the inverse of the
@@ -199,10 +235,8 @@ def register(
                 spots_preseq_req.append(
                     find_spots.spot_yxz(nbp_find_spots.spot_yxz, t, r, c_bg, nbp_find_spots.spot_no)
                 )
-                # apply flow to put these in anchor frame of ref
-                # load in flow
-                flow_loc = os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy")
-                flow_tr = zarr.load(flow_loc)[:]
+                # Apply flow to put these in anchor frame of ref.
+                flow_tr = nbp.flow[t, r]
                 spots_preseq_req[-1] = preprocessing.apply_flow(
                     flow=-flow_tr, points=spots_preseq_req[-1], round_to_int=False
                 )
@@ -246,8 +280,7 @@ def register(
                 )
                 im_spots_trc = im_spots_trc[~oob]
                 # 2. apply the inverse of the flow to the spots
-                flow_loc = os.path.join(nbp_file.output_dir, "flow", "smooth", f"t{t}_r{r}.npy")
-                flow_tr = zarr.load(flow_loc)[:]
+                flow_tr = nbp.flow[t, r]
                 im_spots_trc = preprocessing.apply_flow(flow=-flow_tr, points=im_spots_trc, round_to_int=False)
                 im_spots_tc = np.vstack((im_spots_tc, im_spots_trc))
             # check if there are enough spots to run ICP
@@ -270,7 +303,7 @@ def register(
             log.info(f"Tile: {t}, Channel: {c}, Converged: {converged_channel[t, c]}")
 
         # combine these corrections into the icp_correction
-        use_rounds = nbp_basic.use_rounds + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
+        use_rounds = list(nbp_basic.use_rounds) + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
         for t, r, c in itertools.product(use_tiles, use_rounds, use_channels):
             round_correction_matrix = np.hstack((round_correction[t, r], np.array([0, 0, 0, 1])[:, None]))
             channel_correction_matrix = np.hstack((channel_correction[t, c], np.array([0, 0, 0, 1])[:, None]))
@@ -288,8 +321,6 @@ def register(
             "converged_channel": converged_channel,
         }
 
-    # Now add the registration data to the notebook pages (nbp and nbp_debug)
-    nbp.flow_dir = os.path.join(nbp_file.output_dir, "flow")
     nbp.icp_correction = registration_data["icp"]["icp_correction"]
 
     nbp_debug.channel_transform_initial = registration_data["channel_registration"]["transform"]
@@ -346,9 +377,9 @@ def register(
             )
 
         registration_data["blur"] = True
-    # Save registration data externally
-    with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
-        pickle.dump(registration_data, f)
+    # # Save registration data externally
+    # with open(os.path.join(nbp_file.output_dir, "registration_data.pkl"), "wb") as f:
+    #     pickle.dump(registration_data, f)
 
     # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
     # fluorescence
@@ -377,7 +408,7 @@ def register(
             desc="Computing background scale factors",
             total=len(use_tiles) * len(use_channels),
         ):
-            flow_t_pre_dir = os.path.join(nbp.flow_dir, "smooth", f"t{t}_r{r_pre}.npy")
+            flow_t_pre = nbp.flow[t, r_pre]
             affine_correction = preprocessing.adjust_affine(icp_correction[t, r_pre, c].copy(), new_origin)
             im_pre = tiles_io.load_image(
                 nbp_file,
@@ -390,12 +421,12 @@ def register(
                 apply_shift=True,
                 yxz=yxz,
             )
-            im_pre = preprocessing.transform_im(im_pre, affine_correction, flow_t_pre_dir, flow_ind)
+            im_pre = preprocessing.transform_im(im_pre, affine_correction, flow_t_pre, flow_ind)
             im_pre = im_pre[:, :, z_rad - 1 : z_rad + 1]
             bright = im_pre > np.percentile(im_pre, 99)
             im_pre = im_pre[bright]
             for r in use_rounds:
-                flow_t_r_dir = os.path.join(nbp.flow_dir, "smooth", f"t{t}_r{r}.npy")
+                flow_t_r = nbp.flow[t, r]
                 affine_correction = preprocessing.adjust_affine(icp_correction[t, r, c].copy(), new_origin)
                 im_r = tiles_io.load_image(
                     nbp_file,
@@ -407,17 +438,17 @@ def register(
                     apply_shift=True,
                     yxz=yxz,
                 )
-                im_r = preprocessing.transform_im(im_r, affine_correction, flow_t_r_dir, flow_ind)
+                im_r = preprocessing.transform_im(im_r, affine_correction, flow_t_r, flow_ind)
                 im_r = im_r[:, :, z_rad - 1 : z_rad + 1]
                 im_r = im_r[bright]
                 bg_scale[t, r, c] = np.median(im_r) / np.median(im_pre)
 
         # Now add the bg_scale to the nbp_filter page. To do this we need to delete the bg_scale attribute.
-        nbp_filter.finalized = False
-        del nbp_filter.bg_scale
+        nbp.bg_scale = bg_scale
         log.debug("Compute background scale factors complete")
-        nbp_filter.bg_scale = bg_scale
-        nbp_filter.finalized = True
+
+    # Save a registered image subsets for debugging/plotting purposes.
+    preprocessing.generate_reg_images(nbp_basic, nbp_file, nbp_extract, nbp, nbp_debug)
 
     log.debug("Register complete")
     return nbp, nbp_debug

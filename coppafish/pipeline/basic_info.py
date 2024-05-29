@@ -2,7 +2,7 @@ import os
 import json
 import numpy as np
 
-from ..setup.notebook import NotebookPage
+from ..setup import NotebookPage
 from .. import utils, setup
 from .. import log
 
@@ -28,9 +28,6 @@ def set_basic_info(config_file: dict, config_basic: dict, n_rounds: int = 7) -> 
     """
     nbp = NotebookPage("basic_info")
     nbp.is_3d = config_basic["is_3d"]
-
-    nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_software_hash()
 
     # TODO: Get rid of this
     # First condition refers to situation where jobs not used, alternative if jobs is used
@@ -296,9 +293,6 @@ def set_basic_info_new(config: dict) -> NotebookPage:
     # Initialize Notebook
     nbp = NotebookPage("basic_info")
 
-    nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_software_hash()
-
     # Now break the page contents up into 2 types, contents that must be read in from the config and those that can
     # be computed from the metadata
     config_file = config["file_names"]
@@ -347,10 +341,10 @@ def set_basic_info_new(config: dict) -> NotebookPage:
     # Stage 2: Read in page contents from config that cannot be computed from metadata.
     # the metadata. First few keys in the basic info page are only variables that the user can influence
     for key, value in list(config_basic.items())[:13]:
-        nbp.__setattr__(key=key, value=value)
+        nbp.__setattr__(key, value)
     if nbp.bad_trc is None:
         del nbp.bad_trc
-        nbp.bad_trc = list()
+        nbp.bad_trc = tuple()
 
     # some of these can NOT be left empty
     if nbp.dye_names is None or nbp.tile_pixel_value_shift is None or nbp.use_anchor is None:
@@ -363,8 +357,12 @@ def set_basic_info_new(config: dict) -> NotebookPage:
 
     # Stage 3: Fill in all the metadata except the last item, xy_pos
     for key, value in metadata.items():
-        if key != "xy_pos" and key != "nz":
-            nbp.__setattr__(key=key, value=value)
+        if key in ("xy_pos", "nz"):
+            continue
+        # Set every metadata list to a tuple since lists are not allowed in the notebook.
+        if type(value) is list:
+            value = np.array(value)
+        nbp.__setattr__(key, value)
 
     # Stage 4: If anything from the first 12 entries has been left blank, deal with that here.
     # Unfortunately, this is just many if statements as all blank entries need to be handled differently.
@@ -415,16 +413,8 @@ def set_basic_info_new(config: dict) -> NotebookPage:
 
     if nbp.use_dyes is None:
         del nbp.use_dyes
-        nbp.use_dyes = np.arange(len(nbp.dye_names)).tolist()
+        nbp.use_dyes = utils.base.to_deep_tuple(np.arange(len(nbp.dye_names)).tolist())
         nbp.n_dyes = len(nbp.use_dyes)
-
-    # Run into annoying problem of tilepos_yx, tilepos_yx_nd2 and tile_centre being saved as lists if they are loaded
-    # from json metadata as json cannot save npys.
-    if raw_extension == ".npy":
-        del nbp.tilepos_yx, nbp.tilepos_yx_nd2, nbp.tile_centre
-        nbp.tilepos_yx = np.array(metadata["tilepos_yx"])
-        nbp.tilepos_yx_nd2 = np.array(metadata["tilepos_yx_nd2"])
-        nbp.tile_centre = np.array(metadata["tile_centre"])
 
     # If preseq round is a file, set pre_seq_round to True, else False and raise warning that pre_seq_round is not a
     # file

@@ -166,12 +166,12 @@ def get_isolated_points(spot_yxz: np.ndarray, isolation_dist: float) -> np.ndarr
     return distances > isolation_dist
 
 
-def load_spot_info(file_path: str, n_tiles: int, n_rounds: int, n_extra_rounds: int, n_channels: int) -> dict:
+def load_spot_info(file_path: Optional[str], n_tiles: int, n_rounds: int, n_extra_rounds: int, n_channels: int) -> dict:
     """
     Loads spot info from given `file_path`. If the path does not exist, returns dict with empty lists.
 
     Args:
-        file_path (str): spot info file path.
+        file_path (str or none): spot info file path.
         n_tiles (int): number of tiles.
         n_rounds (int): number of rounds.
         n_extra_rounds (int): number of extra rounds.
@@ -184,7 +184,7 @@ def load_spot_info(file_path: str, n_tiles: int, n_rounds: int, n_extra_rounds: 
         * isolated: [n_anchor_spots] bool array indicating whether each anchor spot is isolated
         * completed: [n_tiles x n_rounds x n_channels] bool array indicating whether spot finding has been completed
     """
-    if os.path.isfile(file_path):
+    if file_path is not None and os.path.isfile(file_path):
         raw = np.load(file_path, allow_pickle=True)
         spot_info = {"spot_yxz": raw.f.arr_0, "spot_no": raw.f.arr_1, "isolated": raw.f.arr_2, "completed": raw.f.arr_3}
     else:

@@ -4,8 +4,8 @@ import numpy as np
 
 from .. import find_spots as fs
 from ..find_spots import detect_torch
-from .. import utils, log
-from ..setup.notebook import NotebookPage
+from .. import log
+from ..setup import NotebookPage
 from ..utils import tiles_io, indexing
 
 
@@ -44,8 +44,6 @@ def find_spots(
 
     # Phase 0: Initialisation
     nbp = NotebookPage("find_spots")
-    nbp.software_version = utils.system.get_software_version()
-    nbp.revision_hash = utils.system.get_software_hash()
     if nbp_basic.is_3d is False:
         # set z details to None if using 2d pipeline
         config["radius_z"] = None
@@ -68,7 +66,7 @@ def find_spots(
 
     # Phase 1: Load in previous results if they exist
     spot_info = fs.load_spot_info(
-        nbp_file.spot_details_info,
+        None,
         nbp_basic.n_tiles,
         nbp_basic.n_rounds,
         nbp_basic.n_extra_rounds,
@@ -118,7 +116,7 @@ def find_spots(
                 config["radius_z"],
                 True,
             )
-            local_yxz = local_yxz.numpy()
+            local_yxz = local_yxz.numpy().astype(np.int16)
             spot_intensity = spot_intensity.numpy()
             no_negative_neighbour = fs.check_neighbour_intensity(
                 image_trc, local_yxz, thresh=nbp_basic.tile_pixel_value_shift
@@ -147,18 +145,11 @@ def find_spots(
             assert spot_info["spot_yxz"].shape[0] == np.sum(
                 spot_info["spot_no"]
             ), "spot_yxz and spot_no do not match. Tile {}, round {}, channel {}".format(t, r, c)
-            np.savez(
-                nbp_file.spot_details_info,
-                spot_info["spot_yxz"],
-                spot_info["spot_no"],
-                spot_info["isolated"],
-                spot_info["completed"],
-            )
-            pbar.update(1)
+            pbar.update()
 
     # Phase 3: Save results to notebook page
     nbp.spot_yxz = spot_info["spot_yxz"]
-    nbp.spot_no = spot_info["spot_no"]
+    nbp.spot_no = spot_info["spot_no"].astype(np.int32)
     nbp.isolated_spots = spot_info["isolated"]
     log.debug("Find spots complete")
 

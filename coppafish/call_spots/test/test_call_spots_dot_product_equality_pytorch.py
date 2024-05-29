@@ -1,8 +1,6 @@
-import pytest
 import numpy as np
 
 
-@pytest.mark.pytorch
 def test_dot_product_score_equality():
     import torch
     from coppafish.call_spots.dot_product import dot_product_score

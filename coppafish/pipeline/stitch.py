@@ -1,15 +1,25 @@
-from tqdm import tqdm
-import numpy as np
+import os
 
-from .. import utils, log
+import numpy as np
+from tqdm import tqdm
+import zarr
+
+from .. import log, utils
+from ..find_spots import base as find_spots_base
+from ..setup import NotebookPage
 from ..stitch import starting_shifts as stitch_starting_shifts
 from ..stitch import shift as stich_shift
 from ..stitch import tile_origin as stitch_tile_origin
-from ..find_spots import base as find_spots_base
-from ..setup.notebook import NotebookPage
 
 
-def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no: np.ndarray) -> NotebookPage:
+def stitch(
+    config: dict,
+    nbp_basic: NotebookPage,
+    nbp_file: NotebookPage,
+    nbp_extract: NotebookPage,
+    local_yxz: np.ndarray,
+    spot_no: np.ndarray,
+) -> NotebookPage:
     """
     This gets the origin of each tile such that a global coordinate system can be built.
 
@@ -31,8 +41,6 @@ def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no
             global coordinates.
     """
     nbp_debug = NotebookPage("stitch")
-    nbp_debug.software_version = utils.system.get_software_version()
-    nbp_debug.revision_hash = utils.system.get_software_hash()
     directions = ["north", "east"]
     coords = ["y", "x", "z"]
     shifts = stitch_starting_shifts.get_shifts_to_search(config, nbp_basic, nbp_debug)
@@ -165,7 +173,7 @@ def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no
     # get tile origins in global coordinates.
     # global coordinates are built about central tile so find this first
     tile_dist_to_centre = np.linalg.norm(
-        nbp_basic.tilepos_yx[nbp_basic.use_tiles] - np.mean(nbp_basic.tilepos_yx, axis=0), axis=1
+        nbp_basic.tilepos_yx[list(nbp_basic.use_tiles)] - np.mean(nbp_basic.tilepos_yx, axis=0), axis=1
     )
     centre_tile = nbp_basic.use_tiles[tile_dist_to_centre.argmin()]
 
@@ -174,11 +182,11 @@ def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no
     for t in nbp_basic.use_tiles:
         # find the min distance between this tile and all other tiles used
         hamming_dist = np.sum(
-            np.abs(nbp_basic.tilepos_yx[t] - nbp_basic.tilepos_yx[nbp_basic.use_tiles]), axis=1
+            np.abs(nbp_basic.tilepos_yx[t] - nbp_basic.tilepos_yx[list(nbp_basic.use_tiles)]), axis=1
         ).astype(float)
         hamming_dist[hamming_dist == 0] = np.inf
         min_hamming_dist[t] = np.min(hamming_dist)
-    min_hamming_dist = min_hamming_dist[nbp_basic.use_tiles]
+    min_hamming_dist = min_hamming_dist[list(nbp_basic.use_tiles)]
     all_tiles_connected = np.all(min_hamming_dist == 1)
     no_tiles_connected = np.all(min_hamming_dist > 1)
 
@@ -202,7 +210,7 @@ def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no
         tile_origin[:, :2] = nbp_basic.tilepos_yx * (1 - config["expected_overlap"]) * nbp_basic.tile_sz
         tile_origin = tile_origin - tile_origin[centre_tile]
         # set unused tiles to nan
-        unused_tiles = np.setdiff1d(np.arange(nbp_basic.n_tiles), nbp_basic.use_tiles)
+        unused_tiles = np.setdiff1d(np.arange(nbp_basic.n_tiles), list(nbp_basic.use_tiles))
         tile_origin[unused_tiles, :] = np.nan
 
     else:
@@ -234,5 +242,38 @@ def stitch(config: dict, nbp_basic: NotebookPage, local_yxz: np.ndarray, spot_no
         )[:, 2]
         for var in shift_info[j].keys():
             nbp_debug.__setattr__(j + "_" + var, shift_info[j][var])
+
+    # save stitched dapi
+    # Will load in from nd2 file if nb.filter_debug.r_dapi is None i.e. if no DAPI filtering performed.
+    dapi_path = os.path.join(nbp_file.output_dir, "dapi_image.zarr")
+    utils.tiles_io.save_stitched(
+        dapi_path,
+        nbp_file,
+        nbp_basic,
+        nbp_extract,
+        nbp_debug.tile_origin,
+        nbp_basic.anchor_round,
+        nbp_basic.dapi_channel,
+        from_raw=True,
+        zero_thresh=config["save_image_zero_thresh"],
+        num_rotations=nbp_extract.num_rotations,
+    )
+    nbp_debug.dapi_image = zarr.open_array(dapi_path, mode="r")
+    # save stitched anchor round/channel
+    anchor_path = os.path.join(nbp_file.output_dir, "anchor_image.zarr")
+    utils.tiles_io.save_stitched(
+        anchor_path,
+        nbp_file,
+        nbp_basic,
+        nbp_extract,
+        nbp_debug.tile_origin,
+        nbp_basic.anchor_round,
+        nbp_basic.anchor_channel,
+        from_raw=False,
+        zero_thresh=config["save_image_zero_thresh"],
+        num_rotations=nbp_extract.num_rotations,
+    )
+    nbp_debug.anchor_image = zarr.open_array(anchor_path, mode="r")
+
     log.debug("Stitch complete")
     return nbp_debug

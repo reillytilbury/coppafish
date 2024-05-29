@@ -411,7 +411,7 @@ class ICPPointCloudViewer:
             # in round mode, apply the flow only and set the round to the selected round
             r = self.r
             affine_round_correction = np.eye(4, 3)
-        flow = zarr.load(os.path.join(self.nb.register.flow_dir, "smooth", f"t{self.t}_r{r}.npy"))[:]
+        flow = self.nb.register.flow[self.t, r]
         base_1, in_bounds = apply_transform(
             yxz=base, flow=flow, icp_correction=affine_round_correction, tile_sz=self.nb.basic_info.tile_sz
         )
@@ -592,14 +592,14 @@ def view_optical_flow(nb: Notebook, t: int, r: int):
     print("Base and Target images loaded.")
     # load the warps
     output_dir = nb.file_names.output_dir + "/flow"
-    name = ["raw", "smooth"]
-    flow = [zarr.load(os.path.join(output_dir, f, f"t{t}_r{r}.npy"))[:].astype(np.float32) for f in name]
+    names = ["raw", "smooth"]
+    flows = [nb.register.flow_raw[t, r], nb.register.flow[t, r]]
     # warp the base image using the flows
-    base_warped = [skimage.transform.warp(base, f + coords, order=0) for f in flow]
+    base_warped = [skimage.transform.warp(base, f + coords, order=0) for f in flows]
     print("Base image warped.")
     del coords
     # load the correlation
-    corr = zarr.load(os.path.join(output_dir, "corr", f"t{t}_r{r}.npy"))[:]
+    corr = nb.register.correlation[t, r]
     print("Correlation loaded.")
     mask = corr > np.percentile(corr, 97.5)
 
@@ -608,29 +608,29 @@ def view_optical_flow(nb: Notebook, t: int, r: int):
     # add overlays
     viewer.add_image(target, name="target", colormap="green", blending="additive")
     viewer.add_image(base, name="base", colormap="red", blending="additive")
-    for i in range(len(flow)):
+    for i in range(len(flows)):
         translation = [0, 1.1 * nx * (i + 1), 0]
         viewer.add_image(target, name="target", colormap="green", blending="additive", translate=translation)
         viewer.add_image(
             base_warped[i],
-            name=name[i],
+            name=names[i],
             colormap="red",
             blending="additive",
             translate=translation,
             contrast_limits=(0, 5_000),
         )
     # add flows as images
-    for i, j in np.ndindex(len(flow), len(coord_order)):
+    for i, j in np.ndindex(len(flows), len(coord_order)):
         translation = [1.1 * ny * (j + 1), 1.1 * nx * (i + 1), 0]
         viewer.add_image(
-            flow[i][j], name=name[i] + " : " + coord_order[j], translate=translation, contrast_limits=[-10, 10]
+            flows[i][j], name=names[i] + " : " + coord_order[j], translate=translation, contrast_limits=[-10, 10]
         )
         if i == 0:
             viewer.add_image(mask, name="mask", colormap="red", translate=translation, opacity=0.2, blending="additive")
     # add correlation
     for i in range(1):
         translation = [1.1 * ny * (len(coord_order) + 1), 1.1 * nx * (i + 1), 0]
-        viewer.add_image(corr, name="correlation: " + name[i], colormap="cyan", translate=translation)
+        viewer.add_image(corr, name="correlation: " + names[i], colormap="cyan", translate=translation)
 
     # label axes
     viewer.dims.axis_labels = ["y", "x", "z"]

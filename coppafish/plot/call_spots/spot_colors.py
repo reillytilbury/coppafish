@@ -240,7 +240,9 @@ class view_codes(ColorPlotBase):
             page_name = "ref_spots"
             spot_score = nb.ref_spots.score[spot_no]
             t = nb.ref_spots.tile[spot_no]
-            self.spot_color = nb.ref_spots.colors[spot_no][np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)]
+            self.spot_color = nb.ref_spots.colours[spot_no][
+                np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
+            ]
 
         if np.ndim(nb.call_spots.color_norm_factor) == 3:
             color_norm = nb.call_spots.color_norm_factor[t][
@@ -417,6 +419,7 @@ class view_spot(ColorPlotBase):
             file_type=nb.extract.file_type,
             nbp_file=nb.file_names,
             nbp_basic=nb.basic_info,
+            nbp_register=nb.register,
         )[0]
         spot_colors = np.moveaxis(spot_colors, 1, 2)  # put round as the last axis to match color_norm
         spot_colors = spot_colors.reshape(im_yxz.shape[0], -1)

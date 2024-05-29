@@ -1,12 +1,10 @@
-import pytest
 import numpy as np
+import torch
 
 from coppafish.call_spots import background, background_pytorch
 
 
-@pytest.mark.pytorch
 def test_fit_background_equality() -> None:
-    import torch
 
     n_spots = 3
     n_rounds = 4

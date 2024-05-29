@@ -49,9 +49,9 @@ def create(
     if not include_rounds:
         assert not include_channels, "Unable to remove rounds and keep channels"
 
-    seq_rounds = nbp_basic.use_rounds.copy()
-    seq_channels = nbp_basic.use_channels.copy()
-    all_tiles = sorted([t for t in nbp_basic.use_tiles.copy()])
+    seq_rounds = list(nbp_basic.use_rounds)
+    seq_channels = list(nbp_basic.use_channels)
+    all_tiles = sorted([t for t in nbp_basic.use_tiles])
     all_rounds = sorted(
         [
             r

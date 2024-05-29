@@ -2,9 +2,6 @@
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: integration tests",
-    "optimised: tests requiring requirements-optimised.txt packages",
-    "pytorch: tests requiring requirements-pytorch.txt packages",
-    "pytorchgpu: tests requiring requirements-pytorchgpu.txt packages and an available cuda device"
 ]
 
 [tool.black]
@@ -12,4 +9,6 @@ line-length = 120
 
 [tool.pyright]
 typeCheckingMode = "off"
+# Fix relative importing resolves using pyright.
+executionEnvironments = {"root" = "src"}
 
