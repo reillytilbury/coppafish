@@ -411,31 +411,42 @@ def merge_subvols(position, subvol):
     return merged
 
 
-def generate_reg_images(nb: Notebook):
+def generate_reg_images(
+    nbp_basic: NotebookPage,
+    nbp_file: NotebookPage,
+    nbp_extract: NotebookPage,
+    nbp_register: NotebookPage,
+    nbp_register_debug: NotebookPage,
+):
     """
-    Function to generate registration images. These are `[500 x 500 x min(10, n_planes)]` images centred in the middle
-    of the tile and saved as uint8. They are saved as .npy files in the reg_images folder in the output directory.
+    Function to generate and save registration images. These are `[500 x 500 x min(10, n_planes)]` images centred in
+    the middle of the tile and saved as uint8. They are saved as .npy files in the reg_images folder in the output
+    directory.
 
     Args:
-        nb: notebook.
+        nbp_basic: `basic_info` notebook page.
+        nbp_file: `file_names` notebook page.
+        nbp_extract: `extract` notebook page.
+        nbp_register: unfinished `register` notebook page.
+        nbp_register_debug: unfinished `register_debug` notebook page.
     """
     use_tiles, use_rounds, use_channels = (
-        list(nb.basic_info.use_tiles),
-        list(nb.basic_info.use_rounds),
-        list(nb.basic_info.use_channels),
+        list(nbp_basic.use_tiles),
+        list(nbp_basic.use_rounds),
+        list(nbp_basic.use_channels),
     )
-    if nb.basic_info.pre_seq_round is not None:
-        use_rounds += [nb.basic_info.pre_seq_round]
+    if nbp_basic.pre_seq_round is not None:
+        use_rounds += [nbp_basic.pre_seq_round]
     anchor_round, anchor_channel, dapi_channel = (
-        nb.basic_info.anchor_round,
-        nb.basic_info.anchor_channel,
-        nb.basic_info.dapi_channel,
+        nbp_basic.anchor_round,
+        nbp_basic.anchor_channel,
+        nbp_basic.dapi_channel,
     )
-    yx_centre = nb.basic_info.tile_centre.astype(int)[:2]
-    yx_radius = np.min([250, nb.basic_info.tile_sz // 2])
-    z_central_index = int(np.median(np.arange(len(nb.basic_info.use_z))))
-    if len(nb.basic_info.use_z) <= 10:
-        z_planes = np.arange(len(nb.basic_info.use_z))
+    yx_centre = nbp_basic.tile_centre.astype(int)[:2]
+    yx_radius = np.min([250, nbp_basic.tile_sz // 2])
+    z_central_index = int(np.median(np.arange(len(nbp_basic.use_z))))
+    if len(nbp_basic.use_z) <= 10:
+        z_planes = np.arange(len(nbp_basic.use_z))
     else:
         z_planes = np.arange(z_central_index - 5, z_central_index + 5)
 
@@ -445,47 +456,54 @@ def generate_reg_images(nb: Notebook):
         np.arange(tile_centre[1] - yx_radius, tile_centre[1] + yx_radius),
         z_planes,
     ]
+    image_shape = (yxz[0].size, yxz[1].size, yxz[2].size)
 
-    # Create the reg_images directory if it doesn't exist
-    reg_images_dir = os.path.join(nb.file_names.output_dir, "reg_images")
-    if not os.path.isdir(os.path.join(nb.file_names.output_dir, "reg_images")):
-        os.makedirs(reg_images_dir)
-    # Create the t directories if they don't exist, within these create the round reg and channel reg directories
-    for t in use_tiles:
-        if not os.path.isdir(os.path.join(reg_images_dir, f"t{t}")):
-            os.makedirs(os.path.join(reg_images_dir, f"t{t}"))
-        if not os.path.isdir(os.path.join(reg_images_dir, f"t{t}", "round")):
-            os.makedirs(os.path.join(reg_images_dir, f"t{t}", "round"))
-        if not os.path.isdir(os.path.join(reg_images_dir, f"t{t}", "channel")):
-            os.makedirs(os.path.join(reg_images_dir, f"t{t}", "channel"))
+    anchor_images = zarr.open_array(
+        os.path.join(nbp_file.output_dir, "anchor_reg_images.zarr"),
+        dtype=np.uint8,
+        shape=(max(use_tiles) + 1, 2) + image_shape,
+        chunks=(1, 1) + image_shape,
+    )
+    round_images = zarr.open_array(
+        os.path.join(nbp_file.output_dir, "round_reg_images.zarr"),
+        dtype=np.uint8,
+        shape=(max(use_tiles) + 1, max(use_rounds) + 1, 3) + image_shape,
+        chunks=(1, 1, 1) + image_shape,
+    )
+    channel_images = zarr.open_array(
+        os.path.join(nbp_file.output_dir, "channel_reg_images.zarr"),
+        dtype=np.uint8,
+        shape=(max(use_tiles) + 1, max(use_channels) + 1, 3) + image_shape,
+        chunks=(1, 1, 1) + image_shape,
+    )
 
-    # Get the anchor round and active channels
     anchor_round_active_channels = [dapi_channel, anchor_channel]
     for t, c in tqdm(product(use_tiles, anchor_round_active_channels), desc="Anchor Images", total=len(use_tiles) * 2):
         im = load_transformed_image(
-            nb.basic_info,
-            nb.file_names,
-            nb.extract,
-            nb.register,
-            nb.register_debug,
+            nbp_basic,
+            nbp_file,
+            nbp_extract,
+            nbp_register,
+            nbp_register_debug,
             t=t,
             r=anchor_round,
             c=c,
             yxz=yxz,
             reg_type="none",
         )
-        sub_dir = "round" if c == dapi_channel else "channel"
-        file_name = os.path.join(reg_images_dir, f"t{t}", sub_dir, "anchor.npy")
-        save_reg_image(im=im, file_path=file_name)
+        im = fill_to_uint8(im)
+        sub_index = 0 if c == dapi_channel else 1
+        anchor_images[t, sub_index] = im
+    nbp_register.anchor_images = anchor_images
 
     # get the round images, apply optical flow, apply icp + optical flow, concatenate and save
     for t, r in tqdm(product(use_tiles, use_rounds), desc="Round Images", total=len(use_tiles) * len(use_rounds)):
         im = load_transformed_image(
-            nb.basic_info,
-            nb.file_names,
-            nb.extract,
-            nb.register,
-            nb.register_debug,
+            nbp_basic,
+            nbp_file,
+            nbp_extract,
+            nbp_register,
+            nbp_register_debug,
             t=t,
             r=r,
             c=dapi_channel,
@@ -493,11 +511,11 @@ def generate_reg_images(nb: Notebook):
             reg_type="none",
         )
         im_flow = load_transformed_image(
-            nb.basic_info,
-            nb.file_names,
-            nb.extract,
-            nb.register,
-            nb.register_debug,
+            nbp_basic,
+            nbp_file,
+            nbp_extract,
+            nbp_register,
+            nbp_register_debug,
             t=t,
             r=r,
             c=dapi_channel,
@@ -505,11 +523,11 @@ def generate_reg_images(nb: Notebook):
             reg_type="flow",
         )
         im_flow_icp = load_transformed_image(
-            nb.basic_info,
-            nb.file_names,
-            nb.extract,
-            nb.register,
-            nb.register_debug,
+            nbp_basic,
+            nbp_file,
+            nbp_extract,
+            nbp_register,
+            nbp_register_debug,
             t=t,
             r=r,
             c=dapi_channel,
@@ -517,18 +535,19 @@ def generate_reg_images(nb: Notebook):
             reg_type="flow_icp",
         )
         im_concat = np.concatenate([im[None], im_flow[None], im_flow_icp[None]], axis=0)
-        file_name = os.path.join(reg_images_dir, f"t{t}", "round", f"r{r}.npy")
-        save_reg_image(im=im_concat, file_path=file_name)
+        im_concat = fill_to_uint8(im_concat)
+        round_images[t, r] = im_concat
+    nbp_register.round_images = round_images
 
     # get the channel images, save, apply optical flow, save, apply icp, save
     r_mid = 3
     for t, c in tqdm(product(use_tiles, use_channels), desc="Channel Images", total=len(use_tiles) * len(use_channels)):
         im = load_transformed_image(
-            nb.basic_info,
-            nb.file_names,
-            nb.extract,
-            nb.register,
-            nb.register_debug,
+            nbp_basic,
+            nbp_file,
+            nbp_extract,
+            nbp_register,
+            nbp_register_debug,
             t=t,
             r=r_mid,
             c=c,
@@ -536,11 +555,11 @@ def generate_reg_images(nb: Notebook):
             reg_type="none",
         )
         im_flow = load_transformed_image(
-            nb.basic_info,
-            nb.file_names,
-            nb.extract,
-            nb.register,
-            nb.register_debug,
+            nbp_basic,
+            nbp_file,
+            nbp_extract,
+            nbp_register,
+            nbp_register_debug,
             t=t,
             r=r_mid,
             c=c,
@@ -548,11 +567,11 @@ def generate_reg_images(nb: Notebook):
             reg_type="flow",
         )
         im_flow_icp = load_transformed_image(
-            nb.basic_info,
-            nb.file_names,
-            nb.extract,
-            nb.register,
-            nb.register_debug,
+            nbp_basic,
+            nbp_file,
+            nbp_extract,
+            nbp_register,
+            nbp_register_debug,
             t=t,
             r=r_mid,
             c=c,
@@ -560,8 +579,9 @@ def generate_reg_images(nb: Notebook):
             reg_type="flow_icp",
         )
         im_concat = np.concatenate([im[None], im_flow[None], im_flow_icp[None]], axis=0)
-        file_name = os.path.join(reg_images_dir, f"t{t}", "channel", f"c{c}.npy")
-        save_reg_image(im=im_concat, file_path=file_name)
+        im_concat = fill_to_uint8(im_concat)
+        channel_images[t, c] = im_concat
+    nbp_register.channel_images = channel_images
 
 
 def load_transformed_image(
@@ -680,21 +700,26 @@ def adjust_affine(affine: np.ndarray, new_origin: np.ndarray) -> np.ndarray:
     return affine
 
 
-def save_reg_image(im: np.ndarray, file_path: str) -> None:
+def fill_to_uint8(array: np.ndarray) -> np.ndarray[np.uint8]:
     """
-    takes in a small image and saves it as a uint8 image in the output directory
-    Args:
-        im: image to save (y, x, z) or 3( y, x, z) (usually (500 x 500 x 10) or (3, 500, 500, 10))
-        file_path: str, path to save the image
+    Take a numpy array, scale/shift the array to take up the uint8 range. If the array is a single pixel, then that
+    pixel is set to 0.
 
+    Args:
+        array: array to shift and scale.
+
+    Returns:
+        (ndarray[uint8]): shifted/scaled array.
     """
-    im_min, im_max = np.min(im), np.max(im)
-    im = im - im_min
+    assert array.size > 0, "Given array cannot be empty"
+
+    im_min, im_max = np.min(array), np.max(array)
+    array = array - im_min
     # Save the image as uint8
     if im_max != 0:
-        im = im / np.max(im) * 255  # Scale to 0-255
-    im = im.astype(np.uint8)
-    np.save(file_path, im)
+        array = array / np.max(array) * 255  # Scale to 0-255
+    array = array.astype(np.uint8)
+    return array
 
 
 def window_image(image: np.ndarray) -> np.ndarray:

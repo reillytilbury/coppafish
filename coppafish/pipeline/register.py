@@ -447,5 +447,8 @@ def register(
         nbp.bg_scale = bg_scale
         log.debug("Compute background scale factors complete")
 
+    # Save a registered image subsets for debugging/plotting purposes.
+    preprocessing.generate_reg_images(nbp_basic, nbp_file, nbp_extract, nbp, nbp_debug)
+
     log.debug("Register complete")
     return nbp, nbp_debug

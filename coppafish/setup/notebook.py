@@ -83,6 +83,12 @@ class Notebook:
     def __init__(self, notebook_dir: str, config_path: Optional[str] = None, debugging: bool = False, /) -> None:
         """
         Load the notebook found at the given directory. Or, if the directory does not exist, create the directory.
+
+        notebook_dir (str): the notebook directory to write into/load from.
+        config_path (str, optional): path to the pipeline's config file. Must be given when creating the notebook for
+            the first time.
+        debugging (bool, optional): do not compare against a config file from disk. This is useful for unit testing
+            purposes only.
         """
         assert type(notebook_dir) is str
         assert config_path is None or type(config_path) is str
@@ -109,12 +115,12 @@ class Notebook:
         """
         Add and save a new page to the notebook using syntax notebook += notebook_page.
         """
+        if type(page) is not NotebookPage:
+            raise TypeError(f"Cannot add type {type(page)} to the notebook")
         if self._config_path is None:
             raise ValueError(f"The notebook must have a specified config path when instantiated to add notebook pages.")
         if page.name not in self._debug_page and not os.path.isfile(self._config_path):
             raise FileNotFoundError(f"Could not add page since config at {self._config_path} was not found")
-        if type(page) is not NotebookPage:
-            raise TypeError(f"Cannot add type {type(page)} to the notebook")
         unset_variables = page.get_unset_variables()
         if len(unset_variables) > 0:
             raise ValueError(

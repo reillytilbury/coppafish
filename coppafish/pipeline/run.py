@@ -1,7 +1,5 @@
 import os
 
-import zarr
-
 from . import basic_info
 from . import extract_run
 from . import filter_run
@@ -17,25 +15,12 @@ from ..pdf.base import BuildPDF
 from ..setup import Notebook, file_names
 
 
-def run_pipeline(
-    config_file: str,
-    overwrite_ref_spots: bool = False,
-) -> Notebook:
+def run_pipeline(config_file: str) -> Notebook:
     """
     Bridge function to run every step of the pipeline.
 
     Args:
         config_file: Path to config file.
-        overwrite_ref_spots: Only used if *Notebook* contains *ref_spots* but not *call_spots* page.
-            If `True`, the variables:
-
-            * `gene_no`
-            * `score`
-            * `score_diff`
-            * `intensity`
-
-            in `nb.ref_spots` will be overwritten if they exist. If this is `False`, they will only be overwritten
-            if they are all set to `None`, otherwise an error will occur.
 
     Returns:
         Notebook: notebook containing all information gathered during the pipeline.
@@ -43,7 +28,7 @@ def run_pipeline(
     nb = initialize_nb(config_file)
     log.error_catch(run_tile_indep_pipeline, nb)
     log.error_catch(run_stitch, nb)
-    log.error_catch(run_reference_spots, nb, overwrite_ref_spots)
+    log.error_catch(run_reference_spots, nb)
     log.error_catch(BuildPDF, nb)
     log.error_catch(run_omp, nb)
     log.error_catch(BuildPDF, nb, auto_open=True)
@@ -241,15 +226,15 @@ def run_register(nb: Notebook) -> None:
             config["register"],
             pre_seq_blur_radius=None,
         )
+        # register.preprocessing.generate_reg_images(nb, nbp, nbp_debug)
         nb += nbp
         nb += nbp_debug
-        register.preprocessing.generate_reg_images(nb)
     else:
         log.warn(utils.warnings.NotebookPageWarning("register"))
         log.warn(utils.warnings.NotebookPageWarning("register_debug"))
 
 
-def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None:
+def run_reference_spots(nb: Notebook) -> None:
     """
     This runs the `reference_spots` step of the pipeline to get the intensity of each spot on the reference
     round/channel in each imaging round/channel. The `call_spots` step of the pipeline is then run to produce the
@@ -261,16 +246,6 @@ def run_reference_spots(nb: Notebook, overwrite_ref_spots: bool = False) -> None
 
     Args:
         nb: `Notebook` containing `stitch` and `register` pages.
-        overwrite_ref_spots: Only used if *Notebook* contains *ref_spots* but not *call_spots* page.
-            If `True`, the variables:
-
-            * `gene_no`
-            * `score`
-            * `score_diff`
-            * `intensity`
-
-            in `nb.ref_spots` will be overwritten if they exist. If this is `False`, they will only be overwritten
-            if they are all set to `None`, otherwise an error will occur.
     """
     if not nb.has_page("ref_spots") or not nb.has_page("call_spots"):
         nbp_ref_spots = get_reference_spots.get_reference_spots(

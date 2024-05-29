@@ -1041,7 +1041,7 @@ class RoboMinnie:
         self.stitch_tile_origins = nb.stitch.tile_origin
 
         assert nb.has_page("stitch"), f"Stitch not found in notebook at {config_filepath}"
-        run.run_reference_spots(nb, overwrite_ref_spots=False)
+        run.run_reference_spots(nb)
 
         # Keep reference spot information to compare to true spots, if wanted
         assert nb.has_page("ref_spots"), f"Reference spots not found in notebook at {config_filepath}"

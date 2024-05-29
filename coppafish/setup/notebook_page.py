@@ -502,6 +502,25 @@ class NotebookPage:
                 + "This is computed in register because the images must be well-alligned to compute. "
                 + "Zeros if not using the preseq round.",
             ],
+            "anchor_images": [
+                "zarr",
+                "Numpy uint8 array `(n_tiles x 2 x im_y x im_x x im_z)`"
+                + "A subset of the anchor image after all image registration is applied. "
+                + "The second axis is for the channels. 0 is the dapi channel, 1 is the anchor reference channel.",
+            ],
+            "round_images": [
+                "zarr",
+                "Numpy uint8 array `(n_tiles x n_rounds x 3 x im_y x im_x x im_z)`"
+                + "A subset of the anchor image after all image registration is applied. "
+                + "The third axis is for the registration step. 0 is before register, 1 is after optical flow, 2 is "
+                + "after optical flow and ICP",
+            ],
+            "channel_images": [
+                "zarr",
+                "Numpy uint8 array `(n_tiles x n_channels x 3 x im_y x im_x x im_z)`"
+                + "The third axis is for the registration step. 0 is before register, 1 is after optical flow, 2 is "
+                + "after optical flow and ICP",
+            ],
         },
         "register_debug": {
             "channel_transform_initial": [
@@ -792,6 +811,21 @@ class NotebookPage:
     }
 
     def __init__(self, page_name: str) -> None:
+        """
+        Initialise a new, empty notebook page.
+
+        Args:
+            - page_name (str): the notebook page name. Must exist within _options in the notebook page class.
+
+        Notes:
+            - The way that the notebook handles zarr arrays is special since they must not be kept in memory. To give
+                the notebook page a zarr variable, you must give a zarr.Array class for the array. The array must be
+                kept on disk, so you can save the array anywhere to disk initially that is outside of the
+                notebook/notebook page. Then, when the notebook page is complete and saved, the zarr array is moved by
+                the page into the page's directory. Therefore, a zarr array is never put into memory. When an existing
+                zarr array is accessed in a page, it gives you the zarr.Array class, which can then be put into memory
+                as a numpy array when indexed.
+        """
         if page_name not in self._options.keys():
             raise ValueError(f"Could not find _options for page called {page_name}")
         self._name = page_name

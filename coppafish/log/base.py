@@ -1,9 +1,9 @@
-import time
-import socket
-import logging
-import traceback
 from datetime import datetime
-from typing import Union, Callable, Any
+import logging
+import socket
+import time
+import traceback
+from typing import Any, Callable, Union
 
 from ..utils import email
 
@@ -25,7 +25,7 @@ severity_to_name = {
 def error_catch(func: Callable, *args, **kwargs) -> Any:
     """
     Any raised Exceptions that are not Keyboard/System interrupts are captured here and then sent to the logger as an
-    error so all errors are saved to the .log file.
+    error so the errors can be saved to the pipeline's .log file, when given.
 
     Args:
         func (Callable): function to run and catch errors on. All other parameters are input into func.
