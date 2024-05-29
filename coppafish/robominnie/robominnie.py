@@ -1,24 +1,24 @@
 # Originally created by Max Shinn, August 2023
 # Refactored and expanded by Paul Shuker, September 2023 - present
-import os
-import csv
 import bz2
+import csv
 import json
-import time
-import pickle
-import pandas
-import shutil
-import napari
-import warnings
-import dask.array
-import scipy.stats
-import numpy as np
 import math as maths
-from tqdm import tqdm
-import numpy.typing as npt
-from typing import Dict, List, Any, Tuple, Optional
+import os
+import pickle
+import shutil
+import time
+from typing import Any, Dict, List, Optional, Tuple
+import warnings
 
-from ..omp import scores as omp_scores
+import dask.array
+import napari
+import numpy as np
+import numpy.typing as npt
+import pandas
+import scipy.stats
+from tqdm import tqdm
+
 from .. import utils
 from ..pipeline import run
 
@@ -1064,7 +1064,7 @@ class RoboMinnie:
         # Keep the OMP spot intensities, assigned gene, assigned tile number and the spot positions in the class
         # instance
         self.omp_spot_intensities = np.ones_like(nb.omp.gene_no)
-        self.omp_spot_scores = omp_scores.omp_scores_int_to_float(nb.omp.scores)
+        self.omp_spot_scores = nb.omp.scores
         self.omp_gene_numbers = nb.omp.gene_no
         self.omp_tile_number = nb.omp.tile
         self.omp_spot_local_positions = nb.omp.local_yxz  # yxz position of each gene found

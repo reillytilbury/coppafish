@@ -611,10 +611,10 @@ class NotebookPage:
                 + "To get `global_yxz`, add `nb.stitch.tile_origin[tile[s]]`.",
             ],
             "scores": [
-                "ndarray[int16]",
+                "ndarray[float16]",
                 "Numpy array [n_spots]"
                 + "For each spot `s`, specified by position `local_yxz[s]` at tile `tile[s]` with gene read `gene_no[s]`, "
-                + "has gene read score of `scores[s]`. Each score is between 0 and `np.iinfo(np.int16).max`.",
+                + "has gene read score of `scores[s]`. Each score is between 0 and 1.",
             ],
             "tile": [
                 "ndarray[int16]",
@@ -1005,6 +1005,8 @@ class NotebookPage:
             return self._is_ndarray_of_dtype(value, (np.uint16, np.uint32, np.uint64))
         elif type_as_str == "ndarray[float]":
             return self._is_ndarray_of_dtype(value, (np.float16, np.float32, np.float64))
+        elif type_as_str == "ndarray[float16]":
+            return self._is_ndarray_of_dtype(value, (np.float16,))
         elif type_as_str == "ndarray[str]":
             return self._is_ndarray_of_dtype(value, (str, np.str_))
         elif type_as_str == "ndarray[bool]":

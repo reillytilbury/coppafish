@@ -1,6 +1,7 @@
-import torch
-import numpy as np
 import math as maths
+
+import numpy as np
+import torch
 from typing_extensions import assert_type
 
 
@@ -84,15 +85,3 @@ def score_coefficient_image(
     results = results[tuple((points - point_min[np.newaxis]).T)]
 
     return torch.clip(results, 0, 1).to(device=cpu, dtype=coefficient_image.dtype)
-
-
-def omp_scores_float_to_int(scores: torch.Tensor) -> torch.Tensor:
-    assert (0 <= scores).all() and (scores <= 1).all(), "scores should be between 0 and 1 inclusive"
-
-    return torch.round(scores * np.iinfo(np.int16).max, decimals=0).to(torch.int16)
-
-
-def omp_scores_int_to_float(scores: torch.Tensor) -> torch.Tensor:
-    assert (0 <= scores).all() and (scores <= np.iinfo(np.int16).max).all()
-
-    return (scores.float() / np.iinfo(np.int16).max).float()

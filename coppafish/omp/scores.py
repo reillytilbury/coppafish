@@ -1,6 +1,6 @@
-import scipy
 import numpy as np
 import numpy.typing as npt
+import scipy
 
 from .. import log
 
@@ -70,15 +70,3 @@ def score_coefficient_image(
         # This scipy convolve will automatically use zeroes when on the edge of the image
         result[:, :, :, g] = scipy.signal.convolve(coefs_image_function[:, :, :, g], spot_shape_kernel, mode="same")
     return np.clip(result, 0, 1, dtype=coefficient_image.dtype)
-
-
-def omp_scores_float_to_int(scores: npt.NDArray[np.float_]) -> npt.NDArray[np.int16]:
-    assert (0 <= scores).all() and (scores <= 1).all(), "scores should be between 0 and 1 inclusive"
-
-    return np.round(scores * np.iinfo(np.int16).max, 0).astype(np.int16)
-
-
-def omp_scores_int_to_float(scores: npt.NDArray[np.int16]) -> npt.NDArray[np.float32]:
-    assert (0 <= scores).all() and (scores <= np.iinfo(np.int16).max).all()
-
-    return (scores / np.iinfo(np.int16).max).astype(np.float32)

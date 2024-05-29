@@ -1,10 +1,10 @@
-from typing import Optional, Union, List
+from typing import List, Optional, Union
+
 import numpy as np
 import numpy.typing as npt
 
-from ..omp.scores import omp_scores_int_to_float
-from ..setup import NotebookPage, Notebook
 from .. import log
+from ..setup import Notebook, NotebookPage
 
 
 def get_spot_intensity(spot_colors: npt.NDArray[np.float_]) -> npt.NDArray[np.float_]:
@@ -48,7 +48,7 @@ def omp_spot_score(
     else:
         scores = nbp.scores[spot_no]
 
-    return omp_scores_int_to_float(scores)
+    return scores
 
 
 def get_intensity_thresh(nb: Notebook) -> float:

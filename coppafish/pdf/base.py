@@ -653,7 +653,7 @@ class BuildPDF:
         bar_x = np.arange(0, median_scores.size, dtype=float) + 0.5
         ticks = []
         labels = []
-        scores: np.ndarray = omp_scores.omp_scores_int_to_float(omp_page.scores)
+        scores: np.ndarray = omp_page.scores
         tile: np.ndarray = omp_page.tile
         local_z: np.ndarray = omp_page.local_yxz[:, 2]
         i = 0
@@ -776,7 +776,7 @@ class BuildPDF:
         else:
             gene_names = [f"gene_{g}" for g in range(n_genes)]
 
-        scores = omp_scores.omp_scores_int_to_float(omp_page.scores)
+        scores = omp_page.scores
         gene_numbers = omp_page.gene_no[scores >= score_threshold]
         unique_genes, counts = np.unique(gene_numbers, return_counts=True)
         for g, gene_name in enumerate(gene_names):

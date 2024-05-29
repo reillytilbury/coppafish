@@ -107,7 +107,7 @@ def run_omp(
     spots_local_yxz = torch.zeros((0, 3), dtype=torch.int16)
     spots_tile = torch.zeros(0, dtype=torch.int16)
     spots_gene_no = torch.zeros(0, dtype=torch.int16)
-    spots_score = torch.zeros(0, dtype=torch.int16)
+    spots_score = torch.zeros(0, dtype=torch.float16)
     spots_colours = torch.zeros((0, n_rounds_use, n_channels_use), dtype=torch.int32)
 
     for t in nbp_basic.use_tiles:
@@ -315,12 +315,11 @@ def run_omp(
                 keep_scores = g_spots_score >= config["score_threshold"]
                 g_spots_local_yxz = g_spots_local_yxz[keep_scores].to(dtype=torch.int16)
                 g_spots_yxz = g_spots_yxz[keep_scores]
-                g_spots_score = g_spots_score[keep_scores]
+                g_spots_score = g_spots_score[keep_scores].to(dtype=torch.float16)
                 n_g_spots = g_spots_local_yxz.shape[0]
                 if n_g_spots == 0:
                     continue
 
-                g_spots_score = scores_torch.omp_scores_float_to_int(g_spots_score)
                 g_spots_tile = torch.ones(n_g_spots, dtype=torch.int16) * t
                 g_spots_gene_no = torch.ones(n_g_spots, dtype=torch.int16) * g
 
