@@ -98,6 +98,40 @@ def register(
             )
 
     # Part 2: Round registration
+    use_rounds = list(nbp_basic.use_rounds) + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
+    corr_loc = os.path.join(nbp_file.output_dir, "corr.zarr")
+    raw_loc = os.path.join(nbp_file.output_dir, "raw.zarr")
+    smooth_loc = os.path.join(nbp_file.output_dir, "smooth.zarr")
+    raw_smooth_shape = (
+        max(nbp_basic.use_tiles) + 1,
+        max(use_rounds) + 1,
+        3,
+        nbp_basic.tile_sz,
+        nbp_basic.tile_sz,
+        len(nbp_basic.use_z),
+    )
+    raw_smooth_chunks = (1, 1, None, None, None, None)
+    zarr.open_array(
+        store=corr_loc,
+        mode="w",
+        shape=raw_smooth_shape[:2] + raw_smooth_shape[3:],
+        dtype=np.float16,
+        chunks=raw_smooth_chunks[:2] + raw_smooth_chunks[3:],
+    )
+    zarr.open_array(
+        store=raw_loc,
+        mode="w",
+        shape=raw_smooth_shape,
+        dtype=np.float16,
+        chunks=raw_smooth_chunks,
+    )
+    zarr.open_array(
+        store=smooth_loc,
+        shape=raw_smooth_shape,
+        mode="w",
+        dtype=np.float16,
+        chunks=raw_smooth_chunks,
+    )
     for t in tqdm(use_tiles, desc="Optical Flow on uncompleted tiles", total=len(use_tiles)):
         # Load in the anchor image and the round images. Note that here anchor means anchor round, not necessarily
         # anchor channel
@@ -109,7 +143,6 @@ def register(
             r=nbp_basic.anchor_round,
             c=nbp_basic.dapi_channel,
         )
-        use_rounds = list(nbp_basic.use_rounds) + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
         for r in tqdm(use_rounds, desc="Round", total=len(use_rounds)):
             round_image = tiles_io.load_image(
                 nbp_file,
@@ -121,39 +154,6 @@ def register(
                 suffix="_raw" if r == nbp_basic.pre_seq_round else "",
             )
             # Now run the registration algorithm on this tile and round
-            corr_loc = os.path.join(nbp_file.output_dir, "corr.zarr")
-            raw_loc = os.path.join(nbp_file.output_dir, "raw.zarr")
-            smooth_loc = os.path.join(nbp_file.output_dir, "smooth.zarr")
-            raw_smooth_shape = (
-                max(nbp_basic.use_tiles) + 1,
-                max(use_rounds) + 1,
-                3,
-                nbp_basic.tile_sz,
-                nbp_basic.tile_sz,
-                len(nbp_basic.use_z),
-            )
-            raw_smooth_chunks = (None, None, 3, 64, 64, None)
-            zarr.open_array(
-                store=corr_loc,
-                mode="w",
-                shape=raw_smooth_shape[:2] + raw_smooth_shape[3:],
-                dtype=np.float16,
-                chunks=raw_smooth_chunks[:2] + raw_smooth_chunks[3:],
-            )
-            zarr.open_array(
-                store=raw_loc,
-                mode="w",
-                shape=raw_smooth_shape,
-                dtype=np.float16,
-                chunks=raw_smooth_chunks,
-            )
-            zarr.open_array(
-                store=smooth_loc,
-                shape=raw_smooth_shape,
-                mode="w",
-                dtype=np.float16,
-                chunks=raw_smooth_chunks,
-            )
             register_base.optical_flow_register(
                 target=round_image,
                 base=anchor_image,
