@@ -1047,7 +1047,7 @@ class RoboMinnie:
         assert nb.has_page("ref_spots"), f"Reference spots not found in notebook at {config_filepath}"
 
         if save_ref_spots_data:
-            self.ref_spots_scores = nb.ref_spots.score
+            self.ref_spots_scores = nb.ref_spots.scores
             self.ref_spots_local_positions_yxz = nb.ref_spots.local_yxz
             self.ref_spots_intensities = nb.ref_spots.intensity
             self.ref_spots_gene_indices = nb.ref_spots.gene_no

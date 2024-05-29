@@ -246,7 +246,7 @@ class BuildPDF:
                 for t in nb.basic_info.use_tiles:
                     keep = nb.ref_spots.tile == t
                     fig = self.create_positions_histograms(
-                        nb.ref_spots.score[keep],
+                        nb.ref_spots.scores[keep],
                         nb.ref_spots.local_yxz[keep],
                         DEFAULT_REF_SCORE_THRESHOLD,
                         title=f"Spot position histograms for {t=}, scores "

@@ -1,7 +1,7 @@
 import itertools
 import os
 import pickle
-from typing import Tuple
+from typing import Tuple, Union
 
 import numpy as np
 import scipy
@@ -22,7 +22,7 @@ def register(
     nbp_filter: NotebookPage,
     nbp_find_spots: NotebookPage,
     config: dict,
-    pre_seq_blur_radius: float,
+    pre_seq_blur_radius: Union[None, float] = None,
 ) -> Tuple[NotebookPage, NotebookPage]:
     """
     Registration pipeline. Returns register Notebook Page.

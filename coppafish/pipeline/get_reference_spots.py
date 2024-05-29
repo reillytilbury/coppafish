@@ -135,7 +135,6 @@ def get_reference_spots(
     nbp.tile = tile
     nbp.colours = spot_colours_full
     nbp.bg_colours = bg_colours
-
     log.debug("Get ref spots complete")
 
     return nbp

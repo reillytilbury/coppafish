@@ -30,7 +30,6 @@ def run_extract(
     """
     # initialise notebook pages
     if not nbp_basic.is_3d:
-        # config["deconvolve"] = False  # only deconvolve if 3d pipeline
         log.error(
             NotImplementedError(f"coppafish 2d is not in a stable state, please contact a dev to add this. Sorry! ;(")
         )
@@ -71,7 +70,6 @@ def run_extract(
     )
     indices_t = indexing.unique(indices, axis=0)
     indices_r = indexing.unique(indices, axis=1)
-    # first_rounds = indexing.unique(indices, 1)
     with tqdm(
         total=len(indices_t) * len(indices_r),
         desc=f"Extracting raw {nbp_file.raw_extension} files to {config['file_type']}",

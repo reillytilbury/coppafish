@@ -41,7 +41,7 @@ class view_weight:
             iter: Iteration in OMP to view the dot product calculation for i.e. the number of genes
                 which have already been fitted (`iter=0` will have only background fit,
                 `iter=1` will have background + 1 gene etc.).
-                The score saved as `nb.ref_spots.score` can be viewed with `iter=0`.
+                The score saved as `nb.ref_spots.scores` can be viewed with `iter=0`.
             score_info: This is a list containing `[track_info, bled_codes, weight_vmax]`.
                 It is only ever used to call this function from `view_score`.
             check_weight: When this is `True`, we raise an error if weight computed here is different

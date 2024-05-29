@@ -1,20 +1,20 @@
+import matplotlib as mpl
+import matplotlib.colors as colors
+from matplotlib.patches import Rectangle
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Button, Slider
 import mplcursors
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.colors as colors
-from matplotlib.widgets import Button, Slider
-from matplotlib.patches import Rectangle
 from sklearn import linear_model
-import matplotlib as mpl
+
+from ...setup import Notebook
+from ...spot_colors.base import normalise_rc
+from ..call_spots.spot_colors import view_codes
 
 try:
     import importlib_resources
 except ModuleNotFoundError:
     import importlib.resources as importlib_resources
-
-from ...setup import Notebook
-from ...spot_colors.base import normalise_rc
-from ..call_spots.spot_colors import view_codes
 
 
 plt.style.use("dark_background")
@@ -43,7 +43,7 @@ class ViewAllGeneScores:
         """
         self.mode = mode
         if mode == "score":
-            values = self.nb.ref_spots.score
+            values = self.nb.ref_spots.scores
         elif mode == "prob":
             values = np.max(self.nb.ref_spots.gene_probs, axis=1)
         elif mode == "score_diff":
@@ -351,8 +351,8 @@ class GESpotViewer:
             axis=0,
         )
         self.spots = spots / color_norm
-        # order spots by nb.ref_spots.score
-        # self.spots = self.spots[np.argsort(nb.ref_spots.score[self.gene_g_mask]), :]
+        # order spots by nb.ref_spots.scores
+        # self.spots = self.spots[np.argsort(nb.ref_spots.scores[self.gene_g_mask]), :]
         # We need to find the expected spot profile for each round/channel
         self.spots_expected = nb.call_spots.bled_codes[self.gene_index, :, nb.basic_info.use_channels].T
         # normalise so that mean brightness is the same as that of the observed spots
@@ -829,7 +829,7 @@ class GeneScoreScatter:
         else:
             self.ax.clear()
         gene_g_mask = self.nb.ref_spots.gene_no == self.gene_no
-        self.score = self.nb.ref_spots.score[gene_g_mask]
+        self.score = self.nb.ref_spots.scores[gene_g_mask]
         self.second_score = self.score - self.nb.ref_spots.score_diff[gene_g_mask]
         self.ax.scatter(x=self.second_score, y=self.score, s=1)
         # Add a line at y=x

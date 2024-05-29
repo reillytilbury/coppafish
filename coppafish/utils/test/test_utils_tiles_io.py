@@ -40,4 +40,4 @@ def test_tiles_io_save_load_tile():
         assert np.allclose(array_1[:, :, 1], output), "Expected a subvolume to be loaded in"
 
 
-# TODO: save_stitched and get_npy_tile_ind unit tests
+# TODO: get_npy_tile_ind unit tests.

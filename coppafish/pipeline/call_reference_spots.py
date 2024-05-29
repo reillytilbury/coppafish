@@ -1,16 +1,19 @@
-import numpy as np
-from typing import Tuple
-from tqdm import tqdm
 from itertools import product
-from scipy.sparse.linalg import svds
+from typing import Tuple
 
-from ..setup import NotebookPage
-from ..filter import base as filter_base
+import numpy as np
+from scipy.sparse.linalg import svds
+from scipy.sparse.linalg import svds
+from tqdm import tqdm
+
 from .. import call_spots
 from .. import spot_colors
 from .. import utils
 from .. import log
-from scipy.sparse.linalg import svds
+from ..filter import base as filter_base
+from ..filter import base as filter_base
+from ..setup import NotebookPage
+from ..setup.notebook import NotebookPage
 
 
 def call_reference_spots(
@@ -359,7 +362,7 @@ def call_reference_spots(
     gene_prob = np.zeros((n_spots, n_genes))
     gene_no = np.zeros(n_spots, dtype=int)
     gene_prob_score = np.zeros(n_spots)
-    bad_tr = [(t, r) for t, r, c in bad_trc]
+    bad_tr = [(t, r) for t, r, _ in bad_trc]
     for t in tqdm(nbp_basic.use_tiles, desc="Estimating gene probabilities"):
         tile_t_spots = spot_tile == t
         bad_r = [r for r in range(n_rounds) if (t, r) in bad_tr]
@@ -379,7 +382,7 @@ def call_reference_spots(
     bg_percentile = 50
     bg_strength = np.linalg.norm(bg_codes, axis=(1, 2))
     # first, estimate bleed matrix
-    bad_t = [t for t, r, c in nbp_basic.bad_trc]
+    bad_t = [t for t, _, _ in nbp_basic.bad_trc]
     good_t = [t for t in nbp_basic.use_tiles if t not in bad_t]
     for d in tqdm(range(n_dyes), desc="Estimating bleed matrix"):
         for r in range(n_rounds):
@@ -396,7 +399,7 @@ def call_reference_spots(
             if len(colours_d) == 0:
                 continue
             # Now we have colours_d, we can estimate the bleed matrix for this dye
-            u, s, v = svds(colours_d, k=1)
+            _, _, v = svds(colours_d, k=1)
             v = v[0]
             v *= np.sign(v[np.argmax(np.abs(v))])  # Make sure the largest element is positive
             bleed_matrix[:, d] = v
@@ -464,11 +467,11 @@ def call_reference_spots(
 
     # save overwritable variables in nbp_ref_spots
     # delete all variables in ref_spots set to None so can add them later.
-    for var in ["gene_no", "score", "score_diff", "intensity", "background_strength", "gene_probs"]:
+    for var in ["gene_no", "scores", "score_diff", "intensity", "background_strength", "gene_probs"]:
         if hasattr(nbp_ref_spots, var):
             nbp_ref_spots.__delattr__(var)
     nbp_ref_spots.gene_no = gene_no.astype(np.int16)
-    nbp_ref_spots.score = gene_score
+    nbp_ref_spots.scores = gene_score
     nbp_ref_spots.score_diff = gene_score - gene_score_second
     nbp_ref_spots.intensity = np.median(np.max(colours, axis=2), axis=1).astype(np.float32)
     nbp_ref_spots.background_strength = bg_codes

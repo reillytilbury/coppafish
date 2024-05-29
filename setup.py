@@ -41,8 +41,7 @@ setup(
         "PyQt5",
         "mplcursors",
         "magicgui",
-        "napari[all]<=0.4.17",
-        "pydantic<=1.10.13",
+        "napari",
     ],
     package_data={
         "coppafish.setup": [

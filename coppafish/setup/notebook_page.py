@@ -343,116 +343,29 @@ class NotebookPage:
         "stitch": {
             "tile_origin": [
                 "ndarray[float]",
-                "Numpy float array [n_tiles x 3]"
+                "Numpy array (n_tiles x 3)"
                 + "`tile_origin[t,:]` is the bottom left $yxz$ coordinate of tile $t$."
                 + "$yx$ coordinates in yx-pixels and z coordinate in z-pixels."
                 + "nan is populated in places where a tile is not used in the pipeline.",
             ],
-            "north_start_shift_search": [
-                "ndarray[int]",
-                "Numpy integer array [3 x 3]"
-                + "Initial search range used to find overlap between north neighbouring tiles"
-                + "`[i, :]` is the `[min, max, step]` of the search in direction $i$ (0 is $y$, 1 is $x$, 2 is $z$)."
-                + "`[2,:]` is in units of z-pixels and is 0 if *2D*.",
-            ],
-            "east_start_shift_search": [
-                "ndarray[int]",
-                "Numpy integer array [3 x 3]"
-                + "Initial search range used to find overlap between east neighbouring tiles"
-                + "`[i, :]` is the `[min, max, step]` of the search in direction $i$ (0 is $y$, 1 is $x$, 2 is $z$)."
-                + "`[2,:]` is in units of z-pixels and is 0 if *2D*.",
-            ],
-            "north_final_shift_search": [
-                "ndarray[int]",
-                "Numpy integer array [3 x 3]"
-                + "Final search range used to find overlap between north neighbouring tiles"
-                + "`[i, :]` is the `[min, max, step]` of the search in direction $i$ (0 is $y$, 1 is $x$, 2 is $z$)."
-                + "`[2,:]` is in units of z-pixels and is 0 if *2D*.",
-            ],
-            "east_final_shift_search": [
-                "ndarray[int]",
-                "Numpy integer array [3 x 3]"
-                + "Final search range used to find overlap between east neighbouring tiles"
-                + "`[i, :]` is the `[min, max, step]` of the search in direction $i$ (0 is $y$, 1 is $x$, 2 is $z$)."
-                + "`[2,:]` is in units of z-pixels and is 0 if *2D*.",
-            ],
-            "north_pairs": [
-                "ndarray[int]",
-                "Numpy integer array [n_north_overlap x 2]"
-                + "`north_pairs[i, 1]` is the tile to the north of `north_pairs[i, 0]`",
-            ],
-            "east_pairs": [
-                "ndarray[int]",
-                "Numpy integer array [n_east_overlap x 2]"
-                + "`east_pairs[i, 1]` is the tile to the east of `east_pairs[i, 0]`",
-            ],
-            "north_shifts": [
-                "ndarray[int]",
-                "Numpy integer array [n_north_overlap x 3]"
-                + "`north_shifts[i, :]` is the $yxz$ shift found that is applied to `north_pairs[i, 0]` to take it to `north_pairs[i, 1]`"
-                + ""
-                + "Units: `[yx_pixels, yx_pixels, z_pixels]`, `[:, 2] = 0` if *2D*.",
-            ],
-            "east_shifts": [
-                "ndarray[int]",
-                "Numpy integer array [n_east_overlap x 3]"
-                + "`east_shifts[i, :]` is the $yxz$ shift found that is applied to `east_pairs[i, 0]` to take it to `east_pairs[i, 1]`"
-                + ""
-                + "Units: `[yx_pixels, yx_pixels, z_pixels]`, `[:, 2] = 0` if *2D*.",
-            ],
-            "north_score": [
+            "shifts": [
                 "ndarray[float]",
-                "Numpy float array [n_north_overlap x 1]"
-                + "`north_score[i]` is approximately the number of matches found for `north_shifts[i, :]`",
+                "Numpy array (n_tiles x n_tiles x 3)"
+                + "`shifts[t1, t2, :]` is the $yxz$ shift from tile $t1$ to tile $t2$."
+                + "nan is populated in places where shift is not calculated, i.e. if tiles are not adjacent,"
+                + "or if one of the tiles is not used in the pipeline.",
             ],
-            "east_score": [
+            "scores": [
                 "ndarray[float]",
-                "Numpy float array [n_east_overlap x 1]"
-                + "`east_score[i]` is approximately the number of matches found for `east_shifts[i, :]`",
-            ],
-            "north_score_thresh": [
-                "ndarray[float]",
-                "Numpy float array [n_north_overlap x 1]"
-                + "If `north_score[i]` is below `north_score_thresh[i]`, it indicates `north_shifts[i]` may be incorrect.",
-            ],
-            "east_score_thresh": [
-                "ndarray[float]",
-                "Numpy float array [n_east_overlap x 1]"
-                + "If `east_score[i]` is below `east_score_thresh[i]`, it indicates `east_shifts[i]` found may be incorrect.",
-            ],
-            "north_outlier_shifts": [
-                "ndarray[int]",
-                "Numpy integer array [n_north_overlap x 3]"
-                + "If `north_score[i]` was below `north_score_thresh[i]`, `north_shifts[i]` was found again"
-                + "and old shift recorded as `north_outlier_shifts[i]`. Will be zero if this did not happen.",
-            ],
-            "east_outlier_shifts": [
-                "ndarray[int]",
-                "Numpy integer array [n_east_overlap x 3]"
-                + "If `east_score[i]` was below `east_score_thresh[i]`, `east_shifts[i]` was found again"
-                + "and old shift recorded as `east_outlier_shifts[i]`. Will be zero if this did not happen.",
-            ],
-            "north_outlier_score": [
-                "ndarray[float]",
-                "Numpy float array [n_north_overlap x 1]"
-                + "If `north_score[i]` was below `north_score_thresh[i]`, `north_shifts[i]` was found again"
-                + "and old score recorded as `north_outlier_score[i]`. Will be zero if this did not happen.",
-            ],
-            "east_outlier_score": [
-                "ndarray[float]",
-                "Numpy float array [n_east_overlap x 1]"
-                + "If `east_score[i]` was below `east_score_thresh[i]`, `east_shifts[i]` was found again"
-                + "and old score recorded as `east_outlier_score[i]`. Will be zero if this did not happen.",
+                "Numpy array [n_tiles x n_tiles]"
+                + "`scores[t1, t2]` is the score of the shift from tile $t1$ to tile $t2$."
+                + "nan is populated in places where shift is not calculated, i.e. if tiles are not adjacent,"
+                + "or if one of the tiles is not used in the pipeline.",
             ],
             "dapi_image": [
                 "zarr",
-                "Numpy uint16 array (n_z x n_y x n_x)",
-                "Stitched dapi image of all tiles.",
-            ],
-            "anchor_image": [
-                "zarr",
-                "Numpy int16 array (n_z x n_y x n_x)",
-                "Stitched anchor image of all tiles.",
+                "uint16 array (im_y x im_x x im_z). "
+                + "Fused large dapi image created by merging all tiles together after stitch shifting is applied.",
             ],
         },
         "register": {
@@ -579,7 +492,7 @@ class NotebookPage:
                 "ndarray[int16]",
                 "Numpy array [n_spots]. Gene number assigned to each spot. `None` if not assigned.",
             ],
-            "score": [
+            "scores": [
                 "ndarray[float]",
                 "Numpy float array [n_spots]. `score[s]' is the highest gene coef of spot s.",
             ],

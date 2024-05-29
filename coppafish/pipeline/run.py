@@ -193,10 +193,8 @@ def run_stitch(nb: Notebook) -> None:
     """
     config = setup.config.get_config(nb.config_path)
     if not nb.has_page("stitch"):
-        nbp_debug = stitch.stitch(
-            config["stitch"], nb.basic_info, nb.file_names, nb.extract, nb.find_spots.spot_yxz, nb.find_spots.spot_no
-        )
-        nb += nbp_debug
+        nbp = stitch.stitch(config["stitch"], nb.basic_info, nb.file_names, nb.extract)
+        nb += nbp
     else:
         log.warn(utils.warnings.NotebookPageWarning("stitch"))
 

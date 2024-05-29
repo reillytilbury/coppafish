@@ -397,6 +397,8 @@ def set_basic_info_new(config: dict) -> NotebookPage:
     if nbp.use_channels is None:
         del nbp.use_channels
         nbp.use_channels = np.arange(metadata["n_channels"]).tolist()
+    if len(nbp.use_channels) > 9:
+        raise NotImplementedError(f"There must be 9 or fewer sequencing channels to run coppafish.")
 
     # If no use_z given, default to all except the first if ignore_first_z_plane = True
     if nbp.use_z is None:
