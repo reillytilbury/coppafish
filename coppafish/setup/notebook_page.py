@@ -54,11 +54,14 @@ class NotebookPage:
                 "int or none",
                 "Channel in anchor round that contains *DAPI* images. `None` if no *DAPI*.",
             ],
-            "use_channels": ["tuple[int]", "n_use_channels. Channels in imaging rounds to use throughout pipeline."],
-            "use_rounds": ["tuple[int]", "n_use_rounds. Imaging rounds to use throughout pipeline."],
-            "use_z": ["tuple[int]", "z planes used to make tile *npy* files"],
+            "use_channels": [
+                "tuple[int] or none",
+                "n_use_channels. Channels in imaging rounds to use throughout pipeline.",
+            ],
+            "use_rounds": ["tuple[int] or none", "n_use_rounds. Imaging rounds to use throughout pipeline."],
+            "use_z": ["tuple[int] or none", "z planes used to make tile *npy* files"],
             "use_tiles": [
-                "tuple[int]",
+                "tuple[int] or none",
                 "n_use_tiles tiles to use throughout pipeline."
                 + "For an experiment where the tiles are arranged in a $4 \\times 3$ ($n_y \\times n_x$) grid, "
                 + "tile indices are indicated as below:"

@@ -384,27 +384,28 @@ def set_basic_info_new(config: dict) -> NotebookPage:
     # If no use_tiles given, default to all
     if nbp.use_tiles is None:
         del nbp.use_tiles
-        nbp.use_tiles = np.arange(metadata["n_tiles"]).tolist()
+        nbp.use_tiles = tuple(np.arange(metadata["n_tiles"]).tolist())
 
     # If no use_rounds given, replace none with [], unless non jobs and user has provided the rounds in the file names
     if nbp.use_rounds is None:
         del nbp.use_rounds
         if config_file["round"] is not None and raw_extension != "jobs":
-            nbp.use_rounds = np.arange(len(config_file["round"])).tolist()
+            nbp.use_rounds = tuple(np.arange(len(config_file["round"])).tolist())
         else:
-            nbp.use_rounds = np.arange(0, nbp.n_rounds).tolist()
+            nbp.use_rounds = tuple(np.arange(0, nbp.n_rounds).tolist())
 
     if nbp.use_channels is None:
         del nbp.use_channels
-        nbp.use_channels = np.arange(metadata["n_channels"]).tolist()
+        nbp.use_channels = tuple(np.arange(metadata["n_channels"]).tolist())
     if len(nbp.use_channels) > 9:
         raise NotImplementedError(f"There must be 9 or fewer sequencing channels to run coppafish.")
 
     # If no use_z given, default to all except the first if ignore_first_z_plane = True
     if nbp.use_z is None:
         del nbp.use_z
-        nbp.use_z = np.arange(int(config_basic["ignore_first_z_plane"]), metadata["nz"]).tolist()
-        nbp.use_z.sort()
+        use_z = np.arange(int(config_basic["ignore_first_z_plane"]), metadata["nz"]).tolist()
+        use_z.sort()
+        nbp.use_z = tuple(use_z)
     # This has not been assigned yet but now we can be sure that use_z not None!
     nbp.nz = len(nbp.use_z)
     for i in range(nbp.nz):
