@@ -395,8 +395,8 @@ class NotebookPage:
                 + "yxz affine corrections to be applied after the warp.",
             ],
             "bg_scale": [
-                "ndarray[float]",
-                "Numpy float array `[n_tiles x n_rounds x n_channels]`"
+                "tuple[tuple[tuple[float]]] or none",
+                "tuple of `[n_tiles][n_rounds][n_channels]`"
                 + "`bg_scale[t, r, c]` is the scale factor applied to the preseq round of tile $t$, channel $c$"
                 + "to match the colour profile of the sequencing image in tile t, round r, channel c. "
                 + "This is computed in register because the images must be well-alligned to compute. "

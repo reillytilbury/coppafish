@@ -8,7 +8,7 @@ import scipy
 from tqdm import tqdm
 import zarr
 
-from .. import find_spots, log
+from .. import find_spots, log, utils
 from ..register import preprocessing
 from ..register import base as register_base
 from ..setup import NotebookPage
@@ -375,11 +375,12 @@ def register(
 
         registration_data["blur"] = True
 
-    bg_scale = np.zeros((n_tiles, n_rounds, n_channels))
+    bg_scale = None
     if nbp_basic.use_preseq:
         # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
         # fluorescence
         log.debug("Compute background scale factors started")
+        bg_scale = np.zeros((n_tiles, n_rounds, n_channels))
         r_pre = nbp_basic.pre_seq_round
         use_rounds = nbp_basic.use_rounds
         mid_z = len(nbp_basic.use_z) // 2
@@ -437,6 +438,7 @@ def register(
                 im_r = im_r[bright]
                 bg_scale[t, r, c] = np.median(im_r) / np.median(im_pre)
 
+        bg_scale = utils.base.to_deep_tuple(bg_scale.tolist())
         log.debug("Compute background scale factors complete")
     # Now add the bg_scale to the nbp_filter page. To do this we need to delete the bg_scale attribute.
     nbp.bg_scale = bg_scale
