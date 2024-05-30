@@ -1,6 +1,6 @@
 import os
 import math as maths
-from typing import Tuple
+from typing import List, Tuple
 
 import tqdm
 import torch
@@ -90,18 +90,21 @@ def run_omp(
     # Find the bottom-left position of every subset to break the entire tile up into.
     subset_origin_start = (-spot_radius_xy, -spot_radius_xy, 0)
     subset_origin_new = list(subset_origin_start)
-    subset_origins_yxz = []
+    subset_origins_yxz: List[Tuple[int]] = []
+    subset_step_yx = subset_size_xy - 2 * spot_radius_xy
     while True:
         if subset_origin_new[0] >= nbp_basic.tile_sz:
             break
-        subset_origins_yxz.append(subset_origin_new.copy())
-        subset_origin_new[1] += subset_size_xy - 2 * spot_radius_xy
+        subset_origins_yxz.append(tuple(subset_origin_new.copy()))
+
+        subset_origin_new[1] += subset_step_yx
         if subset_origin_new[1] >= nbp_basic.tile_sz:
             subset_origin_new[1] = subset_origin_start[1]
-            subset_origin_new[0] += subset_size_xy - 2 * spot_radius_xy
+            subset_origin_new[0] += subset_step_yx
 
     log.debug(f"Subset shape: {subset_shape}")
     log.debug(f"Running {len(subset_origins_yxz)} subsets for each tile")
+    log.debug(f"{subset_origins_yxz=}")
 
     # Results are appended to these arrays
     spots_local_yxz = torch.zeros((0, 3), dtype=torch.int16)
@@ -125,6 +128,9 @@ def run_omp(
                 return positions_yxz.detach().clone() + torch.asarray(subset_yxz)[np.newaxis]
 
             def get_valid_subset_positions(positions_yxz: torch.Tensor) -> torch.Tensor:
+                assert (positions_yxz >= 0).all()
+                assert (positions_yxz[:, [0, 1]] < subset_shape[0]).all()
+
                 valid = (
                     (positions_yxz[:, 0] >= spot_radius_xy)
                     * (positions_yxz[:, 1] >= spot_radius_xy)
@@ -293,8 +299,8 @@ def run_omp(
                     force_cpu=config["force_cpu"],
                 )
                 # Convert spot positions in the subset image to positions on the tile.
-                g_spots_local_yxz = subset_to_tile_positions(g_spots_yxz)
                 valid_positions = get_valid_subset_positions(g_spots_yxz)
+                g_spots_local_yxz = subset_to_tile_positions(g_spots_yxz)
                 if valid_positions.sum() == 0:
                     continue
 
