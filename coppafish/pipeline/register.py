@@ -375,11 +375,11 @@ def register(
 
         registration_data["blur"] = True
 
-    # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
-    # fluorescence
-    log.debug("Compute background scale factors started")
+    bg_scale = np.zeros((n_tiles, n_rounds, n_channels))
     if nbp_basic.use_preseq:
-        bg_scale = np.zeros((n_tiles, n_rounds, n_channels))
+        # Load in the middle z-planes of each tile and compute the scale factors to be used when removing background
+        # fluorescence
+        log.debug("Compute background scale factors started")
         r_pre = nbp_basic.pre_seq_round
         use_rounds = nbp_basic.use_rounds
         mid_z = len(nbp_basic.use_z) // 2
@@ -437,9 +437,9 @@ def register(
                 im_r = im_r[bright]
                 bg_scale[t, r, c] = np.median(im_r) / np.median(im_pre)
 
-        # Now add the bg_scale to the nbp_filter page. To do this we need to delete the bg_scale attribute.
-        nbp.bg_scale = bg_scale
         log.debug("Compute background scale factors complete")
+    # Now add the bg_scale to the nbp_filter page. To do this we need to delete the bg_scale attribute.
+    nbp.bg_scale = bg_scale
 
     # Save a registered image subsets for debugging/plotting purposes.
     preprocessing.generate_reg_images(nbp_basic, nbp_file, nbp_extract, nbp, nbp_debug)
