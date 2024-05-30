@@ -34,20 +34,6 @@ conda create -n coppafish python=3.10
 conda activate coppafish
 ```
 
-#### venv
-
-```console
-python -m venv /path/to/new/virtual/environment
-```
-then, in Linux and MacOS:
-```console
-source /path/to/new/virtual/environment/bin/activate
-```
-or windows:
-```console
-/path/to/new/virtual/environment/Scripts/activate.bat
-```
-
 ### Install
 
 Our latest coppafish release can be cloned locally
