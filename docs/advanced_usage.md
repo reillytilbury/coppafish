@@ -51,23 +51,13 @@ without running the command above.
 
 ## Retrieve the Notebook config
 
-Notebooks will store a copy of the config file used, this way the notebook becomes separate from the initial starting 
-condition once it has run through the pipeline. To access a notebook's config file:
+Notebook's store a path to the config file, this can be accessed by doing
 
 ```python
 from coppafish import Notebook
 
-nb = Notebook("path/to/notebook.npz")
-config = nb.get_config()
-```
-
-`config` is a dictionary of dictionaries. Each key is a section/page name, each item is a dictionary containing each 
-config variable and its set value.
-
-Access the absolute file path to the config file by:
-
-```python
-nb._config_file
+nb = Notebook("path/to/notebook")
+config = nb.config_path
 ```
 
 ## Remove notebook page
@@ -75,16 +65,8 @@ nb._config_file
 Each coppafish section is saved as a separate notebook page. To change the config variables and re-run the coppafish 
 pipeline, you can delete the notebook and all output directory files and re-run again. But, if you only wished to 
 re-run starting from an intermediate section, you can delete all subsequent sections and output files. For example, if 
-you wished to re-run OMP after changing OMP config parameters, you can delete all output files marked `omp_*` then 
-remove the OMP notebook page by:
-
-```python
-from coppafish import Notebook
-
-nb = Notebook("path/to/notebook.npz")
-del nb.omp
-nb.save()
-```
+you wished to re-run OMP after changing OMP config parameters, you can delete the subdirectory called "omp" found 
+within the notebook directory.
 
 Now coppafish can be re-run and it will continue from OMP. This is particularly useful for many tile datasets. If you 
 are unsure what must be re-run, then it is suggested to start from an empty output directory.

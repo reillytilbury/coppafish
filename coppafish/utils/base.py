@@ -47,14 +47,15 @@ def set_notebook_output_dir(notebook_path: str, new_output_dir: str) -> None:
     assert os.path.isfile(notebook_path), f"Notebook at {notebook_path} not found"
     assert os.path.isdir(new_output_dir), f"{new_output_dir} directory not found"
 
+    old_name = PurePath(nb.file_names.psf).name
+    if PurePath(nb.file_names.output_dir) in PurePath(nb.file_names.psf).parents:
+        del nb.file_names.psf
+        nb.file_names.psf = os.path.join(new_output_dir, old_name)
+
     nb = Notebook(notebook_path)
     # Set the copied notebook variables to the right output directory.
     del nb.file_names.output_dir
     nb.file_names.output_dir = new_output_dir
-
-    old_name = PurePath(nb.file_names.psf).name
-    del nb.file_names.psf
-    nb.file_names.psf = os.path.join(new_output_dir, old_name)
 
     nb.resave(notebook_path)
 
