@@ -60,7 +60,7 @@ def call_reference_spots(
     n_genes = len(gene_names)
     # Load bleed matrix info
     if nbp_file.initial_bleed_matrix is None:
-        expected_dye_names = ["ATTO425", "AF488", "DY520XL", "AF532", "AF594", "AF647", "AF750"]
+        expected_dye_names = ("ATTO425", "AF488", "DY520XL", "AF532", "AF594", "AF647", "AF750")
         assert nbp_basic.dye_names == expected_dye_names, (
             f"To use the default bleed matrix, dye names must be given in the order {expected_dye_names}, but got "
             + f"{nbp_basic.dye_names}."
@@ -297,7 +297,7 @@ def call_reference_spots(
         initial_bleed_matrix = np.zeros((len(nbp_basic.use_channels), len(nbp_basic.dye_names)))
         # Populate initial_bleed_matrix with dye info for all channels in use
         for i, dye in enumerate(nbp_basic.dye_names):
-            initial_bleed_matrix[:, i] = dye_info[dye][nbp_basic.use_channels]
+            initial_bleed_matrix[:, i] = dye_info[dye][list(nbp_basic.use_channels)]
     if nbp_file.initial_bleed_matrix is not None:
         # Use an initial bleed matrix given by the user
         initial_bleed_matrix = np.load(nbp_file.initial_bleed_matrix)

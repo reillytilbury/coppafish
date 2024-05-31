@@ -34,11 +34,11 @@ def get_compressor_and_chunks(
         image_z_index = np.argmin(image_shape).item()
     if optimised_for == OptimisedFor.FULL_READ_AND_WRITE:
         compressor = Blosc(cname="lz4", clevel=2, shuffle=Blosc.BITSHUFFLE)
-        chunk_size_z = image_shape[image_z_index] // 2
+        chunk_size_z = 1
         chunk_size_yx = 288
     elif optimised_for == OptimisedFor.Z_PLANE_READ:
         compressor = Blosc(cname="lz4", clevel=4, shuffle=Blosc.SHUFFLE)
-        chunk_size_z = image_shape[image_z_index] // 2
+        chunk_size_z = 1
         chunk_size_yx = 576
     else:
         raise ValueError(f"Unknown OptimisedFor value of {optimised_for}")

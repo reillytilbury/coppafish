@@ -53,7 +53,7 @@ def get_spot_colors(
     yxz_base: np.ndarray,
     t: np.ndarray,
     transform: np.ndarray,
-    bg_scale: np.ndarray,
+    bg_scale: Optional[Tuple[Tuple[Tuple[float]]]],
     file_type: str,
     nbp_file: NotebookPage,
     nbp_basic: NotebookPage,
@@ -74,8 +74,8 @@ def get_spot_colors(
             yx coordinates are in units of `yx_pixels`. z coordinates are in units of `z_pixels`.
         t: `int`. Tile number.
         transform: `float32 [n_tiles x n_rounds x n_channels x 4 x 3]`.
-        bg_scale: `float32 [n_tiles x n_rounds x n_channels]` scale factors to apply to background images before
-        subtraction.if 'None', no background subtraction will be performed.
+        bg_scale: `float [n_tiles x n_rounds x n_channels]` scale factors to apply to background images before
+            subtraction. If 'None', no background subtraction will be performed.
         file_type: `str`. Type of file to read in. E.g. '.zarr' or '.npy'.
         nbp_file: `file_names` notebook page.
         nbp_basic: `basic_info` notebook page.
@@ -104,6 +104,8 @@ def get_spot_colors(
         use_rounds = list(nbp_basic.use_rounds) + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
     if use_channels is None:
         use_channels = list(nbp_basic.use_channels)
+    if bg_scale is not None:
+        bg_scale = np.array(bg_scale, dtype=np.float32)
 
     n_spots = yxz_base.shape[0]
     no_verbose = n_spots < 10000
