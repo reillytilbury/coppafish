@@ -104,7 +104,11 @@ def run_omp(
 
     log.debug(f"Subset shape: {subset_shape}")
     log.debug(f"Running {len(subset_origins_yxz)} subsets for each tile")
-    log.debug(f"{subset_origins_yxz=}")
+    # Set the first subset to somewhere in the middle of the tile for better mean spot computation.
+    subset_origins_yxz[0], subset_origins_yxz[len(subset_origins_yxz) // 2] = (
+        subset_origins_yxz[len(subset_origins_yxz) // 2],
+        subset_origins_yxz[0],
+    )
 
     # Results are appended to these arrays
     spots_local_yxz = torch.zeros((0, 3), dtype=torch.int16)
