@@ -189,26 +189,26 @@ class Viewer:
             self.viewer.dims.axis_labels = ["y", "x"]
 
     def add_legend(self, gene_legend_info: pd.DataFrame) -> None:
+        """
+        Add a legend to the napari viewer to show the genes plotted. This will be a figure with the gene names and
+        symbols. The self.legend object will contain the figure, axes, xy coordinates and the gene_names of all of the
+        genes in the legend and in the notebook.
+        """
         # Add legend indicating genes plotted
-        gene_names = np.array([gene.name for gene in self.genes])
+        legend_gene_names = np.array([gene.name for gene in self.genes if gene.symbol_mpl is not None])
         self.legend["fig"], self.legend["ax"], max_label_length = legend.add_legend(
             gene_legend_info=gene_legend_info,
-            genes=gene_names,
+            genes=legend_gene_names,
         )
 
         # Initialize positions and gene numbers in the legend
-        num_genes = len(self.legend["ax"].collections)
-        self.legend["xy"] = np.zeros((num_genes, 2), dtype=float)
-        self.legend["gene_no"] = np.zeros(num_genes, dtype=int)
-
-        # Crop gene names to the maximum label length
-        cropped_gene_names = np.array([gene[:max_label_length] for gene in gene_names])
+        num_legend_genes = len(legend_gene_names)
+        self.legend["xy"] = np.zeros((num_legend_genes, 2), dtype=float)
+        self.legend["gene_names"] = legend_gene_names
 
         # Populate positions and gene numbers for the legend
-        for idx in range(num_genes):
-            self.legend["xy"][idx] = np.array(self.legend["ax"].collections[idx].get_offsets())
-            legend_text = self.legend["ax"].texts[idx].get_text()
-            self.legend["gene_no"][idx] = np.where(cropped_gene_names == legend_text)[0][0]
+        for i in range(num_legend_genes):
+            self.legend["xy"][i] = np.array(self.legend["ax"].collections[i].get_offsets())
 
         # Connect the event handler for legend clicks
         self.legend["fig"].mpl_connect("button_press_event", self.legend_event_handler)
@@ -249,7 +249,7 @@ class Viewer:
 
         # connect to the appropriate function to update the napari viewer
         if slider_variable == "spot":
-            slider.sliderReleased.connect(self.update_thresholds)
+            slider.sliderReleased.connect(self.update_genes_and_thresholds)
         elif slider_variable == "image":
             slider.sliderReleased.connect(lambda x=name: self.update_image_contrast(x))
         elif slider_variable == "z_thick":
@@ -276,18 +276,7 @@ class Viewer:
             self.sliders[layer_name].value()[1],
         ]
 
-    def update_genes(self) -> None:
-        """
-        This method updates the genes plotted in the napari viewer to reflect the current state of the Viewer object.
-        """
-        active_layer_name = self.method["names"][self.method["active"]]
-        active_genes = np.array([g.notebook_index for g in self.genes if g.active])
-        mask = np.isin(self.spots[active_layer_name].gene, active_genes)
-        print(f"Gene active: {[g.name for g in np.array(self.genes)[active_genes]]}, num_spots: {np.sum(mask)}")
-        self.viewer.layers[active_layer_name].shown = mask
-        self.viewer.layers[active_layer_name].refresh()
-
-    def update_thresholds(self) -> None:
+    def update_genes_and_thresholds(self) -> None:
         """
         This method updates the thresholds in the napari viewer to reflect the current state of the Viewer object. It
         will be called when the score or intensity thresholds change.
@@ -303,8 +292,11 @@ class Viewer:
             good_score = (self.spots[m].score >= score_range[0]) & (self.spots[m].score <= score_range[1])
             # 2. intensity threshold
             good_intensity = self.spots[m].intensity >= intensity_thresh
+            # 3. gene active
+            active_genes = np.array([g.notebook_index for g in self.genes if g.active])
+            good_gene = np.isin(self.spots[m].gene, active_genes)
             # create mask
-            mask = good_score & good_intensity
+            mask = good_score & good_intensity & good_gene
             self.viewer.layers[m].shown = mask
             self.viewer.layers[m].refresh()
 
@@ -398,42 +390,57 @@ class Viewer:
             closest_gene_coordinates[i] = self.legend["xy"][closest_grid_point, i]
 
         # Identify the gene that was clicked
-        clicked_gene_index = np.where((self.legend["xy"] == closest_gene_coordinates).all(axis=1))[0][0]
-        clicked_gene_number = self.legend["gene_no"][clicked_gene_index]
+        clicked_gene_legend_index = np.where((self.legend["xy"] == closest_gene_coordinates).all(axis=1))[0][0]
+        clicked_gene_name = self.legend["gene_names"][clicked_gene_legend_index]
+        clicked_gene_notebook_index = np.where([g.name == clicked_gene_name for g in self.genes])[0][0]
 
-        # Get the current number of active genes and check if the clicked gene is active
-        active_genes = np.array([g.notebook_index for g in self.genes if g.active])
-        num_active_genes = len(active_genes)
-        is_gene_active = np.isin(clicked_gene_number, active_genes)
+        # get the active genes and their indices in the notebook and the legend respectively
+        active_gene_notebook_indices = np.array([g.notebook_index for g in self.genes if g.active])
+        # get the number of active genes and whether the clicked gene is active
+        num_active_genes = len(active_gene_notebook_indices)
+        clicked_gene_active = np.isin(clicked_gene_notebook_index, active_gene_notebook_indices)
 
-        # Update the active genes based on the click event
-        if is_gene_active and num_active_genes == 1:
-            # If the gene is the only selected gene, clicking it will show all genes
-            for gene in self.genes:
-                gene.active = gene.name in self.legend["gene_names"]
+        # left click will either add or remove the gene from the plot, or if the gene is the only gene shown, will show
+        # all genes
+        if event.button.name == "LEFT":
+            if clicked_gene_active and num_active_genes == 1:
+                print("Left click on only active gene")
+                # If the gene is the only selected gene, clicking it will show all genes
+                for gene in self.genes:
+                    gene.active = gene.name in self.legend["gene_names"]
+            elif clicked_gene_active and num_active_genes > 1:
+                print("Left click on one of many active genes")
+                # If single-clicking on an active gene, it will remove that gene
+                self.genes[clicked_gene_notebook_index].active = False
+            else:
+                print("Left click on inactive gene")
+                # If single-clicking on an inactive gene, it will add that gene
+                self.genes[clicked_gene_notebook_index].active = True
+        # right click will either show only that gene (if it is not already the only gene shown) or show all genes
         elif event.button.name == "RIGHT":
-            # If right-clicking on a gene, it will select only that gene
-            # self.active_genes = np.array([clicked_gene_number])
-            for gene in self.genes:
-                gene.active = gene.notebook_index == clicked_gene_number
-        elif is_gene_active:
-            # If single-clicking on an active gene, it will remove that gene
-            self.genes[clicked_gene_number].active = False
-        else:
-            # If single-clicking on an inactive gene, it will add that gene
-            self.genes[clicked_gene_number].active = True
+            if clicked_gene_active and num_active_genes == 1:
+                # If right-clicking on only active gene, it will show all genes
+                for gene in self.genes:
+                    gene.active = gene.name in self.legend["gene_names"]
+            else:
+                # if right-clicking in any other case, it will only show that gene
+                for gene in self.genes:
+                    gene.active = gene.notebook_index == clicked_gene_notebook_index
+
+        # update the lists of active genes and their indices
+        active_gene_notebook_indices = np.array([g.notebook_index for g in self.genes if g.active])
+        active_gene_names = [self.genes[i].name for i in active_gene_notebook_indices]
+        active_gene_legend_indices = np.where(np.isin(self.legend["gene_names"], active_gene_names))[0]
 
         # Update the legend formatting to reflect the changes
-        active_genes = np.array([g.notebook_index for g in self.genes if g.active])
-        for gene_number in range(len(self.genes)):
-            gene_index = np.where(self.legend["gene_no"] == gene_number)[0][0]
-            alpha_value = 1 if np.isin(gene_number, active_genes) else 0.5
-            self.legend["ax"].collections[gene_index].set_alpha(alpha_value)
-            self.legend["ax"].texts[gene_index].set_alpha(alpha_value)
+        for i, gene_name in enumerate(self.legend["gene_names"]):
+            alpha_value = 1 if np.isin(i, active_gene_legend_indices) else 0.5
+            self.legend["ax"].collections[i].set_alpha(alpha_value)
+            self.legend["ax"].texts[i].set_alpha(alpha_value)
 
         # Redraw the legend figure to apply the changes
         self.legend["fig"].draw()
-        self.update_genes()
+        self.update_genes_and_thresholds()
 
     def get_selected_spot_index(self):
         """
