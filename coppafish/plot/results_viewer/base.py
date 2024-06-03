@@ -332,12 +332,12 @@ class Viewer:
             if selectedData is not None:
                 n_selected = len(selectedData)
                 if n_selected == 1:
-                    napari_layer_index = list(selectedData)[0]
+                    selected_spot_index = list(selectedData)[0]
                     active_method_name = self.method["names"][self.method["active"]]
-                    spot_index = self.spots[active_method_name].notebook_index[napari_layer_index]
-                    spot_gene = self.spots[active_method_name].gene[napari_layer_index]
-                    tile = self.spots[active_method_name].tile[napari_layer_index]
-                    score = self.spots[active_method_name].score[napari_layer_index]
+                    spot_index = self.spots[active_method_name].notebook_index[selected_spot_index]
+                    spot_gene = self.spots[active_method_name].gene[selected_spot_index]
+                    score = self.spots[active_method_name].score[selected_spot_index]
+                    tile = self.spots[active_method_name].tile[selected_spot_index]
                     self.viewer.status = (
                         f"Spot {spot_index}, Gene {spot_gene}, Score {score:.2f}, " f"Tile {tile} selected"
                     )
