@@ -1,15 +1,14 @@
-import os
-import zarr
-import tqdm
-import torch
-import scipy
-import numpy as np
-import math as maths
-from typing_extensions import assert_type
 from concurrent.futures import ProcessPoolExecutor
-import numpy.typing as npt
+import math as maths
 
-from .. import utils, log
+import numpy as np
+import numpy.typing as npt
+import scipy
+import torch
+import tqdm
+from typing_extensions import assert_type
+
+from .. import log, utils
 from ..register import preprocessing
 from ..setup import NotebookPage
 
@@ -26,6 +25,15 @@ def load_spot_colours(
     """
     Load the full registered image for every sequencing round/channel for the given tile. No post-processing is
     applied, including tile_pixel_value_shift subtraction, background subtraction, and colour normalisation.
+
+    Args:
+        - nbp_basic (NotebookPage): `basic_info` notebook page.
+        - nbp_file (NotebookPage): `file_names` notebook page.
+        - nbp_extract (NotebookPage): `extract` notebook page.
+        - nbp_register (NotebookPage): `register` notebook page.
+        - nbp_register_debug (NotebookPage): `register_debug` notebook page.
+        - tile (int): tile index.
+        - dtype (numpy dtype): datatype to return images. Default: uint16.
 
     Returns:
         (`(im_y x im_x x im_z x n_rounds_use x n_channels_use) ndarray`) spot_colours: tile loaded spot colours.

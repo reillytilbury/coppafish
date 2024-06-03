@@ -20,8 +20,7 @@ from .. import call_spots as call_spots_plot
 from ...setup import Notebook
 from ..call_spots import gene_counts, view_bled_codes, view_bleed_matrix, view_codes, view_intensity, view_spot
 from ..call_spots_new import BGNormViewer, GEViewer, ViewAllGeneScores
-from ..omp import histogram_score, view_omp
-from ..omp.coefs import view_score
+from ..omp import histogram_score, View_OMP_Coefficients
 from .hotkeys import KeyBinds, ViewHotkeys
 
 try:
@@ -318,7 +317,7 @@ class Viewer:
         # we will change the z-coordinates of the spots to the current z-plane if they are within the z-thickness
         # of the current z-plane.
         current_z = self.viewer.dims.current_step[0]
-        for i, m in enumerate(self.method["names"]):
+        for _, m in enumerate(self.method["names"]):
             z_coords = self.spots[m].location[:, 0].copy()
             in_range = np.abs(z_coords - current_z) <= z_thick / 2
             z_coords[in_range] = current_z
@@ -795,11 +794,11 @@ class Viewer:
             if spot_index is not None:
                 view_spot(self.nb, spot_index, self.method["names"][self.method["active"]])
 
-        @self.viewer.bind_key(KeyBinds.view_spot_colours_and_weights)
-        def call_to_view_omp_score(viewer):
-            spot_index = self.get_selected_spot_index()
-            if spot_index is not None:
-                view_score(self.nb, spot_index, self.method["names"][self.method["active"]])
+        # @self.viewer.bind_key(KeyBinds.view_spot_colours_and_weights)
+        # def call_to_view_omp_score(viewer):
+        #     spot_index = self.get_selected_spot_index()
+        #     if spot_index is not None:
+        #         view_score(self.nb, spot_index, self.method["names"][self.method["active"]])
 
         @self.viewer.bind_key(KeyBinds.view_intensity_from_colour)
         def call_to_view_omp_score(viewer):
@@ -811,20 +810,7 @@ class Viewer:
         def call_to_view_omp(viewer):
             spot_index = self.get_selected_spot_index()
             if spot_index is not None:
-                view_omp(self.nb, spot_index, self.method["names"][self.method["active"]])
-
-        # @self.viewer.bind_key(KeyBinds.view_omp_fit)
-        # def call_to_view_omp(viewer):
-        #     spot_index = self.get_selected_spot_index()
-        #     if spot_index is not None:
-        #         view_omp_fit(self.nb, spot_index, self.method["names"][self.method["active"]])
-
-        # TODO: Remove or refactor this as this as we don't have a score multiplier for omp
-        # @self.viewer.bind_key(KeyBinds.view_omp_score)
-        # def call_to_view_omp_score(viewer):
-        #     spot_index = self.get_selected_spot_index()
-        #     if spot_index is not None:
-        #         view_omp_score(self.nb, spot_index, self.method_buttons.method, self.omp_score_multiplier_slider.value())
+                View_OMP_Coefficients(self.nb, spot_index, self.method["names"][self.method["active"]])
 
 
 class Method(QMainWindow):

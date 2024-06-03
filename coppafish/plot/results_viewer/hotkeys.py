@@ -20,8 +20,6 @@ class KeyBinds:
     view_spot_colours_and_weights = "d"
     view_intensity_from_colour = "Shift-i"
     view_omp_coefficients = "o"
-    view_omp_fit = "Shift-o"
-    view_omp_score = "Shift-s"
 
 
 class ViewHotkeys:

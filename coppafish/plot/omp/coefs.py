@@ -1,209 +1,120 @@
-from ..call_spots.spot_colors import ColorPlotBase
-from ..call_spots.dot_product import view_score
-from ..call_spots.background import view_background
-from ...spot_colors.base import get_spot_colors
-from ...call_spots import omp_spot_score, get_spot_intensity
-from ...setup import Notebook
+import itertools
+import os
+from typing import Tuple
+
 import matplotlib.pyplot as plt
 import numpy as np
-from typing import Optional, List, Tuple
+import torch
 
-plt.style.use("dark_background")
-
-
-def get_coef_images(
-    nb: Notebook, spot_no: int, method, im_size: List[int]
-) -> Tuple[np.ndarray, List[float], List[float]]:
-    """
-    Gets image of $yxz$ dimension `(2*im_size[0]+1) x (2*im_size[1]+1) x (2*im_size[2]+1)` of the coefficients
-    fitted by omp for each gene.
-
-    Args:
-        nb: *Notebook* containing experiment details. Must have run at least as far as `call_reference_spots`.
-        spot_no: Spot of interest to get gene coefficient images for.
-        method: `'anchor'` or `'omp'`.
-            Which method of gene assignment used i.e. `spot_no` belongs to `ref_spots` or `omp` page of Notebook.
-        im_size: $yxz$ radius of image to get for each gene.
-
-    Returns:
-        `coef_images` - `float16 [n_genes x (2*im_size[0]+1) x (2*im_size[1]+1) x (2*im_size[2]+1)]`.
-            Image for each gene, axis order is $gyxz$.
-            `coef_images[g, 0, 0, 0]` refers to coefficient of gene g at `global_yxz = min_global_yxz`.
-            `coef_images[g, -1, -1, -1]` refers to coefficient of gene g at `global_yxz = max_global_yxz`.
-        `min_global_yxz` - `float [3]`. Min $yxz$ coordinates of image in global coordinates.
-        `max_global_yxz` - `float [3]`. Max $yxz$ coordinates of image in global coordinates.
-    """
-
-    if method.lower() == "omp":
-        page_name = "omp"
-    else:
-        page_name = "ref_spots"
-    t = nb.__getattribute__(page_name).tile[spot_no]
-    color_norm = nb.call_spots.color_norm_factor[t][np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)]
-    spot_yxz = nb.__getattribute__(page_name).local_yxz[spot_no]
-
-    # Subtlety here, may have y-axis flipped, but I think it is correct:
-    # note im_yxz[1] refers to point at max_y, min_x+1, z. So when reshape and set plot_extent, should be correct.
-    # I.e. im = np.zeros(49); im[1] = 1; im = im.reshape(7,7); plt.imshow(im, extent=[-0.5, 6.5, -0.5, 6.5])
-    # will show the value 1 at max_y, min_x+1.
-    im_yxz = np.array(
-        np.meshgrid(
-            np.arange(spot_yxz[0] - im_size[0], spot_yxz[0] + im_size[0] + 1)[::-1],
-            np.arange(spot_yxz[1] - im_size[1], spot_yxz[1] + im_size[1] + 1),
-            spot_yxz[2],
-        ),
-        dtype=np.int16,
-    ).T.reshape(-1, 3)
-    z = np.arange(-im_size[2], im_size[2] + 1)
-    im_yxz = np.vstack([im_yxz + [0, 0, val] for val in z])
-    im_diameter_yx = [2 * im_size[0] + 1, 2 * im_size[1] + 1]
-    spot_colors = (
-        get_spot_colors(
-            im_yxz,
-            t,
-            nb.register.transform,
-            nb.file_names,
-            nb.basic_info,
-            nb.extract,
-            nb.filter,
-            nb.register,
-        )[0]
-        / color_norm
-    )
-
-    # Only look at pixels with high enough intensity - same as in full pipeline
-    spot_intensity = get_spot_intensity(np.abs(spot_colors))
-    config = nb.get_config()["omp"]
-    initial_intensity_thresh = 0
-
-    keep = spot_intensity > initial_intensity_thresh
-    bled_codes = nb.call_spots.bled_codes_ge
-    n_genes = bled_codes.shape[0]
-    bled_codes = np.asarray(
-        bled_codes[np.ix_(np.arange(n_genes), nb.basic_info.use_rounds, nb.basic_info.use_channels)]
-    )
-
-    dp_thresh = config["dp_thresh"]
-    if method.lower() == "omp":
-        alpha = config["alpha"]
-        beta = config["beta"]
-    else:
-        config_call_spots = nb.get_config()["call_spots"]
-        alpha = config_call_spots["alpha"]
-        beta = config_call_spots["beta"]
-    max_genes = config["max_genes"]
-    weight_coef_fit = config["weight_coef_fit"]
-
-    all_coefs = None
-    # FIXME: Does not work after the OMP refactor.
-    # all_coefs = np.zeros((spot_colors.shape[0], n_genes + nb.basic_info.n_channels))
-    # (
-    #     all_coefs[np.ix_(keep, np.arange(n_genes))],
-    #     all_coefs[np.ix_(keep, np.array(nb.basic_info.use_channels) + n_genes)],
-    # ) = get_all_coefs(spot_colors[keep], bled_codes, 0, 0, 0, alpha, beta, max_genes, weight_coef_fit)
-
-    n_genes = all_coefs.shape[1]
-    nz = len(z)
-    coef_images = np.zeros((n_genes, len(z), im_diameter_yx[0], im_diameter_yx[1]))
-    for g in range(n_genes):
-        ind = 0
-        for z in range(nz):
-            coef_images[g, z] = all_coefs[ind : ind + np.prod(im_diameter_yx), g].reshape(
-                im_diameter_yx[0], im_diameter_yx[1]
-            )
-            ind += np.prod(im_diameter_yx)
-    coef_images = np.moveaxis(coef_images, 1, -1)  # move z index to end
-    min_global_yxz = im_yxz.min(axis=0) + nb.stitch.tile_origin[t]
-    max_global_yxz = im_yxz.max(axis=0) + nb.stitch.tile_origin[t]
-    return coef_images.astype(np.float16), min_global_yxz, max_global_yxz
+from ... import register
+from ...call_spots import background_pytorch
+from ...omp import coefs_torch
+from ...setup import Notebook
 
 
-class view_omp(ColorPlotBase):
-    def __init__(self, nb: Notebook, spot_no: int, method: str = "omp", im_size: int = 8):
+class View_OMP_Coefficients:
+    def __init__(
+        self, nb: Notebook, spot_no: int, method: str, im_size: int = 8, z_planes: Tuple[int] = (-2, 0, 2)
+    ) -> None:
         """
-        Diagnostic to show omp coefficients of all genes in neighbourhood of spot.
-        Only genes for which a significant number of pixels are non-zero will be plotted.
-
-        !!! warning "Requires access to `nb.file_names.tile_dir`"
+        Display omp coefficients of all genes in neighbourhood of spot in three z planes.
 
         Args:
-            nb: Notebook containing experiment details. Must have run at least as far as `call_reference_spots`.
-            spot_no: Spot of interest to be plotted.
-            method: `'anchor'` or `'omp'`.
-                Which method of gene assignment used i.e. `spot_no` belongs to `ref_spots` or `omp` page of Notebook.
-            im_size: Radius of image to be plotted for each gene.
+            nb (Notebook): Notebook containing experiment details.
+            spot_no (int): Spot index to be plotted.
+            method (str): gene calling method.
+            im_size (int): number of pixels out from the central pixel to plot to create the square images.
+            z_planes (tuple of int): z planes to show. 0 is the central z plane.
         """
-        coef_images, min_global_yxz, max_global_yxz = get_coef_images(nb, spot_no, method, [im_size, im_size, 0])
+        assert type(nb) is Notebook
+        assert type(spot_no) is int
+        assert type(method) is str
+        assert type(im_size) is int
+        assert im_size >= 0
+        assert type(z_planes) is tuple
+        assert len(z_planes) > 0
+        tile_dir = nb.file_names.tile_dir
+        assert os.path.isdir(tile_dir), f"Viewing coefficients requires access to images expected at {tile_dir}"
 
-        if method.lower() == "omp":
-            page_name = "omp"
-            config = nb.get_config()["thresholds"]
-            spot_score = omp_spot_score(nb.omp, spot_no)
+        plt.style.use("dark_background")
+        local_yxz: np.ndarray = None
+        tile: int = None
+        if method in ("anchor", "prob"):
+            local_yxz = nb.ref_spots.local_yxz[spot_no]
+            tile = nb.ref_spots.tile[spot_no]
+        elif method == "omp":
+            local_yxz = nb.omp.local_yxz[spot_no]
+            tile = nb.omp.tile[spot_no]
         else:
-            page_name = "ref_spots"
-            spot_score = nb.ref_spots.scores[spot_no]
-        gene_no = nb.__getattribute__(page_name).gene_no[spot_no]
-        t = nb.__getattribute__(page_name).tile[spot_no]
-        spot_yxz = nb.__getattribute__(page_name).local_yxz[spot_no]
-        gene_name = nb.call_spots.gene_names[gene_no]
-        all_gene_names = list(nb.call_spots.gene_names) + [f"BG{i}" for i in range(nb.basic_info.n_channels)]
-        spot_yxz_global = spot_yxz + nb.stitch.tile_origin[t]
-        n_genes = nb.call_spots.bled_codes_ge.shape[0]
+            raise ValueError(f"Unknown gene calling method: {method}")
+        assert local_yxz.shape == (3,)
 
-        n_nonzero_pixels_thresh = np.min([im_size, 5])  # If 5 pixels non-zero, plot that gene
-        plot_genes = np.where(np.sum(coef_images != 0, axis=(1, 2, 3)) > n_nonzero_pixels_thresh)[0]
-        coef_images = coef_images[plot_genes, :, :, 0]
-        n_plot = len(plot_genes)
-        # at most n_max_rows rows
-        if n_plot <= 16:
-            n_max_rows = 4
-        else:
-            n_max_rows = int(np.ceil(np.sqrt(n_plot)))
-        n_cols = int(np.ceil(n_plot / n_max_rows))
-        subplot_row_columns = [int(np.ceil(n_plot / n_cols)), n_cols]
-        fig_size = np.clip([n_cols + 5, subplot_row_columns[0] + 4], 3, 12)
-        subplot_adjust = [0.05, 0.775, 0.05, 0.91]
-        super().__init__(
-            coef_images,
-            None,
-            subplot_row_columns,
-            subplot_adjust=subplot_adjust,
-            fig_size=fig_size,
-            cbar_pos=[0.9, 0.05, 0.03, 0.86],
-            slider_pos=[0.85, 0.05, 0.01, 0.86],
-        )
-        # set x, y coordinates to be those of the global coordinate system
-        plot_extent = [
-            min_global_yxz[1] - 0.5,
-            max_global_yxz[1] + 0.5,
-            min_global_yxz[0] - 0.5,
-            max_global_yxz[0] + 0.5,
-        ]
-        for i in range(self.n_images):
-            # Add cross-hair
-            self.ax[i].axes.plot(
-                [spot_yxz_global[1], spot_yxz_global[1]], [plot_extent[2], plot_extent[3]], "k", linestyle=":", lw=1
+        config = nb.init_config["omp"]
+
+        coord_min = local_yxz - im_size
+        coord_min[2] = local_yxz[2] + min(z_planes)
+        coord_max = local_yxz + im_size + 1
+        coord_max[2] = local_yxz[2] + max(z_planes)
+        yxz = []
+        for i in range(3):
+            yxz.append([coord_min[i], coord_max[i]])
+
+        spot_shape = tuple([coord_max[i] - coord_min[i] for i in range(3)])
+        n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
+        image_colours = np.zeros(spot_shape + (n_rounds_use, n_channels_use), dtype=np.float32)
+        for r, c in itertools.product(nb.basic_info.use_rounds, nb.basic_info.use_channels):
+            image_colours[:, :, :, r, c] = register.preprocessing.load_transformed_image(
+                nb.basic_info,
+                nb.file_names,
+                nb.extract,
+                nb.register,
+                nb.register_debug,
+                tile,
+                r,
+                c,
+                yxz,
+                reg_type="flow_icp",
             )
-            self.ax[i].axes.plot(
-                [plot_extent[0], plot_extent[1]], [spot_yxz_global[0], spot_yxz_global[0]], "k", linestyle=":", lw=1
-            )
-            self.im[i].set_extent(plot_extent)
-            self.ax[i].tick_params(labelbottom=False, labelleft=False)
-            # Add title
-            title_text = f"{plot_genes[i]}: {all_gene_names[plot_genes[i]]}"
-            if plot_genes[i] >= n_genes:
-                text_color = (0.7, 0.7, 0.7)  # If background, make grey
-                title_text = all_gene_names[plot_genes[i]]
-            elif plot_genes[i] == gene_no:
-                text_color = "g"
-            else:
-                text_color = "w"  # TODO: maybe make color same as used in plot for each gene
-            self.ax[i].set_title(title_text, color=text_color)
-        plt.subplots_adjust(hspace=0.32)
-        plt.suptitle(
-            f"OMP gene coefficients for spot {spot_no} (match" f" {str(np.around(spot_score, 2))} to {gene_name})",
-            x=(subplot_adjust[0] + subplot_adjust[1]) / 2,
-            size=13,
+        image_colours = torch.asarray(image_colours, dtype=torch.float32)
+        bled_codes_ge = nb.call_spots.bled_codes_ge
+        n_genes = bled_codes_ge.shape[0]
+        bled_codes_ge = bled_codes_ge[np.ix_(range(n_genes), nb.basic_info.use_rounds, nb.basic_info.use_channels)]
+        bled_codes_ge = torch.asarray(bled_codes_ge.astype(np.float32))
+
+        image_colours = image_colours.reshape((-1, n_rounds_use, n_channels_use))
+        bled_codes_ge = bled_codes_ge.reshape((n_genes, n_rounds_use * n_channels_use))
+
+        image_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(image_colours)
+        bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
+
+        coefficient_image = coefs_torch.compute_omp_coefficients(
+            image_colours,
+            bled_codes_ge,
+            maximum_iterations=config["max_genes"],
+            background_coefficients=bg_coefficients,
+            background_codes=bg_codes,
+            dot_product_threshold=config["dp_thresh"],
+            dot_product_norm_shift=0.0,
+            weight_coefficient_fit=config["weight_coef_fit"],
+            alpha=config["alpha"],
+            beta=config["beta"],
+            do_not_compute_on=None,
+            force_cpu=config["force_cpu"],
         )
-        self.change_norm()
+        # Of shape (n_genes, n_pixels)
+        coefficient_image: np.ndarray = coefficient_image.toarray()
+        coefficient_image = coefficient_image.reshape((-1, spot_shape))
+        mid_z = spot_shape[2] // 2
+
+        fig, axes = plt.subplots(nrows=1, ncols=len(z_planes), squeeze=False)
+        for i, z_plane in enumerate(z_planes):
+            ax: plt.Axes = axes[0, i]
+            ax.imshow(coefficient_image[0, :, :, mid_z + z_plane])
+            ax_title = "Central plane"
+            if z_plane < 0:
+                ax_title = f"- {abs(z_plane)}"
+            if z_plane > 0:
+                ax_title = f"+ {abs(z_plane)}"
+            ax.set_title(ax_title)
+        fig.tight_layout()
         plt.show()

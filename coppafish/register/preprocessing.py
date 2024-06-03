@@ -1,7 +1,7 @@
 from itertools import product
 import os
 import pickle
-from typing import Union
+from typing import Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -12,7 +12,7 @@ from skimage.transform import warp
 from tqdm import tqdm
 import zarr
 
-from ..setup import Notebook, NotebookPage
+from ..setup import NotebookPage
 from ..utils import tiles_io
 
 
@@ -593,11 +593,12 @@ def load_transformed_image(
     t: int,
     r: int,
     c: int,
-    yxz: Union[list, None] = None,
+    yxz: Optional[list] = None,
     reg_type: str = "none",
 ) -> np.ndarray:
     """
     Load the image from tile t, round r, channel c, apply the relevant registration and return the image.
+
     Args:
         nbp_basic_info (NotebookPage)
         nbp_file_names (NotebookPage)
