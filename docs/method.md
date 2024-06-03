@@ -8,10 +8,10 @@ pipeline runs in.
 
 Save all raw data again at the `tile_dir` in the `extract` config section. Coppafish does this for:
 
-* file compression support.
-* saving raw data in a universal format that can then be used by multiple versions of our software.
-* optimised data retrieval speeds. The default file type is using [zarr](https://zarr.readthedocs.io/) arrays, but we
-also support saving as uncompressed numpy arrays by setting `file_type` to `.npy` in the extract config section.
+* file compression.
+* saving raw data in a consistent format.
+* faster data retrieval. The default file type is using [zarr](https://zarr.readthedocs.io/) arrays, but coppafish also
+supports saving as uncompressed numpy arrays by setting `file_type` to `.npy` in the extract config section.
 
 Extract also saves metadata inside of the `tile_dir` directory if the raw files are ND2 format.
 
@@ -22,20 +22,10 @@ $\textsf{n_pixels}$ is the total number of pixels in your dataset[^1].
 ## Filter
 
 All images are filtered to help minimise scattering of light (bright points will appear as cones initially, hence the
-name "Point Spread Function") and emphasis spots. The parts to this are:
-
-* calculating a Point Spread Function (PSF) using “good” spot shapes which is used to apply a
-<a href="https://en.wikipedia.org/wiki/Wiener_deconvolution" target="_blank">Wiener filtering</a> on every image if
-`deconvolve` in the `filter` config is set to true (default). This is to reduce image blur caused by light scattering.
-* applying a smoothing kernel (this is just an un-weighted average) to every image by setting `r_smooth` in the
-`filter` config section. By default, this is not applied.
-* a difference of two <a href=https://en.wikipedia.org/wiki/Hann_function target="_blank">Hannings</a> 2D kernel is
-applied to every image that is not a DAPI. By default, this is not applied. If it is a DAPI, instead apply a 2D top hat
-filter (which is just a 2D top hat kernel) of size `r_dapi` if it is set manually to a number in the config. By
-default, this is not applied.
+name "Point Spread Function") and emphasise spots. A given point spread function is used to Wiener deconvolve the 
+images.
 
 After filtering is applied, the images are scaled by a computed scale factor and then saved in `uint16` format again.
-By default, only the Wiener deconvolve is applied as this is expected to be near optimal.
 
 Filter takes $\textsf{n_pixels}\times4\times10^{-8}$ minutes.
 
