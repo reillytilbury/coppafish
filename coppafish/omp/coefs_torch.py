@@ -2,7 +2,6 @@ import torch
 import scipy
 import math as maths
 import numpy as np
-from typing_extensions import assert_type
 from typing import Tuple, Optional, List
 
 from .. import utils
@@ -10,6 +9,31 @@ from ..call_spots import dot_product_pytorch
 
 
 NO_GENE_SELECTION = -32768
+
+
+def non_linear_function_coefficients(coefficients: torch.Tensor, a: float) -> torch.Tensor:
+    """
+    Non-linear function element-wise coefficients using the following function:
+
+    x / (x + a) for x > 0.
+    0 for x <= 0.
+
+    Args:
+        - coefficients (`(im_y x im_x x im_z) tensor`): OMP coefficient image.
+        - a (float): a constant.
+
+    Returns:
+        (`(im_y x im_x x im_z) tensor`) function_coefficients: functioned coefficients.
+    """
+    assert type(coefficients) is torch.Tensor
+    assert type(a) is float
+    assert coefficients.ndim == 3
+
+    result = coefficients.detach().clone()
+    positives = coefficients > 0
+    result[~positives] = 0
+    result[positives] /= result[positives] + a
+    return result
 
 
 def compute_omp_coefficients(
@@ -52,21 +76,20 @@ def compute_omp_coefficients(
     Returns:
         - (`(n_pixels x n_genes) sparse csr_matrix`) pixel_coefficients: OMP
             coefficients for every pixel. Since most coefficients are zero, the results are stored as a sparse matrix.
-            Flattening the image dimensions is done using numpy's reshape method for consistency.
+            Flattening the image dimensions is done using pytorch's reshape method for consistency.
 
     Notes:
         - A csr matrix is fast at row slicing, which is why we use it. I.e. it is fast at pixel_coefficients[:, [g]]
             for a gene g.
     """
-    assert_type(pixel_colours, torch.Tensor)
-    assert_type(bled_codes, torch.Tensor)
-    assert_type(background_coefficients, torch.Tensor)
-    assert_type(background_codes, torch.Tensor)
-    assert_type(weight_coefficient_fit, bool)
-    assert_type(do_not_compute_on, torch.Tensor)
-
-    assert pixel_colours.ndim == 2
-    assert bled_codes.ndim == 2
+    assert type(pixel_colours) is torch.Tensor
+    assert type(bled_codes) is torch.Tensor
+    assert type(background_coefficients) is torch.Tensor
+    assert type(background_codes) is torch.Tensor
+    assert type(weight_coefficient_fit) is bool
+    assert do_not_compute_on is None or type(do_not_compute_on) is torch.Tensor
+    assert pixel_colours.dim() == 2
+    assert bled_codes.dim() == 2
     assert maximum_iterations >= 1
     assert background_coefficients.ndim == 2
     assert background_codes.ndim == 2
@@ -197,14 +220,13 @@ def get_next_best_gene(
         - (`(n_pixels x (n_rounds * n_channels)) tensor`) inverse_variance: the reciprocal of the variance
             for each round/channel based on the genes fit to the pixel.
     """
-    assert_type(consider_pixels, torch.Tensor)
-    assert_type(residual_pixel_colours, torch.Tensor)
-    assert_type(all_bled_codes, torch.Tensor)
-    assert_type(coefficients, torch.Tensor)
-    assert_type(genes_added, torch.Tensor)
-    assert_type(background_genes, torch.Tensor)
-    assert_type(background_variance, torch.Tensor)
-
+    assert type(consider_pixels) is torch.Tensor
+    assert type(residual_pixel_colours) is torch.Tensor
+    assert type(all_bled_codes) is torch.Tensor
+    assert type(coefficients) is torch.Tensor
+    assert type(genes_added) is torch.Tensor
+    assert type(background_genes) is torch.Tensor
+    assert type(background_variance) is torch.Tensor
     assert consider_pixels.dim() == 1
     assert residual_pixel_colours.dim() == 2
     assert all_bled_codes.dim() == 2
@@ -302,12 +324,11 @@ def weight_selected_genes(
             bled codes with computed coefficients. Remains pixel colour for any pixel that is not computed on.
     """
     # This function used to be called fit_coefs and fit_coefs_weight
-    assert_type(consider_pixels, torch.Tensor)
-    assert_type(bled_codes, torch.Tensor)
-    assert_type(pixel_colours, torch.Tensor)
-    assert_type(genes, torch.Tensor)
-    assert_type(weight, torch.Tensor)
-
+    assert type(consider_pixels) is torch.Tensor
+    assert type(bled_codes) is torch.Tensor
+    assert type(pixel_colours) is torch.Tensor
+    assert type(genes) is torch.Tensor
+    assert weight is None or type(weight) is torch.Tensor
     assert consider_pixels.dim() == 1
     assert bled_codes.dim() == 2
     assert pixel_colours.dim() == 2
