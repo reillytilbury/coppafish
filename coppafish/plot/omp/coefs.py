@@ -1,42 +1,53 @@
-import itertools
 import os
 from typing import Tuple
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.widgets import CheckButtons, Slider
 import numpy as np
 import torch
 
 from ... import register
 from ...call_spots import background_pytorch
-from ...omp import coefs_torch
+from ...omp import coefs_torch, scores_torch, base
 from ...setup import Notebook
 
 
 class View_OMP_Coefficients:
     def __init__(
-        self, nb: Notebook, spot_no: int, method: str, im_size: int = 8, z_planes: Tuple[int] = (-2, 0, 2)
+        self,
+        nb: Notebook,
+        spot_no: int,
+        method: str,
+        im_size: int = 8,
+        z_planes: Tuple[int] = (-2, -1, 0, 1, 2),
+        init_select_gene: int = 0,
     ) -> None:
         """
         Display omp coefficients of all genes in neighbourhood of spot in three z planes.
 
         Args:
             nb (Notebook): Notebook containing experiment details.
-            spot_no (int): Spot index to be plotted.
+            spot_no (int-like or none): Spot index to be plotted.
             method (str): gene calling method.
             im_size (int): number of pixels out from the central pixel to plot to create the square images.
             z_planes (tuple of int): z planes to show. 0 is the central z plane.
+            init_select_gene (int): gene number to display initially.
         """
         assert type(nb) is Notebook
-        assert type(spot_no) is int
+        if spot_no is None:
+            return
+        assert type(int(spot_no)) is int
         assert type(method) is str
         assert type(im_size) is int
         assert im_size >= 0
         assert type(z_planes) is tuple
-        assert len(z_planes) > 0
+        assert len(z_planes) > 1
         tile_dir = nb.file_names.tile_dir
         assert os.path.isdir(tile_dir), f"Viewing coefficients requires access to images expected at {tile_dir}"
 
         plt.style.use("dark_background")
+
         local_yxz: np.ndarray = None
         tile: int = None
         if method in ("anchor", "prob"):
@@ -51,31 +62,35 @@ class View_OMP_Coefficients:
 
         config = nb.init_config["omp"]
 
-        coord_min = local_yxz - im_size
-        coord_min[2] = local_yxz[2] + min(z_planes)
-        coord_max = local_yxz + im_size + 1
-        coord_max[2] = local_yxz[2] + max(z_planes)
-        yxz = []
-        for i in range(3):
-            yxz.append([coord_min[i], coord_max[i]])
+        coord_min = (local_yxz - im_size).tolist()
+        coord_min[2] = local_yxz[2].item() + min(z_planes)
+        coord_max = (local_yxz + im_size + 1).tolist()
+        coord_max[2] = local_yxz[2].item() + max(z_planes) + 1
+        yxz = [np.arange(coord_min[i], coord_max[i]) for i in range(3)]
 
-        spot_shape = tuple([coord_max[i] - coord_min[i] for i in range(3)])
+        spot_shape_yxz = tuple([coord_max[i] - coord_min[i] for i in range(3)])
         n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
-        image_colours = np.zeros(spot_shape + (n_rounds_use, n_channels_use), dtype=np.float32)
-        for r, c in itertools.product(nb.basic_info.use_rounds, nb.basic_info.use_channels):
-            image_colours[:, :, :, r, c] = register.preprocessing.load_transformed_image(
-                nb.basic_info,
-                nb.file_names,
-                nb.extract,
-                nb.register,
-                nb.register_debug,
-                tile,
-                r,
-                c,
-                yxz,
-                reg_type="flow_icp",
-            )
+        image_colours = np.zeros(spot_shape_yxz + (n_rounds_use, n_channels_use), dtype=np.float32)
+        for i, r in enumerate(nb.basic_info.use_rounds):
+            for j, c in enumerate(nb.basic_info.use_channels):
+                image_colours[:, :, :, i, j] = register.preprocessing.load_transformed_image(
+                    nb.basic_info,
+                    nb.file_names,
+                    nb.extract,
+                    nb.register,
+                    nb.register_debug,
+                    tile,
+                    r,
+                    c,
+                    yxz,
+                    reg_type="flow_icp",
+                )
         image_colours = torch.asarray(image_colours, dtype=torch.float32)
+        colour_norm_factor = np.array(nb.call_spots.color_norm_factor, dtype=np.float32)
+        colour_norm_factor = colour_norm_factor[
+            np.ix_(range(colour_norm_factor.shape[0]), nb.basic_info.use_rounds, nb.basic_info.use_channels)
+        ]
+        colour_norm_factor = torch.asarray(colour_norm_factor).float()
         bled_codes_ge = nb.call_spots.bled_codes_ge
         n_genes = bled_codes_ge.shape[0]
         bled_codes_ge = bled_codes_ge[np.ix_(range(n_genes), nb.basic_info.use_rounds, nb.basic_info.use_channels)]
@@ -84,7 +99,9 @@ class View_OMP_Coefficients:
         image_colours = image_colours.reshape((-1, n_rounds_use, n_channels_use))
         bled_codes_ge = bled_codes_ge.reshape((n_genes, n_rounds_use * n_channels_use))
 
+        image_colours /= colour_norm_factor[[tile]]
         image_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(image_colours)
+        image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
         bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
 
         coefficient_image = coefs_torch.compute_omp_coefficients(
@@ -100,21 +117,108 @@ class View_OMP_Coefficients:
             beta=config["beta"],
             do_not_compute_on=None,
             force_cpu=config["force_cpu"],
+        ).toarray()
+        coefficient_image = torch.asarray(coefficient_image).T.reshape(
+            (len(nb.call_spots.gene_names),) + spot_shape_yxz
         )
-        # Of shape (n_genes, n_pixels)
-        coefficient_image: np.ndarray = coefficient_image.toarray()
-        coefficient_image = coefficient_image.reshape((-1, spot_shape))
-        mid_z = spot_shape[2] // 2
 
-        fig, axes = plt.subplots(nrows=1, ncols=len(z_planes), squeeze=False)
-        for i, z_plane in enumerate(z_planes):
-            ax: plt.Axes = axes[0, i]
-            ax.imshow(coefficient_image[0, :, :, mid_z + z_plane])
+        self.scores = []
+        for g in range(coefficient_image.shape[0]):
+            self.scores.append(
+                scores_torch.score_coefficient_image(
+                    coefficient_image[g],
+                    (torch.asarray(spot_shape_yxz) // 2)[np.newaxis],
+                    torch.asarray(nb.omp.spot),
+                    torch.asarray(nb.omp.mean_spot),
+                    config["high_coef_bias"],
+                ).item()
+            )
+        print(f"Expected score {nb.omp.scores[spot_no]}")
+        print(f"Got: {self.scores[nb.omp.gene_no[spot_no]]}")
+        print(f"Best scoring gene: {np.argmax(self.scores)}")
+
+        # Of shape (n_genes, n_pixels)
+        self.selected_gene = init_select_gene
+        self.gene_names = nb.call_spots.gene_names
+        self.z_planes = z_planes
+        self.coefficient_image = coefficient_image
+        self.mid_z = -min(self.z_planes)
+        self.function_coefficients = False
+        self.high_coef_bias = config["high_coef_bias"]
+        self.draw_canvas()
+        plt.show()
+
+    def draw_canvas(self) -> None:
+        self.fig, self.axes = plt.subplots(
+            nrows=2,
+            ncols=len(self.z_planes) + 1,
+            squeeze=False,
+            gridspec_kw={"width_ratios": [5] * len(self.z_planes) + [1] * 1, "height_ratios": [6, 1]},
+        )
+        self.fig.subplots_adjust(bottom=0.25)
+        ax_function_coefs = self.axes[1, 1]
+        # Keep widgets in self otherwise they will get garbage collected and not respond to clicks anymore.
+        self.function_coefs_button = CheckButtons(
+            ax_function_coefs, ["Non-linear function"], actives=[self.function_coefficients]
+        )
+        self.function_coefs_button.on_clicked(self.function_gene_coefficients_updated)
+        ax_slider: plt.Axes = self.axes[1, 0]
+        self.gene_slider = Slider(
+            ax_slider,
+            label="Gene",
+            valmin=0,
+            valmax=self.coefficient_image.shape[0] - 1,
+            valstep=1,
+            valinit=self.selected_gene,
+        )
+        self.gene_slider.active = True
+        self.gene_slider.on_changed(self.gene_selected_updated)
+        self.draw_gene()
+
+    def draw_gene(self) -> None:
+        for ax in self.axes[0]:
+            ax.clear()
+        for ax in self.axes[1]:
+            ax.set_xticks([], [])
+            ax.set_yticks([], [])
+        self.fig.suptitle(
+            f"Gene {self.selected_gene} {self.gene_names[self.selected_gene]} "
+            + f"Score: {round(self.scores[self.selected_gene], 3)}\nOMP Coefficients"
+        )
+        cmap = mpl.cm.viridis
+        if self.function_coefficients:
+            norm = mpl.colors.Normalize(vmin=0, vmax=1)
+        else:
+            abs_max = np.abs(self.coefficient_image).max()
+            norm = mpl.colors.Normalize(vmin=-abs_max, vmax=abs_max)
+        self.fig.colorbar(
+            mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
+            cax=self.axes[0, -1],
+            orientation="vertical",
+            label="",
+        )
+        for i, z_plane in enumerate(self.z_planes):
+            ax: plt.Axes = self.axes[0, i]
+            ax.clear()
+            ax_coefficients = self.coefficient_image.detach().clone()[self.selected_gene]
+            if self.function_coefficients:
+                ax_coefficients = coefs_torch.non_linear_function_coefficients(ax_coefficients, self.high_coef_bias)
+            ax_coefficients = ax_coefficients.numpy()
+            ax.imshow(ax_coefficients[:, :, self.mid_z + z_plane], cmap=cmap, norm=norm)
             ax_title = "Central plane"
             if z_plane < 0:
                 ax_title = f"- {abs(z_plane)}"
             if z_plane > 0:
                 ax_title = f"+ {abs(z_plane)}"
             ax.set_title(ax_title)
-        fig.tight_layout()
-        plt.show()
+        self.gene_slider.active = True
+        self.fig.tight_layout()
+        plt.draw()
+
+    def function_gene_coefficients_updated(self, _) -> None:
+        self.function_coefficients = self.function_coefs_button.get_status()[0]
+        self.draw_gene()
+
+    def gene_selected_updated(self, _) -> None:
+        self.selected_gene = int(self.gene_slider.val)
+        self.draw_gene()

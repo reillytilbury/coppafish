@@ -766,7 +766,7 @@ class Viewer:
 
         @self.viewer.bind_key(KeyBinds.view_gene_efficiency)
         def call_to_view_gene_efficiency(viewer):
-            GEViewer(self.nb)
+            self.open_plot = GEViewer(self.nb)
 
         @self.viewer.bind_key(KeyBinds.view_gene_counts)
         def call_to_gene_counts(viewer):
@@ -810,7 +810,7 @@ class Viewer:
         def call_to_view_omp(viewer):
             spot_index = self.get_selected_spot_index()
             if spot_index is not None:
-                View_OMP_Coefficients(self.nb, spot_index, self.method["names"][self.method["active"]])
+                self.open_plot = View_OMP_Coefficients(self.nb, spot_index, self.method["names"][self.method["active"]])
 
 
 class Method(QMainWindow):
