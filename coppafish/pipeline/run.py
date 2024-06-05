@@ -252,8 +252,7 @@ def run_reference_spots(nb: Notebook) -> None:
             nb.find_spots,
             nb.extract,
             nb.register,
-            nb.stitch.tile_origin,
-            nb.register.icp_correction,
+            nb.stitch,
         )
         config = setup.config.get_config(nb.config_path)
         nbp_call_spots, nbp_ref_spots = call_reference_spots.call_reference_spots(

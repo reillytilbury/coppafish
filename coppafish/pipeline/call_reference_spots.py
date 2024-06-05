@@ -3,7 +3,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from scipy.sparse.linalg import svds
-from coppafish.call_spots.dot_product import gene_prob_score, dot_product_score
+from .. import log
+from ..setup import NotebookPage
+from ..call_spots import dot_product_score, gene_prob_score
+
 
 target_values = [1, 1, 0.9, 0.7, 0.8, 1, 1]
 d_max = [0, 1, 3, 2, 4, 5, 6]
@@ -274,22 +277,29 @@ def view_homogeneous_scale_regression(homogeneous_scale: np.ndarray, gene_codes:
     plt.show()
 
 
-def call_spots(spot_colours: np.ndarray, spot_tile: np.ndarray,
-               gene_codes: np.ndarray, gene_names: np.ndarray) -> np.ndarray:
+def call_spots(nbp_ref_spots: NotebookPage, nbp_basic: NotebookPage, nbp_file: NotebookPage,
+               nbp_extract: NotebookPage) -> NotebookPage:
     """
     Function to do gene assignments to reference spots. In doing so we compute some important parameters for the
     downstream analysis.
+
     Args:
-        spot_colours: np.ndarray [n_spots x n_rounds x n_channels]
-            The spot colours for each spot in each round and channel.
-        spot_tile: np.ndarray [n_spots]
-            The tile number for each spot.
-        gene_codes: np.ndarray [n_genes x n_rounds]
-            The gene codes for each gene in each round.
-        gene_names: np.ndarray [n_genes]
+        nbp_ref_spots: NotebookPage
+            The reference spots notebook page. This will be altered in the process.
+        nbp_basic: NotebookPage
+            The basic info notebook page.
+        nbp_file: NotebookPage
+            The file names notebook page.
+        nbp_extract: NotebookPage
+            The extract notebook page.
+
     """
+    log.debug("Call spots started")
+    nbp = NotebookPage("call_spots")
+    nbp_ref_spots.finalized = False
+
     # convert spot colours to float
-    spot_colours = spot_colours.astype(float)
+    spot_colours = nbp_ref_spots.colours.astype(float)
 
     n_tiles, n_rounds, n_channels, n_dyes, n_spots, n_genes = 8, 7, 7, 7, len(spot_tile), len(gene_names)
     use_tiles, use_rounds, use_channels = [4, 5], np.arange(7), [5, 9, 14, 15, 18, 23, 27]

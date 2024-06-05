@@ -491,37 +491,42 @@ class NotebookPage:
                 + "`[s, r, c]` is the intensity of spot $s$ on round $r$, channel $c$."
                 + "`-tile_pixel_value_shift` if that round/channel not used otherwise integer.",
             ],
-            "gene_no": [
-                "ndarray[int16]",
-                "Numpy array [n_spots]. Gene number assigned to each spot. `None` if not assigned.",
-            ],
-            "scores": [
-                "ndarray[float]",
-                "Numpy float array [n_spots]. `score[s]' is the highest gene coef of spot s.",
-            ],
             "intensity": [
                 "ndarray[float]",
                 "Numpy float32 array [n_spots]. "
                 + "$\\chi_s = \\underset{r}{\\mathrm{median}}(\\max_c\\zeta_{s_{rc}})$"
                 + "where $\\pmb{\\zeta}_s=$ `colors[s, r]/color_norm_factor[r]`.",
             ],
-            "gene_probs": [
-                "ndarray[float]",
-                "Numpy float array [n_spots x n_genes]. Von-Mises probability that spot $s$ is gene $g$.",
+            "dot_product_gene_no": [
+                "ndarray[int16]",
+                "Numpy array [n_spots]. Gene number assigned to each spot. `None` if not assigned.",
             ],
-            "gene_probs_initial": [
+            "dot_product_gene_score": [
                 "ndarray[float]",
-                "Numpy float array [n_spots x n_genes]. Von-Mises probability that spot $s$ is gene $g$ before "
-                + "normalisation parameters are applied."
+                "Numpy float array [n_spots]. `score[s]' is the highest gene coef of spot s.",
             ],
+            "probability_gene_no": [
+                "ndarray[int16]",
+                "Numpy array [n_spots]. Gene number assigned to each spot by the probability method. "
+                "`None` if not assigned.",
+            ],
+            "probability_gene_score": [
+                "ndarray[float]",
+                "Numpy float array [n_spots]. Probability of gene assignment to probability_gene_no[s] for spot s.",
+            ],
+            "probability_gene_no_initial": [
+                "ndarray[int16]",
+                "Numpy array [n_spots]. Gene number assigned to each spot by the initial probability method. "
+                "`None` if not assigned.",
+            ],
+            "probability_gene_score_initial": [
+                "ndarray[float]",
+                "Numpy float array [n_spots]. Initial probability of gene assignment to "
+                "probability_gene_no_initial[s] for spot s.",
+            ],
+
         },
         "call_spots": {
-            "abs_intensity_percentile": [
-                "ndarray[float]",
-                "Numpy float array [100]]"
-                + "Percentile of `intensity` on the central z-plane of the central tile. This is used to determine "
-                  "which spots OMP should be run on.",
-            ],
             "gene_names": [
                 "ndarray[str]",
                 "Numpy string array [n_genes]"
@@ -598,6 +603,12 @@ class NotebookPage:
             ],
         },
         "omp": {
+            "abs_intensity_percentile": [
+                "ndarray[float]",
+                "Numpy float array [100]]"
+                + "Percentile of `intensity` on the central z-plane of the central tile. This is used to determine "
+                  "which spots OMP should be run on.",
+            ],
             "spot_tile": [
                 "int",
                 "`spot` was found from isolated spots detected on this tile.",

@@ -414,7 +414,6 @@ class view_spot(ColorPlotBase):
         spot_colors = get_spot_colors(
             yxz_base=im_yxz,
             t=t,
-            transform=nb.register.icp_correction,
             bg_scale=nb.filter.bg_scale,
             file_type=nb.extract.file_type,
             nbp_file=nb.file_names,

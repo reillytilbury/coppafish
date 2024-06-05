@@ -61,7 +61,6 @@ def get_coef_images(
         get_spot_colors(
             im_yxz,
             t,
-            nb.register.transform,
             nb.file_names,
             nb.basic_info,
             nb.extract,
