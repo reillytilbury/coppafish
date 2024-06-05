@@ -9,7 +9,7 @@ import torch
 
 from ... import register
 from ...call_spots import background_pytorch
-from ...omp import coefs_torch, scores_torch, base
+from ...omp import coefs_torch, scores_torch
 from ...setup import Notebook
 
 
