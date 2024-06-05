@@ -19,7 +19,7 @@ def test_score_coefficient_image() -> None:
     mean_spot[1, 2, 1] = 0.5
     spot[1, 3, 2] = 1
     mean_spot[1, 3, 2] = 0.9
-    high_bias = 2
+    high_bias = 2.0
 
     scores = scores_torch.score_coefficient_image(coefficient_image, points, spot, mean_spot, high_bias)
 
