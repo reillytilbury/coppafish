@@ -247,22 +247,19 @@ def run_reference_spots(nb: Notebook) -> None:
     """
     if not nb.has_page("ref_spots") or not nb.has_page("call_spots"):
         nbp_ref_spots = get_reference_spots.get_reference_spots(
-            nb.file_names,
-            nb.basic_info,
-            nb.find_spots,
-            nb.extract,
-            nb.register,
-            nb.stitch,
+            nbp_file=nb.file_names,
+            nbp_basic=nb.basic_info,
+            nbp_find_spots=nb.find_spots,
+            nbp_extract=nb.extract,
+            nbp_register=nb.register,
+            nbp_stitch=nb.stitch,
         )
         config = setup.config.get_config(nb.config_path)
         nbp_call_spots, nbp_ref_spots = call_reference_spots.call_reference_spots(
-            config["call_spots"],
-            nb.file_names,
-            nb.basic_info,
-            nbp_ref_spots,
-            nb.extract,
-            nb.register,
-            transform=nb.register.icp_correction,
+            config=config["call_spots"],
+            nbp_ref_spots=nbp_ref_spots,
+            nbp_file=nb.file_names,
+            nbp_basic=nb.basic_info,
         )
         nb += nbp_ref_spots
         nb += nbp_call_spots

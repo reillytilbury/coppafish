@@ -1,18 +1,12 @@
 import itertools
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 from scipy.sparse.linalg import svds
 from .. import log
 from ..setup import NotebookPage
 from ..call_spots import dot_product_score, gene_prob_score
-
-
-target_values = [1, 1, 0.9, 0.7, 0.8, 1, 1]
-d_max = [0, 1, 3, 2, 4, 5, 6]
-
-conc_param_parallel = .1 # it takes this many spots to scale the bled code for any round
-conc_param_perp = 40 # it takes this many spots to change the bled code in a round
 
 
 def bayes_mean(spot_colours: np.ndarray, prior_colours: np.ndarray, conc_param_parallel: float,
@@ -23,13 +17,13 @@ def bayes_mean(spot_colours: np.ndarray, prior_colours: np.ndarray, conc_param_p
     to prior_colours and conc_param_perp for the direction orthogonal to prior_colours.
 
     Args:
-        spot_colours: np.ndarray [n_spots x n_channels]
+        spot_colours: np.ndarray [n_spots x n_channels_use]
             The spot colours for each spot.
-        prior_colours: np.ndarray [n_channels]
+        prior_colours: np.ndarray [n_channels_use]
             The prior mean colours.
-        conc_param_parallel: np.ndarray [n_channels]
+        conc_param_parallel: np.ndarray [n_channels_use]
             The concentration parameter for the direction parallel to prior_colours.
-        conc_param_perp: np.ndarray [n_channels]
+        conc_param_perp: np.ndarray [n_channels_use]
             The concentration parameter for the direction orthogonal to prior_colours.
     """
     n_spots, data_sum = len(spot_colours), np.sum(spot_colours, axis=0)
@@ -49,7 +43,7 @@ def compute_bleed_matrix(spot_colours: np.ndarray, gene_no: np.ndarray, gene_cod
     """
     Function to compute the bleed matrix from the spot colours and the gene assignments.
     Args:
-        spot_colours: np.ndarray [n_spots x n_rounds x n_channels]
+        spot_colours: np.ndarray [n_spots x n_rounds x n_channels_use]
             The spot colours for each spot in each round and channel.
         gene_no: np.ndarray [n_spots]
             The gene assignment for each spot.
@@ -59,12 +53,12 @@ def compute_bleed_matrix(spot_colours: np.ndarray, gene_no: np.ndarray, gene_cod
             The number of dyes.
 
     Returns:
-        bleed_matrix: np.ndarray [n_dyes x n_channels]
+        bleed_matrix: np.ndarray [n_dyes x n_channels_use]
             The bleed matrix.
     """
     assert len(spot_colours) == len(gene_no), "Spot colours and gene_no must have the same length."
-    n_spots, n_rounds, n_channels = spot_colours.shape
-    bleed_matrix = np.zeros((n_dyes, n_channels))
+    n_spots, n_rounds, n_channels_use = spot_colours.shape
+    bleed_matrix = np.zeros((n_dyes, n_channels_use))
 
     # loop over all dyes, find the spots which are meant to be dye d in round r, and compute the SVD
     for d in range(n_dyes):
@@ -92,11 +86,11 @@ def view_free_and_target_bled_codes(free_bled_codes_tile_indep: np.ndarray,
     """
     Function to plot the free and target bleed codes for each gene.
     Args:
-        free_bled_codes_tile_indep: np.ndarray [n_genes x n_rounds x n_channels]
+        free_bled_codes_tile_indep: np.ndarray [n_genes x n_rounds x n_channels_use]
             The free bled codes.
-        target_bled_codes: np.ndarray [n_genes x n_rounds x n_channels]
+        target_bled_codes: np.ndarray [n_genes x n_rounds x n_channels_use]
             The target bled codes.
-        target_scale: np.ndarray [n_rounds x n_channels]
+        target_scale: np.ndarray [n_rounds x n_channels_use]
             The scale factor for each round and channel.
         gene_names: np.ndarray [n_genes]
             The gene names.
@@ -104,16 +98,16 @@ def view_free_and_target_bled_codes(free_bled_codes_tile_indep: np.ndarray,
             The number of spots for each gene.
     """
     n_columns = 9
-    n_genes, n_rounds, n_channels = free_bled_codes_tile_indep.shape
+    n_genes, n_rounds, n_channels_use = free_bled_codes_tile_indep.shape
     n_rows = n_genes // n_columns + 1
 
     fig, ax = plt.subplots(n_rows, n_columns, figsize=(25, 15))
-    codes = np.zeros((n_genes, n_rounds, 2 * n_channels + 1)) * np.nan
+    codes = np.zeros((n_genes, n_rounds, 2 * n_channels_use + 1)) * np.nan
     # fill in the codes
     for g in range(n_genes):
         for r in range(n_rounds):
-            codes[g, r, :n_channels] = free_bled_codes_tile_indep[g, r]
-            codes[g, r, -n_channels:] = target_bled_codes[g, r]
+            codes[g, r, :n_channels_use] = free_bled_codes_tile_indep[g, r]
+            codes[g, r, -n_channels_use:] = target_bled_codes[g, r]
     # fill in the image grid
     for g in range(n_genes):
         row, col = g // n_columns, g % n_columns
@@ -142,9 +136,9 @@ def view_tile_bled_codes(free_bled_codes: np.ndarray, free_bled_codes_tile_indep
     """
     Function to plot the free bled codes for each tile for a given gene.
     Args:
-        free_bled_codes: np.ndarray [n_genes x n_tiles x n_rounds x n_channels]
+        free_bled_codes: np.ndarray [n_genes x n_tiles x n_rounds x n_channels_use]
             The free bled codes.
-        free_bled_codes_tile_indep: np.ndarray [n_genes x n_rounds x n_channels]
+        free_bled_codes_tile_indep: np.ndarray [n_genes x n_rounds x n_channels_use]
             The tile independent free bled codes.
         gene_names: np.ndarray [n_genes]
             The gene names.
@@ -154,7 +148,7 @@ def view_tile_bled_codes(free_bled_codes: np.ndarray, free_bled_codes_tile_indep
             The gene to plot.
     """
     n_columns = 4
-    _, _, n_rounds, n_channels = free_bled_codes.shape
+    _, _, n_rounds, n_channels_use = free_bled_codes.shape
     n_tiles = len(use_tiles)
     n_rows = int(np.ceil(n_tiles / n_columns)) + 1
 
@@ -189,23 +183,23 @@ def view_target_scale_regression(target_scale: np.ndarray, gene_codes:np.ndarray
     """
     Plotter to show the regression of the target scale factor for each round and channel.
     Args:
-        target_scale: np.ndarray [n_rounds x n_channels]
+        target_scale: np.ndarray [n_rounds x n_channels_use]
             The target scale factor.
         gene_codes: np.ndarray [n_genes x n_rounds]
             gene_codes[g, r] is the expected dye for gene g in round r.
-        d_max: np.ndarray [n_channels]
+        d_max: np.ndarray [n_channels_use]
             d_max[c] is the dye with the highest expression in channel c.
         target_values: np.ndarray [n_dyes]
             target_values[d] is the target value for dye d in its brightest channel.
-        free_bled_codes_tile_indep: np.ndarray [n_genes x n_rounds x n_channels]
+        free_bled_codes_tile_indep: np.ndarray [n_genes x n_rounds x n_channels_use]
             The tile independent free bled codes.
         n_spots: np.ndarray [n_genes]
             The number of spots for each gene.
 
     """
-    n_genes, n_rounds, n_channels = free_bled_codes_tile_indep.shape
-    fig, ax = plt.subplots(n_rounds, n_channels, figsize=(25, 15))
-    for r, c in np.ndindex(n_rounds, n_channels):
+    n_genes, n_rounds, n_channels_use = free_bled_codes_tile_indep.shape
+    fig, ax = plt.subplots(n_rounds, n_channels_use, figsize=(25, 15))
+    for r, c in np.ndindex(n_rounds, n_channels_use):
         relevant_genes = np.where(gene_codes[:, r] == d_max[c])[0]
         n_spots_rc = n_spots[relevant_genes]
         x = free_bled_codes_tile_indep[relevant_genes, r, c]
@@ -235,23 +229,23 @@ def view_homogeneous_scale_regression(homogeneous_scale: np.ndarray, gene_codes:
     Plotter to show the regression of the homogeneous scale factor for tile t for all rounds and channels.
 
     Args:
-        homogeneous_scale: np.ndarray [n_tiles x n_rounds x n_channels]
+        homogeneous_scale: np.ndarray [n_tiles x n_rounds x n_channels_use]
             The homogeneous scale factor.
         gene_codes: np.ndarray [n_genes x n_rounds]
             gene_codes[g, r] is the expected dye for gene g in round r.
-        d_max: np.ndarray [n_channels]
+        d_max: np.ndarray [n_channels_use]
             d_max[c] is the dye with the highest expression in channel c.
-        target_bled_codes: np.ndarray [n_genes x n_rounds x n_channels]
+        target_bled_codes: np.ndarray [n_genes x n_rounds x n_channels_use]
             The target bled codes. target_bled_codes[g, r, c] = free_bled_codes_tile_indep[g, r, c] * target_scale[r, c]
-        free_bled_codes: np.ndarray [n_genes x n_tiles x n_rounds x n_channels]
+        free_bled_codes: np.ndarray [n_genes x n_tiles x n_rounds x n_channels_use]
             The free bled codes.
         n_spots: np.ndarray [n_genes]
             The number of spots for each gene.
 
     """
-    n_tiles, n_rounds, n_channels = homogeneous_scale.shape
-    fig, ax = plt.subplots(n_rounds, n_channels, figsize=(25, 15))
-    for r, c in np.ndindex(n_rounds, n_channels):
+    n_tiles, n_rounds, n_channels_use = homogeneous_scale.shape
+    fig, ax = plt.subplots(n_rounds, n_channels_use, figsize=(25, 15))
+    for r, c in np.ndindex(n_rounds, n_channels_use):
         relevant_genes = np.where(gene_codes[:, r] == d_max[c])[0]
         n_spots_rc = n_spots[relevant_genes]
         x = free_bled_codes[relevant_genes, t, r, c]
@@ -277,38 +271,58 @@ def view_homogeneous_scale_regression(homogeneous_scale: np.ndarray, gene_codes:
     plt.show()
 
 
-def call_spots(nbp_ref_spots: NotebookPage, nbp_basic: NotebookPage, nbp_file: NotebookPage,
-               nbp_extract: NotebookPage) -> NotebookPage:
+def call_reference_spots(config: dict,
+                         nbp_ref_spots: NotebookPage,
+                         nbp_file: NotebookPage,
+                         nbp_basic: NotebookPage) -> [NotebookPage, NotebookPage]:
     """
     Function to do gene assignments to reference spots. In doing so we compute some important parameters for the
     downstream analysis.
 
     Args:
+        config: dict
+            The configuration dictionary for the call spots page. Should contain the following keys:
+            - gene_prob_threshold: float
+                The threshold for the gene probability score.
+            - target_values: list (length n_dyes)
+                The target values for each dye.
+            - concentration_param_parallel: float
+                The concentration parameter for the parallel direction of the prior.
+            - concentration_param_perpendicular: float
+                The concentration parameter for the perpendicular direction of the prior.
         nbp_ref_spots: NotebookPage
             The reference spots notebook page. This will be altered in the process.
-        nbp_basic: NotebookPage
-            The basic info notebook page.
         nbp_file: NotebookPage
             The file names notebook page.
-        nbp_extract: NotebookPage
-            The extract notebook page.
+        nbp_basic: NotebookPage
+            The basic info notebook page.
 
+    Returns:
+        nbp: NotebookPage
+            The call spots notebook page.
+        nbp_ref_spots: NotebookPage
+            The reference spots notebook page.
     """
     log.debug("Call spots started")
     nbp = NotebookPage("call_spots")
-    nbp_ref_spots.finalized = False
 
-    # convert spot colours to float
+    # load in frequently used variables
     spot_colours = nbp_ref_spots.colours.astype(float)
+    spot_tile = nbp_ref_spots.spot_tile
 
-    n_tiles, n_rounds, n_channels, n_dyes, n_spots, n_genes = 8, 7, 7, 7, len(spot_tile), len(gene_names)
-    use_tiles, use_rounds, use_channels = [4, 5], np.arange(7), [5, 9, 14, 15, 18, 23, 27]
-    raw_bleed_dir = r"C:\Users\reill\PycharmProjects\coppafish\coppafish\setup\dye_info_raw.npy"
+    gene_names, gene_codes = np.genfromtxt(nbp_file.code_book, dtype=(str, str)).transpose()
+    gene_codes = np.array([[int(i) for i in gene_codes[j]] for j in range(len(gene_codes))])
+    n_tiles, n_rounds, n_channels_use = nbp_basic.n_tiles, nbp_basic.n_rounds, len(nbp_basic.use_channels)
+    n_dyes, n_spots, n_genes = len(nbp_basic.dye_names), len(spot_colours)
+    use_tiles, use_rounds, use_channels = nbp_basic.use_tiles, nbp_basic.use_rounds, nbp_basic.use_channels
+
+    setup_dir = os.getcwd().split('pipeline')[0] + 'setup'
+    raw_bleed_dir = os.path.join(setup_dir, 'dye_info_raw.npy')
     raw_bleed_matrix = np.load(raw_bleed_dir)[:, use_channels].astype(float)
     raw_bleed_matrix = raw_bleed_matrix / np.linalg.norm(raw_bleed_matrix, axis=1)[:, None]
 
     # 1. Normalise spot colours and remove background as constant offset across different rounds of the same channel
-    colour_norm_factor_initial = np.zeros((8, 7, 7))
+    colour_norm_factor_initial = np.zeros((n_tiles, n_rounds, n_channels_use))
     for t in use_tiles:
         colour_norm_factor_initial[t] = 1 / (np.percentile(spot_colours[spot_tile == t], 95, axis=0))
         spot_colours[spot_tile == t] *= colour_norm_factor_initial[t]
@@ -321,47 +335,49 @@ def call_spots(nbp_ref_spots: NotebookPage, nbp_basic: NotebookPage, nbp_file: N
 
     # 3. Use spots with score above threshold to work out global dye codes
     prob_mode_initial, prob_score_initial = np.argmax(gene_prob, axis=1), np.max(gene_prob, axis=1)
-    prob_threshold = 0.9
+    prob_threshold = config['gene_prob_threshold']
     good = prob_score_initial > prob_threshold
     bleed_matrix_initial = compute_bleed_matrix(spot_colours[good], prob_mode_initial[good], gene_codes, n_dyes)
+    d_max = np.argmax(bleed_matrix_initial, axis=0)
 
     # 4. Compute the free_bled_codes
-    free_bled_codes = np.zeros((n_genes, n_tiles, n_rounds, n_channels))
-    free_bled_codes_tile_indep = np.zeros((n_genes, n_rounds, n_channels))
+    free_bled_codes = np.zeros((n_genes, n_tiles, n_rounds, n_channels_use))
+    free_bled_codes_tile_indep = np.zeros((n_genes, n_rounds, n_channels_use))
     for g in range(n_genes):
         for r in range(n_rounds):
             good_g = (prob_mode_initial == g) & good
             free_bled_codes_tile_indep[g, r] = bayes_mean(spot_colours=spot_colours[good_g, r],
                                                           prior_colours=bleed_matrix_initial[gene_codes[g, r]],
-                                                          conc_param_parallel=conc_param_parallel,
-                                                          conc_param_perp=conc_param_perp)
+                                                          conc_param_parallel=config['concentration_parameter_parallel'],
+                                                          conc_param_perp=config['concentration_parameter_perpendicular'])
             for t in use_tiles:
                 good_gt = (prob_mode_initial == g) & (spot_tile == t) & good
                 free_bled_codes[g, t, r] = bayes_mean(spot_colours=spot_colours[good_gt, r],
                                                       prior_colours=bleed_matrix_initial[gene_codes[g, r]],
-                                                      conc_param_parallel=conc_param_parallel,
-                                                      conc_param_perp=conc_param_perp)
+                                                      conc_param_parallel=config['concentration_parameter_parallel'],
+                                                      conc_param_perp=config['concentration_parameter_perpendicular'])
     # normalise the free bled codes
     free_bled_codes_tile_indep /= np.linalg.norm(free_bled_codes_tile_indep, axis=(1, 2))[:, None, None]
     free_bled_codes[use_tiles] /= np.linalg.norm(free_bled_codes[use_tiles], axis=(2, 3))[:, :, None, None]
 
     # 5. compute the scale factor V_rc maximising the similarity between the tile independent codes and the target
     # values. Then rename the product V_rc * free_bled_codes to target_bled_codes
-    target_scale = np.zeros((n_rounds, n_channels))
-    for r, c in np.ndindex(n_rounds, n_channels):
+    target_scale = np.zeros((n_rounds, n_channels_use))
+    for r, c in np.ndindex(n_rounds, n_channels_use):
         rc_genes = np.where(gene_codes[:, r] == d_max[c])[0]
         n_spots = np.array([np.sum((prob_mode_initial == g) & (prob_score_initial > prob_threshold)) for g in rc_genes])
-        target_scale[r, c] = np.sum(
-            np.sqrt(n_spots) * free_bled_codes_tile_indep[rc_genes, r, c] * target_values[d_max[c]]) / np.sum(
-            np.sqrt(n_spots) * free_bled_codes_tile_indep[rc_genes, r, c] ** 2)
+        target_scale[r, c] = (np.sum(
+            np.sqrt(n_spots) * free_bled_codes_tile_indep[rc_genes, r, c] * config['target_values'][d_max[c]]) /
+                              np.sum(
+            np.sqrt(n_spots) * free_bled_codes_tile_indep[rc_genes, r, c] ** 2))
     target_bled_codes = free_bled_codes_tile_indep * target_scale[None, :, :]
     # normalise the target bled codes
     target_bled_codes /= np.linalg.norm(target_bled_codes, axis=(1, 2))[:, None, None]
 
     # 6. compute the scale factor Q_trc maximising the similarity between the tile independent codes and the target
     # bled codes
-    homogeneous_scale = np.ones((n_tiles, n_rounds, n_channels))
-    for t, r, c in itertools.product(use_tiles, range(n_rounds), range(n_channels)):
+    homogeneous_scale = np.ones((n_tiles, n_rounds, n_channels_use))
+    for t, r, c in itertools.product(use_tiles, range(n_rounds), range(n_channels_use)):
         relevant_genes = np.where(gene_codes[:, r] == d_max[c])[0]
         n_spots = np.array([np.sum((prob_mode_initial == g) & (prob_score_initial > prob_threshold) & (spot_tile == t))
                             for g in relevant_genes])
@@ -381,11 +397,21 @@ def call_spots(nbp_ref_spots: NotebookPage, nbp_basic: NotebookPage, nbp_file: N
     good = prob_score > prob_threshold
     bleed_matrix = compute_bleed_matrix(spot_colours[good], prob_mode[good], gene_codes, n_dyes)
 
-    return None
+    # add all information to the reference spots notebook page
+    nbp_ref_spots.intensity = np.median(np.max(spot_colours, axis=-1), axis=-1)
+    nbp_ref_spots.dot_product_gene_no, nbp_ref_spots.dot_product_score = dp_mode, dp_score
+    nbp_ref_spots.probability_gene_no, nbp_ref_spots.probability_gene_score = prob_mode, prob_score
+    nbp_ref_spots.probability_gene_no_initial, nbp_ref_spots.probability_gene_score_initial = (
+        prob_mode_initial, prob_score_initial)
 
-#
-# colours = np.load(r"C:\Users\reill\Desktop\local_datasets\dante\dante_0_11_0\call_spots_variables\colours.npy")
-# tile = np.load(r"C:\Users\reill\Desktop\local_datasets\dante\dante_0_11_0\call_spots_variables\spot_tile.npy")
-# gene_codes = np.load(r"C:\Users\reill\Desktop\local_datasets\dante\dante_0_11_0\call_spots_variables\gene_codes.npy")
-# gene_names = np.load(r"C:\Users\reill\Desktop\local_datasets\dante\dante_0_11_0\call_spots_variables\gene_names.npy")
-# call_spots(colours, tile, gene_codes, gene_names)
+    # add all information to the call spots notebook page
+    nbp.gene_names, nbp.gene_codes = gene_names, gene_codes
+    nbp.target_scale, nbp.homogeneous_scale = target_scale, homogeneous_scale
+    nbp.colour_norm_factor = colour_norm_factor_initial * target_scale[None, :, :] * homogeneous_scale
+    nbp.free_bled_codes, nbp.free_bled_codes_tile_indep = free_bled_codes, free_bled_codes_tile_indep
+    nbp.target_bled_codes = target_bled_codes
+    nbp.bleed_matrix_raw, nbp.bleed_matrix_initial, nbp.bleed_matrix = (raw_bleed_matrix, bleed_matrix_initial,
+                                                                        bleed_matrix)
+
+    return nbp, nbp_ref_spots
+

@@ -6,7 +6,7 @@ import zarr
 
 from .. import log, stitch as stitch_base
 from ..setup import NotebookPage
-from ..utils import tiles_io
+from ..utils import tiles_io, system
 
 
 def stitch(config: dict, nbp_basic: NotebookPage, nbp_file: NotebookPage, nbp_extract: NotebookPage) -> NotebookPage:
@@ -24,6 +24,8 @@ def stitch(config: dict, nbp_basic: NotebookPage, nbp_file: NotebookPage, nbp_ex
     """
     log.debug("Stitch started")
     nbp = NotebookPage("stitch")
+    nbp.software_version = system.get_software_version()
+    nbp.revision_hash = system.get_software_hash()
 
     # initialize the variables
     overlap = config["expected_overlap"]
