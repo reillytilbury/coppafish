@@ -20,11 +20,12 @@ def load_spot_colours(
     nbp_register: NotebookPage,
     nbp_register_debug: NotebookPage,
     tile: int,
-    dtype: np.dtype = np.uint16,
+    dtype: np.dtype = np.float16,
 ) -> npt.NDArray:
     """
     Load the full registered image for every sequencing round/channel for the given tile. No post-processing is
-    applied, including tile_pixel_value_shift subtraction, background subtraction, and colour normalisation.
+    applied, including background subtraction and colour normalisation. The images are correctly centred around the
+    zero mark, so dtype must support negative numbers.
 
     Args:
         - nbp_basic (NotebookPage): `basic_info` notebook page.
@@ -33,7 +34,7 @@ def load_spot_colours(
         - nbp_register (NotebookPage): `register` notebook page.
         - nbp_register_debug (NotebookPage): `register_debug` notebook page.
         - tile (int): tile index.
-        - dtype (numpy dtype): datatype to return images. Default: uint16.
+        - dtype (numpy dtype): datatype to return images. Default: float16.
 
     Returns:
         (`(im_y x im_x x im_z x n_rounds_use x n_channels_use) ndarray`) spot_colours: tile loaded spot colours.
@@ -88,7 +89,7 @@ def load_spot_colours(
         image_batch = torch.cat((image_batch, image_r[np.newaxis]), dim=0)
         del image_r
         # Flow_field_r[0] are y shifts, flow_field_r[2] are z shifts.
-        flow_field_tr = nbp_register.flow[tile, r]
+        flow_field_tr = nbp_register.flow[tile, r].astype(np.float32)
         flow_field_tr[[0, 1, 2]] = flow_field_tr[[2, 1, 0]]
         # Flow's shape changes (3, im_y, im_x, im_z) -> (1, im_y, im_x, im_z, 3).
         flow_field_tr = torch.asarray(flow_field_tr.transpose((1, 2, 3, 0)))[np.newaxis]
@@ -104,7 +105,6 @@ def load_spot_colours(
             registered_image_batch = torch.nn.functional.grid_sample(
                 image_batch, grids, mode="bilinear", padding_mode="zeros", align_corners=False
             )
-            registered_image_batch += nbp_basic.tile_pixel_value_shift
             registered_image_batch = registered_image_batch.numpy().astype(dtype).transpose((2, 3, 4, 0, 1))
             colours[:, :, :, i_min:i_max, :] = registered_image_batch
 

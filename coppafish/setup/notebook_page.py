@@ -628,7 +628,7 @@ class NotebookPage:
                 "Numpy array [n_spots]" + "`gene_no[s]` is the index of the gene assigned to spot $s$.",
             ],
             "colours": [
-                "ndarray[int32]",
+                "ndarray[float16]",
                 "Numpy `(n_spots x len(use_rounds) x len(use_channels))`"
                 + "Each spot's intensity in every sequencing round/channel before colour normalisation.",
             ],

@@ -1,9 +1,13 @@
-import os
-import zarr
-import numpy as np
-from tqdm import tqdm
-from typing import Optional, List, Union, Tuple
+from concurrent.futures import ProcessPoolExecutor
+from typing import Any, List, Optional, Tuple, Union
 
+import numpy as np
+import numpy.typing as npt
+import scipy
+import torch
+from tqdm import tqdm
+
+from ..register import preprocessing
 from ..setup import NotebookPage
 from ..utils import tiles_io
 
@@ -47,6 +51,130 @@ def apply_transform(
         (yxz_transform >= np.array([0, 0, 0])).all(axis=1), (yxz_transform < tile_sz).all(axis=1)
     )  # set color to nan if out range
     return yxz_transform, in_range
+
+
+def get_spot_colours_new(
+    nbp_basic: NotebookPage,
+    nbp_file: NotebookPage,
+    nbp_extract: NotebookPage,
+    nbp_register: NotebookPage,
+    nbp_register_debug: NotebookPage,
+    tile: int,
+    round: int,
+    channels: Optional[Union[Tuple[int], int]] = None,
+    yxz: Optional[npt.NDArray[np.int_]] = None,
+    registration_type: str = "flow_and_icp",
+    dtype: np.dtype = np.float32,
+) -> npt.NDArray[Any]:
+    """
+    Load and return registered image(s) colours. Image(s) are correctly centred around zero. Zeros are placed when the
+    position is out of bounds.
+
+    Args:
+        nbp_basic (NotebookPage): `basic_info` notebook page.
+        nbp_file (NotebookPage): `file_names` notebook page.
+        nbp_extract (NotebookPage): `extract` notebook page.
+        nbp_register (NotebookPage): `register` notebook page.
+        nbp_register_debug (NotebookPage): `register_debug` notebook page.
+        tile (int): tile index.
+        round (int): round index.
+        channels (tuple of ints or int): channel indices (index) to load. Default: sequencing channels.
+        yxz (`(n_points x 3) ndarray[int]`): specific points to retrieve relative to the reference image (the anchor
+            round/channel). Default: the entire image.
+        registration_type (str): registration method to apply up to. Can be 'flow' or 'flow_and_icp'. Default:
+            'flow_and_icp', the completed registration, after optical flow and ICP corrections.
+        dtype (dtype): data type to return the images into. This must support negative numbers. An integer dtype will
+            cause rounding errors. Default: np.float32.
+
+    Returns:
+        (`(len(channels) x im_y x im_x x im_z) ndarray[dtype]` if yxz is None else `(len(channels) x n_points)
+        ndarray[dtype]`) image: registered image intensities.
+
+    Notes:
+        - If you are planning to load in multiple channels, this function is faster if called once.
+    """
+    assert type(nbp_basic) is NotebookPage
+    assert type(nbp_file) is NotebookPage
+    assert type(nbp_extract) is NotebookPage
+    assert type(nbp_register) is NotebookPage
+    assert type(nbp_register_debug) is NotebookPage
+    assert type(tile) is int
+    assert type(round) is int
+    if channels is None:
+        channels = nbp_basic.use_channels
+    if type(channels) is int:
+        channels = (channels,)
+    assert type(channels) is tuple
+    assert len(channels) > 0
+    if yxz is not None:
+        assert type(yxz) is np.ndarray
+        assert yxz.shape[0] > 0
+        assert yxz.shape[1] == 3
+    assert registration_type in ("flow", "flow_and_icp")
+
+    image_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
+
+    # First, affine transform every channel image, all pixels since this is fast.
+    suffix = "_raw" if round == nbp_basic.pre_seq_round else ""
+    image = tuple()
+    new_origin = np.zeros(3, dtype=int)
+    # While each image is being affine transformed, disk load the next image.
+    with ProcessPoolExecutor(max_workers=len(nbp_basic.use_channels)) as executor:
+        futures = []
+        for c in channels:
+            im_c = tiles_io.load_image(
+                nbp_file, nbp_basic, nbp_extract.file_type, tile, round, c, yxz=None, suffix=suffix
+            ).astype(np.float32)
+            affine = np.eye(4, 3)
+            if registration_type == "flow_and_icp" and c != nbp_basic.dapi_channel:
+                affine = nbp_register.icp_correction[tile, round, c].copy()
+            elif registration_type == "flow":
+                affine = nbp_register_debug.channel_correction[tile, c]
+            affine = preprocessing.adjust_affine(affine=affine, new_origin=new_origin)
+            futures.append(
+                executor.submit(scipy.ndimage.affine_transform, im_c, affine, order=1, mode="constant", cval=0)
+            )
+        for future in futures:
+            image += (future.result(timeout=300)[np.newaxis].copy(),)
+        del futures
+    image = torch.asarray(np.concatenate(image, axis=0, dtype=np.float32))
+    assert image.shape == (len(channels),) + image_shape
+    # Second, optical flow and interpolate given yxz positions.
+    half_pixel_0, half_pixel_1, half_pixel_2 = [1 / image_shape[i] for i in range(3)]
+    grid_0, grid_1, grid_2 = torch.meshgrid(
+        torch.linspace(half_pixel_0 - 1, 1 - half_pixel_0, image_shape[0]),
+        torch.linspace(half_pixel_1 - 1, 1 - half_pixel_1, image_shape[1]),
+        torch.linspace(half_pixel_2 - 1, 1 - half_pixel_2, image_shape[2]),
+        indexing="ij",
+    )
+    grid = torch.cat((grid_2[:, :, :, None], grid_1[:, :, :, None], grid_0[:, :, :, None]), dim=3)[None]
+    flow_field = nbp_register.flow[tile, round].astype(np.float32)
+    flow_field[[0, 1, 2]] = flow_field[[2, 1, 0]]
+    # Flow's shape (3, im_y, im_x, im_z) -> (1, im_y, im_x, im_z, 3).
+    flow_field = torch.asarray(flow_field.transpose((1, 2, 3, 0)))[np.newaxis]
+    flow_field[..., 0] *= half_pixel_2 * 2
+    flow_field[..., 1] *= half_pixel_1 * 2
+    flow_field[..., 2] *= half_pixel_0 * 2
+    assert grid.shape == (1,) + image_shape + (3,)
+    grid += flow_field
+    image = image[None]
+    if yxz is None:
+        flow_image = torch.nn.functional.grid_sample(
+            image, grid, mode="bilinear", padding_mode="zeros", align_corners=False
+        )[0]
+        assert flow_image.shape == (len(channels),) + image_shape
+    else:
+        # Only sample the selected yxz points from the image.
+        grid = grid[0]
+        yxz_torch = torch.asarray(yxz).int()
+        # Creates grid of shape (1, 1, 1, n_points, 3)
+        grid = grid[tuple(yxz_torch.T)][None, None, None]
+        assert grid.shape == (1, 1, 1, yxz.shape[0], 3)
+        flow_image = torch.nn.functional.grid_sample(
+            image, grid, mode="bilinear", padding_mode="zeros", align_corners=False
+        )[0, :, 0, 0]
+        assert flow_image.shape == (len(channels), yxz.shape[0])
+    return flow_image.numpy().astype(dtype)
 
 
 def get_spot_colors(
@@ -140,8 +268,8 @@ def get_spot_colors(
 
                 # Read in the shifted uint16 colors here, and remove shift later.
                 spot_colors[in_range, i, j] = tiles_io.load_image(
-                    nbp_file, nbp_basic, file_type, t, r, c, yxz_transform, apply_shift=False
-                )
+                    nbp_file, nbp_basic, file_type, t, r, c, apply_shift=False
+                )[tuple(yxz_transform.T)]
                 pbar.update(1)
             del flow_tr
 

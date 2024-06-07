@@ -141,7 +141,6 @@ def _save_image(
 def _load_image(
     file_path: str,
     file_type: str,
-    indices: Optional[Union[Tuple[Union[List, int]], int]] = None,
     mmap_mode: str = None,
 ) -> npt.NDArray[np.uint16]:
     """
@@ -150,10 +149,9 @@ def _load_image(
     Args:
         file_path (str): image location.
         file_type (str): file type. Either `'.npy'` or `'.zarr'`.
-        indices (tuple or int, optional): coordinate indices to retrieve from the image. Default: entire image.
         mmap_mode (str, optional): the mmap_mode for numpy loading only. Default: no mapping.
 
-    Returns `ndarray[uint16]`: loaded image.
+    Returns `(im_z x im_y x im_x) ndarray[uint16]`: loaded image.
 
     Raises:
         ValueError: unsupported file type.
@@ -164,19 +162,10 @@ def _load_image(
         - Indexing a zarr array can be different from a numpy array, so we only support indexing with tuples and
             integers. See [here](https://zarr.readthedocs.io/en/stable/tutorial.html#advanced-indexing) for details.
     """
-    if indices is None:
-        indices = ...
-    else:
-        assert isinstance(indices, (int, tuple)), f"Unexpected indices type: {type(indices)}"
-
     if file_type.lower() == ".npy":
-        return np.load(file_path, mmap_mode=mmap_mode)[indices]
+        return np.load(file_path, mmap_mode=mmap_mode)[:]
     elif file_type.lower() == ".zarr":
-        if indices == ...:
-            return zarr.open(file_path, mode="r")[:]
-        elif isinstance(indices, int):
-            return zarr.open(file_path, mode="r")[indices, ...]
-        return zarr.open(file_path, mode="r").get_coordinate_selection(indices)
+        return zarr.open(file_path, mode="r")[:]
     else:
         log.error(ValueError(f"Unsupported `file_type`: {file_type.lower()}"))
 
@@ -272,10 +261,10 @@ def load_image(
     t: int,
     r: int,
     c: int,
-    yxz: Optional[Union[List, Tuple, np.ndarray]] = None,
+    yxz: Optional[Tuple[int, None]] = None,
     apply_shift: bool = True,
     suffix: str = "",
-) -> npt.NDArray[Union[np.int32, np.uint16]]:
+) -> Union[npt.NDArray[np.uint16], npt.NDArray[np.int32]]:
     """
     Loads in image corresponding to desired tile, round and channel from the relevant npy file.
 
@@ -286,93 +275,62 @@ def load_image(
         t (int): npy tile index considering.
         r (int): round considering.
         c (int): channel considering.
-        yxz (`list` of `int` or `ndarray[int]`, optional): if `None`, whole image is loaded otherwise there are two
-            choices
-            - `list` of `int [2 or 3]`. List containing y,x,z coordinates of sub image to load in.
-                E.g. if `yxz = [np.array([5]), np.array([10,11,12]), np.array([8,9])]`
-                returned `image` will have shape `[1 x 3 x 2]`.
-                if `yxz = [None, None, z_planes]`, all pixels on given z_planes will be returned
-                i.e. shape of image will be `[tile_sz x tile_sz x n_z_planes]`.
-            - `[n_pixels x (2 or 3)] ndarray[int]`. Array containing yxz coordinates for which the pixel value is
-                desired. E.g. if `yxz = np.ones((10,3))`, returned `image` will have shape `[10,]` with all values
-                indicating the pixel value at `[1,1,1]`.
-            Default: `None`.
-
-        apply_shift (bool, optional): if true and loading in a non-dapi channel, will apply the shift to the image.
+        yxz (tuple): a tuple of length 3. Contains tuples of length 2 and nones which specify the dimension minimum
+            (inclusive) and maximum (exclusive) values to grab. Can be none to grab the entire dimension. For example,
+            yxz=(None, (0, 25), None) would return all y values, x values from 0 to 24 (inclusive), and all z values
+            to given an image of shape `(im_y x 25 x im_z)`. The image will always be returned with three-dimensions.
+            Default: retrieve the entire image.
+        apply_shift (bool, optional): if true and loading in a non-dapi channel, will apply the shift to the image to
+            centre the zero correctly. This will convert the image from uint16 to int32.
         suffix (str, optional): suffix to add to file name to load from. Default: no suffix.
 
     Returns:
-        `int32 [ny x nx (x nz)]` or `int32 [n_pixels x (2 or 3)]`
-            Loaded image.
+        (`(sz_y x sz_x x sz_z) ndarray`): loaded image.
 
     Notes:
-        - May want to disable `apply_shift` to save memory and/or make loading quicker as there will be no dtype
-            conversion. If loading in DAPI, dtype is always `uint16` as there is no shift.
+        - May want to disable `apply_shift` to save memory as there will be no dtype conversion. If loading in DAPI,
+            dtype is always `uint16` as there is no pixel shift.
     """
-    if nbp_basic.is_3d:
-        file_path = nbp_file.tile[t][r][c]
-        file_path = file_path[: file_path.index(file_type)] + suffix + file_type
-    else:
-        log.error(NotImplementedError("2D image loading is currently not supported"))
+    assert type(nbp_basic) is NotebookPage
+    assert type(nbp_file) is NotebookPage
+    assert type(file_type) is str
+    assert type(t) is int, f"Got type {type(t)} instead"
+    assert type(r) is int
+    assert type(c) is int
+    if yxz is None:
+        yxz = (None,) * 3
+    assert type(yxz) is tuple
+    assert len(yxz) == 3
+
+    file_path = nbp_file.tile[t][r][c]
+    file_path = file_path[: file_path.index(file_type)] + suffix + file_type
+
     if not image_exists(file_path, file_type):
         log.error(FileNotFoundError(f"Could not find image at {file_path} to load from"))
-    if yxz is not None:
-        # Use mmap when only loading in part of image
-        if isinstance(yxz, (list, tuple)):
-            if nbp_basic.is_3d:
-                if len(yxz) != 3:
-                    log.error(ValueError(f"Loading in a 3D tile but dimension of coordinates given is {len(yxz)}."))
-                if yxz[0] is None and yxz[1] is None:
-                    z_indices = yxz[2]
-                    if isinstance(z_indices, int):
-                        image = _load_image(file_path, file_type, z_indices, mmap_mode="r")
-                    else:
-                        image = np.asarray(
-                            [
-                                _load_image(file_path, file_type, indices=int(z_indices[i]), mmap_mode="r")
-                                for i in range(len(z_indices))
-                            ],
-                            dtype=np.uint16,
-                        )
-                    if image.ndim == 3:
-                        # zyx -> yxz
-                        image = np.moveaxis(image, 0, 2)
-                else:
-                    coord_index_zyx = np.ix_(yxz[2], yxz[0], yxz[1])
-                    image = np.moveaxis(_load_image(file_path, file_type, indices=coord_index_zyx, mmap_mode="r"), 0, 2)
-            else:
-                if len(yxz) != 2:
-                    log.error(ValueError(f"Loading in a 2D tile but dimension of coordinates given is {len(yxz)}."))
-                coord_index = np.ix_(np.array([c]), yxz[0], yxz[1])  # add channel as first coordinate in 2D.
-                # [0] below is to remove channel index of length 1.
-                image = _load_image(nbp_file.tile[t][r], file_type, mmap_mode="r")[coord_index][0]
-        elif isinstance(yxz, np.ndarray):
-            if nbp_basic.is_3d:
-                if yxz.shape[1] != 3:
-                    log.error(ValueError(f"Loading in a 3D tile but dimension of coordinates given is {yxz.shape[1]}."))
-                coord_index_zyx = tuple([yxz[:, j] for j in [2, 0, 1]])
-                image = _load_image(file_path, file_type)[coord_index_zyx]
-            else:
-                if yxz.shape[1] != 2:
-                    log.error(ValueError(f"Loading in a 2D tile but dimension of coordinates given is {yxz.shape[1]}."))
-                coord_index = tuple(np.asarray(yxz[:, i]) for i in range(2))
-                coord_index = (np.full(yxz.shape[0], c, int),) + coord_index  # add channel as first coordinate in 2D.
-                image = _load_image(nbp_file.tile[t][r], file_type, mmap_mode="r")[coord_index]
-        else:
-            log.error(
-                ValueError(
-                    f"yxz should either be an [n_spots x n_dim] array to return an n_spots array indicating "
-                    f"the value of the image at these coordinates or \n"
-                    f"a list containing {2 + int(nbp_basic.is_3d)} arrays indicating the sub image to load."
-                )
-            )
-    else:
-        if nbp_basic.is_3d:
-            # Don't use mmap when loading in whole image
-            image = np.moveaxis(_load_image(file_path, file_type), 0, 2)
-        else:
-            # Use mmap when only loading in part of image
-            image = _load_image(file_path, file_type, mmap_mode="r")[c]
+
+    # Image is in shape zyx.
+    image = _load_image(file_path, file_type)
+    # zyx -> yxz.
+    image = image.transpose((1, 2, 0))
+
+    dim_indices = tuple()
+    for dim, yxz_dim in enumerate(yxz):
+        if yxz_dim is None:
+            dim_indices += ((0, image.shape[dim]),)
+            continue
+        assert type(yxz_dim) is tuple, f"Expected tuple in yxz at index {dim} if not None, got {yxz_dim}"
+        assert len(yxz_dim) == 2, f"Tuple must be length 2 inside of yxz, image min (inclusive) and max (exclusive)."
+        assert type(yxz_dim[0]) is int and type(yxz_dim[1]) is int, f"Must be ints inside tuple in yxz, got {yxz_dim}"
+        assert yxz_dim[0] < yxz_dim[1], f"The maximum must be greater than the minimum"
+        assert yxz_dim[0] >= 0, f"The yxz minimum must be >= 0, got {yxz_dim[0]} for image dim {dim}"
+        assert yxz_dim[1] <= image.shape[dim], f"The yxz maximum must be <= {image.shape[dim]}, got {yxz_dim[1]}"
+        dim_indices += (yxz_dim,)
+
+    image = image[
+        dim_indices[0][0] : dim_indices[0][1],
+        dim_indices[1][0] : dim_indices[1][1],
+        dim_indices[2][0] : dim_indices[2][1],
+    ]
     # Apply shift if not DAPI channel
     if apply_shift and c != nbp_basic.dapi_channel:
         image = offset_pixels_by(image, -nbp_basic.tile_pixel_value_shift)

@@ -9,7 +9,6 @@ from matplotlib.transforms import ScaledTranslation
 from matplotlib.backends.backend_pdf import PdfPages
 from typing import Union, Optional, Tuple, List
 
-from ..omp import scores as omp_scores
 from ..setup import Notebook, NotebookPage
 from ..utils import tiles_io
 from .. import log
@@ -302,8 +301,9 @@ class BuildPDF:
                     axes[0, 0].set_ylabel("round")
                     axes[0, 0].set_title(f"dye code match")
                     self.empty_plot_ticks(axes[1, 0], show_bottom_frame=True, show_left_frame=True)
-                    axes[1, 0].plot(np.arange(N_GENES_SHOW), g_probs[:N_GENES_SHOW])
-                    axes[1, 0].plot(np.arange(N_GENES_SHOW), g_r_dot_products[g_spots[:N_GENES_SHOW]].mean(1))
+                    max_shown = g_probs[:N_GENES_SHOW].size
+                    axes[1, 0].plot(np.arange(max_shown), g_probs[:N_GENES_SHOW])
+                    axes[1, 0].plot(np.arange(max_shown), g_r_dot_products[g_spots[:N_GENES_SHOW]].mean(1))
                     axes[1, 0].legend(("probability score", "mean match"), loc="lower right")
                     for ax in [axes[0, 0], axes[1, 0]]:
                         ax.set_xlim([0, N_GENES_SHOW - 1])
