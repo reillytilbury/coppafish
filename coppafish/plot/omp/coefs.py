@@ -21,7 +21,7 @@ class View_OMP_Coefficients:
         method: str,
         im_size: int = 8,
         z_planes: Tuple[int] = (-2, -1, 0, 1, 2),
-        init_select_gene: int = 0,
+        init_select_gene: int = None,
     ) -> None:
         """
         Display omp coefficients of all genes in neighbourhood of spot in three z planes.
@@ -32,7 +32,7 @@ class View_OMP_Coefficients:
             method (str): gene calling method.
             im_size (int): number of pixels out from the central pixel to plot to create the square images.
             z_planes (tuple of int): z planes to show. 0 is the central z plane.
-            init_select_gene (int): gene number to display initially.
+            init_select_gene (int): gene number to display initially. Default: the highest scoring gene.
         """
         assert type(nb) is Notebook
         if spot_no is None:
@@ -45,6 +45,7 @@ class View_OMP_Coefficients:
         assert len(z_planes) > 2
         tile_dir = nb.file_names.tile_dir
         assert os.path.isdir(tile_dir), f"Viewing coefficients requires access to images expected at {tile_dir}"
+        assert init_select_gene is None or type(init_select_gene) is int
 
         plt.style.use("dark_background")
 
@@ -134,7 +135,10 @@ class View_OMP_Coefficients:
             )
 
         # Of shape (n_genes, n_pixels)
-        self.selected_gene = init_select_gene
+        if init_select_gene is None:
+            self.selected_gene = np.argmax(self.scores).item()
+        else:
+            self.selected_gene = init_select_gene
         self.gene_names = nb.call_spots.gene_names
         self.z_planes = z_planes
         self.coefficient_image = coefficient_image
