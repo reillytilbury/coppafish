@@ -7,7 +7,7 @@ from matplotlib.widgets import CheckButtons, Slider
 import numpy as np
 import torch
 
-from ... import register
+from ... import spot_colors
 from ...call_spots import background_pytorch
 from ...omp import coefs_torch, scores_torch
 from ...setup import Notebook
@@ -42,7 +42,7 @@ class View_OMP_Coefficients:
         assert type(im_size) is int
         assert im_size >= 0
         assert type(z_planes) is tuple
-        assert len(z_planes) > 1
+        assert len(z_planes) > 2
         tile_dir = nb.file_names.tile_dir
         assert os.path.isdir(tile_dir), f"Viewing coefficients requires access to images expected at {tile_dir}"
 
@@ -67,24 +67,23 @@ class View_OMP_Coefficients:
         coord_max = (local_yxz + im_size + 1).tolist()
         coord_max[2] = local_yxz[2].item() + max(z_planes) + 1
         yxz = [np.arange(coord_min[i], coord_max[i]) for i in range(3)]
+        yxz = np.array(np.meshgrid(*[np.arange(coord_min[i], coord_max[i]) for i in range(3)])).reshape((3, -1)).T
 
         spot_shape_yxz = tuple([coord_max[i] - coord_min[i] for i in range(3)])
         n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
         image_colours = np.zeros(spot_shape_yxz + (n_rounds_use, n_channels_use), dtype=np.float32)
         for i, r in enumerate(nb.basic_info.use_rounds):
-            for j, c in enumerate(nb.basic_info.use_channels):
-                image_colours[:, :, :, i, j] = register.preprocessing.load_transformed_image(
-                    nb.basic_info,
-                    nb.file_names,
-                    nb.extract,
-                    nb.register,
-                    nb.register_debug,
-                    tile,
-                    r,
-                    c,
-                    yxz,
-                    reg_type="flow_icp",
-                )
+            image_colours[:, :, :, i] = spot_colors.base.get_spot_colours_new(
+                nb.basic_info,
+                nb.file_names,
+                nb.extract,
+                nb.register,
+                nb.register_debug,
+                int(tile),
+                r,
+                yxz=yxz,
+                registration_type="flow_and_icp",
+            ).T.reshape((spot_shape_yxz + (n_channels_use,)))
         image_colours = torch.asarray(image_colours, dtype=torch.float32)
         colour_norm_factor = np.array(nb.call_spots.color_norm_factor, dtype=np.float32)
         colour_norm_factor = colour_norm_factor[
@@ -133,9 +132,6 @@ class View_OMP_Coefficients:
                     config["high_coef_bias"],
                 ).item()
             )
-        print(f"Expected score {nb.omp.scores[spot_no]}")
-        print(f"Got: {self.scores[nb.omp.gene_no[spot_no]]}")
-        print(f"Best scoring gene: {np.argmax(self.scores)}")
 
         # Of shape (n_genes, n_pixels)
         self.selected_gene = init_select_gene
@@ -159,7 +155,11 @@ class View_OMP_Coefficients:
         ax_function_coefs = self.axes[1, 1]
         # Keep widgets in self otherwise they will get garbage collected and not respond to clicks anymore.
         self.function_coefs_button = CheckButtons(
-            ax_function_coefs, ["Non-linear function"], actives=[self.function_coefficients]
+            ax_function_coefs,
+            ["Non-linear function"],
+            actives=[self.function_coefficients],
+            frame_props={"edgecolor": "white", "facecolor": "white"},
+            check_props={"facecolor": "black"},
         )
         self.function_coefs_button.on_clicked(self.function_gene_coefficients_updated)
         ax_slider: plt.Axes = self.axes[1, 0]
@@ -178,7 +178,10 @@ class View_OMP_Coefficients:
     def draw_gene(self) -> None:
         for ax in self.axes[0]:
             ax.clear()
+        all_spines = ("top", "bottom", "left", "right")
         for ax in self.axes[1]:
+            for spine in all_spines:
+                ax.spines[spine].set_visible(False)
             ax.set_xticks([], [])
             ax.set_yticks([], [])
         self.fig.suptitle(
@@ -190,7 +193,7 @@ class View_OMP_Coefficients:
             norm = mpl.colors.Normalize(vmin=0, vmax=1)
         else:
             abs_max = np.abs(self.coefficient_image).max()
-            norm = mpl.colors.Normalize(vmin=-abs_max, vmax=abs_max)
+            norm = mpl.colors.Normalize(vmin=min(0, self.coefficient_image.min()), vmax=abs_max)
         self.fig.colorbar(
             mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
             cax=self.axes[0, -1],
