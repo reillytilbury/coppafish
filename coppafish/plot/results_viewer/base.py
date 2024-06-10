@@ -146,7 +146,7 @@ class Viewer:
                 slider_variable="z_thick",
             )
 
-        abs_intensity_thresh = nb.call_spots.abs_intensity_percentile[50]
+        abs_intensity_thresh = np.percentile(self.spots["anchor"].intensity, 10)
         # set up sliders to adjust background images contrast
         for i, b in enumerate(self.background_images["images"]):
             if b.ndim == 3:
@@ -203,12 +203,17 @@ class Viewer:
 
         # Initialize positions and gene numbers in the legend
         num_legend_genes = len(legend_gene_names)
+        legend_gene_names_cropped = np.array([g[:max_label_length] for g in legend_gene_names])
         self.legend["xy"] = np.zeros((num_legend_genes, 2), dtype=float)
-        self.legend["gene_names"] = legend_gene_names
-
+        self.legend["gene_names"] = [None] * num_legend_genes
         # Populate positions and gene numbers for the legend
         for i in range(num_legend_genes):
             self.legend["xy"][i] = np.array(self.legend["ax"].collections[i].get_offsets())
+            cropped_legend_gene_name_i = self.legend["ax"].texts[i].get_text()
+            gene_i_index = np.where(legend_gene_names_cropped == cropped_legend_gene_name_i)[0][0]
+            self.legend["gene_names"][i] = legend_gene_names[gene_i_index]
+        # convert the gene names to a numpy array
+        self.legend["gene_names"] = np.array(self.legend["gene_names"])
 
         # Connect the event handler for legend clicks
         self.legend["fig"].mpl_connect("button_press_event", self.legend_event_handler)
@@ -382,6 +387,7 @@ class Viewer:
         When click on a gene which is the only selected gene, it will return to showing all genes.
         """
         clicked_coordinates = np.array([event.xdata, event.ydata])
+        print(f"Clicked coordinates = {clicked_coordinates}")
         closest_gene_coordinates = np.zeros(2)
 
         # Find the closest gene coordinates in the legend to the clicked position
@@ -392,7 +398,9 @@ class Viewer:
         # Identify the gene that was clicked
         clicked_gene_legend_index = np.where((self.legend["xy"] == closest_gene_coordinates).all(axis=1))[0][0]
         clicked_gene_name = self.legend["gene_names"][clicked_gene_legend_index]
+        print(f"Legend says clicked gene = {clicked_gene_name}")
         clicked_gene_notebook_index = np.where([g.name == clicked_gene_name for g in self.genes])[0][0]
+        print(f"Notebook says clicked gene = {self.genes[clicked_gene_notebook_index].name}")
 
         # get the active genes and their indices in the notebook and the legend respectively
         active_gene_notebook_indices = np.array([g.notebook_index for g in self.genes if g.active])
@@ -548,9 +556,9 @@ class Viewer:
         global_loc = [(local_loc[i] + tile_origin[tile[i]])[:, [2, 0, 1]] for i in range(n_methods)]
         # apply downsample factor
         global_loc = [loc // downsample_factor for loc in global_loc]
-        colours = [nb.__getattribute__(self.method["pages"][i]).colours[:, :, use_channels] for i in range(2)]
-        score = [nb.ref_spots.scores, np.max(nb.ref_spots.gene_probs, axis=1)]
-        gene_no = [nb.ref_spots.gene_no, np.argmax(nb.ref_spots.gene_probs, axis=1)]
+        colours = [nb.__getattribute__(self.method["pages"][i]).colours for i in range(2)]
+        score = [nb.ref_spots.dot_product_gene_score, nb.ref_spots.probability_gene_score]
+        gene_no = [nb.ref_spots.dot_product_gene_no, nb.ref_spots.probability_gene_no]
         intensity = [nb.ref_spots.intensity, nb.ref_spots.intensity]
         if nb.has_page("omp"):
             score.append(nb.omp.scores)

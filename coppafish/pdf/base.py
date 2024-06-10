@@ -246,7 +246,7 @@ class BuildPDF:
                 for t in nb.basic_info.use_tiles:
                     keep = nb.ref_spots.tile == t
                     fig = self.create_positions_histograms(
-                        nb.ref_spots.scores[keep],
+                        nb.ref_spots.dot_product_gene_score[keep],
                         nb.ref_spots.local_yxz[keep],
                         DEFAULT_REF_SCORE_THRESHOLD,
                         title=f"Spot position histograms for {t=}, scores "
@@ -266,7 +266,7 @@ class BuildPDF:
                             nb.basic_info.use_channels,
                         )
                     ]
-                    / nb.call_spots.color_norm_factor[
+                    / nb.call_spots.colour_norm_factor[
                         np.ix_(
                             nb.ref_spots.tile,
                             nb.basic_info.use_rounds,
@@ -274,7 +274,7 @@ class BuildPDF:
                         )
                     ]
                 )
-                n_genes = gene_probs.shape[1]
+                n_genes = len(nb.call_spots.gene_names)
                 gene_names = nb.call_spots.gene_names
                 spot_colours_rnorm = scores / np.linalg.norm(scores, axis=2)[:, :, None]
                 signs = np.sign(np.sum(spot_colours_rnorm, axis=(1, 2)))
