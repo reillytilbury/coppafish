@@ -120,12 +120,25 @@ def get_spot_colours_new(
     run_on = torch.device("cpu")
     if not force_cpu and torch.cuda.is_available():
         run_on = torch.device("cuda")
-
     n_points = yxz.shape[0]
     half_pixels = [1 / image_shape[i] for i in range(3)]
+    # If true, load in only a subset of the flow image to avoid too much disk loading.
+    load_subset = n_points < 10_000
 
     # 1: Affine transform every pixel position, keep them as floating points.
     yxz_registered = torch.zeros((0, n_points, 3), dtype=torch.float32)
+
+    def get_yxz_bounds() -> Tuple[torch.Tensor, torch.Tensor]:
+        yxz_mins = yxz_registered.floor().min(dim=0).min(dim=0)
+        yxz_mins -= 5
+        yxz_mins = torch.clamp(yxz_mins, 0, torch.asarray(image_shape))
+        yxz_maxs = yxz_registered.ceil().max(dim=0).max(dim=0)
+        yxz_maxs += 5
+        yxz_maxs = torch.clamp(yxz_maxs, 0, torch.asarray(image_shape))
+        assert yxz_mins.shape == (3,)
+        assert yxz_maxs.shape == (3,)
+        return yxz_mins, yxz_maxs
+
     for c in channels:
         affine = np.eye(4, 3)
         if registration_type == "flow_and_icp" and c != nbp_basic.dapi_channel:
@@ -153,7 +166,27 @@ def get_spot_colours_new(
     if registration_type == "flow_and_icp":
         # 2: Gather the optical flow shifts using interpolation from the affine positions.
         # (3, 1, im_y, im_x, im_z).
-        flow_image = torch.asarray(nbp_register.flow[tile, round]).float()[:, np.newaxis]
+        flow_image = torch.zeros((3, 1) + image_shape).float()
+        if load_subset:
+            yxz_minimums, yxz_maximums = get_yxz_bounds()
+            flow_image[
+                :,
+                0,
+                yxz_minimums[0] : yxz_maximums[0],
+                yxz_minimums[1] : yxz_maximums[1],
+                yxz_minimums[2] : yxz_maximums[2],
+            ] = torch.asarray(
+                nbp_register.flow[
+                    tile,
+                    round,
+                    :,
+                    yxz_minimums[0] : yxz_maximums[0],
+                    yxz_minimums[1] : yxz_maximums[1],
+                    yxz_minimums[2] : yxz_maximums[2],
+                ]
+            )
+        else:
+            flow_image = torch.asarray(nbp_register.flow[tile, round]).float()[:, np.newaxis]
         flow_image = [flow_image[[i]] for i in range(3)]
         # (1, 1, len(channels), n_points, 3). yxz becomes zxy to use the grid_sample function.
         yxz_registered = yxz_registered[np.newaxis, np.newaxis, :, :, [2, 1, 0]]
@@ -177,10 +210,10 @@ def get_spot_colours_new(
 
     # 4: Gather all unregistered channel images.
     suffix = "_raw" if round == nbp_basic.pre_seq_round else ""
-    images = torch.zeros((0,) + image_shape, dtype=torch.float32)
-    for c in channels:
+    images = torch.zeros((len(channels),) + image_shape, dtype=torch.float32)
+    for c_i, c in enumerate(channels):
         image_c = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, tile, round, c, suffix=suffix)
-        images = torch.cat((images, torch.asarray(image_c[np.newaxis]).float()), dim=0).float()
+        images[c_i] = torch.asarray(image_c).float()
         del image_c
 
     # 5: Use the yxz registered positions to gather from the images through interpolation.

@@ -110,13 +110,14 @@ def register(
         nbp_basic.tile_sz,
         len(nbp_basic.use_z),
     )
-    raw_smooth_chunks = (1, 1, None, None, None, None)
+    raw_smooth_chunks = (1, 1, None, 150, 150, 4)
     zarr.open_array(
         store=corr_loc,
         mode="w",
         shape=raw_smooth_shape[:2] + raw_smooth_shape[3:],
         dtype=np.float16,
-        chunks=raw_smooth_chunks[:2] + raw_smooth_chunks[3:],
+        chunks=raw_smooth_chunks[:1] + raw_smooth_chunks[3:],
+        zarr_version=2,
     )
     zarr.open_array(
         store=raw_loc,
@@ -124,6 +125,7 @@ def register(
         shape=raw_smooth_shape,
         dtype=np.float16,
         chunks=raw_smooth_chunks,
+        zarr_version=2,
     )
     zarr.open_array(
         store=smooth_loc,
@@ -131,6 +133,7 @@ def register(
         mode="w",
         dtype=np.float16,
         chunks=raw_smooth_chunks,
+        zarr_version=2,
     )
     for t in tqdm(use_tiles, desc="Optical Flow on uncompleted tiles", total=len(use_tiles)):
         # Load in the anchor image and the round images. Note that here anchor means anchor round, not necessarily
