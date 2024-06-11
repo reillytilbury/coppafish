@@ -75,20 +75,12 @@ def run_filter(
 
     nbp_debug.z_info = int(np.floor(nbp_basic.nz / 2))  # central z-plane to get info from.
     nbp_debug.r_dapi = config["r_dapi"]
-    if config["r1"] is None:
-        config["r1"] = extract.base.get_pixel_length(config["r1_auto_microns"], nbp_basic.pixel_size_xy)
-    if config["r2"] is None:
-        config["r2"] = config["r1"] * 2
-    filter_kernel = utils.morphology.hanning_diff(config["r1"], config["r2"])
 
     if nbp_debug.r_dapi is not None:
         filter_kernel_dapi = utils.strel.disk(nbp_debug.r_dapi)
     else:
         filter_kernel_dapi = None
 
-    if config["r_smooth"] is not None:
-        smooth_kernel = np.ones(tuple(np.array(config["r_smooth"], dtype=int) * 2 - 1))
-        smooth_kernel = smooth_kernel / np.sum(smooth_kernel)
     if config["deconvolve"]:
         if not os.path.isfile(nbp_file.psf):
             raise FileNotFoundError(f"Could not find the PSF at location {nbp_file.psf}")
@@ -182,11 +174,6 @@ def run_filter(
                 # DAPI images are shifted so all negative pixels are now positive so they can be saved without clipping
                 im_filtered -= im_filtered.min()
             elif c != nbp_basic.dapi_channel:
-                if config["difference_of_hanning"]:
-                    im_filtered = utils.morphology.convolve_2d(im_filtered, filter_kernel)
-                if config["r_smooth"] is not None:
-                    # oa convolve uses lots of memory and much slower here.
-                    im_filtered = utils.morphology.imfilter(im_filtered, smooth_kernel, oa=False)
                 if (im_filtered > np.iinfo(np.int32).max).sum() > 0:
                     log.warn(f"Converting to int32 has cut off pixels for {t=}, {r=}, {c=} filtered image")
                 if compute_scale:

@@ -93,12 +93,6 @@ _options = {
         "deconvolve": "bool",
         "wiener_constant": "number",
         "wiener_pad_shape": "tuple_int",
-        "r_smooth": "maybe_tuple_int",
-        "r1": "maybe_int",
-        "r2": "maybe_int",
-        "r1_auto_microns": "number",
-        "difference_of_hanning": "bool",
-        "pre_seq_blur_radius": "maybe_int",
         "scale_multiplier": "number",
         "percent_clip_warn": "number",
         "percent_clip_error": "number",
@@ -119,7 +113,8 @@ _options = {
     "stitch": {
         "expected_overlap": "number",
     },
-    "register": {  # this parameter is for channel registration
+    "register": {
+        # this parameter is for channel registration
         "bead_radii": "maybe_tuple_number",
         # these parameters are for round registration
         "sample_factor_yx": "int",

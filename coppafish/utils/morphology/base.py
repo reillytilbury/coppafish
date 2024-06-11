@@ -59,33 +59,6 @@ def ftrans2(b: npt.NDArray[np.float_], t: Optional[npt.NDArray[np.float_]] = Non
     return h
 
 
-def hanning_diff(r1: int, r2: int) -> npt.NDArray[np.float_]:
-    """
-    Gets difference of two hanning window 2D convolve kernel.
-    Central positive, outer negative with sum of `0`.
-
-    Args:
-        r1: radius in pixels of central positive hanning convolve kernel.
-        r2: radius in pixels of outer negative hanning convolve kernel.
-
-    Returns:
-        `float [2*r2+1 x 2*r2+1]`.
-            Difference of two hanning window 2D convolve kernel.
-    """
-    if not 0 <= r1 <= r2 - 1:
-        log.error(errors.OutOfBoundsError("r1", r1, 0, r2 - 1))
-    if not r1 + 1 <= r2 <= np.inf:
-        log.error(errors.OutOfBoundsError("r2", r1 + 1, np.inf))
-    h_outer = np.hanning(2 * r2 + 3)[1:-1]  # ignore zero values at first and last index
-    h_outer = -h_outer / h_outer.sum()
-    h_inner = np.hanning(2 * r1 + 3)[1:-1]
-    h_inner = h_inner / h_inner.sum()
-    h = h_outer.copy()
-    h[r2 - r1 : r2 + r1 + 1] += h_inner
-    h = ftrans2(h)
-    return h
-
-
 def convolve_2d(image: npt.NDArray[np.float_], kernel: npt.NDArray[np.float_]) -> npt.NDArray[np.float_]:
     """
     Convolves `image` with `kernel`, padding by replicating border pixels.
@@ -132,9 +105,7 @@ def ensure_odd_kernel(kernel: npt.NDArray[np.float_], pad_location: str = "start
         elif pad_location == "end":
             pad_dims = [tuple(np.array([0, 1]) * val) for val in even_dims]
         else:
-            log.error(
-                ValueError(f"pad_location has to be either 'start' or 'end' but value given was {pad_location}.")
-            )
+            log.error(ValueError(f"pad_location has to be either 'start' or 'end' but value given was {pad_location}."))
         return np.pad(kernel, pad_dims, mode="constant")
     else:
         return kernel

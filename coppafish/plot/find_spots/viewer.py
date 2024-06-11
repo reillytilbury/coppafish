@@ -1,53 +1,23 @@
+import os
+import time
+from typing import Optional
+import warnings
+
+from PyQt5.QtWidgets import QSlider
 import napari
 import numpy as np
-import os
-import warnings
-from typing import Optional
 from qtpy.QtCore import Qt
-from PyQt5.QtWidgets import QSlider
-import time
 
-from ...setup import Notebook
-from ..raw import get_raw_images, number_to_list, add_basic_info_no_save
-from ... import extract, utils
+from ... import utils
 from ...filter import base as filter_base
-from ...utils import tiles_io
 from ...find_spots import check_neighbour_intensity
+from ...setup import Notebook
+from ...utils import tiles_io
+from ..raw import add_basic_info_no_save
 
 
 def get_filtered_image(nb: Notebook, t: int, r: int, c: int) -> np.ndarray:
-    # Function to load in raw image then filter according to parameters in `config['extract']`.
-
-    # Load in raw image
-    use_z = nb.basic_info.use_z
-    t, r, c, use_z = number_to_list([t, r, c, use_z])
-    image_raw = get_raw_images(nb, t, r, c, use_z)[0, 0, 0]
-
-    # Filter image
-    if not nb.basic_info.is_3d:
-        image_raw = extract.focus_stack(image_raw)
-    image_raw, bad_columns = extract.strip_hack(image_raw)
-    config = nb.get_config()["scale"]
-    r1 = config["r1"]
-    r2 = config["r2"]
-    if r1 is None:
-        r1 = extract.get_pixel_length(config["r1_auto_microns"], nb.basic_info.pixel_size_xy)
-    if r2 is None:
-        r2 = r1 * 2
-    filter_kernel = utils.morphology.hanning_diff(r1, r2)
-    image = utils.morphology.convolve_2d(image_raw, filter_kernel)
-
-    # Smooth image
-    if config["r_smooth"] is not None:
-        smooth_kernel = np.ones(tuple(np.array(config["r_smooth"], dtype=int) * 2 - 1))
-        smooth_kernel = smooth_kernel / np.sum(smooth_kernel)
-        image = utils.morphology.imfilter(image, smooth_kernel, oa=False)
-    image[:, bad_columns] = 0
-
-    # Scale image
-    scale = config["scale_norm"] / image.max()
-    image = np.rint(image * scale).astype(np.int32)
-    return image
+    raise NotImplementedError(f"This function is outdated")
 
 
 class view_find_spots:
