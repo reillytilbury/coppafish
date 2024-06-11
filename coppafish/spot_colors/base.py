@@ -221,12 +221,16 @@ def get_spot_colours_new(
                 yxz_subset[0][0] : yxz_subset[0][1],
                 yxz_subset[1][0] : yxz_subset[1][1],
                 yxz_subset[2][0] : yxz_subset[2][1],
-            ] = tiles_io.load_image(
-                nbp_file, nbp_basic, nbp_extract.file_type, tile, round, c, suffix=suffix, yxz=yxz_subset
-            )
+            ] = torch.asarray(
+                tiles_io.load_image(
+                    nbp_file, nbp_basic, nbp_extract.file_type, tile, round, c, suffix=suffix, yxz=yxz_subset
+                )
+            ).float()
             del yxz_minimums, yxz_maximums, yxz_subset
         else:
-            image_c = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, tile, round, c, suffix=suffix)
+            image_c = torch.asarray(
+                tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, tile, round, c, suffix=suffix)
+            ).float()
         images[c_i] = torch.asarray(image_c).float()
         del image_c
 
