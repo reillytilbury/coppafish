@@ -603,12 +603,6 @@ class NotebookPage:
             ],
         },
         "omp": {
-            "abs_intensity_percentile": [
-                "ndarray[float]",
-                "Numpy float array [100]]"
-                + "Percentile of `intensity` on the central z-plane of the central tile. This is used to determine "
-                  "which spots OMP should be run on.",
-            ],
             "spot_tile": [
                 "int",
                 "`spot` was found from isolated spots detected on this tile.",
