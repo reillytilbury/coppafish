@@ -185,6 +185,7 @@ def get_spot_colours_new(
                     yxz_minimums[2] : yxz_maximums[2],
                 ]
             )
+            del yxz_minimums, yxz_maximums
         else:
             flow_image = torch.asarray(nbp_register.flow[tile, round]).float()[:, np.newaxis]
         flow_image = [flow_image[[i]] for i in range(3)]
@@ -212,7 +213,20 @@ def get_spot_colours_new(
     suffix = "_raw" if round == nbp_basic.pre_seq_round else ""
     images = torch.zeros((len(channels),) + image_shape, dtype=torch.float32)
     for c_i, c in enumerate(channels):
-        image_c = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, tile, round, c, suffix=suffix)
+        image_c = torch.zeros(image_shape).float()
+        if load_subset:
+            yxz_minimums, yxz_maximums = get_yxz_bounds()
+            yxz_subset = tuple([(yxz_minimums[i], yxz_maximums[i]) for i in range(3)])
+            image_c[
+                yxz_subset[0][0] : yxz_subset[0][1],
+                yxz_subset[1][0] : yxz_subset[1][1],
+                yxz_subset[2][0] : yxz_subset[2][1],
+            ] = tiles_io.load_image(
+                nbp_file, nbp_basic, nbp_extract.file_type, tile, round, c, suffix=suffix, yxz=yxz_subset
+            )
+            del yxz_minimums, yxz_maximums, yxz_subset
+        else:
+            image_c = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, tile, round, c, suffix=suffix)
         images[c_i] = torch.asarray(image_c).float()
         del image_c
 

@@ -139,9 +139,7 @@ def _save_image(
 
 
 def _load_image(
-    file_path: str,
-    file_type: str,
-    mmap_mode: str = None,
+    file_path: str, file_type: str, yxz: Optional[Tuple[Tuple[int], None]] = None
 ) -> npt.NDArray[np.uint16]:
     """
     Read in image from file_path location.
@@ -149,25 +147,52 @@ def _load_image(
     Args:
         file_path (str): image location.
         file_type (str): file type. Either `'.npy'` or `'.zarr'`.
-        mmap_mode (str, optional): the mmap_mode for numpy loading only. Default: no mapping.
+        yxz (tuple): a tuple of length 3. Contains tuples of length 2 and nones which specify the dimension minimum
+            (inclusive) and maximum (exclusive) values to grab. Can be none to grab the entire dimension. For example,
+            yxz=(None, (0, 25), None) would return all y values, x values from 0 to 24 (inclusive), and all z values
+            to given an image of shape `(im_y x 25 x im_z)`. The image will always be returned with three-dimensions.
+            Default: retrieve the entire image.
 
-    Returns `(im_z x im_y x im_x) ndarray[uint16]`: loaded image.
+    Returns `(im_y x im_x x im_z) ndarray[uint16]`: loaded image.
 
     Raises:
         ValueError: unsupported file type.
-
-    Notes:
-        - For zarr, if indices is None then the entire image will be loaded into memory (not memory mapped like numpy),
-            which can be slower if you only need a subset of the image.
-        - Indexing a zarr array can be different from a numpy array, so we only support indexing with tuples and
-            integers. See [here](https://zarr.readthedocs.io/en/stable/tutorial.html#advanced-indexing) for details.
     """
+    if yxz is None:
+        yxz = (None,) * 3
+    assert type(yxz) is tuple
+    assert len(yxz) == 3
+
+    image = None
     if file_type.lower() == ".npy":
-        return np.load(file_path, mmap_mode=mmap_mode)[:]
+        image = np.load(file_path, mmap_mode=None)[:]
     elif file_type.lower() == ".zarr":
-        return zarr.open(file_path, mode="r")[:]
+        image = zarr.open(file_path, mode="r")
     else:
         log.error(ValueError(f"Unsupported `file_type`: {file_type.lower()}"))
+
+    shape_yxz = (image.shape[1], image.shape[2], image.shape[0])
+    dim_indices_yxz = tuple()
+    for dim, yxz_dim in enumerate(yxz):
+        if yxz_dim is None:
+            dim_indices_yxz += ((0, shape_yxz[dim]),)
+            continue
+        assert type(yxz_dim) is tuple, f"Expected tuple in yxz at index {dim} if not None, got {yxz_dim}"
+        assert len(yxz_dim) == 2, f"Tuple must be length 2 inside of yxz, image min (inclusive) and max (exclusive)."
+        assert type(yxz_dim[0]) is int and type(yxz_dim[1]) is int, f"Must be ints inside tuple in yxz, got {yxz_dim}"
+        assert yxz_dim[0] < yxz_dim[1], f"The maximum must be greater than the minimum"
+        assert yxz_dim[0] >= 0, f"The yxz minimum must be >= 0, got {yxz_dim[0]} for image dim {dim}"
+        assert yxz_dim[1] <= shape_yxz[dim], f"The yxz maximum must be <= {shape_yxz[dim]}, got {yxz_dim[1]}"
+        dim_indices_yxz += (yxz_dim,)
+    image = image[
+        dim_indices_yxz[2][0] : dim_indices_yxz[2][1],
+        dim_indices_yxz[1][0] : dim_indices_yxz[1][1],
+        dim_indices_yxz[0][0] : dim_indices_yxz[0][1],
+    ]
+    # zyx -> yxz.
+    image = image.transpose((1, 2, 0))
+
+    return image
 
 
 def save_image(
@@ -261,7 +286,7 @@ def load_image(
     t: int,
     r: int,
     c: int,
-    yxz: Optional[Tuple[int, None]] = None,
+    yxz: Optional[Tuple[Tuple[int], None]] = None,
     apply_shift: bool = True,
     suffix: str = "",
 ) -> Union[npt.NDArray[np.uint16], npt.NDArray[np.int32]]:
@@ -297,10 +322,7 @@ def load_image(
     assert type(t) is int, f"Got type {type(t)} instead"
     assert type(r) is int
     assert type(c) is int
-    if yxz is None:
-        yxz = (None,) * 3
-    assert type(yxz) is tuple
-    assert len(yxz) == 3
+    assert yxz is None or type(yxz) is tuple
 
     file_path = nbp_file.tile[t][r][c]
     file_path = file_path[: file_path.index(file_type)] + suffix + file_type
@@ -308,29 +330,9 @@ def load_image(
     if not image_exists(file_path, file_type):
         log.error(FileNotFoundError(f"Could not find image at {file_path} to load from"))
 
-    # Image is in shape zyx.
-    image = _load_image(file_path, file_type)
-    # zyx -> yxz.
-    image = image.transpose((1, 2, 0))
+    # Image is in shape yxz.
+    image = _load_image(file_path, file_type, yxz)
 
-    dim_indices = tuple()
-    for dim, yxz_dim in enumerate(yxz):
-        if yxz_dim is None:
-            dim_indices += ((0, image.shape[dim]),)
-            continue
-        assert type(yxz_dim) is tuple, f"Expected tuple in yxz at index {dim} if not None, got {yxz_dim}"
-        assert len(yxz_dim) == 2, f"Tuple must be length 2 inside of yxz, image min (inclusive) and max (exclusive)."
-        assert type(yxz_dim[0]) is int and type(yxz_dim[1]) is int, f"Must be ints inside tuple in yxz, got {yxz_dim}"
-        assert yxz_dim[0] < yxz_dim[1], f"The maximum must be greater than the minimum"
-        assert yxz_dim[0] >= 0, f"The yxz minimum must be >= 0, got {yxz_dim[0]} for image dim {dim}"
-        assert yxz_dim[1] <= image.shape[dim], f"The yxz maximum must be <= {image.shape[dim]}, got {yxz_dim[1]}"
-        dim_indices += (yxz_dim,)
-
-    image = image[
-        dim_indices[0][0] : dim_indices[0][1],
-        dim_indices[1][0] : dim_indices[1][1],
-        dim_indices[2][0] : dim_indices[2][1],
-    ]
     # Apply shift if not DAPI channel
     if apply_shift and c != nbp_basic.dapi_channel:
         image = offset_pixels_by(image, -nbp_basic.tile_pixel_value_shift)
