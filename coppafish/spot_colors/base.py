@@ -123,22 +123,25 @@ def get_spot_colours_new(
     n_points = yxz.shape[0]
     half_pixels = [1 / image_shape[i] for i in range(3)]
     # If true, load in only a subset of the flow image to avoid too much disk loading.
-    load_subset = n_points < 10_000
+    load_subset = n_points < 40_000
 
-    # 1: Affine transform every pixel position, keep them as floating points.
-    yxz_registered = torch.zeros((0, n_points, 3), dtype=torch.float32)
-
-    def get_yxz_bounds() -> Tuple[torch.Tensor, torch.Tensor]:
-        yxz_mins = yxz_registered.floor().min(dim=0)[0].min(dim=0)[0]
-        yxz_mins -= 5
+    def get_yxz_bounds(from_yxz: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        assert from_yxz.ndim == 3
+        assert from_yxz.shape[-1] == 3
+        yxz_mins = from_yxz.min(dim=0)[0].min(dim=0)[0] + 1
+        yxz_mins = torch.floor(((yxz_mins / torch.asarray(half_pixels)) - 1) * 0.5)
+        yxz_mins -= torch.asarray([5, 5, 1])
         yxz_mins = torch.clamp(yxz_mins, torch.zeros(3), torch.asarray(image_shape)).int()
-        yxz_maxs = yxz_registered.ceil().max(dim=0)[0].max(dim=0)[0]
-        yxz_maxs += 5
+        yxz_maxs = from_yxz.max(dim=0)[0].max(dim=0)[0] + 1
+        yxz_maxs = torch.ceil(((yxz_maxs / torch.asarray(half_pixels)) - 1) * 0.5)
+        yxz_maxs += torch.asarray([5, 5, 1])
         yxz_maxs = torch.clamp(yxz_maxs, torch.zeros(3), torch.asarray(image_shape)).int()
         assert yxz_mins.shape == (3,)
         assert yxz_maxs.shape == (3,)
         return yxz_mins, yxz_maxs
 
+    # 1: Affine transform every pixel position, keep them as floating points.
+    yxz_registered = torch.zeros((0, n_points, 3), dtype=torch.float32)
     for c in channels:
         affine = np.eye(4, 3)
         if registration_type == "flow_and_icp" and c != nbp_basic.dapi_channel:
@@ -168,7 +171,7 @@ def get_spot_colours_new(
         # (3, 1, im_y, im_x, im_z).
         flow_image = torch.zeros((3, 1) + image_shape).float()
         if load_subset:
-            yxz_minimums, yxz_maximums = get_yxz_bounds()
+            yxz_minimums, yxz_maximums = get_yxz_bounds(yxz_registered)
             flow_image[
                 :,
                 0,
@@ -215,7 +218,7 @@ def get_spot_colours_new(
     for c_i, c in enumerate(channels):
         image_c = torch.zeros(image_shape).float()
         if load_subset:
-            yxz_minimums, yxz_maximums = get_yxz_bounds()
+            yxz_minimums, yxz_maximums = get_yxz_bounds(yxz_registered)
             yxz_subset = tuple([(yxz_minimums[i].item(), yxz_maximums[i].item()) for i in range(3)])
             image_c[
                 yxz_subset[0][0] : yxz_subset[0][1],

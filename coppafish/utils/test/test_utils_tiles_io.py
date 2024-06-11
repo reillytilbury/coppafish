@@ -49,3 +49,6 @@ def test_tiles_io_save_load_tile():
 
 
 # TODO: get_npy_tile_ind unit tests.
+
+if __name__ == "__main__":
+    test_tiles_io_save_load_tile()
