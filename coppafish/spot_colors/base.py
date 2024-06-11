@@ -129,10 +129,10 @@ def get_spot_colours_new(
     yxz_registered = torch.zeros((0, n_points, 3), dtype=torch.float32)
 
     def get_yxz_bounds() -> Tuple[torch.Tensor, torch.Tensor]:
-        yxz_mins = yxz_registered.floor().min(dim=0).min(dim=0)
+        yxz_mins = yxz_registered.floor().min(dim=0)[0].min(dim=0)[0]
         yxz_mins -= 5
         yxz_mins = torch.clamp(yxz_mins, 0, torch.asarray(image_shape))
-        yxz_maxs = yxz_registered.ceil().max(dim=0).max(dim=0)
+        yxz_maxs = yxz_registered.ceil().max(dim=0)[0].max(dim=0)[0]
         yxz_maxs += 5
         yxz_maxs = torch.clamp(yxz_maxs, 0, torch.asarray(image_shape))
         assert yxz_mins.shape == (3,)
