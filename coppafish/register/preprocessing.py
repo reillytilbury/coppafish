@@ -662,7 +662,7 @@ def transform_im(im: np.ndarray, affine: np.ndarray, flow: zarr.Array, flow_ind:
 
 def adjust_affine(affine: np.ndarray, new_origin: np.ndarray) -> np.ndarray:
     """
-    adjusts the affine transform for a new origin, then converts from 4 x 3 to 3 x 4 format.
+    Adjusts the affine transform for a new origin, then converts from 4 x 3 to 3 x 4 format.
 
     Args:
         affine: 4 x 3 affine transform (y x z)

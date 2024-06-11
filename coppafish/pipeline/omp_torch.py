@@ -7,8 +7,7 @@ import torch
 import tqdm
 from typing_extensions import assert_type
 
-from .. import log
-from .. import spot_colors
+from .. import log, utils, spot_colors
 from ..call_spots import background_pytorch, qual_check_torch
 from ..find_spots import detect_torch
 from ..omp import coefs_torch, scores_torch, spots_torch
@@ -122,10 +121,29 @@ def run_omp(
         # STEP 1: Load every registered sequencing round/channel image into memory
         log.debug(f"Loading tile {t} colours")
         colour_image = np.zeros(tile_shape + (n_rounds_use, n_channels_use), dtype=np.float16)
+        n_batch_size = maths.floor(utils.system.get_available_memory() * 2.3e7 / (np.prod(tile_shape)))
+        n_batches = maths.ceil(n_channels_use / n_batch_size)
+        log.debug(f"Channel batches: {n_batches}")
         for i, r in enumerate(tqdm.tqdm(nbp_basic.use_rounds, unit="round", desc=f"Loading tile {t} colours")):
-            colour_image[:, :, :, i] = spot_colors.base.get_spot_colours_new(
-                nbp_basic, nbp_file, nbp_extract, nbp_register, nbp_register_debug, t, r, dtype=np.float16
-            ).transpose((1, 2, 3, 0))
+            for j_batch in range(n_batches):
+                j_min = j_batch * n_batch_size
+                j_max = min((j_batch + 1) * n_batch_size, n_channels_use)
+                colour_image[:, :, :, i, j_min:j_max] = (
+                    spot_colors.base.get_spot_colours_new(
+                        nbp_basic,
+                        nbp_file,
+                        nbp_extract,
+                        nbp_register,
+                        nbp_register_debug,
+                        t,
+                        r,
+                        channels=tuple([nbp_basic.use_channels[j] for j in range(j_min, j_max)]),
+                        dtype=np.float16,
+                        force_cpu=config["force_cpu"],
+                    )
+                    .reshape((j_max - j_min,) + tile_shape)
+                    .transpose((1, 2, 3, 0))
+                )
         log.debug(f"Loading tile {t} colours complete")
 
         description = f"Computing OMP on tile {t} using the "

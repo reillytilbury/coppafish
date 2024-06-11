@@ -3,11 +3,10 @@ from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
-import scipy
 import torch
 from tqdm import tqdm
 
-from ..register import preprocessing
+from .. import log
 from ..setup import NotebookPage
 from ..utils import tiles_io
 
@@ -62,9 +61,10 @@ def get_spot_colours_new(
     tile: int,
     round: int,
     channels: Optional[Union[Tuple[int], int]] = None,
-    yxz: Optional[npt.NDArray[np.int_]] = None,
+    yxz: npt.NDArray[np.int_] = None,
     registration_type: str = "flow_and_icp",
     dtype: np.dtype = np.float32,
+    force_cpu: bool = True,
 ) -> npt.NDArray[Any]:
     """
     Load and return registered image(s) colours. Image(s) are correctly centred around zero. Zeros are placed when the
@@ -80,20 +80,23 @@ def get_spot_colours_new(
         round (int): round index.
         channels (tuple of ints or int): channel indices (index) to load. Default: sequencing channels.
         yxz (`(n_points x 3) ndarray[int]`): specific points to retrieve relative to the reference image (the anchor
-            round/channel). Default: the entire image.
+            round/channel). Default: the entire image in the order such that
+            `image.reshape((len(channels) x im_y x im_x x im_z))` will return the entire image.
         registration_type (str): registration method to apply up to. Can be 'flow' or 'flow_and_icp'. Default:
             'flow_and_icp', the completed registration, after optical flow and ICP corrections.
         dtype (dtype): data type to return the images into. This must support negative numbers. An integer dtype will
             cause rounding errors. Default: np.float32.
+        force_cpu (bool): only use a CPU to run computations on. Default: true.
 
     Returns:
-        (`(len(channels) x im_y x im_x x im_z) ndarray[dtype]` if yxz is None else `(len(channels) x n_points)
-        ndarray[dtype]`) image: registered image intensities.
+        `(len(channels) x n_points) ndarray[dtype]`) image: registered image intensities.
 
     Notes:
         - If you are planning to load in multiple channels, this function is faster if called once.
+        - float32 precision is used throughout intermediate steps.
     """
     assert type(nbp_basic) is NotebookPage
+    image_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
     assert type(nbp_file) is NotebookPage
     assert type(nbp_extract) is NotebookPage
     assert type(nbp_register) is NotebookPage
@@ -106,77 +109,93 @@ def get_spot_colours_new(
         channels = (channels,)
     assert type(channels) is tuple
     assert len(channels) > 0
-    if yxz is not None:
-        assert type(yxz) is np.ndarray
-        assert yxz.shape[0] > 0
-        assert yxz.shape[1] == 3
+    if yxz is None:
+        yxz = [np.linspace(0, image_shape[i], image_shape[i], endpoint=False) for i in range(3)]
+        yxz = np.array(np.meshgrid(*yxz, indexing="ij")).reshape((3, -1)).astype(np.int32).T
+    assert type(yxz) is np.ndarray
+    assert yxz.shape[0] > 0
+    assert yxz.shape[1] == 3
     assert registration_type in ("flow", "flow_and_icp")
 
-    image_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
+    run_on = torch.device("cpu")
+    if not force_cpu and torch.cuda.is_available():
+        run_on = torch.device("cuda")
 
-    # First, affine transform every channel image, all pixels since this is fast.
+    n_points = yxz.shape[0]
+    half_pixels = [1 / image_shape[i] for i in range(3)]
+
+    # 1: Affine transform every pixel position, keep them as floating points.
+    yxz_registered = torch.zeros((0, n_points, 3), dtype=torch.float32)
+    for c in channels:
+        affine = np.eye(4, 3)
+        if registration_type == "flow_and_icp" and c != nbp_basic.dapi_channel:
+            affine = nbp_register.icp_correction[tile, round, c].copy()
+        elif registration_type == "flow":
+            affine = nbp_register_debug.channel_correction[tile, c].copy()
+        assert affine.shape == (4, 3)
+        affine.flags.writeable = True
+        affine = torch.asarray(affine).float()
+        yxz_affine_c = torch.asarray(yxz).float()
+        yxz_affine_c = torch.nn.functional.pad(yxz_affine_c, (0, 1, 0, 0), "constant", 1)
+        yxz_affine_c = yxz_affine_c.to(run_on)
+        affine = affine.to(run_on)
+        yxz_affine_c = torch.matmul(yxz_affine_c, affine)
+        yxz_affine_c = yxz_affine_c.cpu()
+        affine = affine.cpu()
+        assert yxz_affine_c.shape == (n_points, 3)
+        for i in range(3):
+            yxz_affine_c[:, i] = (2 * yxz_affine_c[:, i] + 1) * half_pixels[i]
+            yxz_affine_c[:, i] -= 1
+        yxz_registered = torch.cat((yxz_registered, yxz_affine_c[np.newaxis]), dim=0).float()
+        del yxz_affine_c, affine
+    del yxz
+
+    if registration_type == "flow_and_icp":
+        # 2: Gather the optical flow shifts using interpolation from the affine positions.
+        # (3, 1, im_y, im_x, im_z).
+        flow_image = torch.asarray(nbp_register.flow[tile, round]).float()[:, np.newaxis]
+        flow_image = [flow_image[[i]] for i in range(3)]
+        # (1, 1, len(channels), n_points, 3). yxz becomes zxy to use the grid_sample function.
+        yxz_registered = yxz_registered[np.newaxis, np.newaxis, :, :, [2, 1, 0]]
+        # Gives flow shifts in shape (3, len(channels), n_points).
+        optical_flow_shifts = torch.zeros((3, len(channels), n_points)).float()
+        for i in range(3):
+            optical_flow_shifts[i] = torch.nn.functional.grid_sample(
+                flow_image[i], yxz_registered, mode="bilinear", align_corners=False
+            )[0, 0, 0]
+        yxz_registered = yxz_registered[..., [2, 1, 0]]
+        del flow_image
+        # (len(channels), n_points, 3)
+        optical_flow_shifts = optical_flow_shifts.movedim(0, 1).movedim(1, 2)
+        assert optical_flow_shifts.shape == (len(channels), n_points, 3)
+        # Convert optical flow pixel shifts to grid sized shifts based on pytorch's grid_sample function.
+        for i in range(3):
+            optical_flow_shifts[:, :, i] *= half_pixels[i] * 2
+        # 3: Apply optical flow shifts to the yxz affine positions for final registered positions.
+        yxz_registered = yxz_registered[0, 0] + optical_flow_shifts
+        del optical_flow_shifts
+
+    # 4: Gather all unregistered channel images.
     suffix = "_raw" if round == nbp_basic.pre_seq_round else ""
-    image = tuple()
-    new_origin = np.zeros(3, dtype=int)
-    # While each image is being affine transformed, disk load the next image.
-    with ProcessPoolExecutor(max_workers=len(nbp_basic.use_channels)) as executor:
-        futures = []
-        for c in channels:
-            im_c = tiles_io.load_image(
-                nbp_file, nbp_basic, nbp_extract.file_type, tile, round, c, yxz=None, suffix=suffix
-            ).astype(np.float32)
-            affine = np.eye(4, 3)
-            if registration_type == "flow_and_icp" and c != nbp_basic.dapi_channel:
-                affine = nbp_register.icp_correction[tile, round, c].copy()
-            elif registration_type == "flow":
-                affine = nbp_register_debug.channel_correction[tile, c]
-            affine = preprocessing.adjust_affine(affine=affine, new_origin=new_origin)
-            futures.append(
-                executor.submit(scipy.ndimage.affine_transform, im_c, affine, order=1, mode="constant", cval=0)
-            )
-        for future in futures:
-            image += (future.result(timeout=300)[np.newaxis].copy(),)
-        del futures
-    image = torch.asarray(np.concatenate(image, axis=0, dtype=np.float32))
-    assert image.shape == (len(channels),) + image_shape
-    # Second, optical flow and interpolate given yxz positions.
-    half_pixel_0, half_pixel_1, half_pixel_2 = [1 / image_shape[i] for i in range(3)]
-    grid_0, grid_1, grid_2 = torch.meshgrid(
-        torch.linspace(half_pixel_0 - 1, 1 - half_pixel_0, image_shape[0]),
-        torch.linspace(half_pixel_1 - 1, 1 - half_pixel_1, image_shape[1]),
-        torch.linspace(half_pixel_2 - 1, 1 - half_pixel_2, image_shape[2]),
-        indexing="ij",
-    )
-    grid = torch.cat((grid_2[:, :, :, None], grid_1[:, :, :, None], grid_0[:, :, :, None]), dim=3)[None]
-    flow_field = nbp_register.flow[tile, round].astype(np.float32)
-    flow_field[[0, 1, 2]] = flow_field[[2, 1, 0]]
-    # Flow's shape (3, im_y, im_x, im_z) -> (1, im_y, im_x, im_z, 3).
-    flow_field = torch.asarray(flow_field.transpose((1, 2, 3, 0)))[np.newaxis]
-    flow_field[..., 0] *= half_pixel_2 * 2
-    flow_field[..., 1] *= half_pixel_1 * 2
-    flow_field[..., 2] *= half_pixel_0 * 2
-    assert grid.shape == (1,) + image_shape + (3,)
-    grid += flow_field
-    image = image[None]
-    if yxz is None:
-        flow_image = torch.nn.functional.grid_sample(
-            image, grid, mode="bilinear", padding_mode="zeros", align_corners=False
-        )[0]
-        assert flow_image.shape == (len(channels),) + image_shape
-    else:
-        # Only sample the selected yxz points from the image.
-        grid = grid[0]
-        yxz_torch = torch.asarray(yxz).int()
-        # Creates grid of shape (1, 1, 1, n_points, 3)
-        grid = grid[tuple(yxz_torch.T)][None, None, None]
-        assert grid.shape == (1, 1, 1, yxz.shape[0], 3)
-        flow_image = torch.nn.functional.grid_sample(
-            image, grid, mode="bilinear", padding_mode="zeros", align_corners=False
-        )[0, :, 0, 0]
-        assert flow_image.shape == (len(channels), yxz.shape[0])
-    return flow_image.numpy().astype(dtype)
+    images = torch.zeros((0,) + image_shape, dtype=torch.float32)
+    for c in channels:
+        image_c = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, tile, round, c, suffix=suffix)
+        images = torch.cat((images, torch.asarray(image_c[np.newaxis]).float()), dim=0).float()
+        del image_c
+
+    # 5: Use the yxz registered positions to gather from the images through interpolation.
+    # (len(channels), 1, im_y, im_x, im_z)
+    images = images[:, np.newaxis]
+    # (len(channels), 1, 1, n_points, 3)
+    yxz_registered = yxz_registered[:, np.newaxis, np.newaxis, :, [2, 1, 0]]
+    pixel_intensities = torch.nn.functional.grid_sample(images, yxz_registered, mode="bilinear", align_corners=False)
+    # (len(channels), n_points)
+    pixel_intensities = pixel_intensities[:, 0, 0, 0].numpy().astype(dtype)
+    assert pixel_intensities.shape == (len(channels), n_points)
+    return pixel_intensities
 
 
+# TODO: Remove the use of the old, slower, and less precise get_spot_colors function in the codebase.
 def get_spot_colors(
     yxz_base: np.ndarray,
     t: np.ndarray,
