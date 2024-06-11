@@ -564,7 +564,7 @@ class Viewer:
             score.append(nb.omp.scores)
             gene_no.append(nb.omp.gene_no)
             omp_colours = nb.omp.colours.copy()
-            colour_norm_factor = nb.call_spots.color_norm_factor[
+            colour_norm_factor = nb.call_spots.colour_norm_factor[
                 np.ix_(np.arange(nb.basic_info.n_tiles), nb.basic_info.use_rounds, nb.basic_info.use_channels)
             ]
             omp_colours_float = omp_colours / colour_norm_factor[tile[-1]]
