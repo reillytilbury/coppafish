@@ -39,6 +39,7 @@ nav:
   - Advanced Usage: advanced_usage.md
   - Troubleshoot: troubleshoot.md
   - Glossary: glossary.md
+  - Call Spots: call_spots.md
 
 # This part allows mathematics to be displayed LaTeX style, by using $...$ for in line or $$...$$ for multi-line.
 markdown_extensions:
