@@ -548,7 +548,7 @@ class Viewer:
         downsample_factor = np.array([1, downsample_factor, downsample_factor])
         n_methods = len(self.method["names"])
         tile_origin = nb.stitch.tile_origin
-        use_channels = nb.basic_info.use_channels
+        colour_norm_factor = nb.call_spots.colour_norm_factor
 
         # initialise relevant information
         tile = [nb.__getattribute__(self.method["pages"][i]).tile for i in range(n_methods)]
@@ -557,6 +557,7 @@ class Viewer:
         # apply downsample factor
         global_loc = [loc // downsample_factor for loc in global_loc]
         colours = [nb.__getattribute__(self.method["pages"][i]).colours for i in range(2)]
+        colours = [colours[i] * colour_norm_factor[tile[i]] for i in range(2)]
         score = [nb.ref_spots.dot_product_gene_score, nb.ref_spots.probability_gene_score]
         gene_no = [nb.ref_spots.dot_product_gene_no, nb.ref_spots.probability_gene_no]
         intensity = [nb.ref_spots.intensity, nb.ref_spots.intensity]
@@ -564,10 +565,7 @@ class Viewer:
             score.append(nb.omp.scores)
             gene_no.append(nb.omp.gene_no)
             omp_colours = nb.omp.colours.copy()
-            colour_norm_factor = nb.call_spots.colour_norm_factor[
-                np.ix_(np.arange(nb.basic_info.n_tiles), nb.basic_info.use_rounds, nb.basic_info.use_channels)
-            ]
-            omp_colours_float = omp_colours / colour_norm_factor[tile[-1]]
+            omp_colours_float = omp_colours * colour_norm_factor[tile[-1]]
             intensity_omp = np.median(np.max(omp_colours_float, axis=-1), axis=-1)
             intensity.append(intensity_omp)
             colours.append(nb.omp.colours)

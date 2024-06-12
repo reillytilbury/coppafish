@@ -256,10 +256,12 @@ class Notebook:
             for config_variable_name, value in self._init_config[config_section].items():
                 is_equal = False
                 if config_variable_name not in config_on_disk[config_section].keys():
-                    raise ValueError(
+                    log.warn(
                         f"Config at {self.config_path} is missing the variable named {config_variable_name} in section "
                         + f"{config_section}. {version_mismatch_msg}"
                     )
+                    modified_variables += (config_variable_name,)
+                    continue
                 config_variable = config_on_disk[config_section][config_variable_name]
                 if value == config_variable:
                     is_equal = True

@@ -101,7 +101,7 @@ def view_free_and_target_bled_codes(free_bled_codes_tile_indep: np.ndarray,
     n_genes, n_rounds, n_channels_use = free_bled_codes_tile_indep.shape
     n_rows = n_genes // n_columns + 1
 
-    fig, ax = plt.subplots(n_rows, n_columns, figsize=(25, 15))
+    fig, ax = plt.subplots(n_rows, n_columns)
     codes = np.zeros((n_genes, n_rounds, 2 * n_channels_use + 1)) * np.nan
     # fill in the codes
     for g in range(n_genes):
@@ -152,7 +152,7 @@ def view_tile_bled_codes(free_bled_codes: np.ndarray, free_bled_codes_tile_indep
     n_tiles = len(use_tiles)
     n_rows = int(np.ceil(n_tiles / n_columns)) + 1
 
-    fig, ax = plt.subplots(n_rows, n_columns, figsize=(25, 15))
+    fig, ax = plt.subplots(n_rows, n_columns)
     for i, t in enumerate(use_tiles):
         row, col = i // n_columns, i % n_columns
         ax[row, col].imshow(free_bled_codes[gene, t].T, cmap='viridis')
@@ -179,7 +179,7 @@ def view_tile_bled_codes(free_bled_codes: np.ndarray, free_bled_codes_tile_indep
 
 def view_target_scale_regression(target_scale: np.ndarray, gene_codes:np.ndarray, d_max: np.ndarray,
                                  target_values: np.ndarray, free_bled_codes_tile_indep: np.ndarray,
-                                 n_spots: np.ndarray) -> None:
+                                 n_spots: np.ndarray, use_channels: tuple) -> None:
     """
     Plotter to show the regression of the target scale factor for each round and channel.
     Args:
@@ -195,36 +195,64 @@ def view_target_scale_regression(target_scale: np.ndarray, gene_codes:np.ndarray
             The tile independent free bled codes.
         n_spots: np.ndarray [n_genes]
             The number of spots for each gene.
+        use_channels: np.ndarray [n_channels_use]
 
     """
     n_genes, n_rounds, n_channels_use = free_bled_codes_tile_indep.shape
-    fig, ax = plt.subplots(n_rounds, n_channels_use, figsize=(25, 15))
-    for r, c in np.ndindex(n_rounds, n_channels_use):
-        relevant_genes = np.where(gene_codes[:, r] == d_max[c])[0]
-        n_spots_rc = n_spots[relevant_genes]
-        x = free_bled_codes_tile_indep[relevant_genes, r, c]
-        y = [target_values[d_max[c]]] * len(relevant_genes)
-        sizes = np.sqrt(n_spots_rc)
-        ax[r, c].scatter(x, y, s=sizes)
-        ax[r, c].plot(x, target_scale[r, c] * x, color='red')
-        ax[r, c].set_title(f"Round {r}, Channel {c}", fontsize=8)
-        ax[r, c].set_xticks([])
-        ax[r, c].set_yticks([])
-        ax[r, c].set_xlim(0, free_bled_codes_tile_indep.max())
-        if r == n_rounds - 1:
-            ax[r, c].set_xlabel("free rc")
-        if c == 0:
-            ax[r, c].set_ylabel("target rc")
+    fig, ax = plt.subplots(n_channels_use, 1)
+    for c in range(n_channels_use):
+        x, y, y_scaled, s = [], [], [], []
+        for r in range(n_rounds):
+            # get data
+            relevant_genes = np.where(gene_codes[:, r] == d_max[c])[0]
+            n_spots_rc = n_spots[relevant_genes]
+            new_y_vals = free_bled_codes_tile_indep[relevant_genes, r, c]
+            new_y_scaled_vals = free_bled_codes_tile_indep[relevant_genes, r, c] * target_scale[r, c]
+            # append data
+            y.append(new_y_vals)
+            y_scaled.append(new_y_scaled_vals)
+            s.append(np.sqrt(n_spots_rc))
+            x.append(np.repeat(2 * r, len(relevant_genes)))
+        # convert data to numpy arrays
+        x, y, y_scaled, s = np.concatenate(x), np.concatenate(y), np.concatenate(y_scaled), np.concatenate(s)
+        jitter = np.random.normal(0, 0.1, len(x))
+        ax[c].scatter(x + jitter, y, s=s, c='cyan', alpha=0.5)
+        ax[c].scatter(x + 1 + jitter, y_scaled, s=s, c='red', alpha=0.5)
+        # add a horizontal line for the target value
+        ax[c].axhline(target_values[d_max[c]], color='white', linestyle='--')
+        ax[c].set_xticks([])
+        max_val = max(np.max(free_bled_codes_tile_indep), np.max(free_bled_codes_tile_indep * target_scale))
+        ax[c].set_yticks(np.round([0, target_values[d_max[c]], max_val], 2))
+        ax[c].set_xlim(-1, 2 * n_rounds)
+        ax[c].set_ylim(0, max_val)
+        ax[c].set_ylabel(f"Channel {use_channels[c]}")
+        # add text to the right hand side of each row
+        ax[c].text(2 * n_rounds + 0.25, 1, f"mean scale = {np.mean(target_scale[:, c]) :.2f}")
+        if c == n_channels_use - 1:
+            ax[c].set_xlabel("Round")
+            ax[c].set_xticks(np.arange(0, 2 * n_rounds, 2), labels=np.arange(n_rounds))
+
     plt.suptitle("Each scale $V_{rc}$ is chosen so that the loss function "
                  "$L(V_{rc}) = \sum_{g \in G_{rc}} \sqrt{N_g}(E_{grc}V_{rc} - T_{d_{max}(c)})^2$ is minimised, \n"
                  "where $G_{rc}$ is the set of genes with gene code $d_{max}(c)$ in round r and $E_g$ is the "
-                 "tile-independent bled code for gene g.")
+                 "tile-independent bled code for gene g. Cyan points are raw values, red points are scaled values.")
+    # add another figure to show the target scale
+    fig2, ax2 = plt.subplots(1, 1)
+    ax2.imshow(target_scale, cmap='viridis')
+    ax2.set_title("Target scale")
+    ax2.set_ylabel("Round")
+    ax2.set_xlabel("Channel")
+    ax2.set_yticks(np.arange(n_rounds))
+    ax2.set_xticks(np.arange(n_channels_use), labels=use_channels)
+    # add colorbar
+    cbar = plt.colorbar(ax2.imshow(target_scale, cmap='viridis'), ax=ax2)
+    cbar.set_label("Scale factor")
     plt.show()
 
 
 def view_homogeneous_scale_regression(homogeneous_scale: np.ndarray, gene_codes: np.ndarray, d_max: np.ndarray,
                                       target_bled_codes: np.ndarray, free_bled_codes: np.ndarray,
-                                      n_spots: np.ndarray, t: int) -> None:
+                                      n_spots: np.ndarray, t: int, use_channels: tuple) -> None:
     """
     Plotter to show the regression of the homogeneous scale factor for tile t for all rounds and channels.
 
@@ -241,10 +269,15 @@ def view_homogeneous_scale_regression(homogeneous_scale: np.ndarray, gene_codes:
             The free bled codes.
         n_spots: np.ndarray [n_genes]
             The number of spots for each gene.
+        t: int
+            The tile to plot.
+        use_channels: tuple
+            The channels to use.
 
     """
+    use_channels = list(use_channels)
     n_tiles, n_rounds, n_channels_use = homogeneous_scale.shape
-    fig, ax = plt.subplots(n_rounds, n_channels_use, figsize=(25, 15))
+    fig, ax = plt.subplots(n_rounds, n_channels_use)
     for r, c in np.ndindex(n_rounds, n_channels_use):
         relevant_genes = np.where(gene_codes[:, r] == d_max[c])[0]
         n_spots_rc = n_spots[relevant_genes]
@@ -253,21 +286,68 @@ def view_homogeneous_scale_regression(homogeneous_scale: np.ndarray, gene_codes:
         sizes = np.sqrt(n_spots_rc)
         ax[r, c].scatter(x, y, s=sizes)
         ax[r, c].plot(x, homogeneous_scale[t, r, c] * x, color='red')
-        ax[r, c].set_title(f"r {r}, c {c}", fontsize=8)
+        ax[r, c].set_title(f"r {r}, c {use_channels[c]}", fontsize=8)
         ax[r, c].set_xticks([])
         ax[r, c].set_yticks([])
         ax[r, c].set_xlim(0, free_bled_codes[:, t].max())
         ax[r, c].set_ylim(0, target_bled_codes.max())
         if r == n_rounds - 1:
-            ax[r, c].set_xlabel("free rc")
+            ax[r, c].set_xlabel("$D_{gtrc}$")
         if c == 0:
-            ax[r, c].set_ylabel("target rc")
+            ax[r, c].set_ylabel("$K_{grc}$")
     plt.suptitle("Each homogeneous scale $Q_{trc}$ is chosen so that the loss function "
-                 "$L(Q_{trc}) = \sum_{g \in G_{rc}} \sqrt{N_g}(D_{gtrc}Q_{trc} - E_{grc}V_{rc})^2$ is minimised, \n"
-                 "where $G_{rc}$ is the set of genes with gene code $d_{max}(c)$ in round r, $E_g$ is the "
-                 "tile-independent bled code for gene g, $D_g$ is the tile-dependent bled code for gene g, "
+                 "$L(Q_{trc}) = \sum_{g \in G_{rc}} \sqrt{N_g}(D_{gtrc}Q_{trc} - K_{grc})^2$ is minimised, \n"
+                 "where $G_{rc}$ is the set of genes with gene code $d_{max}(c)$ in round r, $K_{grc} = E_{grc}V_{rc}$ "
+                 "is the target bled code for gene g, $D_g$ is the tile-dependent bled code for gene g, "
                  "and $V_{rc}$ is the preliminary target scale factor.")
 
+    plt.show()
+
+
+def view_homogeneous_scale_factors(homogeneous_scale: np.ndarray, target_scale: np.ndarray,
+                                   use_tiles: tuple, use_rounds: tuple, use_channels: tuple) -> None:
+    """
+    Function to plot the homogeneous scale factors for each tile, round and channel.
+    Args:
+        homogeneous_scale: np.ndarray [n_tiles x n_rounds x n_channels_use]
+            The homogeneous scale factors.
+        target_scale: np.ndarray [n_rounds x n_channels_use]
+            The target scale factors.
+        use_tiles: tuple
+            The tiles to use.
+        use_rounds: tuple
+            The rounds to use.
+        use_channels:  tuple
+            The channels to use.
+    """
+    use_tiles, use_rounds, use_channels = list(use_tiles), list(use_rounds), list(use_channels)
+    homogeneous_scale = homogeneous_scale[use_tiles]
+    relative_scale = homogeneous_scale / target_scale[None, :, :]
+    n_tiles, n_rounds, n_channels_use = homogeneous_scale.shape
+    homogeneous_scale = homogeneous_scale.reshape((n_tiles * n_rounds, n_channels_use))
+    relative_scale = relative_scale.reshape((n_tiles * n_rounds, n_channels_use))
+    fig, ax = plt.subplots(1, 3)
+    ax[0].imshow(target_scale, cmap='viridis')
+    ax[0].set_xticks(np.arange(n_channels_use), labels=use_channels)
+    ax[0].set_yticks(np.arange(n_rounds), labels=use_rounds)
+    ax[0].set_title("Target Scale Factors")
+    ax[0].set_xlabel("Channel")
+    ax[0].set_ylabel("Round")
+    plt.colorbar(ax[0].imshow(target_scale, cmap='viridis'), ax=ax[0])
+    for i, scale in enumerate([homogeneous_scale, relative_scale]):
+        i += 1
+        ax[i].imshow(scale, cmap='viridis')
+        ax[i].set_xticks(np.arange(n_channels_use), labels=use_channels)
+        ax[i].set_yticks(np.arange(n_tiles * n_rounds), labels=[f"T{t}, R{r}" for t, r in np.ndindex(n_tiles, n_rounds)],
+                         fontsize=8)
+        ax[i].set_title("Homogeneous Scale Factors" if i == 1 else "Homogeneous Scale Factors \n / Target Scale Factors")
+        ax[i].set_xlabel("Channel")
+        ax[i].set_ylabel("Tile x Round")
+        # add horizontal red lines at each tile
+        for t in range(1, n_tiles):
+            ax[i].axhline(t * n_rounds - 0.5, color='red', linestyle='--')
+        # add colorbar
+        plt.colorbar(ax[i].imshow(scale, cmap='viridis'), ax=ax[i])
     plt.show()
 
 
