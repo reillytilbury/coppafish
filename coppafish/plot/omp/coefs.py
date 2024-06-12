@@ -142,8 +142,10 @@ class View_OMP_Coefficients:
         self.gene_names = nb.call_spots.gene_names
         self.z_planes = z_planes
         self.coefficient_image = coefficient_image
+        self.iteration_count_image = (~np.isclose(coefficient_image.numpy(), 0)).astype(int).sum(0)
         self.mid_z = -min(self.z_planes)
         self.function_coefficients = False
+        self.show_iteration_counts = False
         self.high_coef_bias = config["high_coef_bias"]
         self.draw_canvas()
         plt.show()
@@ -154,6 +156,7 @@ class View_OMP_Coefficients:
             ncols=len(self.z_planes) + 1,
             squeeze=False,
             gridspec_kw={"width_ratios": [5] * len(self.z_planes) + [1] * 1, "height_ratios": [6, 1]},
+            layout="tight",
         )
         self.fig.subplots_adjust(bottom=0.25)
         ax_function_coefs = self.axes[1, 1]
@@ -177,9 +180,37 @@ class View_OMP_Coefficients:
         )
         self.gene_slider.active = True
         self.gene_slider.on_changed(self.gene_selected_updated)
-        self.draw_gene()
+        ax_iteration_count = self.axes[1, 2]
+        self.show_iteration_count_button = CheckButtons(
+            ax_iteration_count,
+            ["Show iteration counts"],
+            actives=[self.show_iteration_counts],
+            frame_props={"edgecolor": "white", "facecolor": "white"},
+            check_props={"facecolor": "black"},
+        )
+        self.show_iteration_count_button.on_clicked(self.show_iteration_count_changed)
+        self.draw_data()
 
-    def draw_gene(self) -> None:
+    def draw_data(self) -> None:
+        cmap = mpl.cm.viridis
+        title = f"Gene {self.selected_gene} {self.gene_names[self.selected_gene]}"
+
+        if self.show_iteration_counts:
+            norm = mpl.colors.Normalize(vmin=0, vmax=self.iteration_count_image.max())
+            image_data = self.iteration_count_image
+            title += "\nIteration Count"
+        else:
+            image_data = self.coefficient_image.detach().clone()[self.selected_gene]
+            title += f"Score: {round(self.scores[self.selected_gene], 3)}\n"
+            title += "OMP Coefficients"
+            if self.function_coefficients:
+                norm = mpl.colors.Normalize(vmin=0, vmax=1)
+                image_data = coefs_torch.non_linear_function_coefficients(image_data, self.high_coef_bias)
+            else:
+                abs_max = np.abs(self.coefficient_image).max()
+                norm = mpl.colors.Normalize(vmin=min(0, self.coefficient_image.min()), vmax=abs_max)
+            image_data = image_data.numpy()
+
         for ax in self.axes[0]:
             ax.clear()
         all_spines = ("top", "bottom", "left", "right")
@@ -188,16 +219,7 @@ class View_OMP_Coefficients:
                 ax.spines[spine].set_visible(False)
             ax.set_xticks([], [])
             ax.set_yticks([], [])
-        self.fig.suptitle(
-            f"Gene {self.selected_gene} {self.gene_names[self.selected_gene]} "
-            + f"Score: {round(self.scores[self.selected_gene], 3)}\nOMP Coefficients"
-        )
-        cmap = mpl.cm.viridis
-        if self.function_coefficients:
-            norm = mpl.colors.Normalize(vmin=0, vmax=1)
-        else:
-            abs_max = np.abs(self.coefficient_image).max()
-            norm = mpl.colors.Normalize(vmin=min(0, self.coefficient_image.min()), vmax=abs_max)
+        self.fig.suptitle(title)
         self.fig.colorbar(
             mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
             cax=self.axes[0, -1],
@@ -207,11 +229,7 @@ class View_OMP_Coefficients:
         for i, z_plane in enumerate(self.z_planes):
             ax: plt.Axes = self.axes[0, i]
             ax.clear()
-            ax_coefficients = self.coefficient_image.detach().clone()[self.selected_gene]
-            if self.function_coefficients:
-                ax_coefficients = coefs_torch.non_linear_function_coefficients(ax_coefficients, self.high_coef_bias)
-            ax_coefficients = ax_coefficients.numpy()
-            ax.imshow(ax_coefficients[:, :, self.mid_z + z_plane], cmap=cmap, norm=norm)
+            ax.imshow(image_data[:, :, self.mid_z + z_plane], cmap=cmap, norm=norm)
             ax_title = "Central plane"
             if z_plane < 0:
                 ax_title = f"- {abs(z_plane)}"
@@ -219,13 +237,16 @@ class View_OMP_Coefficients:
                 ax_title = f"+ {abs(z_plane)}"
             ax.set_title(ax_title)
         self.gene_slider.active = True
-        self.fig.tight_layout()
         plt.draw()
 
     def function_gene_coefficients_updated(self, _) -> None:
         self.function_coefficients = self.function_coefs_button.get_status()[0]
-        self.draw_gene()
+        self.draw_data()
+
+    def show_iteration_count_changed(self, _) -> None:
+        self.show_iteration_counts = self.show_iteration_count_button.get_status()[0]
+        self.draw_data()
 
     def gene_selected_updated(self, _) -> None:
         self.selected_gene = int(self.gene_slider.val)
-        self.draw_gene()
+        self.draw_data()
