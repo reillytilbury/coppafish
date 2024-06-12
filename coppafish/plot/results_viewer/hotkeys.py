@@ -19,7 +19,8 @@ class KeyBinds:
     view_spot_intensities = "s"
     view_spot_colours_and_weights = "d"
     view_intensity_from_colour = "Shift-i"
-    view_omp_coefficients = "o"
+    view_omp_coef_image = "o"
+    view_omp_pixel_weights = "p"
 
 
 class ViewHotkeys:
@@ -28,7 +29,7 @@ class ViewHotkeys:
         fig.tight_layout()
         fig.suptitle("Hotkeys", size=20)
         ax.set_axis_off()
-        text = f"""Toggle zoom/spot selection: {KeyBinds.key_to_str(KeyBinds.switch_zoom_select)}
+        text = f"""Toggle between zoom and spot selection: {KeyBinds.key_to_str(KeyBinds.switch_zoom_select)}
                 Remove background image: {KeyBinds.key_to_str(KeyBinds.remove_background)}
                 View bleed matrix: {KeyBinds.key_to_str(KeyBinds.view_bleed_matrix)}
                 View background, normalised: {KeyBinds.key_to_str(KeyBinds.view_background_norm)}
@@ -43,9 +44,8 @@ class ViewHotkeys:
                 View spot intensities: {KeyBinds.key_to_str(KeyBinds.view_spot_intensities)}
                 View spot colours and weights: {KeyBinds.key_to_str(KeyBinds.view_spot_colours_and_weights)}
                 View intensities calculation from colour: {KeyBinds.key_to_str(KeyBinds.view_intensity_from_colour)}
-                View OMP coefficients: {KeyBinds.key_to_str(KeyBinds.view_omp_coefficients)}
-                View OMP fit: {KeyBinds.key_to_str(KeyBinds.view_omp_fit)}
-                View OMP score: {KeyBinds.key_to_str(KeyBinds.view_omp_score)}"""
+                View OMP coefficient image: {KeyBinds.key_to_str(KeyBinds.view_omp_coef_image)}
+                View pixel's OMP coefficients: {KeyBinds.key_to_str(KeyBinds.view_omp_pixel_weights)}"""
         ax.text(
             0.1,
             0.5,

@@ -13,7 +13,19 @@ from ...omp import coefs_torch, scores_torch
 from ...setup import Notebook
 
 
-class View_OMP_Coefficients:
+def get_spot_position_and_tile(nb: Notebook, spot_no: int, method: str) -> Tuple[np.ndarray, int]:
+    if method in ("anchor", "prob"):
+        local_yxz = nb.ref_spots.local_yxz[spot_no]
+        tile = nb.ref_spots.tile[spot_no]
+    elif method == "omp":
+        local_yxz = nb.omp.local_yxz[spot_no]
+        tile = nb.omp.tile[spot_no]
+    else:
+        raise ValueError(f"Unknown gene calling method: {method}")
+    return local_yxz, int(tile)
+
+
+class ViewOMPImage:
     def __init__(
         self,
         nb: Notebook,
@@ -24,7 +36,7 @@ class View_OMP_Coefficients:
         init_select_gene: int = None,
     ) -> None:
         """
-        Display omp coefficients of all genes in neighbourhood of spot in three z planes.
+        Display omp coefficients of all genes in around the local neighbourhood of spot.
 
         Args:
             nb (Notebook): Notebook containing experiment details.
@@ -49,16 +61,7 @@ class View_OMP_Coefficients:
 
         plt.style.use("dark_background")
 
-        local_yxz: np.ndarray = None
-        tile: int = None
-        if method in ("anchor", "prob"):
-            local_yxz = nb.ref_spots.local_yxz[spot_no]
-            tile = nb.ref_spots.tile[spot_no]
-        elif method == "omp":
-            local_yxz = nb.omp.local_yxz[spot_no]
-            tile = nb.omp.tile[spot_no]
-        else:
-            raise ValueError(f"Unknown gene calling method: {method}")
+        local_yxz, tile = get_spot_position_and_tile(nb, spot_no, method)
         assert local_yxz.shape == (3,)
 
         config = nb.init_config["omp"]
@@ -201,7 +204,7 @@ class View_OMP_Coefficients:
             title += "\nIteration Count"
         else:
             image_data = self.coefficient_image.detach().clone()[self.selected_gene]
-            title += f"Score: {round(self.scores[self.selected_gene], 3)}\n"
+            title += f" Score: {round(self.scores[self.selected_gene], 3)}\n"
             title += "OMP Coefficients"
             if self.function_coefficients:
                 norm = mpl.colors.Normalize(vmin=0, vmax=1)
@@ -249,4 +252,136 @@ class View_OMP_Coefficients:
 
     def gene_selected_updated(self, _) -> None:
         self.selected_gene = int(self.gene_slider.val)
+        self.draw_data()
+
+
+class ViewOMPPixelCoefficients:
+    def __init__(self, nb: Notebook, spot_no: int, method: str) -> None:
+        """
+        Show the OMP coefficients for one pixel position over each OMP iteration.
+
+        Args:
+            nb (Notebook): the notebook.
+            spot_no (int): the spot index.
+            method (str): the method that the spot was found on. Can be 'anchor', 'prob' or 'omp'.
+        """
+        assert type(nb) is Notebook
+        assert type(spot_no) is int
+        assert type(method) is str
+        assert method in ("anchor", "prob", "omp")
+
+        plt.style.use("dark_background")
+
+        local_yxz, tile = get_spot_position_and_tile(nb, spot_no, method)
+
+        n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
+        image_colours = np.zeros((1, n_rounds_use, n_channels_use), dtype=np.float32)
+        for i, r in enumerate(nb.basic_info.use_rounds):
+            image_colours[:, i] = spot_colors.base.get_spot_colours_new(
+                nb.basic_info,
+                nb.file_names,
+                nb.extract,
+                nb.register,
+                nb.register_debug,
+                int(tile),
+                r,
+                yxz=local_yxz[np.newaxis],
+                registration_type="flow_and_icp",
+            ).T[np.newaxis]
+        image_colours = torch.asarray(image_colours, dtype=torch.float32)
+        colour_norm_factor = np.array(nb.call_spots.color_norm_factor, dtype=np.float32)
+        colour_norm_factor = colour_norm_factor[
+            np.ix_(range(colour_norm_factor.shape[0]), nb.basic_info.use_rounds, nb.basic_info.use_channels)
+        ]
+        colour_norm_factor = torch.asarray(colour_norm_factor).float()
+        bled_codes_ge = nb.call_spots.bled_codes_ge
+        n_genes = bled_codes_ge.shape[0]
+        bled_codes_ge = bled_codes_ge[np.ix_(range(n_genes), nb.basic_info.use_rounds, nb.basic_info.use_channels)]
+        bled_codes_ge = torch.asarray(bled_codes_ge.astype(np.float32))
+
+        image_colours = image_colours.reshape((-1, n_rounds_use, n_channels_use))
+        bled_codes_ge = bled_codes_ge.reshape((n_genes, n_rounds_use * n_channels_use))
+
+        image_colours /= colour_norm_factor[[tile]]
+        image_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(image_colours)
+        image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
+        bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
+
+        config = nb.init_config["omp"]
+        # Get the maximum number of OMP gene assignments made and what genes.
+        coefficients = coefs_torch.compute_omp_coefficients(
+            image_colours,
+            bled_codes_ge,
+            maximum_iterations=config["max_genes"],
+            background_coefficients=bg_coefficients,
+            background_codes=bg_codes,
+            dot_product_threshold=config["dp_thresh"],
+            dot_product_norm_shift=0.0,
+            weight_coefficient_fit=config["weight_coef_fit"],
+            alpha=config["alpha"],
+            beta=config["beta"],
+            do_not_compute_on=None,
+            force_cpu=config["force_cpu"],
+        ).toarray()[0]
+        self.maximum_iterations = (~np.isclose(coefficients, 0)).sum()
+        if self.maximum_iterations == 0:
+            raise ValueError(f"The selected pixel has no OMP gene assignments to display")
+        self.final_selected_genes = (~np.isclose(coefficients, 0)).nonzero()[0].tolist()
+        self.coefficients = np.zeros((self.maximum_iterations, len(self.final_selected_genes)), dtype=np.float32)
+        for i in range(self.maximum_iterations):
+            self.coefficients[i] = coefs_torch.compute_omp_coefficients(
+                image_colours,
+                bled_codes_ge,
+                maximum_iterations=(i + 1),
+                background_coefficients=bg_coefficients,
+                background_codes=bg_codes,
+                dot_product_threshold=config["dp_thresh"],
+                dot_product_norm_shift=0.0,
+                weight_coefficient_fit=config["weight_coef_fit"],
+                alpha=config["alpha"],
+                beta=config["beta"],
+                do_not_compute_on=None,
+                force_cpu=config["force_cpu"],
+            ).toarray()[0][self.final_selected_genes]
+
+        self.gene_names = nb.call_spots.gene_names
+        self.show_iteration = self.maximum_iterations - 1
+        self.draw_canvas()
+        self.draw_data()
+        plt.show()
+
+    def draw_canvas(self) -> None:
+        self.fig, self.axes = plt.subplots(2, 1, squeeze=False, gridspec_kw={"height_ratios": [7, 1]})
+        ax_slider: plt.Axes = self.axes[1, 0]
+        self.iteration_slider = Slider(
+            ax_slider,
+            label="Iteration",
+            valmin=1,
+            valmax=self.maximum_iterations,
+            valstep=1,
+            valinit=self.maximum_iterations,
+        )
+        self.iteration_slider.active = True
+        self.iteration_slider.on_changed(self.show_iteration_changed)
+
+    def draw_data(self) -> None:
+        ax_plot: plt.Axes = self.axes[0, 0]
+        ax_plot.clear()
+        x_min, x_max = -0.5, self.maximum_iterations - 0.5
+        ax_plot.set_xlim(x_min, x_max)
+        ax_plot.set_ylim(min(0, self.coefficients.min()), self.coefficients.max())
+        ax_plot.hlines(0, x_min, x_max, colors="white", linewidths=1.0)
+        ax_plot.bar(
+            np.linspace(0, self.maximum_iterations, num=self.maximum_iterations, endpoint=False),
+            self.coefficients[self.show_iteration],
+            width=0.4,
+            color="green",
+            edgecolor="black",
+            linewidth=0.9,
+            tick_label=[self.gene_names[i] for i in self.final_selected_genes],
+        )
+        plt.draw()
+
+    def show_iteration_changed(self, _) -> None:
+        self.show_iteration = (self.iteration_slider.val) - 1
         self.draw_data()
