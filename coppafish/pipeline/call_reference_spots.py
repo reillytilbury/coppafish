@@ -102,12 +102,11 @@ def view_free_and_target_bled_codes(free_bled_codes_tile_indep: np.ndarray,
     n_rows = n_genes // n_columns + 1
 
     fig, ax = plt.subplots(n_rows, n_columns)
-    codes = np.zeros((n_genes, n_rounds, 2 * n_channels_use + 1)) * np.nan
+    codes = np.zeros((n_genes, n_channels_use, 2 * n_rounds + 1)) * np.nan
     # fill in the codes
     for g in range(n_genes):
-        for r in range(n_rounds):
-            codes[g, r, :n_channels_use] = free_bled_codes_tile_indep[g, r]
-            codes[g, r, -n_channels_use:] = target_bled_codes[g, r]
+        codes[g, :, :n_rounds] = free_bled_codes_tile_indep[g].T
+        codes[g, :, -n_rounds:] = target_bled_codes[g].T
     # fill in the image grid
     for g in range(n_genes):
         row, col = g // n_columns, g % n_columns
