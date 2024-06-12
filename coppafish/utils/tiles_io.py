@@ -186,8 +186,8 @@ def _load_image(
         dim_indices_yxz += (yxz_dim,)
     image = image[
         dim_indices_yxz[2][0] : dim_indices_yxz[2][1],
-        dim_indices_yxz[1][0] : dim_indices_yxz[1][1],
         dim_indices_yxz[0][0] : dim_indices_yxz[0][1],
+        dim_indices_yxz[1][0] : dim_indices_yxz[1][1],
     ]
     # zyx -> yxz.
     image = image.transpose((1, 2, 0))
