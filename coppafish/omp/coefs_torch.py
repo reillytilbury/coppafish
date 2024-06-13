@@ -136,15 +136,10 @@ def compute_omp_coefficients(
     # Run on every non-zero pixel colour.
     iterate_on_pixels = torch.logical_not(torch.isclose(pixel_colours, torch.asarray(0).float()).all(dim=1))
     iterate_on_pixels = torch.logical_and(iterate_on_pixels, do_not_compute_on.logical_not_())
-    pixels_iterated: List[int] = []
     # Start with a lil_matrix when populating results as this is faster than the csr matrix.
     coefficient_image = scipy.sparse.lil_matrix(np.zeros((n_pixels, n_genes), dtype=np.float32))
 
     for i in range(maximum_iterations):
-        n_pixels_to_compute = iterate_on_pixels.sum()
-        if n_pixels_to_compute == 0:
-            break
-        pixels_iterated.append(int(iterate_on_pixels.sum()))
         best_genes, pass_threshold, inverse_variance = get_next_best_gene(
             iterate_on_pixels,
             residual_pixel_colours,
@@ -160,13 +155,15 @@ def compute_omp_coefficients(
 
         # Update what pixels to continue iterating on
         iterate_on_pixels = torch.logical_and(iterate_on_pixels, pass_threshold).to(device=run_on)
+        if iterate_on_pixels.sum() == 0:
+            break
         genes_added = torch.cat((genes_added, best_genes[:, np.newaxis]), dim=1).to(device=run_on)
 
-        # Update coefficients for pixels with new a gene assignment and keep the residual pixel colour
+        # Update coefficients for pixels with new a gene assignment and keep the residual pixel colour.
         genes_added_coefficients, residual_pixel_colours = weight_selected_genes(
             iterate_on_pixels,
             bled_codes.T,
-            pixel_colours,
+            pixel_colours.detach().clone(),
             genes_added,
             weight=torch.sqrt(inverse_variance) if weight_coefficient_fit else None,
         )

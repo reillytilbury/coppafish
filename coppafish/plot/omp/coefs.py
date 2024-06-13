@@ -256,7 +256,7 @@ class ViewOMPImage:
 
 
 class ViewOMPPixelCoefficients:
-    def __init__(self, nb: Notebook, spot_no: int, method: str) -> None:
+    def __init__(self, nb: Notebook, spot_no: int, method: str, tile: int = None, local_yxz: np.ndarray = None) -> None:
         """
         Show the OMP coefficients for one pixel position over each OMP iteration.
 
@@ -264,15 +264,21 @@ class ViewOMPPixelCoefficients:
             nb (Notebook): the notebook.
             spot_no (int): the spot index.
             method (str): the method that the spot was found on. Can be 'anchor', 'prob' or 'omp'.
+            tile (int): tile of the pixel.
+            local_yxz (`(3) ndarray[int]`): position relative to tile to view. If tile and local_yxz are both given,
+                then spot_no and method are ignored.
         """
         assert type(nb) is Notebook
         assert type(spot_no) is int
         assert type(method) is str
         assert method in ("anchor", "prob", "omp")
+        assert tile is None or type(tile) is int
+        assert local_yxz is None or type(local_yxz) is np.ndarray
 
         plt.style.use("dark_background")
 
-        local_yxz, tile = get_spot_position_and_tile(nb, spot_no, method)
+        if tile is None or local_yxz is None:
+            local_yxz, tile = get_spot_position_and_tile(nb, spot_no, method)
 
         n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
         image_colours = np.zeros((1, n_rounds_use, n_channels_use), dtype=np.float32)
@@ -343,7 +349,7 @@ class ViewOMPPixelCoefficients:
                 do_not_compute_on=None,
                 force_cpu=config["force_cpu"],
             ).toarray()[0][self.final_selected_genes]
-
+        self.local_yxz = local_yxz
         self.gene_names = nb.call_spots.gene_names
         self.show_iteration = self.maximum_iterations - 1
         self.draw_canvas()
@@ -352,6 +358,7 @@ class ViewOMPPixelCoefficients:
 
     def draw_canvas(self) -> None:
         self.fig, self.axes = plt.subplots(2, 1, squeeze=False, gridspec_kw={"height_ratios": [7, 1]})
+        self.fig.suptitle(f"OMP coefficients for pixel {tuple(self.local_yxz.tolist())}")
         ax_slider: plt.Axes = self.axes[1, 0]
         self.iteration_slider = Slider(
             ax_slider,
@@ -369,13 +376,14 @@ class ViewOMPPixelCoefficients:
         ax_plot.clear()
         x_min, x_max = -0.5, self.maximum_iterations - 0.5
         ax_plot.set_xlim(x_min, x_max)
-        ax_plot.set_ylim(min(0, self.coefficients.min()), self.coefficients.max())
+        abs_max = np.abs(self.coefficients).max()
+        ax_plot.set_ylim(-abs_max - 0.5, abs_max + 0.5)
         ax_plot.hlines(0, x_min, x_max, colors="white", linewidths=1.0)
         ax_plot.bar(
             np.linspace(0, self.maximum_iterations, num=self.maximum_iterations, endpoint=False),
             self.coefficients[self.show_iteration],
-            width=0.4,
-            color="green",
+            width=0.3,
+            color="whitesmoke",
             edgecolor="black",
             linewidth=0.9,
             tick_label=[self.gene_names[i] for i in self.final_selected_genes],
