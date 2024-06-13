@@ -434,7 +434,7 @@ class Viewer:
         self.legend["fig"].draw()
         self.update_genes()
 
-    def get_selected_spot_index(self):
+    def get_selected_spot_index(self) -> int:
         """
         Get the index of the selected spot.
         """
@@ -448,7 +448,7 @@ class Viewer:
         else:
             self.viewer.status = "No spot selected :("
             spot_index = None
-        return spot_index
+        return int(spot_index)
 
     def create_gene_list(self, gene_marker_file: str, nb_gene_names: list) -> None:
         """
