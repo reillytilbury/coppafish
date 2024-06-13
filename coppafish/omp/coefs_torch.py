@@ -134,7 +134,7 @@ def compute_omp_coefficients(
     background_variance = background_variance.to(device=run_on)
 
     # Run on every non-zero pixel colour.
-    iterate_on_pixels = torch.logical_not(torch.isclose(pixel_colours, torch.asarray(0).float()).all(dim=1))
+    iterate_on_pixels = torch.logical_not(torch.isclose(pixel_colours, torch.asarray(0).float()).all(dim=1)).to(run_on)
     iterate_on_pixels = torch.logical_and(iterate_on_pixels, do_not_compute_on.logical_not_())
     # Start with a lil_matrix when populating results as this is faster than the csr matrix.
     coefficient_image = scipy.sparse.lil_matrix(np.zeros((n_pixels, n_genes), dtype=np.float32))
