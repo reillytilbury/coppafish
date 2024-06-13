@@ -6,11 +6,11 @@ data into [numpy](#numpy) format.
 
 ### ND2
 
-ND2 files index tiles differently to coppafish. The difference is illustrated below on a 3x2 grid.
+ND2 files index tiles differently to coppafish. The difference is illustrated below on a 2x3 grid.
 
 <figure markdown="span">
   ![Image title](images/coppafish_and_nd2_tile_indices.png){ width="400" }
-  <figcaption>Gene calling on a tile.</figcaption>
+  <figcaption>How six tiles are indexed.</figcaption>
 </figure>
 
 
