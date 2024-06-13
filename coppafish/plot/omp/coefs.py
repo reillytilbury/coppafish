@@ -136,16 +136,25 @@ class ViewOMPImage:
                     config["high_coef_bias"],
                 ).item()
             )
+        self.scores = np.array(self.scores, np.float32)
 
-        # Of shape (n_genes, n_pixels)
-        if init_select_gene is None:
-            self.selected_gene = np.argmax(self.scores).item()
-        else:
-            self.selected_gene = init_select_gene
+        self.coefficient_image: np.ndarray = coefficient_image.numpy()
+
+        central_pixel = np.array(self.coefficient_image.shape[1:]) // 2
+        central_pixels = np.ix_(range(n_genes), [central_pixel[0]], [central_pixel[1]], [central_pixel[2]])
+        gene_is_selectable = ~np.isclose(self.coefficient_image[central_pixels].ravel(), 0)
+        if init_select_gene is not None:
+            gene_is_selectable[init_select_gene] = True
+        assert gene_is_selectable.ndim == 1
+
         self.gene_names = nb.call_spots.gene_names
         self.z_planes = z_planes
-        self.coefficient_image = coefficient_image
-        self.iteration_count_image = (~np.isclose(coefficient_image.numpy(), 0)).astype(int).sum(0)
+        self.selectable_genes = np.where(gene_is_selectable)[0]
+        if init_select_gene is None:
+            self.selected_gene = self.selectable_genes[np.argmax(self.scores[self.selectable_genes])].item()
+        else:
+            self.selected_gene = init_select_gene
+        self.iteration_count_image = (~np.isclose(self.coefficient_image, 0)).astype(int).sum(0)
         self.mid_z = -min(self.z_planes)
         self.function_coefficients = False
         self.show_iteration_counts = False
@@ -176,12 +185,11 @@ class ViewOMPImage:
         self.gene_slider = Slider(
             ax_slider,
             label="Gene",
-            valmin=0,
-            valmax=self.coefficient_image.shape[0] - 1,
-            valstep=1,
+            valmin=self.selectable_genes.min(),
+            valmax=self.selectable_genes.max(),
+            valstep=self.selectable_genes,
             valinit=self.selected_gene,
         )
-        self.gene_slider.active = True
         self.gene_slider.on_changed(self.gene_selected_updated)
         ax_iteration_count = self.axes[1, 2]
         self.show_iteration_count_button = CheckButtons(
@@ -196,23 +204,24 @@ class ViewOMPImage:
 
     def draw_data(self) -> None:
         cmap = mpl.cm.viridis
-        title = f"Gene {self.selected_gene} {self.gene_names[self.selected_gene]}"
 
         if self.show_iteration_counts:
             norm = mpl.colors.Normalize(vmin=0, vmax=self.iteration_count_image.max())
             image_data = self.iteration_count_image
-            title += "\nIteration Count"
+            title = "OMP Iteration Count"
         else:
-            image_data = self.coefficient_image.detach().clone()[self.selected_gene]
-            title += f" Score: {round(self.scores[self.selected_gene], 3)}\n"
-            title += "OMP Coefficients"
+            image_data = self.coefficient_image[self.selected_gene]
+            title = "OMP Coefficients\n"
+            title += f"Gene {self.selected_gene} {self.gene_names[self.selected_gene]}\n"
+            title += f" Score: {str(self.scores[self.selected_gene])[:4]}"
             if self.function_coefficients:
                 norm = mpl.colors.Normalize(vmin=0, vmax=1)
-                image_data = coefs_torch.non_linear_function_coefficients(image_data, self.high_coef_bias)
+                image_data = coefs_torch.non_linear_function_coefficients(
+                    torch.asarray(image_data), self.high_coef_bias
+                ).numpy()
             else:
                 abs_max = np.abs(self.coefficient_image).max()
                 norm = mpl.colors.Normalize(vmin=min(0, self.coefficient_image.min()), vmax=abs_max)
-            image_data = image_data.numpy()
 
         for ax in self.axes[0]:
             ax.clear()
@@ -239,7 +248,8 @@ class ViewOMPImage:
             if z_plane > 0:
                 ax_title = f"+ {abs(z_plane)}"
             ax.set_title(ax_title)
-        self.gene_slider.active = True
+        self.function_coefs_button.active = not self.show_iteration_counts
+        self.gene_slider.active = not self.show_iteration_counts
         plt.draw()
 
     def function_gene_coefficients_updated(self, _) -> None:
