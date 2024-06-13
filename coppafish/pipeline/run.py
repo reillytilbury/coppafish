@@ -29,9 +29,9 @@ def run_pipeline(config_file: str) -> Notebook:
     log.error_catch(run_tile_indep_pipeline, nb)
     log.error_catch(run_stitch, nb)
     log.error_catch(run_reference_spots, nb)
-    # log.error_catch(BuildPDF, nb)
+    log.error_catch(BuildPDF, nb)
     log.error_catch(run_omp, nb)
-    # log.error_catch(BuildPDF, nb, auto_open=True)
+    log.error_catch(BuildPDF, nb, auto_open=True)
     log.info(f"Pipeline complete", force_email=True)
     return nb
 
@@ -46,12 +46,12 @@ def run_tile_indep_pipeline(nb: Notebook) -> None:
             then merge them together. Default: true if PC has >110GB of available memory. False otherwise.
     """
     run_extract(nb)
-    # BuildPDF(nb)
+    BuildPDF(nb)
     run_filter(nb)
-    # BuildPDF(nb)
+    BuildPDF(nb)
     run_find_spots(nb)
     run_register(nb)
-    # BuildPDF(nb)
+    BuildPDF(nb)
     check_spots.check_n_spots(nb)
 
 
