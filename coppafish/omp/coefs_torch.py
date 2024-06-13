@@ -123,7 +123,6 @@ def compute_omp_coefficients(
     residual_pixel_colours = pixel_colours.detach().clone()
 
     # Move all variables used in computation to the selected device.
-    pixel_colours = pixel_colours.to(device=run_on)
     residual_pixel_colours = residual_pixel_colours.to(device=run_on)
     do_not_compute_on = do_not_compute_on.to(device=run_on)
     bled_codes = bled_codes.to(device=run_on)
@@ -163,7 +162,7 @@ def compute_omp_coefficients(
         genes_added_coefficients, residual_pixel_colours = weight_selected_genes(
             iterate_on_pixels,
             bled_codes.T,
-            pixel_colours.detach().clone(),
+            pixel_colours.detach().clone().to(device=run_on),
             genes_added,
             weight=torch.sqrt(inverse_variance) if weight_coefficient_fit else None,
         )
