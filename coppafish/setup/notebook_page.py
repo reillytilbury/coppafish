@@ -505,26 +505,16 @@ class NotebookPage:
                 "ndarray[float]",
                 "Numpy float array [n_spots]. `score[s]' is the highest gene coef of spot s.",
             ],
-            "probability_gene_no": [
-                "ndarray[int16]",
-                "Numpy array [n_spots]. Gene number assigned to each spot by the probability method. "
-                "`None` if not assigned.",
-            ],
-            "probability_gene_score": [
+            "gene_probabilities": [
                 "ndarray[float]",
-                "Numpy float array [n_spots]. Probability of gene assignment to probability_gene_no[s] for spot s.",
+                "Numpy float array [n_spots x n_genes]. `gene_probabilities[s, g]` is the probability that spot $s$ "
+                + "belongs to gene $g$.",
             ],
-            "probability_gene_no_initial": [
-                "ndarray[int16]",
-                "Numpy array [n_spots]. Gene number assigned to each spot by the initial probability method. "
-                "`None` if not assigned.",
-            ],
-            "probability_gene_score_initial": [
+            "gene_probabilities_initial": [
                 "ndarray[float]",
-                "Numpy float array [n_spots]. Initial probability of gene assignment to "
-                "probability_gene_no_initial[s] for spot s.",
+                "Numpy float array [n_spots x n_genes]. `gene_probabilities_initial[s, g]` is the probability that spot"
+                + " $s$ belongs to gene $g$ after only initial scaling compared against the raw bleed matrix.",
             ],
-
         },
         "call_spots": {
             "gene_names": [

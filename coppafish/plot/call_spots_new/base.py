@@ -45,7 +45,7 @@ class ViewAllGeneScores:
         if mode == "score":
             values = self.nb.ref_spots.dot_product_gene_score
         elif mode == "prob":
-            values = self.nb.ref_spots.probability_gene_score
+            values = np.max(self.nb.ref_spots.gene_probabilities, axis=1)
         elif mode == "score_diff":
             values = self.nb.ref_spots.score_diff
         elif mode == "intensity":

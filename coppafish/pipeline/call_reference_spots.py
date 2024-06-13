@@ -414,10 +414,10 @@ def call_reference_spots(config: dict,
 
     # 2. Compute gene probabilities for each spot
     bled_codes = raw_bleed_matrix[gene_codes]
-    gene_prob = gene_prob_score(spot_colours, bled_codes)
+    gene_prob_initial = gene_prob_score(spot_colours, bled_codes)
 
     # 3. Use spots with score above threshold to work out global dye codes
-    prob_mode_initial, prob_score_initial = np.argmax(gene_prob, axis=1), np.max(gene_prob, axis=1)
+    prob_mode_initial, prob_score_initial = np.argmax(gene_prob_initial, axis=1), np.max(gene_prob_initial, axis=1)
     prob_threshold = min(config['gene_prob_threshold'], np.percentile(prob_score_initial, 90))
     good = prob_score_initial > prob_threshold
     bleed_matrix_initial = compute_bleed_matrix(spot_colours[good], prob_mode_initial[good], gene_codes, n_dyes)
@@ -486,9 +486,8 @@ def call_reference_spots(config: dict,
     # add all information to the reference spots notebook page
     nbp_ref_spots.intensity = np.median(np.max(spot_colours, axis=-1), axis=-1)
     nbp_ref_spots.dot_product_gene_no, nbp_ref_spots.dot_product_gene_score = dp_mode.astype(np.int16), dp_score
-    nbp_ref_spots.probability_gene_no, nbp_ref_spots.probability_gene_score = prob_mode.astype(np.int16), prob_score
-    nbp_ref_spots.probability_gene_no_initial, nbp_ref_spots.probability_gene_score_initial = (
-        prob_mode_initial.astype(np.int16), prob_score_initial)
+    nbp_ref_spots.gene_probabilities_initial = gene_prob_initial
+    nbp_ref_spots.gene_probabilities = gene_prob
 
     # add all information to the call spots notebook page
     nbp.gene_names, nbp.gene_codes = gene_names, gene_codes
