@@ -97,7 +97,7 @@ Wikipedia article</a> for how gene codes are best selected.
 There are configuration variables used throughout the coppafish pipeline. Most of these have reasonable default values, 
 but some must be set by the user and you may wish to tweak other values for better performance. Save the config file as 
 something like `config.ini`. The config file should contain, at the minimum:
-```
+``` text
 [file_names]
 input_dir = path/to/input/data
 output_dir = path/to/output/directory
@@ -141,7 +141,7 @@ python -m coppafish /path/to/config.ini
 ```
 
 Or using a python script
-```python
+``` python
 from coppafish import run_pipeline
 
 run_pipeline("/path/to/config.ini")

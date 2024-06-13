@@ -46,12 +46,17 @@ nav:
 markdown_extensions:
   - pymdownx.arithmatex:
       generic: true
+  # Code can be highlighted, for example python code by code block: ``` python ...``` or inline: `#!python ...`.
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
   # Footnote support
   - footnotes
   # Captions and aligned images support
   - md_in_html
   # Re-sizeable images
   - attr_list
+# Required for LaTeX maths support.
 extra_javascript:
   - javascripts/config.js
   - https://polyfill.io/v3/polyfill.min.js?features=es6
