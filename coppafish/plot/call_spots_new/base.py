@@ -43,9 +43,9 @@ class ViewAllGeneScores:
         """
         self.mode = mode
         if mode == "score":
-            values = self.nb.ref_spots.scores
+            values = self.nb.ref_spots.dot_product_gene_score
         elif mode == "prob":
-            values = np.max(self.nb.ref_spots.gene_probs, axis=1)
+            values = self.nb.ref_spots.probability_gene_score
         elif mode == "score_diff":
             values = self.nb.ref_spots.score_diff
         elif mode == "intensity":
@@ -54,10 +54,10 @@ class ViewAllGeneScores:
             raise ValueError("mode must be 'score', 'prob', 'score_diff' or 'intensity'")
 
         gene_values = np.zeros((self.nb.call_spots.gene_names.shape[0], 0)).tolist()
-        gene_prob_assignments = np.argmax(self.nb.ref_spots.gene_probs, axis=1)
+        gene_prob_assignments = self.nb.probability_gene_no
         for i in range(len(gene_values)):
             if mode != "prob":
-                gene_values[i] = values[self.nb.ref_spots.gene_no == i]
+                gene_values[i] = values[self.nb.ref_spots.dot_product_gene_no == i]
             else:
                 gene_values[i] = values[gene_prob_assignments == i]
 

@@ -85,8 +85,8 @@ class gene_counts:
 
         # Add quality thresholding info and gene assigned to for method with no fake genes and method with fake genes
         self.intensity = [nb.ref_spots.intensity.astype(np.float16)] * 2
-        self.score = [nb.ref_spots.scores.astype(np.float16), score.astype(np.float16)]
-        self.gene_no = [nb.ref_spots.gene_no, gene_no]
+        self.score = [nb.ref_spots.dot_product_gene_score.astype(np.float16), score.astype(np.float16)]
+        self.gene_no = [nb.ref_spots.dot_product_gene_no, gene_no]
 
         # Add current thresholds
         config = nb.get_config()["thresholds"]
