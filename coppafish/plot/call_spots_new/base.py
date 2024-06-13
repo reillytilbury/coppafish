@@ -331,7 +331,7 @@ class GESpotViewer:
         nb = self.nb
         n_channels = len(nb.basic_info.use_channels)
         # First we need to find the spots used to calculate the gene efficiency for the given gene.
-        initial_assignment = np.argmax(nb.ref_spots.gene_probs, axis=1)
+        initial_assignment = np.argmax(nb.ref_spots.gene_probabilities, axis=1)
         if use_ge:
             self.gene_g_mask = nb.call_spots.use_ge * (initial_assignment == gene_index)
         else:
@@ -1006,13 +1006,13 @@ class GeneProbs:
         self.nb = nb
         self.gene_no = gene_no
         self.n_genes = len(self.nb.call_spots.gene_names)
-        self.plot_gene_probs()
+        self.plot_gene_probabilities()
 
-    def load_gene_probs(self):
+    def load_gene_probabilities(self):
         gene_g_mask = self.nb.ref_spots.gene_no == self.gene_no
         gene_g_ids = np.where(gene_g_mask)[0]
         # Get the spot probabilities for the selected gene
-        spot_probs = self.nb.ref_spots.gene_probs[gene_g_mask]
+        spot_probs = self.nb.ref_spots.gene_probabilities[gene_g_mask]
         # We will order the spots by the gene they are assigned to with the highest probability
         self.prob_matrix = np.zeros((0, self.n_genes))
         self.spot_ids = np.zeros(0, dtype=int)
@@ -1032,14 +1032,14 @@ class GeneProbs:
         # update num assignments
         self.num_assignments = num_assignments
 
-    def plot_gene_probs(self, event=None):
+    def plot_gene_probabilities(self, event=None):
         # Plot the prob image
         if not hasattr(self, "fig"):
             self.fig, self.ax = plt.subplots(1, 1, figsize=(8, 8))
         else:
             self.ax.clear()
         # Load the gene probabilities
-        self.load_gene_probs()
+        self.load_gene_probabilities()
         # Plot the matrix. Make sure that the image does not go further than 0.9 right to the edge of the plot
         self.ax.imshow(self.prob_matrix, cmap="viridis", aspect="auto", interpolation="none")
         # Add white horizontal lines to separate the genes. Do this by looping through num_assignments in descending
@@ -1091,7 +1091,7 @@ class GeneProbs:
         # Now create a clickable button to update the scatter plot, make the button black
         self.plot_button = Button(self.plot_button_ax, "Plot", color="k")
         # Now link the click event to the function to update the scatter plot
-        self.plot_button.on_clicked(self.plot_gene_probs)
+        self.plot_button.on_clicked(self.plot_gene_probabilities)
 
     def add_score_plot(self, spot_no: int):
         """

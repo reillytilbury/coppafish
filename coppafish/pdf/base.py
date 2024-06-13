@@ -256,7 +256,7 @@ class BuildPDF:
                     )
                     pdf.savefig(fig)
                 # Create a page for every gene
-                gene_probs = nb.ref_spots.gene_probs
+                gene_probabilities = nb.ref_spots.gene_probabilities
                 # bg colour was subtracted if use_preseq
                 scores = (
                     nb.ref_spots.colours[
@@ -281,17 +281,17 @@ class BuildPDF:
                 spot_colours_rnorm *= signs[:, None, None]
                 n_rounds = spot_colours_rnorm.shape[1]
                 for g in range(n_genes):
-                    g_spots = np.argsort(-gene_probs[:, g])
+                    g_spots = np.argsort(-gene_probabilities[:, g])
                     # Sorted probabilities, with greatest score at index 0
-                    g_probs = gene_probs[g_spots, g]
+                    g_probs = gene_probabilities[g_spots, g]
                     # Bled codes are of shape (rounds, channels, )
                     g_bled_code = nb.call_spots.bled_codes[g][:, nb.basic_info.use_channels]
                     g_bled_code /= np.linalg.norm(g_bled_code, axis=1)[:, None]
                     g_bled_code_ge = nb.call_spots.bled_codes_ge[g][:, nb.basic_info.use_channels]
                     g_bled_code_ge /= np.linalg.norm(g_bled_code_ge, axis=1)[:, None]
                     g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code_ge[None, :, :], axis=2))
-                    thresh_spots = np.argmax(gene_probs, axis=1) == g
-                    thresh_spots = thresh_spots * (np.max(gene_probs) > GENE_PROB_THRESHOLD)
+                    thresh_spots = np.argmax(gene_probabilities, axis=1) == g
+                    thresh_spots = thresh_spots * (np.max(gene_probabilities) > GENE_PROB_THRESHOLD)
                     colours_mean = np.mean(scores[thresh_spots], axis=0)
                     fig, axes = self.create_empty_page(2, 2, gridspec_kw={"width_ratios": [2, 1]})
                     self.empty_plot_ticks(axes[1, 1])
@@ -770,7 +770,7 @@ class BuildPDF:
         labels = []
         gene_counts = []
         median_scores = []
-        n_genes = ref_spots_page.gene_probs.shape[1]
+        n_genes = ref_spots_page.gene_probabilities.shape[1]
         if os.path.isfile(file_page.code_book):
             gene_names, _ = np.genfromtxt(file_page.code_book, dtype=(str, str)).transpose()
         else:
