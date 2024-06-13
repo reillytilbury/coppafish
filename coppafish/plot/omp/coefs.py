@@ -275,8 +275,6 @@ class ViewOMPPixelCoefficients:
         assert tile is None or type(tile) is int
         assert local_yxz is None or type(local_yxz) is np.ndarray
 
-        plt.style.use("dark_background")
-
         if tile is None or local_yxz is None:
             local_yxz, tile = get_spot_position_and_tile(nb, spot_no, method)
 
@@ -357,6 +355,7 @@ class ViewOMPPixelCoefficients:
         plt.show()
 
     def draw_canvas(self) -> None:
+        plt.style.use("dark_background")
         self.fig, self.axes = plt.subplots(2, 1, squeeze=False, gridspec_kw={"height_ratios": [7, 1]})
         self.fig.suptitle(f"OMP coefficients for pixel {tuple(self.local_yxz.tolist())}")
         ax_slider: plt.Axes = self.axes[1, 0]
@@ -384,8 +383,8 @@ class ViewOMPPixelCoefficients:
             self.coefficients[self.show_iteration],
             width=0.3,
             color="whitesmoke",
-            edgecolor="black",
-            linewidth=0.9,
+            edgecolor="dimgrey",
+            linewidth=1.5,
             tick_label=[self.gene_names[i] for i in self.final_selected_genes],
         )
         plt.draw()
