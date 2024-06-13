@@ -85,7 +85,7 @@ class histogram_score:
             1
         ]
         if method.lower() != "omp" and check:
-            if np.max(np.abs(self.score[:, 0] - nb.ref_spots.scores)) > self.check_tol:
+            if np.max(np.abs(self.score[:, 0] - nb.ref_spots.dot_product_gene_score)) > self.check_tol:
                 raise ValueError(
                     f"nb.ref_spots.scores differs to that computed here\n" f"Set check=False to get past this error"
                 )

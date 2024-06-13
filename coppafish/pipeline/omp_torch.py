@@ -64,7 +64,7 @@ def run_omp(
     torch.backends.cudnn.deterministic = True
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-    n_genes = nbp_call_spots.target_bled_codes.shape[0]
+    n_genes = nbp_call_spots.bled_codes.shape[0]
     n_rounds_use = len(nbp_basic.use_rounds)
     n_channels_use = len(nbp_basic.use_channels)
     spot_shape_size_xy: int = config["spot_shape"][0]
@@ -181,7 +181,7 @@ def run_omp(
             pixel_intensity_threshold = torch.quantile(subset_intensities, q=config["pixel_max_percentile"] / 100)
             do_not_compute_on = subset_intensities < pixel_intensity_threshold
             del subset_intensities, pixel_intensity_threshold
-            bled_codes = nbp_call_spots.target_bled_codes
+            bled_codes = nbp_call_spots.bled_codes
             assert (~np.isnan(bled_codes)).all(), "bled codes GE cannot contain nan values"
             assert np.allclose(np.linalg.norm(bled_codes, axis=(1, 2)), 1), "bled codes GE must be L2 normalised"
             bled_codes = torch.asarray(bled_codes.astype(np.float32))

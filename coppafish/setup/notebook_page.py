@@ -574,10 +574,10 @@ class NotebookPage:
                   " we have a prior that the channel vector for each round will be mostly parallel to "
                   "the expected dye code for that gene in that round, so this is taken into account.",
             ],
-            "target_bled_codes": [
+            "bled_codes": [
                 "ndarray[float]",
                 "Numpy float array [n_genes x n_rounds x n_channels_use]"
-                + "target_bled_codes[g, r, c] = target_scale[r, c] * free_bled_codes_tile_independent[g, r, c], "
+                + "bled_codes[g, r, c] = target_scale[r, c] * free_bled_codes_tile_independent[g, r, c], "
                   "meaning that these codes are scaled versions of the tile independent free bled codes that are "
                   "scaled to make the intensities of each dye as close as possible to pre-specified target values.",
             ],

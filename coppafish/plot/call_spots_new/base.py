@@ -829,7 +829,7 @@ class GeneScoreScatter:
         else:
             self.ax.clear()
         gene_g_mask = self.nb.ref_spots.gene_no == self.gene_no
-        self.score = self.nb.ref_spots.scores[gene_g_mask]
+        self.score = self.nb.ref_spots.dot_product_gene_score[gene_g_mask]
         self.second_score = self.score - self.nb.ref_spots.score_diff[gene_g_mask]
         self.ax.scatter(x=self.second_score, y=self.score, s=1)
         # Add a line at y=x
