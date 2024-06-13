@@ -258,22 +258,7 @@ class BuildPDF:
                 # Create a page for every gene
                 gene_probabilities = nb.ref_spots.gene_probabilities
                 # bg colour was subtracted if use_preseq
-                scores = (
-                    nb.ref_spots.colours[
-                        np.ix_(
-                            range(nb.ref_spots.colours.shape[0]),
-                            nb.basic_info.use_rounds,
-                            nb.basic_info.use_channels,
-                        )
-                    ]
-                    / nb.call_spots.colour_norm_factor[
-                        np.ix_(
-                            nb.ref_spots.tile,
-                            nb.basic_info.use_rounds,
-                            nb.basic_info.use_channels,
-                        )
-                    ]
-                )
+                scores = nb.ref_spots.colours * nb.call_spots.colour_norm_factor
                 n_genes = len(nb.call_spots.gene_names)
                 gene_names = nb.call_spots.gene_names
                 spot_colours_rnorm = scores / np.linalg.norm(scores, axis=2)[:, :, None]

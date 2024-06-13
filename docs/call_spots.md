@@ -3,18 +3,25 @@
 The Call Reference Spots section of the pipeline is a method of gene calling which runs quickly on a small set of spots  ($\approx$ 50, 000 per tile) of the anchor image. Initially, this was our final mode of gene calling, but has since been superseded by OMP, which differs from Call Spots in that it runs on several more spots. That being said, the call spots section is still a crucial part of the pipeline as it estimates several important parameters used in the OMP section.
 
 Some of the most important exported parameters of this section are:
-- **Bleed Matrix** $\mathbf{B}$: $(n_{\text{d}} \times n_{\text{c}})$ array of the typical channel spectrum of each dye,
+
+- **Bleed Matrix** $\mathbf{B}$: $(n_{\text{d}} \times n_{\text{c}})$ array of the typical channel spectrum of each dye.
+
 - **Colour Normalisation Factor** $\mathbf{A}$:  $(n_{\text{t}} \times n_{\text{r}} \times n_{\text{c}})$ array which multiplies the colours to minimise any systematic brightness variability between different tiles, rounds and channels, and maximise spectral separation of dyes,
+
 - **Bled Codes** $\mathbf{K}$: $(n_{\text{g}} \times n_{\text{r}} \times n_{\text{c}})$ array of the expected colour spectrum for each gene.
 
-## Algorithm Flow Chart
+## Algorithm Breakdown
 ![call_spots_colours](https://github.com/reillytilbury/coppafish/assets/88850716/21b77712-94cc-4c0b-ae20-e6b366c5826f)
 
-## Algorithm Breakdown
+
 The inputs to the algorithm are:
+
 - Raw spot colours $F_{s, r, c}$ for all spots $s$ (defined as local maxima of round $r_{\text{anchor}}$, channel $c_{\text{anchor}}$)
+
 - The tiles $t_s$ each spot $s$ was detected on
+
 - A binary code array $\mathbf{C}$ of shape $(n_g \times n_r \times n_{dyes})$ which is defined as follows
+
 $$
 C_{g, r, d }= 
 \begin{cases}
@@ -28,12 +35,17 @@ $$
 ### 0: Preprocessing
 The purpose of this step is to convert our raw pixels from integers between -15,000 and 50,000 to floating points numbers. We want to minimise the influence of variable brightness between different tiles, rounds and channels, and get rid of background fluorescence as much as possible. 
 
-We transform the raw spot colours via the following function: 
+We transform the raw spot colours via the following function:
+
 $$F_{s,r,c} \mapsto P_{t(s), r, c}F_{s,r,c} - \beta_{s,c}.$$ 
+
 In the formula above:
+
 - $F_{s,r,c}$ is the raw spot colour for spot $s$ in round $r$ and channel $c$, 
-- $P_{t,r,c} = 1/\text{Percentile}_s(F_{s, r, c}, 95) $ for all spots in tile $t$ is the initial normalisation factor. For 7 dyes, $ \approx 1/ 7 \approx 15\% $ of spots in round $r$ are expected to be brightest in channel $c$. So this is normalising by the average intensity of a bright spot in this $(t, r, c)$, 
-- $ \beta_{s,c} = \text{Percentile}_s(P_{t(s),r,c} F_{s, r, c}, 25)$, where the percentile is taken across rounds. For 7 rounds, this is the second brightest entry of channel $c$ across rounds. This is a rough estimate of the background brightness of spot $s$ in channel $c$ after scaling by $\mathbf{P}$.
+
+- $P_{t,r,c} = 1/\text{Percentile}_s(F_{s, r, c}, 95)$ for all spots in tile $t$ is the initial normalisation factor. For 7 dyes, $\approx 1/ 7 \approx 15\%$ of spots in round $r$ are expected to be brightest in channel $c$. So this is normalising by the average intensity of a bright spot in this $(t, r, c)$, 
+
+- $\beta_{s,c} = \text{Percentile}_s(P_{t(s),r,c} F_{s, r, c}, 25)$, where the percentile is taken across rounds. For 7 rounds, this is the second brightest entry of channel $c$ across rounds. This is a rough estimate of the background brightness of spot $s$ in channel $c$ after scaling by $\mathbf{P}$.
 
 %TODO: Add an image of a spot before anything, after scaling, then after removing background
 
@@ -42,7 +54,7 @@ The purpose of this step is to provide some gene assignments that will facilitat
 
 #### The Naive Approach
 The simplest way to do gene assignments would be:
-1. Create an initial bled code $ \tilde{\mathbf{K}}_g = \mathbf{C_g B} $ for each gene $g$ by matrix multiplying the code matrix $\mathbf{C_g}$ for each gene $g$ with the bleed matrix $\mathbf{B}$. 
+1. Create an initial bled code $\tilde{\mathbf{K}}_g = \mathbf{C_g B}$ for each gene $g$ by matrix multiplying the code matrix $\mathbf{C_g}$ for each gene $g$ with the bleed matrix $\mathbf{B}$. 
 2.  Compute a similarity matrix $\mathbf{Y}$ of shape $(n_{\text{spots}} \times n_{\text{genes}})$ of the cosine angle of each spot $s$ to each gene $g$ defined by 
 $$
 \mathbf{Y_{sg}}  = \mathbf{F_s \cdot \tilde{K}_g} = \sum_{r,c}F_{s,r,c}\tilde{K}_{g,r,c}. 
