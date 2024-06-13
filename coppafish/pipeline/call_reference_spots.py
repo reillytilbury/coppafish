@@ -494,7 +494,7 @@ def call_reference_spots(config: dict,
     nbp.gene_names, nbp.gene_codes = gene_names, gene_codes
     nbp.target_scale, nbp.homogeneous_scale = target_scale, homogeneous_scale
     nbp.colour_norm_factor = colour_norm_factor_initial * target_scale[None, :, :] * homogeneous_scale
-    nbp.free_bled_codes, nbp.free_bled_codes_tile_indep = free_bled_codes, free_bled_codes_tile_indep
+    nbp.free_bled_codes, nbp.free_bled_codes_tile_independent = free_bled_codes, free_bled_codes_tile_indep
     nbp.target_bled_codes = target_bled_codes
     nbp.bleed_matrix_raw, nbp.bleed_matrix_initial, nbp.bleed_matrix = (raw_bleed_matrix, bleed_matrix_initial,
                                                                         bleed_matrix)
