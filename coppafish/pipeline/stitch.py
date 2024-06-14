@@ -6,7 +6,7 @@ import zarr
 
 from .. import log, stitch as stitch_base
 from ..setup import NotebookPage
-from ..utils import tiles_io
+from ..utils import tiles_io, system
 
 
 def stitch(config: dict, nbp_basic: NotebookPage, nbp_file: NotebookPage, nbp_extract: NotebookPage) -> NotebookPage:

@@ -159,10 +159,10 @@ class Viewer2D:
         # Keep gene positions and scores inside the Viewer2D instance.
         self.anchor_global_yxz = nb.ref_spots.local_yxz + nb.stitch.tile_origin[nb.ref_spots.tile]
         self.anchor_gene_no = nb.ref_spots.gene_no
-        self.anchor_score = nb.ref_spots.scores
+        self.anchor_score = nb.ref_spots.dot_product_gene_score
         self.probs_global_yxz = self.anchor_global_yxz
-        self.probs_gene_no = nb.ref_spots.gene_probs.argmax(1)
-        self.probs_score = nb.ref_spots.gene_probs.max(1)
+        self.probs_gene_no = np.argmax(nb.ref_spots.gene_probabilities, axis=1)
+        self.probs_score = np.max(nb.ref_spots.gene_probabilities, axis=1)
         self.omp_available = nb.has_page("omp")
         if self.omp_available:
             self.omp_global_yxz = nb.omp.local_yxz + nb.stitch.tile_origin[nb.omp.tile]
