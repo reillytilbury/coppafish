@@ -494,101 +494,105 @@ class NotebookPage:
                 + "`[s, r, c]` is the intensity of spot $s$ on round $r$, channel $c$."
                 + "`-tile_pixel_value_shift` if that round/channel not used otherwise integer.",
             ],
-            "gene_no": [
-                "ndarray[int16]",
-                "Numpy array [n_spots]. Gene number assigned to each spot. `None` if not assigned.",
-            ],
-            "scores": [
-                "ndarray[float]",
-                "Numpy float array [n_spots]. `score[s]' is the highest gene coef of spot s.",
-            ],
-            "score_diff": [
-                "ndarray[float]",
-                "Numpy float array [n_spots]. "
-                + "`score_diff[s]` is the difference between the highest and second highest gene score of spot s.",
-            ],
             "intensity": [
                 "ndarray[float]",
                 "Numpy float32 array [n_spots]. "
                 + "$\\chi_s = \\underset{r}{\\mathrm{median}}(\\max_c\\zeta_{s_{rc}})$"
                 + "where $\\pmb{\\zeta}_s=$ `colors[s, r]/color_norm_factor[r]`.",
             ],
-            "background_strength": [
-                "ndarray[float]",
-                "Numpy float32 array [n_spots x n_channels_use]"
-                + "Background strength of each spot. Calculated as the median of the channel across rounds.",
+            "dot_product_gene_no": [
+                "ndarray[int16]",
+                "Numpy array [n_spots]. Gene number assigned to each spot. `None` if not assigned.",
             ],
-            "gene_probs": [
+            "dot_product_gene_score": [
                 "ndarray[float]",
-                "Numpy float array [n_spots x n_genes]. Von-Mises probability that spot $s$ is gene $g$.",
+                "Numpy float array [n_spots]. `score[s]' is the highest gene coef of spot s.",
             ],
-            "bg_colours": [
-                "ndarray[int32]",
-                "Numpy array [n_spots x n_rounds x n_channels]. "
-                + "Background colour of each spot. Calculated as the median of the channel across rounds.",
+            "gene_probabilities": [
+                "ndarray[float]",
+                "Numpy float array [n_spots x n_genes]. `gene_probabilities[s, g]` is the probability that spot $s$ "
+                + "belongs to gene $g$.",
+            ],
+            "gene_probabilities_initial": [
+                "ndarray[float]",
+                "Numpy float array [n_spots x n_genes]. `gene_probabilities_initial[s, g]` is the probability that spot"
+                + " $s$ belongs to gene $g$ after only initial scaling compared against the raw bleed matrix.",
             ],
         },
         "call_spots": {
             "gene_names": [
                 "ndarray[str]",
-                "Numpy string array [n_genes]" + "Names of all genes in the code book provided.",
+                "Numpy string array [n_genes]"
+                + "Names of all genes in the code book provided.",
             ],
             "gene_codes": [
                 "ndarray[int]",
                 "Numpy integer array [n_genes x n_rounds]"
                 + "`gene_codes[g, r]` indicates the dye that should be present for gene $g$ in round $r$.",
             ],
-            "color_norm_factor": [
+            "colour_norm_factor": [
                 "ndarray[float]",
-                "Numpy float array [n_tiles x n_rounds x n_channels]"
-                + "Normalisation such that dividing `colors` by `color_norm_factor` equalizes intensity of channels."
-                + "`config['call_spots']['bleed_matrix_method']` indicates whether normalisation is for rounds and channels or just channels.",
+                "Numpy float array [n_tiles x n_rounds x n_channels_use]"
+                + "Normalisation factor for each tile, round, channel. This is multiplied by colours to equalise "
+                "intensities across tiles, rounds and channels and to make the intensities of each dye as close as "
+                "possible to pre-specified target values.",
             ],
-            "abs_intensity_percentile": [
+            "rc_scale": [
                 "ndarray[float]",
-                "Numpy float array [100]]" + "Percentile of `intensity` to use for thresholding in omp.",
+                "Numpy float array [n_rounds x n_channels_use]"
+                + "colour norm factor is a product of 2 scales. The first is the target scale which is the scale "
+                + "that maximises similarity between tile independent free bled codes and the target values",
             ],
-            "initial_bleed_matrix": [
+            "tile_scale": [
                 "ndarray[float]",
-                "Numpy float array [n_channels x n_dyes]"
-                + "Starting point for determination of bleed matrix."
-                + "If separate dye for each channel, `initial_bleed_matrix[r]` will be the identity matrix for each $r$."
-                + "Otherwise, it will be `initial_raw_bleed_matrix` divided by `color_norm_factor`.",
+                "Numpy float array [n_tiles x n_rounds x n_channels_use]"
+                + "colour norm factor is a product of 2 scales. The second is the homogeneous scale which is the "
+                + "scale that maximises similarity between tile dependent free bled codes and the target bled codes. "
+                  "In doing so, we make the tile dependent codes as close as possible to the tile independent codes "
+                  "(ie: we homogenise these codes).",
             ],
-            "bleed_matrix": [
+            "free_bled_codes": [
                 "ndarray[float]",
-                "Numpy float array [n_channels x n_dyes]"
-                + "For a spot, $s$, which should be dye $d$ in round $r$, we expect `color[s, r]/color_norm_factor[r]`"
-                + "to be a constant multiple of `bleed_matrix[r, :, d]`",
+                "Numpy float array [n_genes x n_tiles x n_rounds x n_channels_use]"
+                + "free_bled_codes[g, t] is approximately the mean of all spots assigned to gene g in tile t with high "
+                  "probability. It is not quite the mean because we have a prior that the channel vector for each "
+                  "round will be mostly parallel to the expected dye code for that gene in that round, so this is "
+                  "taken into account.",
+            ],
+            "free_bled_codes_tile_independent": [
+                "ndarray[float]",
+                "Numpy float array [n_genes x n_rounds x n_channels_use]"
+                + "Tile independent free bled codes. free_bled_codes_tile_independent[g] is approximately the mean "
+                  "of all spots assigned to gene g in all tiles with high probability. It is not quite the mean because"
+                  " we have a prior that the channel vector for each round will be mostly parallel to "
+                  "the expected dye code for that gene in that round, so this is taken into account.",
             ],
             "bled_codes": [
                 "ndarray[float]",
-                "Numpy float array [n_genes x n_rounds x n_channels]"
-                + "`color[s, r]/color_norm_factor[r]` of spot, $s$, corresponding to gene $g$"
-                + "is expected to be a constant multiple of `bled_codes[g, r]` in round $r$."
-                + "`nan` if $r$/$c$ outside `use_rounds`/`use_channels` and 0 if `gene_codes[g,r]` outside `use_dyes`."
-                + "All codes have L2 norm = 1 when summed across all `use_rounds` and `use_channels`.",
+                "Numpy float array [n_genes x n_rounds x n_channels_use]"
+                + "bled_codes[g, r, c] = target_scale[r, c] * free_bled_codes_tile_independent[g, r, c], "
+                  "meaning that these codes are scaled versions of the tile independent free bled codes that are "
+                  "scaled to make the intensities of each dye as close as possible to pre-specified target values.",
             ],
-            "bled_codes_ge": [
+            "bleed_matrix_raw": [
                 "ndarray[float]",
-                "Numpy float array [n_genes x n_rounds x n_channels]"
-                + "`color[s, r]/color_norm_factor[r]` of spot, $s$, corresponding to gene $g$"
-                + "is expected to be a constant multiple of `bled_codes[g, r]` in round $r$."
-                + "`nan` if $r$/$c$ outside `use_rounds`/`use_channels` and 0 if `gene_codes[g,r]` outside `use_dyes`."
-                + "All codes have L2 norm = 1 when summed across all `use_rounds` and `use_channels`.",
+                "Numpy float array [n_dyes x n_channels_use]"
+                + "These are the dye codes obtained from an image of each dye alone, outside of any tissue.",
             ],
-            "gene_efficiency": [
+            "bleed_matrix_initial": [
                 "ndarray[float]",
-                "Numpy float array [n_genes x n_rounds]"
-                + "`gene_efficiency[g,r]` gives the expected intensity of gene $g$ in round $r$ compared to that expected by the `bleed_matrix`."
-                + "It is computed based on the average of isolated spot_colors assigned to that gene"
-                + "which exceed `score`, `score_diff` and `intensity` thresholds given in config file."
-                + "For all $g$, there is an `av_round[g]` such that `gene_efficiency[g, av_round[g]] = 1`."
-                + "`nan` if $r$ outside `use_rounds` and 1 if `gene_codes[g,r]` outside `use_dyes`.",
+                "Numpy float array [n_dyes x n_channels_use]"
+                + "bleed_matrix_initial[d] is a vector of length n_channels_use that gives the expected intensity of "
+                  "dye d in each channel. This initial guess is obtained from a SVD of spots which belong to dye d "
+                  "with high probability. It differs from the final bleed matrix by a scale factor and by the spots "
+                  " used to calculate it.",
             ],
-            "use_ge": [
-                "ndarray[bool]",
-                "Bool [n_spots]. Mask for all spots used in gene efficiency calculation.",
+            "bleed_matrix": [
+                "ndarray[float]",
+                "Numpy float array [n_dyes x n_channels_use]"
+                + "bleed_matrix[d] is a vector of length n_channels_use that gives the expected intensity of dye d in "
+                  "each channel. This is the final bleed matrix and is obtained by computing the probabilities of "
+                " scaled spots against the target bled codes.",
             ],
         },
         "omp": {

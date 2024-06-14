@@ -238,7 +238,7 @@ class view_codes(ColorPlotBase):
             self.spot_color = nb.omp.colours[spot_no]
         else:
             page_name = "ref_spots"
-            spot_score = nb.ref_spots.scores[spot_no]
+            spot_score = nb.ref_spots.dot_product_gene_score[spot_no]
             t = nb.ref_spots.tile[spot_no]
             self.spot_color = nb.ref_spots.colours[spot_no][
                 np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
@@ -377,7 +377,7 @@ class view_spot(ColorPlotBase):
         else:
             page_name = "ref_spots"
             t = nb.ref_spots.tile[spot_no]
-            spot_score = nb.ref_spots.scores[spot_no]
+            spot_score = nb.ref_spots.dot_product_gene_score[spot_no]
         if np.ndim(nb.call_spots.color_norm_factor) == 3:
             color_norm = nb.call_spots.color_norm_factor[t][
                 np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
@@ -414,7 +414,6 @@ class view_spot(ColorPlotBase):
         spot_colors = get_spot_colors(
             yxz_base=im_yxz,
             t=t,
-            transform=nb.register.icp_correction,
             bg_scale=nb.filter.bg_scale,
             file_type=nb.extract.file_type,
             nbp_file=nb.file_names,

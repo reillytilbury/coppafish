@@ -245,7 +245,7 @@ class BuildPDF:
                 for t in nb.basic_info.use_tiles:
                     keep = nb.ref_spots.tile == t
                     fig = self.create_positions_histograms(
-                        nb.ref_spots.scores[keep],
+                        nb.ref_spots.dot_product_gene_score[keep],
                         nb.ref_spots.local_yxz[keep],
                         DEFAULT_REF_SCORE_THRESHOLD,
                         title=f"Spot position histograms for {t=}, scores "
@@ -255,42 +255,25 @@ class BuildPDF:
                     )
                     pdf.savefig(fig)
                 # Create a page for every gene
-                gene_probs = nb.ref_spots.gene_probs
+                gene_probabilities = nb.ref_spots.gene_probabilities
                 # bg colour was subtracted if use_preseq
-                scores = (
-                    nb.ref_spots.colours[
-                        np.ix_(
-                            range(nb.ref_spots.colours.shape[0]),
-                            nb.basic_info.use_rounds,
-                            nb.basic_info.use_channels,
-                        )
-                    ]
-                    / nb.call_spots.color_norm_factor[
-                        np.ix_(
-                            nb.ref_spots.tile,
-                            nb.basic_info.use_rounds,
-                            nb.basic_info.use_channels,
-                        )
-                    ]
-                )
-                n_genes = gene_probs.shape[1]
+                scores = nb.ref_spots.colours * nb.call_spots.colour_norm_factor[nb.ref_spots.tile]
+                n_genes = len(nb.call_spots.gene_names)
                 gene_names = nb.call_spots.gene_names
                 spot_colours_rnorm = scores / np.linalg.norm(scores, axis=2)[:, :, None]
                 signs = np.sign(np.sum(spot_colours_rnorm, axis=(1, 2)))
                 spot_colours_rnorm *= signs[:, None, None]
                 n_rounds = spot_colours_rnorm.shape[1]
                 for g in range(n_genes):
-                    g_spots = np.argsort(-gene_probs[:, g])
+                    g_spots = np.argsort(-gene_probabilities[:, g])
                     # Sorted probabilities, with greatest score at index 0
-                    g_probs = gene_probs[g_spots, g]
+                    g_probs = gene_probabilities[g_spots, g]
                     # Bled codes are of shape (rounds, channels, )
-                    g_bled_code = nb.call_spots.bled_codes[g][:, nb.basic_info.use_channels]
-                    g_bled_code /= np.linalg.norm(g_bled_code, axis=1)[:, None]
-                    g_bled_code_ge = nb.call_spots.bled_codes_ge[g][:, nb.basic_info.use_channels]
-                    g_bled_code_ge /= np.linalg.norm(g_bled_code_ge, axis=1)[:, None]
-                    g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code_ge[None, :, :], axis=2))
-                    thresh_spots = np.argmax(gene_probs, axis=1) == g
-                    thresh_spots = thresh_spots * (np.max(gene_probs) > GENE_PROB_THRESHOLD)
+                    g_bled_code = nb.call_spots.bled_codes[g]
+                    g_bled_code = g_bled_code / np.linalg.norm(g_bled_code, axis=1)[:, None]
+                    g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code[None, :, :], axis=2))
+                    thresh_spots = np.argmax(gene_probabilities, axis=1) == g
+                    thresh_spots = thresh_spots * (np.max(gene_probabilities) > GENE_PROB_THRESHOLD)
                     colours_mean = np.mean(scores[thresh_spots], axis=0)
                     fig, axes = self.create_empty_page(2, 2, gridspec_kw={"width_ratios": [2, 1]})
                     self.empty_plot_ticks(axes[1, 1])
@@ -313,7 +296,7 @@ class BuildPDF:
                     axes[1, 0].set_yticks([0, 0.25, 0.5, 0.75, 1])
                     axes[1, 0].grid(True)
                     axes[0, 0].autoscale(enable=True, axis="x", tight=True)
-                    axes[0, 1].imshow(g_bled_code_ge, vmin=0, vmax=1)
+                    axes[0, 1].imshow(g_bled_code, vmin=0, vmax=1)
                     axes[0, 1].set_title("bled code GE")
                     axes[0, 1].set_xlabel("channels")
                     axes[0, 1].set_xticks(
@@ -770,7 +753,7 @@ class BuildPDF:
         labels = []
         gene_counts = []
         median_scores = []
-        n_genes = ref_spots_page.gene_probs.shape[1]
+        n_genes = ref_spots_page.gene_probabilities.shape[1]
         if os.path.isfile(file_page.code_book):
             gene_names, _ = np.genfromtxt(file_page.code_book, dtype=(str, str)).transpose()
         else:

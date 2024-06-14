@@ -43,9 +43,9 @@ class ViewAllGeneScores:
         """
         self.mode = mode
         if mode == "score":
-            values = self.nb.ref_spots.scores
+            values = self.nb.ref_spots.dot_product_gene_score
         elif mode == "prob":
-            values = np.max(self.nb.ref_spots.gene_probs, axis=1)
+            values = np.max(self.nb.ref_spots.gene_probabilities, axis=1)
         elif mode == "score_diff":
             values = self.nb.ref_spots.score_diff
         elif mode == "intensity":
@@ -54,10 +54,10 @@ class ViewAllGeneScores:
             raise ValueError("mode must be 'score', 'prob', 'score_diff' or 'intensity'")
 
         gene_values = np.zeros((self.nb.call_spots.gene_names.shape[0], 0)).tolist()
-        gene_prob_assignments = np.argmax(self.nb.ref_spots.gene_probs, axis=1)
+        gene_prob_assignments = self.nb.probability_gene_no
         for i in range(len(gene_values)):
             if mode != "prob":
-                gene_values[i] = values[self.nb.ref_spots.gene_no == i]
+                gene_values[i] = values[self.nb.ref_spots.dot_product_gene_no == i]
             else:
                 gene_values[i] = values[gene_prob_assignments == i]
 
@@ -331,7 +331,7 @@ class GESpotViewer:
         nb = self.nb
         n_channels = len(nb.basic_info.use_channels)
         # First we need to find the spots used to calculate the gene efficiency for the given gene.
-        initial_assignment = np.argmax(nb.ref_spots.gene_probs, axis=1)
+        initial_assignment = np.argmax(nb.ref_spots.gene_probabilities, axis=1)
         if use_ge:
             self.gene_g_mask = nb.call_spots.use_ge * (initial_assignment == gene_index)
         else:
@@ -829,7 +829,7 @@ class GeneScoreScatter:
         else:
             self.ax.clear()
         gene_g_mask = self.nb.ref_spots.gene_no == self.gene_no
-        self.score = self.nb.ref_spots.scores[gene_g_mask]
+        self.score = self.nb.ref_spots.dot_product_gene_score[gene_g_mask]
         self.second_score = self.score - self.nb.ref_spots.score_diff[gene_g_mask]
         self.ax.scatter(x=self.second_score, y=self.score, s=1)
         # Add a line at y=x
@@ -1006,13 +1006,13 @@ class GeneProbs:
         self.nb = nb
         self.gene_no = gene_no
         self.n_genes = len(self.nb.call_spots.gene_names)
-        self.plot_gene_probs()
+        self.plot_gene_probabilities()
 
-    def load_gene_probs(self):
+    def load_gene_probabilities(self):
         gene_g_mask = self.nb.ref_spots.gene_no == self.gene_no
         gene_g_ids = np.where(gene_g_mask)[0]
         # Get the spot probabilities for the selected gene
-        spot_probs = self.nb.ref_spots.gene_probs[gene_g_mask]
+        spot_probs = self.nb.ref_spots.gene_probabilities[gene_g_mask]
         # We will order the spots by the gene they are assigned to with the highest probability
         self.prob_matrix = np.zeros((0, self.n_genes))
         self.spot_ids = np.zeros(0, dtype=int)
@@ -1032,14 +1032,14 @@ class GeneProbs:
         # update num assignments
         self.num_assignments = num_assignments
 
-    def plot_gene_probs(self, event=None):
+    def plot_gene_probabilities(self, event=None):
         # Plot the prob image
         if not hasattr(self, "fig"):
             self.fig, self.ax = plt.subplots(1, 1, figsize=(8, 8))
         else:
             self.ax.clear()
         # Load the gene probabilities
-        self.load_gene_probs()
+        self.load_gene_probabilities()
         # Plot the matrix. Make sure that the image does not go further than 0.9 right to the edge of the plot
         self.ax.imshow(self.prob_matrix, cmap="viridis", aspect="auto", interpolation="none")
         # Add white horizontal lines to separate the genes. Do this by looping through num_assignments in descending
@@ -1091,7 +1091,7 @@ class GeneProbs:
         # Now create a clickable button to update the scatter plot, make the button black
         self.plot_button = Button(self.plot_button_ax, "Plot", color="k")
         # Now link the click event to the function to update the scatter plot
-        self.plot_button.on_clicked(self.plot_gene_probs)
+        self.plot_button.on_clicked(self.plot_gene_probabilities)
 
     def add_score_plot(self, spot_no: int):
         """

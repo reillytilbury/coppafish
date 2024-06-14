@@ -64,16 +64,13 @@ def run_omp(
     torch.backends.cudnn.deterministic = True
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-    n_genes = nbp_call_spots.bled_codes_ge.shape[0]
+    n_genes = nbp_call_spots.bled_codes.shape[0]
     n_rounds_use = len(nbp_basic.use_rounds)
     n_channels_use = len(nbp_basic.use_channels)
     spot_shape_size_xy: int = config["spot_shape"][0]
     spot_radius_xy: int = maths.ceil(spot_shape_size_xy / 2)
     tile_shape: Tuple[int] = nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)
-    colour_norm_factor = np.array(nbp_call_spots.color_norm_factor, dtype=np.float32)
-    colour_norm_factor = colour_norm_factor[
-        np.ix_(range(colour_norm_factor.shape[0]), nbp_basic.use_rounds, nbp_basic.use_channels)
-    ]
+    colour_norm_factor = np.array(nbp_call_spots.colour_norm_factor, dtype=np.float32)
     colour_norm_factor = torch.asarray(colour_norm_factor).float()
     first_computation = True
 
@@ -199,23 +196,22 @@ def run_omp(
             subset_colours = torch.reshape(subset_colours, (-1, n_rounds_use, n_channels_use))
             # Set any out of bounds colours to zero.
             subset_colours[subset_colours <= -nbp_basic.tile_pixel_value_shift] = 0.0
-            subset_colours /= colour_norm_factor[[t]]
+            subset_colours *= colour_norm_factor[[t]]
             subset_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(subset_colours)
             subset_intensities = qual_check_torch.get_spot_intensity(subset_colours)
             pixel_intensity_threshold = torch.quantile(subset_intensities, q=config["pixel_max_percentile"] / 100)
             do_not_compute_on = subset_intensities < pixel_intensity_threshold
             del subset_intensities, pixel_intensity_threshold
-            bled_codes_ge = nbp_call_spots.bled_codes_ge
-            bled_codes_ge = bled_codes_ge[np.ix_(range(n_genes), nbp_basic.use_rounds, nbp_basic.use_channels)]
-            assert (~np.isnan(bled_codes_ge)).all(), "bled codes GE cannot contain nan values"
-            assert np.allclose(np.linalg.norm(bled_codes_ge, axis=(1, 2)), 1), "bled codes GE must be L2 normalised"
-            bled_codes_ge = torch.asarray(bled_codes_ge.astype(np.float32))
+            bled_codes = nbp_call_spots.bled_codes
+            assert (~np.isnan(bled_codes)).all(), "bled codes GE cannot contain nan values"
+            assert np.allclose(np.linalg.norm(bled_codes, axis=(1, 2)), 1), "bled codes GE must be L2 normalised"
+            bled_codes = torch.asarray(bled_codes.astype(np.float32))
             subset_colours = subset_colours.reshape((-1, n_rounds_use * n_channels_use))
-            bled_codes_ge = bled_codes_ge.reshape((n_genes, n_rounds_use * n_channels_use))
+            bled_codes = bled_codes.reshape((n_genes, n_rounds_use * n_channels_use))
             bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
             coefficient_image = coefs_torch.compute_omp_coefficients(
                 subset_colours,
-                bled_codes_ge,
+                bled_codes,
                 maximum_iterations=config["max_genes"],
                 background_coefficients=bg_coefficients,
                 background_codes=bg_codes,
@@ -227,7 +223,7 @@ def run_omp(
                 do_not_compute_on=do_not_compute_on,
                 force_cpu=config["force_cpu"],
             )
-            del subset_colours, bg_coefficients, bg_codes, bled_codes_ge, do_not_compute_on
+            del subset_colours, bg_coefficients, bg_codes, bled_codes, do_not_compute_on
 
             # STEP 2.5: On the first OMP subset/tile, compute the OMP spot shape using the found coefficients.
             if first_computation:

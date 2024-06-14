@@ -66,7 +66,7 @@ class view_score:
 
         # Get saved values if anchor method
         if method.lower() != "omp":
-            self.g_saved = nb.ref_spots.gene_no[spot_no]
+            self.g_saved = nb.ref_spots.dot_product_gene_no[spot_no]
             if self.track_info["gene_added"][2] < self.n_genes:
                 # Possibility best gene will be background here, but impossible for saved best gene to be background
                 if self.track_info["gene_added"][2] != self.g_saved and check_weight:
@@ -76,7 +76,7 @@ class view_score:
                         f"config['call_spots'] have not been changed.\n"
                         f"Set check_weight=False to skip this error."
                     )
-            self.dp_val_saved = nb.ref_spots.scores[spot_no]
+            self.dp_val_saved = nb.ref_spots.dot_product_gene_score[spot_no]
             config_name = "call_spots"
         else:
             self.g_saved = None

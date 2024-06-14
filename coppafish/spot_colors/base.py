@@ -253,7 +253,6 @@ def get_spot_colours_new(
 def get_spot_colors(
     yxz_base: np.ndarray,
     t: np.ndarray,
-    transform: np.ndarray,
     bg_scale: Optional[Tuple[Tuple[Tuple[float]]]],
     file_type: str,
     nbp_file: NotebookPage,
@@ -274,12 +273,12 @@ def get_spot_colors(
             Local yxz coordinates of spots found in the reference round/reference channel of tile `t`
             yx coordinates are in units of `yx_pixels`. z coordinates are in units of `z_pixels`.
         t: `int`. Tile number.
-        transform: `float32 [n_tiles x n_rounds x n_channels x 4 x 3]`.
         bg_scale: `float [n_tiles x n_rounds x n_channels]` scale factors to apply to background images before
             subtraction. If 'None', no background subtraction will be performed.
         file_type: `str`. Type of file to read in. E.g. '.zarr' or '.npy'.
         nbp_file: `file_names` notebook page.
         nbp_basic: `basic_info` notebook page.
+        nbp_register: `register` notebook page.
         use_rounds: `int [n_use_rounds]`.
             Rounds you would like to find the `spot_color` for.
             Error will raise if transform is zero for particular round.
@@ -326,7 +325,7 @@ def get_spot_colors(
         for i, r in enumerate(use_rounds):
             flow_tr = nbp_register.flow[t, r]
             for j, c in enumerate(use_channels):
-                transform_rc = transform[t, r, c]
+                transform_rc = nbp_register.icp_correction[t, r, c]
                 pbar.set_postfix({"round": r, "channel": c})
                 if transform_rc[0, 0] == 0:
                     raise ValueError(f"Transform for tile {t}, round {r}, channel {c} is zero:" f"\n{transform_rc}")
