@@ -198,7 +198,6 @@ Our method of estimating $\mathbf{E_{g,r}}$ (and $\mathbf{D_{g,t, r}}$ just on a
 *The Bayes Mean biases the sample mean towards a prior vector. This is useful when the number of samples is small and we expect the points to have mean parallel to the prior vector.*
 
 
-
 #### The Parallel Biased Bayes Mean
 
 Fix a gene $g$ and round $r$ and let $\mathbf{F_{1,r}}, \ldots, \mathbf{F_{n,r}}$  be the round $r$ fluorescence vectors of spots assigned to gene $g$ with high probability.
@@ -316,6 +315,10 @@ $$
 
 We will use these instead of $E_{g,r,c}$ from here onwards.
 
+<figure markdown="span">
+  ![Image title](images/algorithm/call_spots/free vs constrained bled codes.png)
+</figure>
+*The `view_free_and_constrained_bled_codes` diagnostic shows the free tile-independent bled codes next to the constrained bled codes. The constrained bled codes have much more uniform colours within each gene. Note how the final round and channel has been scaled down and all of channel 15 has been scaled up.*
 ### 5: Tile Normalisation
 
 The purpose of this step is to remove brightness differences between tiles, and improve the round and channel normalisation we found in the previous step. We do this by finding a scale factor $Q_{t, r, c}$ such that 
