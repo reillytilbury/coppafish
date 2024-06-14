@@ -534,13 +534,13 @@ class NotebookPage:
                 "intensities across tiles, rounds and channels and to make the intensities of each dye as close as "
                 "possible to pre-specified target values.",
             ],
-            "target_scale": [
+            "rc_scale": [
                 "ndarray[float]",
                 "Numpy float array [n_rounds x n_channels_use]"
                 + "colour norm factor is a product of 2 scales. The first is the target scale which is the scale "
                 + "that maximises similarity between tile independent free bled codes and the target values",
             ],
-            "homogeneous_scale": [
+            "tile_scale": [
                 "ndarray[float]",
                 "Numpy float array [n_tiles x n_rounds x n_channels_use]"
                 + "colour norm factor is a product of 2 scales. The second is the homogeneous scale which is the "

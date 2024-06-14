@@ -11,7 +11,11 @@ Some of the most important exported parameters of this section are:
 - **Bled Codes** $\mathbf{K}$: $(n_{\text{g}} \times n_{\text{r}} \times n_{\text{c}})$ array of the expected colour spectrum for each gene.
 
 ## Algorithm Breakdown
-![call_spots_colours](https://github.com/reillytilbury/coppafish/assets/88850716/21b77712-94cc-4c0b-ae20-e6b366c5826f)
+
+<figure markdown="span">
+  ![Image title](images/algorithm/call_spots/Call Spots Flowchart.png)
+</figure>
+*Algorithm Flowchart showing how all variables and steps of the pipeline are related.*
 
 
 The inputs to the algorithm are:
@@ -54,13 +58,19 @@ The purpose of this step is to provide some gene assignments that will facilitat
 
 #### The Naive Approach
 The simplest way to do gene assignments would be:
-1. Create an initial bled code $\tilde{\mathbf{K}}_g = \mathbf{C_g B}$ for each gene $g$ by matrix multiplying the code matrix $\mathbf{C_g}$ for each gene $g$ with the bleed matrix $\mathbf{B}$. 
-2.  Compute a similarity matrix $\mathbf{Y}$ of shape $(n_{\text{spots}} \times n_{\text{genes}})$ of the cosine angle of each spot $s$ to each gene $g$ defined by 
+
+* Create an initial bled code $\tilde{\mathbf{K}}_g = \mathbf{C_g B}$ for each gene $g$ by matrix multiplying the code matrix $\mathbf{C_g}$ for each gene $g$ with the bleed matrix $\mathbf{B}$.
+* Compute a similarity matrix $\mathbf{Y}$ of shape $(n_{\text{spots}} \times n_{\text{genes}})$ of the cosine angle of each spot $s$ to each gene $g$ defined by
+
 $$
-\mathbf{Y_{sg}}  = \mathbf{F_s \cdot \tilde{K}_g} = \sum_{r,c}F_{s,r,c}\tilde{K}_{g,r,c}. 
+\mathbf{Y_{sg}}  = \mathbf{F_s \cdot \tilde{K}_g} = \sum_{r,c}F_{s,r,c}\tilde{K}_{g,r,c}.
 $$
-3. Define a gene assignment vector $\mathbf{G}$ of length $n_{\text{spots}}$ defined by 
-$$G_s = \text{argmax}  \_g Y_{sg}.$$
+
+* Define a gene assignment vector $\mathbf{G}$ of length $n_{\text{spots}}$ defined by
+
+$$
+G_s = \text{argmax}_g Y_{sg}.
+$$
 
 Unfortunately, the naive approach does not work well at all! The main reason for this is that the initial bled codes $\tilde{\mathbf{K}}_g$ are bad estimates of the true bled codes $\mathbf{K_g}$. To see why, note that step 1 above assumes that each gene's expected code is just a copy of the expected dye in that round. In equations, this is saying
 
@@ -69,6 +79,7 @@ $$
 $$
 
 However, due to random fluctuations in the concentrations of bridge probes for each gene in each round some genes appear systematically brighter/dimmer in some rounds! A much better model for the bled codes is 
+
 $$
 \tilde{\mathbf{K}}_{g, r} = \lambda_{gr} \mathbf{B_{d(g, r)}},
 $$
@@ -92,11 +103,19 @@ where $M$ is a normalization constant we don’t need to worry about.
 
 Write $\mathbf{F} = ( \mathbf{F_1}^T, \cdots, \mathbf{F_{n_r}}^T)$ for the $n_{\text{r}}n_{\text{c}}$-dimensional spot code with each round **L2-normalized** and $\mathbf{b_g} = (\mathbf{B_{d(g, 1)}}^T, \cdots, \mathbf{B_{d(g, n_r)}}^T)$ for gene $g$’s $n_{\text{r}}n_{\text{c}}$-dimensional bled code with each round **L2-normalized**. Assume that the rounds are statistically independent of each other. Then
 
-$$ \mathbb{P}[\mathbf{F} = \mathbf{f} \mid G = g] = \prod_r M \exp(\kappa \mathbf{f_r} \cdot \mathbf{b_{g,r}}) = \tilde{M} \exp \left( \kappa \sum_r \mathbf{f_r} \cdot \mathbf{B_{d(g, r)}}\right) =  \tilde{M} \exp(\kappa \mathbf{F \cdot b_g}) $$
+$$ 
+\begin{aligned}
+\mathbb{P}[\mathbf{F} = \mathbf{f} \mid G = g] &= \prod_r M \exp(\kappa \mathbf{f_r} \cdot \mathbf{b_{g,r}}) \\ 
+&= \tilde{M} \exp \left( \kappa \sum_r \mathbf{f_r} \cdot \mathbf{B_{d(g, r)}}\right) \\ 
+&=  \tilde{M} \exp(\kappa \mathbf{f \cdot b_g}). \end{aligned}
+$$
 
 By Bayes' Theorem:
 
-$$ \mathbb{P}[G = g \mid \mathbf{F} = \mathbf{f}] = \dfrac{\mathbb{P}[\mathbf{F} = \mathbf{f} \mid G = g] \mathbb{P}[G = g]}{ \mathbb{P}[\mathbf{F} = \mathbf{f}]} $$
+$$ 
+\mathbb{P}[G = g \mid \mathbf{F} = \mathbf{f}] 
+= \dfrac{\mathbb{P}[\mathbf{F} = \mathbf{f} \mid G = g] \mathbb{P}[G = g]}{ \mathbb{P}[\mathbf{F} = \mathbf{f}]}. 
+$$
 
 Assuming a uniform prior on the genes
 
@@ -108,9 +127,11 @@ where $\mathbf{U}$ is a matrix of shape $(n_g, n_r n_c)$ where each row $U_g = \
 The purpose of this step is to compute an updated estimate of the bleed matrix. To get a more accurate estimate of the colour spectrum for each dye $d$ we will find high probability spots for genes $g$ containing dye $d$ and then extract the rounds in which dye $d$ is supposed to be present. We will then use singular-value decomposition to get a representative vector for the set of samples. 
 
 Set some probability threshold $\alpha$ (by default, $\alpha = 0.9$). We define the following sets:
+
 $$ 
 \mathcal{S} = \{ s : p(s) \geq \alpha \},
 $$
+
 $$ 
 G_{d, r} = \{ g : d(g,r) = d \},
 $$
@@ -118,12 +139,17 @@ $$
 $$ 
 J_{d, r} = \{ \mathbf{F_{sr}} : s \in \mathcal{S}, \ g_s \in C_{d, r} \}
 $$
+
 where: 
+
 - $\mathcal{S}$ is the set of spots with $s$ with probability $p(s) > \alpha$,
+
 - $G_{d,r}$ is the set of genes with dye $d$ in round $r$,
+
 - $J_{d,r}$ is the set of colours of high probability spots in round $r$, for all spots assigned to a gene $g \in G_{d,r}$.
 
 By taking the union of $J_{d,r}$ across rounds, we end up with a set of reliable colour vector estimates for dye $d$:
+
 $$ 
 \mathcal{J}_d = \bigcup_r J_{d, r}
 $$
@@ -150,28 +176,36 @@ We then set the bleed matrix for dye $d$ to $\boldsymbol{\omega}$,  ie: $\mathbf
 
 ### 3: Free Bled Code Estimation
 
-Terminology: 
-- A _free bled code_ $\mathbf{b_g}$ is a bled code computed by an averaging process among spots assigned to gene $g$. This bled code $g$ is _free_ in the sense that the only thing influencing it is the spots of gene $g$
+**Terminology:**
+
+- A _free bled code_ $\mathbf{b_g}$ is a bled code computed by an averaging process among spots assigned to gene $g$. This bled code $g$ is _free_ in the sense that the only thing influencing it is the spots of gene $g$.
+
 - A _constrained bled code_, (usually referred to as just a _bled code_) $\mathbf{b_g}$ for a gene $g$ is a bled code which is influenced by parameters calculated across many genes. This is _constrained_ in the sense that parameters other than gene $g$ alone influence our estimate of $\mathbf{b_g}$.
 
 The purpose of this step is to compute normalised free bled codes $\mathbf{b_g}$ for each gene $g$. We will make extensive use of the initial gene assignments and the bleed matrix we have computed, which forms the prior estimate of any fluorescence vector estimate. We will estimate tile-dependent free bled codes, $\mathbf{D_{gtrc}}$ and tile-independent free bled codes, $\mathbf{E_{grc}}$. By comparing these, we will be able to correct for tile by tile variations in brightness in step 5.
 
-Our method of estimating $ \mathbf{E_{g,r}} $ (and $ \mathbf{D_{g,t, r}} $ just on a smaller set of sample spots):
+Our method of estimating $\mathbf{E_{g,r}}$ (and $\mathbf{D_{g,t, r}}$ just on a smaller set of sample spots):
 
-- Assumes a prior of $ \mathbf{E_{g,r}} = \mathbf{B_{d(g,r)}} $, 
+- Assumes a prior of $\mathbf{E_{g,r}} = \mathbf{B_{d(g,r)}}$,
+
 - Easily scales $\mathbf{B_{d(g,r)}}$ but needs many spots to change its direction,
+
 - Allows some change in the direction if there are sufficiently many spots, meaning that we allow different genes to show the same dye differently if we have enough evidence this is real. This is particularly relevant when dyes fail to completely wash out between rounds.
 
-![bayes_mean_single](https://github.com/reillytilbury/coppafish/assets/88850716/1bfc7651-2967-4d00-94e9-4bfcc8a20ba2)
-The Bayes Mean biases the sample mean towards a prior vector. This is useful when the number of samples is small and we expect the points to have mean parallel to the prior vector.
+<figure markdown="span">
+  ![Image title](images/algorithm/call_spots/bayes_mean_single.png)
+</figure>
+*The Bayes Mean biases the sample mean towards a prior vector. This is useful when the number of samples is small and we expect the points to have mean parallel to the prior vector.*
+
+
 
 #### The Parallel Biased Bayes Mean
 
-Fix a gene $g$ and round $r$ and let $ \mathbf{F_{1,r}}, \ldots, \mathbf{F_{n,r}} $  be the round $r$ fluorescence vectors of spots assigned to gene $g$ with high probability.
+Fix a gene $g$ and round $r$ and let $\mathbf{F_{1,r}}, \ldots, \mathbf{F_{n,r}}$  be the round $r$ fluorescence vectors of spots assigned to gene $g$ with high probability.
 
 We'd like to find a representative vector for this data which captures the mean length, but some genes have very few spots so an average is noisy. We therefore bias our mean towards a scaled version of $\mathbf{B}_{d(g,r)}$. 
 
-To begin, assume the mean vector $ \overline{\mathbf{F}} = \frac{1}{n} \sum_{i} \mathbf{F}_{i,r} $ is normally distributed and impose a normal prior on the space of possible means:
+To begin, assume the mean vector $\overline{\mathbf{F}} = \frac{1}{n} \sum_{i} \mathbf{F}_{i,r}$ is normally distributed and impose a normal prior on the space of possible means:
 
 $$
 \overline{\mathbf{F}} \sim \mathcal{N}(\boldsymbol{\mu}, I_{n_c})
@@ -188,6 +222,7 @@ $$
 $$
 
 in the orthonormal basis 
+
 $$
 \mathbf{v}_1 = \mathbf{B}_{d(g,r)},
 $$
@@ -195,28 +230,29 @@ $$
 $$ 
 \mathbf{v}_2, \ldots, \mathbf{v}_n  \text{ orthogonal to } \mathbf{v}_1.
 $$
-The parameters $\alpha$ and $\beta$, being inverse variances, are concentration parameters. We are going to let $\alpha << \beta$, which means the set of probable means is very unconcentrated along the line $ \lambda \mathbf{B}_{d(g,r) } $, but very concentrated perpendicular to this. Another way of saying this is that our set of probable means under the prior distribution on $\mathbf{\mu}$ will be an elongated ellipsoid along the axis spanned by $ \mathbf{B}_{d(g,r) } $.
 
-Define $\mathbf{Q} =\boldsymbol{\Sigma}^{-1}$ and $\mathbf{b} = \mathbf{B_{d(g,r)}}$. Since the normal is a conjugate prior when the data is normal, we know that the posterior $\boldsymbol{\mu} \mid \mathbf{\overline{F}}$ is normal. Thus finding its mean is equivalent to finding its mode. To find its mode we will find the zero of the derivative of its log-density. The log-density of $\boldsymbol{\mu} \mid \mathbf{\overline{F}}$ is given by
+The parameters $\alpha$ and $\beta$, being inverse variances, are concentration parameters. We are going to let $\alpha << \beta$, which means the set of probable means is very unconcentrated along the line $\lambda \mathbf{B}_{d(g,r) }$, but very concentrated perpendicular to this. Another way of saying this is that our set of probable means under the prior distribution on $\mathbf{\mu}$ will be an elongated ellipsoid along the axis spanned by $\mathbf{B}_{d(g,r) }$.
+
+Define $\boldsymbol{\Lambda} =\boldsymbol{\Sigma}^{-1}$ and $\mathbf{b} = \mathbf{B_{d(g,r)}}$. Since the normal is a conjugate prior when the data is normal, we know that the posterior $\boldsymbol{\mu} \mid \mathbf{\overline{F}}$ is normal. Thus finding its mean is equivalent to finding its mode. To find its mode we will find the zero of the derivative of its log-density. The log-density of $\boldsymbol{\mu} \mid \mathbf{\overline{F}}$ is given by
 
 $$
 \begin{aligned}
 l(\boldsymbol{\mu}) &= \log P(\boldsymbol{\mu}| \overline{\mathbf{F}} = \mathbf{f}) \\ \\
        &= \log P(\boldsymbol{\mu}) + \log P(\overline{\mathbf{F}} = \mathbf{f} | \boldsymbol{\mu}) + C \\ \\
-       &= -\frac{1}{2} (\boldsymbol{\mu} - \mathbf{b})^T Q (\boldsymbol{\mu} - \mathbf{b}) - \frac{1}{2} (\boldsymbol{\mu} - \mathbf{f})^T (\boldsymbol{\mu} - \mathbf{f}) + C
+       &= -\frac{1}{2} (\boldsymbol{\mu} - \mathbf{b})^T \boldsymbol{\Lambda} (\boldsymbol{\mu} - \mathbf{b}) - \frac{1}{2} (\boldsymbol{\mu} - \mathbf{f})^T (\boldsymbol{\mu} - \mathbf{f}) + C
 \end{aligned}
 $$
 
 This has derivative
 
 $$
-\frac{\partial l}{\partial \boldsymbol{\mu}} = -Q (\boldsymbol{\mu} - \boldsymbol{b}) - (\boldsymbol{\mu} - \mathbf{f})
+\frac{\partial l}{\partial \boldsymbol{\mu}} = - \boldsymbol{\lambda} (\boldsymbol{\mu} - \boldsymbol{b}) - (\boldsymbol{\mu} - \mathbf{f})
 $$
 
 Setting this to $\mathbf{0}$, rearranging for $\boldsymbol{\mu}$ and using the fact that
 
 $$
-Q \mathbf{v} = 
+\boldsymbol{\Lambda} \mathbf{v} = 
 \begin{cases}
 \alpha^2 \mathbf{v} & \text{if } \mathbf{v} = \lambda\mathbf{b} \\ \\
 \beta^2 \mathbf{v} & \text{otherwise}
@@ -227,20 +263,23 @@ we get
 
 $$
 \begin{aligned}
-\mathbf{\hat{\mu}} &= (Q + I)^{-1}(Q \mathbf{b} + \mathbf{f}) \\ \\ 
-    &= (Q + I)^{-1}(\alpha^2 \mathbf{b} + \mathbf{f}) \\ \\
-    &= (Q + I)^{-1}(\alpha^2 \mathbf{b} + (\mathbf{f} \cdot \mathbf{b})\mathbf{b} + \mathbf{f} - (\mathbf{f} \cdot \mathbf{b})\mathbf{b}) \\ \\
-    &= (Q + I)^{-1}((\alpha^2 + \mathbf{f} \cdot \mathbf{b})\mathbf{b} + \mathbf{f} - (\mathbf{f} \cdot \mathbf{b})\mathbf{b}) \\ \\
+\mathbf{\hat{\mu}} &= (\Lambda + I)^{-1}(\Lambda \mathbf{b} + \mathbf{f}) \\ \\ 
+    &= (\Lambda + I)^{-1}(\alpha^2 \mathbf{b} + \mathbf{f}) \\ \\
+    &= (\Lambda + I)^{-1}(\alpha^2 \mathbf{b} + (\mathbf{f} \cdot \mathbf{b})\mathbf{b} + \mathbf{f} - (\mathbf{f} \cdot \mathbf{b})\mathbf{b}) \\ \\
+    &= (\Lambda + I)^{-1}((\alpha^2 + \mathbf{f} \cdot \mathbf{b})\mathbf{b} + \mathbf{f} - (\mathbf{f} \cdot \mathbf{b})\mathbf{b}) \\ \\
 &= \dfrac{(\alpha^2 + \mathbf{f} \cdot \mathbf{b})}{1 + \alpha^2} \mathbf{b} +
  \dfrac{1}{1+\beta^2} \bigg( \mathbf{f} - (\mathbf{f} \cdot \mathbf{b})\mathbf{b} \bigg)
 \end{aligned}
 $$
+
 Plugging in $\mathbf{f} = \frac{1}{n}\sum_i \mathbf{F_{i, r}}$ yields our estimate $\mathbf{\hat{\mu}}$
 
-![Bayes Mean](https://github.com/reillytilbury/coppafish/assets/88850716/01719532-4f2c-4710-acdd-6d6f74d7c892)
-Decreasing $\beta$ increases the component of the Bayes Mean $\boldsymbol{\hat{\mu}}$ perpendicular to the prior vector. The values of $\alpha^2$ and $\beta^2$ should be thought of as the number of spots needed to change the scale and direction respectively of the prior vector.
+<figure markdown="span">
+  ![Image title](images/algorithm/call_spots/Bayes Mean.png)
+  </figure>
+*Decreasing $\beta$ increases the component of the Bayes Mean $\boldsymbol{\hat{\mu}}$ perpendicular to the prior vector. The values of $\alpha^2$ and $\beta^2$ should be thought of as the number of spots needed to change the scale and direction respectively of the prior vector.*
 
-### 4: Generation of Target Bled Codes $\mathbf{K_g}$
+### 4: Round and Channel Normalisation
 
 The purpose of this step is to try and remove systematic brightness differences between rounds and channels and ensure that the dyes are well separated. 
 
@@ -249,75 +288,104 @@ To begin, fix a round $r$ and channel $c$ and let $d_{max}(c)$ be the dye which 
 $$
 L(V_{r, c}) = \sum_{g \in G_{r, \ d_{max}(c)}} \sqrt{N_{g}} \  \bigg( V_{r, c} \ E_{g, r, c} - T_{d_{max}(c)} \bigg)^2,
 $$ 
+
 where $N_g$ is the number of high probability spots assigned to gene $g$. There is no reason this has to be a square root, though if it is not, too much influence is given to the most frequent genes. Minimise this loss to obtain
 
 $$
 V_{r, c} = \dfrac{ \sum_{g \in G_{r, \ d_{max}(c) }} \sqrt{N_g} E_{grc} T_{d_{max}(c)} } { \sum_{g \in G_{r, \ d_{max}(c) }} \sqrt{N_g} E_{grc}^2 },
 $$
+
 which is our optimal value!
 
-![scales](https://github.com/reillytilbury/coppafish/assets/88850716/83fca522-0f61-4a4f-b87f-16a466447146)
-The gene intensities for each round and channel plotted in cyan, and their scaled versions plotted in red, showing how they have been recentred around the target values.
 
-![scales_im (1)](https://github.com/reillytilbury/coppafish/assets/88850716/e6eb1bc9-59ff-4d2e-a39a-22eacee2d9d5)
-The target scale matrix shows that most of its job is boosting channel 15 in this case, but the amount it boosts these values is highly variable between rounds.
+<figure markdown="span">
+  ![Image title](images/algorithm/call_spots/rc scale regression.png)
+</figure>
+*The gene intensities for each round and channel plotted in cyan, and their scaled versions plotted in red, showing how they have been recentred around the target values. Plot generated using the `view_rc_scale_regression` diagnostic*
+
+<figure markdown="span">
+  ![Image title](images/algorithm/call_spots/rc_scales_im.png)
+</figure>
+*The round/channel scale matrix shows that most of its job is boosting channel 15 in this case, but the amount it boosts these values is highly variable between rounds.*
 
 Now define the _constrained bled codes_, which we will just call _bled codes_ 
 
 $$
 K_{g,r,c} = E_{g,r,c}V_{r,c}.
 $$
+
 We will use these instead of $E_{g,r,c}$ from here onwards.
 
-### 5: Regression of $\mathbf{D_{g,t}}$ against $\mathbf{K_g}$
+### 5: Tile Normalisation
 
-The purpose of this step is to remove brightness differences between tiles, and improve the round and channel normalisation we found in the previous step. We do this by finding a scale factor $A_{t, r, c}$ such that 
+The purpose of this step is to remove brightness differences between tiles, and improve the round and channel normalisation we found in the previous step. We do this by finding a scale factor $Q_{t, r, c}$ such that 
+
 $$
-A_{t,r,c} D_{g, t, r, c} \approx K_{g, r, c},
+Q_{t,r,c} D_{g, t, r, c} \approx K_{g, r, c},
 $$
-where $\mathbf{D_{g, t,}}$ is the tile-dependent bled code for gene $g$ in tile $t$ defined in step 3 and $\mathbf{K_g}$ is the target bled code for gene $g$ defined in step 4.
+
+where $\mathbf{D_{g, t,}}$ is the tile-dependent bled code for gene $g$ in tile $t$ defined in step 3 and $\mathbf{K_g}$ is the constrained bled code for gene $g$ defined in step 4.
 
 Our method works in a similar way to step 4: fix a tile $t$, round $r$ and channel $c$ and as above, let $G_{r,d}$ be the genes with dye $d$ in round $r$. Define the loss
 
 $$
-L(A_{t,r, c}) = \sum_{g \in G_{r, \ d_{max}(c)}} \sqrt{N_{g,t}} \  \bigg( A_{t,r, c} \ D_{g, t r, c} - K_{g, r, c} \bigg)^2,
+L(Q_{t,r, c}) = \sum_{g \in G_{r, \ d_{max}(c)}} \sqrt{N_{g,t}} \  \bigg( Q_{t,r, c} \ D_{g, t r, c} - K_{g, r, c} \bigg)^2,
 $$ 
+
 where $N_{g, t}$ is the number of high probability spots of gene $g$ in tile $t$. Remember that $K_{g, r, c} = E_{g, r, c}V_{r, c},$ so writing this in full yields
+
 $$
-L(A_{t,r, c}) = \sum_{g \in G_{r, \ d_{max}(c)}} \sqrt{N_{g,t}} \  \bigg( A_{t,r, c} \ D_{g, t r, c} - E_{g, r, c}V_{r, c} \bigg)^2.
+L(Q_{t,r, c}) = \sum_{g \in G_{r, \ d_{max}(c)}} \sqrt{N_{g,t}} \  \bigg( Q_{t,r, c} \ D_{g, t r, c} - E_{g, r, c}V_{r, c} \bigg)^2.
 $$ 
-This means that if $D_{g,t,r,c} \approx E_{g,r,c}$ for all genes $g$ then $A_{t,r,c} \approx V_{r,c}$. This means that $\mathbf{A}$ is correcting for tile differences. Then why does it have indices for $r$ and $c$? Because the way that the brightness varies between tiles may be completely independent for different round-channel pairs. This is addressed further in the diagnostics. Minimising this loss yields:
+
+This means that if $D_{g,t,r,c} \approx E_{g,r,c}$ for all genes $g$ then $Q_{t,r,c} \approx V_{r,c}$. This means that $\mathbf{Q}$ is correcting for tile differences. Then why does it have indices for $r$ and $c$? Because the way that the brightness varies between tiles may be completely independent for different round-channel pairs. This is addressed further in the diagnostics. Minimising this loss yields:
 
 $$
-A_{t,r,c} = \dfrac{ \sum_{g \in G_{r, \ d_{max}(c) }} \sqrt{N_{g, t}} \ K_{g,r,c}  D_{g, t r, c}} { \sum_{g \in G_{r, \ d_{max}(c) }} \sqrt{N_{g, t}}  D_{g, t r, c}^2 }.
+Q_{t,r,c} = \dfrac{ \sum_{g \in G_{r, \ d_{max}(c) }} \sqrt{N_{g, t}} \ K_{g,r,c}  D_{g, t r, c}} { \sum_{g \in G_{r, \ d_{max}(c) }} \sqrt{N_{g, t}}  D_{g, t r, c}^2 }.
 $$
-![homogeneous scale regression](https://github.com/reillytilbury/coppafish/assets/88850716/d3a01b61-21a5-4b88-bd43-821ca42d02c7)
-We can use the `view_homogeneous_scale_regression` function to view the regression for a single tile. Note that the regressions seem to have a high $r^2$ value and the slopes are significantly different even within channels.
 
-![different scales](https://github.com/reillytilbury/coppafish/assets/88850716/6e3e539c-0e9a-4a3d-a50e-fff19b29eeee)
+<figure markdown="span">
+  ![Image title](images/algorithm/call_spots/tile scale regression.png)
+</figure>
+*We can use the `view_tile_scale_regression` diagnostic to view the regression for a single tile. Note that the regressions seem to have a high $r^2$ value and the slopes are significantly different even within channels.*
+
+<figure markdown="span">
+  ![Image title](images/algorithm/call_spots/different scales.png)
+</figure>
+*We can use the `view_scale_factors` diagnostic to view the round/channel scale, the tile scale and the tile scales relative to the round/channel scales. The final plot being non-uniform implies that the tile scale corrections are independent between different $(r, c)$ pairs.*
 
 ### 6 and 7: Application of Scales, Computation of Final Scores and Bleed Matrix
 
 The purpose of this step is to bring all the components together and compute the final scores and bleed matrix.
 
-Now that we have the homogeneous scale $A_{t,r,c}$, we multiply it by the initial scale factor $P_{t, r, c}$ to get our final colour normalisation factor 
+Now that we have the tile scale $Q_{t,r,c}$, we multiply it by the initial scale factor $P_{t, r, c}$ to get our final colour normalisation factor $A_{t, r, c}$:
 
-$$ A_{t, r, c} \mapsto A_{t, r, c} P_{t, r, c}.$$
+$$
+A_{t, r, c} = P_{t, r, c} Q_{t, r, c}.
+$$
 
 This is important as all our calculations have been done on preprocessed spot colours which have already been multiplied by $\mathbf{P}$. We apply this scale to all of our spot colours $F$ by pointwise multiplication.
 
 Next, we compute the final probabilities and dot product scores. We might ask at this point whether we should use:
+
 1. The tile-independent free bled codes $E_{g,r,c}$, 
+
 2. the tile-dependent free bled codes $D_{g,t,r,c}$ or,
+
 3. the constrained bled codes $K_{g, r, c}$? 
 
-The best answer is definitely the target bled codes $K_{g, r, c}$! We calculated $\mathbf{E}$ and $\mathbf{D}$ as important summary statistics which act as representative samples for each gene in the case of $\mathbf{E}$, and for each gene and tile in the case of $\mathbf{D}$. These were only computed to facilitate the computations of $\mathbf{A}$ and $\mathbf{K}$.
+The best answer is definitely the constrained bled codes $K_{g, r, c}$! We calculated $\mathbf{E}$ and $\mathbf{D}$ as important summary statistics which act as representative samples for each gene in the case of $\mathbf{E}$, and for each gene and tile in the case of $\mathbf{D}$. These were only computed to facilitate the computations of $\mathbf{A}$ and $\mathbf{K}$.
 
 While it may seem more accurate to have a different gene code for each tile, the estimates $\mathbf{D_{g, t}}$ are noisy due to small numbers of samples. The colour normalisation factor $\mathbf{A}$ was calculated specifically to maximise similarity of the **tile-dependent** free codes $\mathbf{D}$ with the **tile-independent** constrained codes $\mathbf{K}$, meaning that multiplying spot colours by $\mathbf{A}$ has the dual effect of
+
 1. homogenising them across tiles and,
+
 2. bringing them all close to the constrained codes $\mathbf{K}$.
 
 With that in mind, we compute:
+
 1. Final gene probabilities using the scaled spots $\mathbf{AF}$ and comparing against the constrained codes $\mathbf{K}$
+
 2. Final Dot Products using the scaled spots $\mathbf{AF}$ and comparing against the constrained codes $\mathbf{K}$. These would not have been accurate in step 1 as we had no model of how each gene varied in brightness between rounds, but now this is something we have accounted for in $\mathbf{K}$.
+
 3. The Final Bleed Matrix using the same method as discussed in step 2, but with updated gene probabilities.

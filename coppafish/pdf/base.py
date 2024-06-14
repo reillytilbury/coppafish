@@ -258,7 +258,7 @@ class BuildPDF:
                 # Create a page for every gene
                 gene_probabilities = nb.ref_spots.gene_probabilities
                 # bg colour was subtracted if use_preseq
-                scores = nb.ref_spots.colours * nb.call_spots.colour_norm_factor
+                scores = nb.ref_spots.colours * nb.call_spots.colour_norm_factor[nb.ref_spots.tile]
                 n_genes = len(nb.call_spots.gene_names)
                 gene_names = nb.call_spots.gene_names
                 spot_colours_rnorm = scores / np.linalg.norm(scores, axis=2)[:, :, None]
@@ -270,11 +270,9 @@ class BuildPDF:
                     # Sorted probabilities, with greatest score at index 0
                     g_probs = gene_probabilities[g_spots, g]
                     # Bled codes are of shape (rounds, channels, )
-                    g_bled_code = nb.call_spots.bled_codes[g][:, nb.basic_info.use_channels]
-                    g_bled_code /= np.linalg.norm(g_bled_code, axis=1)[:, None]
-                    g_bled_code_ge = nb.call_spots.bled_codes_ge[g][:, nb.basic_info.use_channels]
-                    g_bled_code_ge /= np.linalg.norm(g_bled_code_ge, axis=1)[:, None]
-                    g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code_ge[None, :, :], axis=2))
+                    g_bled_code = nb.call_spots.bled_codes[g]
+                    g_bled_code = g_bled_code / np.linalg.norm(g_bled_code, axis=1)[:, None]
+                    g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code[None, :, :], axis=2))
                     thresh_spots = np.argmax(gene_probabilities, axis=1) == g
                     thresh_spots = thresh_spots * (np.max(gene_probabilities) > GENE_PROB_THRESHOLD)
                     colours_mean = np.mean(scores[thresh_spots], axis=0)
@@ -298,7 +296,7 @@ class BuildPDF:
                     axes[1, 0].set_yticks([0, 0.25, 0.5, 0.75, 1])
                     axes[1, 0].grid(True)
                     axes[0, 0].autoscale(enable=True, axis="x", tight=True)
-                    axes[0, 1].imshow(g_bled_code_ge, vmin=0, vmax=1)
+                    axes[0, 1].imshow(g_bled_code, vmin=0, vmax=1)
                     axes[0, 1].set_title("bled code GE")
                     axes[0, 1].set_xlabel("channels")
                     axes[0, 1].set_xticks(
