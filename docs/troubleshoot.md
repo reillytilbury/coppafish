@@ -10,7 +10,7 @@ to you, feel free to reach out to the developers for help or
 A notebook file can be corrupted if a process is killed while the notebook is being re-saved. When this happens, an
 error like:
 
-```python
+``` bash
 TypeError: byte indices must be integers or slices, not tuple
 ```
 
@@ -21,14 +21,14 @@ notebook called `notebook_backup.npz` to the original notebook name and continue
 
 If napari fails to open and you see an error such as
 
-```python
+``` bash
 WARNING: composeAndFlush: makeCurrent() failed
 ```
 
 when trying to open the Viewer or RegistrationViewer, here are a few suggestions that might fix the issue:
 
-* In the conda environment, run `conda install -c conda-forge libstdcxx-ng`
-* In the conda environment, run `conda install -c conda-forge libffi`.
+* In the conda environment, run `#!bash conda install -c conda-forge libstdcxx-ng`
+* In the conda environment, run `#!bash conda install -c conda-forge libffi`.
 
 ## Filter image clip error
 
@@ -45,7 +45,6 @@ issue:
 
 ## Memory crash at OMP
 
-Try lowering subset_size_xy in the OMP config. This will cause OMP to compute on fewer pixels at time. It has a 
+Try lowering `subset_size_xy` in the OMP config. This will cause OMP to compute on fewer pixels at time. It has a 
 minimal effect on compute times, but can lower the RAM/VRAM usage. The default is found 
-[here](https://github.com/reillytilbury/coppafish/raw/HEAD/coppafish/setup/settings.default.ini").
-
+[here](https://github.com/reillytilbury/coppafish/raw/HEAD/coppafish/setup/settings.default.ini).

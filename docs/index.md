@@ -29,7 +29,7 @@ Install coppafish software from within an environment. This can be a `venv` or `
 #### Conda
 
 For `conda`, build an environment by doing:
-```console
+``` bash
 conda create -n coppafish python=3.10
 conda activate coppafish
 ```
@@ -37,12 +37,12 @@ conda activate coppafish
 ### Install
 
 Our latest coppafish release can be cloned locally
-```console
+``` bash
 git clone --depth 1 https://github.com/reillytilbury/coppafish
 ```
 
 install package dependencies and coppafish by
-```console
+``` bash
 cd coppafish
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
@@ -57,12 +57,12 @@ later) then remove the `-e` option. The source code can then be deleted after in
 Coppafish will not automatically install updates, but you will see a warning at the start of a pipeline if a new online
 version is available.
 
-If you already have the source code downloaded, navigate inside of the `coppafish` directory, then `git pull` the
-latest code changes. Then, follow the [install](#install) steps again, excluding the `git clone` command, while inside
-your coppafish environment.
+If you already have the source code downloaded, navigate inside of the `coppafish` directory, then `#!bash git pull` 
+the latest code changes. Then, follow the [install](#install) steps again, excluding the `#!bash git clone` command, 
+while inside your coppafish environment.
 
 If you do not have the source code downloaded anymore, follow all the [install](#install) again while inside your
 coppafish environment.
 
-You can verify your install by running `pip show coppafish` in the coppafish environment to check you have the right
-version.
+You can verify your install by running `#!bash pip show coppafish` in the coppafish environment to check you have the 
+right version.

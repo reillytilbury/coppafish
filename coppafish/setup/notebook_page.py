@@ -44,7 +44,10 @@ class NotebookPage:
     _datatype_nest_end: str = "]"
     _options: Dict[str, Dict[str, list]] = {
         "basic_info": {
-            "anchor_channel": ["int or none", "Channel in anchor used. None if anchor not used."],
+            "anchor_channel": [
+                "int or none",
+                "Channel in anchor used. None if anchor not used.",
+            ],
             "anchor_round": [
                 "int or none",
                 "Index of anchor round (typically the first round after imaging rounds so `anchor_round = n_rounds`)."
@@ -632,7 +635,7 @@ class NotebookPage:
                 "Numpy array [n_spots]" + "`gene_no[s]` is the index of the gene assigned to spot $s$.",
             ],
             "colours": [
-                "ndarray[int32]",
+                "ndarray[float16]",
                 "Numpy `(n_spots x len(use_rounds) x len(use_channels))`"
                 + "Each spot's intensity in every sequencing round/channel before colour normalisation.",
             ],

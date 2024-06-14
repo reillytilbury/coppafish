@@ -103,9 +103,9 @@ def find_spots(
                 nbp_file,
                 nbp_basic,
                 nbp_extract.file_type,
-                t,
-                r,
-                c,
+                int(t),
+                int(r),
+                int(c),
                 apply_shift=False,
                 suffix="_raw" if r == nbp_basic.pre_seq_round else "",
             )

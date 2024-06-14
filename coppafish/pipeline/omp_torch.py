@@ -1,16 +1,16 @@
-import os
 import math as maths
+import os
 from typing import List, Tuple
 
-import tqdm
-import torch
 import numpy as np
+import torch
+import tqdm
 from typing_extensions import assert_type
 
-from .. import log
+from .. import log, utils, spot_colors
 from ..call_spots import background_pytorch, qual_check_torch
 from ..find_spots import detect_torch
-from ..omp import base, coefs_torch, scores_torch, spots_torch
+from ..omp import coefs_torch, scores_torch, spots_torch
 from ..setup import NotebookPage
 
 
@@ -117,7 +117,30 @@ def run_omp(
     for t in nbp_basic.use_tiles:
         # STEP 1: Load every registered sequencing round/channel image into memory
         log.debug(f"Loading tile {t} colours")
-        colour_image = base.load_spot_colours(nbp_basic, nbp_file, nbp_extract, nbp_register, nbp_register_debug, t)
+        colour_image = np.zeros(tile_shape + (n_rounds_use, n_channels_use), dtype=np.float16)
+        n_batch_size = maths.floor(utils.system.get_available_memory() * 2.3e7 / (np.prod(tile_shape)))
+        n_batches = maths.ceil(n_channels_use / n_batch_size)
+        log.debug(f"Channel batches: {n_batches}")
+        for i, r in enumerate(tqdm.tqdm(nbp_basic.use_rounds, unit="round", desc=f"Loading tile {t} colours")):
+            for j_batch in range(n_batches):
+                j_min = j_batch * n_batch_size
+                j_max = min((j_batch + 1) * n_batch_size, n_channels_use)
+                colour_image[:, :, :, i, j_min:j_max] = (
+                    spot_colors.base.get_spot_colours_new(
+                        nbp_basic,
+                        nbp_file,
+                        nbp_extract,
+                        nbp_register,
+                        nbp_register_debug,
+                        t,
+                        r,
+                        channels=tuple([nbp_basic.use_channels[j] for j in range(j_min, j_max)]),
+                        dtype=np.float16,
+                        force_cpu=config["force_cpu"],
+                    )
+                    .reshape((j_max - j_min,) + tile_shape)
+                    .transpose((1, 2, 3, 0))
+                )
         log.debug(f"Loading tile {t} colours complete")
 
         description = f"Computing OMP on tile {t} using the "
@@ -171,8 +194,6 @@ def run_omp(
                 ].astype(np.float32)
             )
             subset_colours = torch.reshape(subset_colours, (-1, n_rounds_use, n_channels_use))
-            # Place the zero in the correct position.
-            subset_colours -= nbp_basic.tile_pixel_value_shift
             # Set any out of bounds colours to zero.
             subset_colours[subset_colours <= -nbp_basic.tile_pixel_value_shift] = 0.0
             subset_colours *= colour_norm_factor[[t]]
@@ -348,7 +369,7 @@ def run_omp(
             )
         # For each detected spot, save the image intensity at its location, without background fitting.
         t_local_yxzs = tuple(spots_local_yxz[t_spots].int().T)
-        t_spots_colours = torch.asarray(colour_image[t_local_yxzs].astype(np.int32) - nbp_basic.tile_pixel_value_shift)
+        t_spots_colours = torch.asarray(colour_image[t_local_yxzs].astype(np.float16))
         spots_colours = torch.cat((spots_colours, t_spots_colours), dim=0)
 
         del colour_image, t_spots, t_local_yxzs, t_spots_colours

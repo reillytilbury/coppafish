@@ -1,4 +1,6 @@
 2024/05/30 Alpha Update (v0.11.0):
+ * OMP: OMP is now truly orthogonal. Before, the new gene was weighted using only the residual pixel colour. Now, all 
+    genes are re-weighted using the full pixel colour and a new gene is found using the latest residual colour.
  * Viewer refactor: The viewer is more customisable, and users can now toggle whether they want each image shown to be
     a max intensity projection or not, which is achieved by setting the max_intensity_projection variable in the viewer
     to True or False.

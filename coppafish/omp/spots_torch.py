@@ -1,6 +1,5 @@
 import torch
 import numpy as np
-from typing_extensions import assert_type
 from typing import Tuple
 
 from ..utils.morphology import filter
@@ -25,9 +24,8 @@ def compute_mean_spot_from(
     Returns:
         (`spot_shape tensor`) mean_spot: the mean of the signs of the coefficient.
     """
-    assert_type(image, torch.Tensor)
-    assert_type(spot_positions_yxz, torch.Tensor)
-
+    assert type(image) is torch.Tensor
+    assert type(spot_positions_yxz) is torch.Tensor
     assert image.dim() == 3
     assert spot_positions_yxz.dim() == 2
     assert spot_positions_yxz.shape[0] > 0, "require at least one spot position to compute the spot shape from"
@@ -78,7 +76,7 @@ def count_edge_ones(
         spot (`(size_y x size_x x size_z) tensor[int]`): OMP spot shape. It is a made up of only zeros and ones.
             Ones indicate where the spot coefficient is likely to be positive.
     """
-    assert_type(spot, torch.Tensor)
+    assert type(spot) is torch.Tensor
     assert spot.dim() == 3
     assert torch.isin(spot, torch.asarray([0, 1], device=spot.device)).all()
 
