@@ -764,7 +764,7 @@ class BuildPDF:
         unique_genes, counts = np.unique(gene_numbers, return_counts=True)
         for g, gene_name in enumerate(gene_names):
             if np.isin(g, unique_genes):
-                gene_counts.append(int(counts[unique_genes == g]))
+                gene_counts.append(int(counts[unique_genes == g].item()))
                 scores_g = scores[np.logical_and(omp_page.gene_no == g, scores >= score_threshold)]
                 median_scores.append(float(np.median(scores_g)))
             else:

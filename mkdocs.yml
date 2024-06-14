@@ -41,7 +41,6 @@ nav:
   - Algorithm: algorithm.md
   - Contributing: contributing.md
   - Glossary: glossary.md
-  - Call Spots: call_spots.md
 
 # This part allows mathematics to be displayed LaTeX style, by using $...$ for in line or $$...$$ for multi-line.
 markdown_extensions:
