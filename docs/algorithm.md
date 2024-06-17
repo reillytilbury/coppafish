@@ -320,7 +320,6 @@ We will use these instead of $E_{g,r,c}$ from here onwards.
 </figure>
 *The `view_free_and_constrained_bled_codes` diagnostic shows the free tile-independent bled codes next to the constrained bled codes. The constrained bled codes have much more uniform colours within each gene. Note how the final round and channel has been scaled down and all of channel 15 has been scaled up.*
 ### 5: Tile Normalisation
-#### 5: Tile Normalisation
 
 The purpose of this step is to remove brightness differences between tiles, and improve the round and channel normalisation we found in the previous step. We do this by finding a scale factor $Q_{t, r, c}$ such that 
 
