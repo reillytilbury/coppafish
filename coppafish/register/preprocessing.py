@@ -1,7 +1,7 @@
 from itertools import product
 import os
 import pickle
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -12,7 +12,8 @@ from skimage.transform import warp
 from tqdm import tqdm
 import zarr
 
-from ..setup import Notebook, NotebookPage
+from .. import spot_colors
+from ..setup import NotebookPage
 from ..utils import tiles_io
 
 
@@ -443,20 +444,27 @@ def generate_reg_images(
         nbp_basic.dapi_channel,
     )
     yx_centre = nbp_basic.tile_centre.astype(int)[:2]
-    yx_radius = np.min([250, nbp_basic.tile_sz // 2])
+    yx_radius = min(250, nbp_basic.tile_sz // 2)
     z_central_index = int(np.median(np.arange(len(nbp_basic.use_z))))
     if len(nbp_basic.use_z) <= 10:
         z_planes = np.arange(len(nbp_basic.use_z))
     else:
         z_planes = np.arange(z_central_index - 5, z_central_index + 5)
 
-    tile_centre = np.array([yx_centre[0], yx_centre[1]])
-    yxz = [
-        np.arange(tile_centre[0] - yx_radius, tile_centre[0] + yx_radius),
-        np.arange(tile_centre[1] - yx_radius, tile_centre[1] + yx_radius),
-        z_planes,
-    ]
-    image_shape = (yxz[0].size, yxz[1].size, yxz[2].size)
+    tile_centre = (int(yx_centre[0]), int(yx_centre[1]))
+    yxz = (
+        (tile_centre[0] - yx_radius, tile_centre[0] + yx_radius),
+        (tile_centre[1] - yx_radius, tile_centre[1] + yx_radius),
+        (int(z_planes[0]), int(z_planes[-1])),
+    )
+    yxz_coords = np.meshgrid(
+        np.arange(yxz[0][0], yxz[0][1]),
+        np.arange(yxz[1][0], yxz[1][1]),
+        np.arange(yxz[2][0], yxz[2][1]),
+        indexing="ij",
+    )
+    yxz_coords = np.array(yxz_coords).reshape((3, -1)).T
+    image_shape = tuple([yxz[i][1] - yxz[i][0] for i in range(3)])
 
     anchor_images = zarr.open_array(
         os.path.join(nbp_file.output_dir, "anchor_reg_images.zarr"),
@@ -479,18 +487,7 @@ def generate_reg_images(
 
     anchor_round_active_channels = [dapi_channel, anchor_channel]
     for t, c in tqdm(product(use_tiles, anchor_round_active_channels), desc="Anchor Images", total=len(use_tiles) * 2):
-        im = load_transformed_image(
-            nbp_basic,
-            nbp_file,
-            nbp_extract,
-            nbp_register,
-            nbp_register_debug,
-            t=t,
-            r=anchor_round,
-            c=c,
-            yxz=yxz,
-            reg_type="none",
-        )
+        im = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t, anchor_round, c, yxz=yxz)
         im = fill_to_uint8(im)
         sub_index = 0 if c == dapi_channel else 1
         anchor_images[t, sub_index] = im
@@ -498,43 +495,32 @@ def generate_reg_images(
 
     # get the round images, apply optical flow, apply icp + optical flow, concatenate and save
     for t, r in tqdm(product(use_tiles, use_rounds), desc="Round Images", total=len(use_tiles) * len(use_rounds)):
-        im = load_transformed_image(
+        im = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t, r, dapi_channel, yxz=yxz)
+        im_flow = spot_colors.base.get_spot_colours_new(
             nbp_basic,
             nbp_file,
             nbp_extract,
             nbp_register,
             nbp_register_debug,
-            t=t,
-            r=r,
-            c=dapi_channel,
-            yxz=yxz,
-            reg_type="none",
-        )
-        im_flow = load_transformed_image(
+            t,
+            r,
+            dapi_channel,
+            yxz=yxz_coords,
+            registration_type="flow",
+        ).reshape((1,) + image_shape)
+        im_flow_icp = spot_colors.base.get_spot_colours_new(
             nbp_basic,
             nbp_file,
             nbp_extract,
             nbp_register,
             nbp_register_debug,
-            t=t,
-            r=r,
-            c=dapi_channel,
-            yxz=yxz,
-            reg_type="flow",
-        )
-        im_flow_icp = load_transformed_image(
-            nbp_basic,
-            nbp_file,
-            nbp_extract,
-            nbp_register,
-            nbp_register_debug,
-            t=t,
-            r=r,
-            c=dapi_channel,
-            yxz=yxz,
-            reg_type="flow_icp",
-        )
-        im_concat = np.concatenate([im[None], im_flow[None], im_flow_icp[None]], axis=0)
+            t,
+            r,
+            dapi_channel,
+            yxz=yxz_coords,
+            registration_type="flow_and_icp",
+        ).reshape((1,) + image_shape)
+        im_concat = np.concatenate([im[None], im_flow, im_flow_icp], axis=0)
         im_concat = fill_to_uint8(im_concat)
         round_images[t, r] = im_concat
     nbp_register.round_images = round_images
@@ -542,43 +528,32 @@ def generate_reg_images(
     # get the channel images, save, apply optical flow, save, apply icp, save
     r_mid = 3
     for t, c in tqdm(product(use_tiles, use_channels), desc="Channel Images", total=len(use_tiles) * len(use_channels)):
-        im = load_transformed_image(
+        im = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t, r_mid, c, yxz=yxz)
+        im_flow = spot_colors.base.get_spot_colours_new(
             nbp_basic,
             nbp_file,
             nbp_extract,
             nbp_register,
             nbp_register_debug,
-            t=t,
-            r=r_mid,
-            c=c,
-            yxz=yxz,
-            reg_type="none",
-        )
-        im_flow = load_transformed_image(
+            t,
+            r_mid,
+            c,
+            yxz=yxz_coords,
+            registration_type="flow",
+        ).reshape((1,) + image_shape)
+        im_flow_icp = spot_colors.base.get_spot_colours_new(
             nbp_basic,
             nbp_file,
             nbp_extract,
             nbp_register,
             nbp_register_debug,
-            t=t,
-            r=r_mid,
-            c=c,
-            yxz=yxz,
-            reg_type="flow",
-        )
-        im_flow_icp = load_transformed_image(
-            nbp_basic,
-            nbp_file,
-            nbp_extract,
-            nbp_register,
-            nbp_register_debug,
-            t=t,
-            r=r_mid,
-            c=c,
-            yxz=yxz,
-            reg_type="flow_icp",
-        )
-        im_concat = np.concatenate([im[None], im_flow[None], im_flow_icp[None]], axis=0)
+            t,
+            r_mid,
+            c,
+            yxz=yxz_coords,
+            registration_type="flow_and_icp",
+        ).reshape((1,) + image_shape)
+        im_concat = np.concatenate([im[None], im_flow, im_flow_icp], axis=0)
         im_concat = fill_to_uint8(im_concat)
         channel_images[t, c] = im_concat
     nbp_register.channel_images = channel_images
@@ -593,11 +568,12 @@ def load_transformed_image(
     t: int,
     r: int,
     c: int,
-    yxz: Union[list, None] = None,
+    yxz: Optional[list] = None,
     reg_type: str = "none",
 ) -> np.ndarray:
     """
     Load the image from tile t, round r, channel c, apply the relevant registration and return the image.
+
     Args:
         nbp_basic_info (NotebookPage)
         nbp_file_names (NotebookPage)
@@ -656,7 +632,7 @@ def load_transformed_image(
     return im
 
 
-def transform_im(im: np.ndarray, affine: np.ndarray, flow: zarr.Array, flow_ind: tuple) -> np.ndarray:
+def transform_im(im: np.ndarray, affine: np.ndarray, flow: zarr.Array, flow_ind: Union[tuple, None]) -> np.ndarray:
     """
     Function to apply affine and flow transformations to an image.
 
@@ -664,7 +640,7 @@ def transform_im(im: np.ndarray, affine: np.ndarray, flow: zarr.Array, flow_ind:
         im: image to transform
         affine: 3 x 4 affine transform
         flow: flow as zarr array
-        flow_ind: indices to take from the flow file. If None, return the entire flow file.
+        flow_ind: indices to take from the flow file. If None, use the entire flow file.
         contains_channel_index (bool): true if the first axis of im is the channel axis. All channels have the same
             transformation applied to them.
     """
@@ -672,7 +648,8 @@ def transform_im(im: np.ndarray, affine: np.ndarray, flow: zarr.Array, flow_ind:
 
     im = affine_transform(im, affine, order=1, mode="constant", cval=0)
     flow = flow[:]
-    flow = -(flow[flow_ind].astype(np.float32))
+    if flow_ind is not None:
+        flow = -(flow[flow_ind].astype(np.float32))
     coords = np.meshgrid(
         np.arange(im.shape[0], dtype=np.float32),
         np.arange(im.shape[1], dtype=np.float32),
@@ -685,7 +662,7 @@ def transform_im(im: np.ndarray, affine: np.ndarray, flow: zarr.Array, flow_ind:
 
 def adjust_affine(affine: np.ndarray, new_origin: np.ndarray) -> np.ndarray:
     """
-    adjusts the affine transform for a new origin, then converts from 4 x 3 to 3 x 4 format.
+    Adjusts the affine transform for a new origin, then converts from 4 x 3 to 3 x 4 format.
 
     Args:
         affine: 4 x 3 affine transform (y x z)

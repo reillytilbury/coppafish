@@ -29,6 +29,12 @@ class Notebook:
     # The notebook stores the config as a dict from when it was first instantiated. This way any changes to a page's
     # config can be detected when comparing to the config on disk that the user may have modified.
     _init_config: Dict[str, Dict[str, Any]]
+
+    def get_init_config(self) -> Dict[str, Dict[str, Any]]:
+        return self._init_config
+
+    init_config = property(get_init_config)
+
     _init_config_key = "initial_config"
     _time_created: float
     _time_created_key = "time_created"

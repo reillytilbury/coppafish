@@ -110,13 +110,14 @@ def register(
         nbp_basic.tile_sz,
         len(nbp_basic.use_z),
     )
-    raw_smooth_chunks = (1, 1, None, None, None, None)
+    raw_smooth_chunks = (1, 1, None, 150, 150, 4)
     zarr.open_array(
         store=corr_loc,
         mode="w",
         shape=raw_smooth_shape[:2] + raw_smooth_shape[3:],
         dtype=np.float16,
-        chunks=raw_smooth_chunks[:2] + raw_smooth_chunks[3:],
+        chunks=raw_smooth_chunks[:1] + raw_smooth_chunks[3:],
+        zarr_version=2,
     )
     zarr.open_array(
         store=raw_loc,
@@ -124,6 +125,7 @@ def register(
         shape=raw_smooth_shape,
         dtype=np.float16,
         chunks=raw_smooth_chunks,
+        zarr_version=2,
     )
     zarr.open_array(
         store=smooth_loc,
@@ -131,6 +133,7 @@ def register(
         mode="w",
         dtype=np.float16,
         chunks=raw_smooth_chunks,
+        zarr_version=2,
     )
     for t in tqdm(use_tiles, desc="Optical Flow on uncompleted tiles", total=len(use_tiles)):
         # Load in the anchor image and the round images. Note that here anchor means anchor round, not necessarily
@@ -384,18 +387,18 @@ def register(
         r_pre = nbp_basic.pre_seq_round
         use_rounds = nbp_basic.use_rounds
         mid_z = len(nbp_basic.use_z) // 2
-        tile_centre = np.array([nbp_basic.tile_sz // 2, nbp_basic.tile_sz // 2, mid_z])
+        tile_centre = (nbp_basic.tile_sz // 2, nbp_basic.tile_sz // 2, mid_z)
         yx_rad, z_rad = min(nbp_basic.tile_sz // 2 - 1, 250), min(len(nbp_basic.use_z) // 2 - 1, 5)
-        yxz = [
-            np.arange(tile_centre[0] - yx_rad, tile_centre[0] + yx_rad),
-            np.arange(tile_centre[1] - yx_rad, tile_centre[1] + yx_rad),
-            np.arange(mid_z - z_rad, mid_z + z_rad),
-        ]
+        yxz = (
+            (tile_centre[0] - yx_rad, tile_centre[0] + yx_rad + 1),
+            (tile_centre[1] - yx_rad, tile_centre[1] + yx_rad + 1),
+            (mid_z - z_rad, mid_z + z_rad + 1),
+        )
         flow_ind = np.ix_(
             np.arange(3),
-            np.arange(tile_centre[0] - yx_rad, tile_centre[0] + yx_rad),
-            np.arange(tile_centre[1] - yx_rad, tile_centre[1] + yx_rad),
-            np.arange(mid_z - z_rad, mid_z + z_rad),
+            np.arange(tile_centre[0] - yx_rad, tile_centre[0] + yx_rad + 1),
+            np.arange(tile_centre[1] - yx_rad, tile_centre[1] + yx_rad + 1),
+            np.arange(mid_z - z_rad, mid_z + z_rad + 1),
         )
         new_origin = np.array([yxz[0][0], yxz[1][0], yxz[2][0]])
         for t, c in tqdm(

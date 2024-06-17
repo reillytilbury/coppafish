@@ -1,6 +1,6 @@
 The coppafish pipeline is separated into distinct sections. Some of these are for image pre-processing
-([scale](#scale), [extract](#extract), [filter](#filter)), image alignment ([register](#register), [stitch](#stitch))
-and spot detection/gene calling ([find spots](#find-spots), [call spots](#call-spots),
+([extract](#extract), [filter](#filter)), image alignment ([register](#register), [stitch](#stitch)) and spot 
+detection/gene calling ([find spots](#find-spots), [call spots](#call-spots), 
 [orthogonal matching pursuit](#orthogonal-matching-pursuit)). Below, each section is given in the order a coppafish
 pipeline runs in.
 

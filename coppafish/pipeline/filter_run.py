@@ -158,8 +158,6 @@ def run_filter(
             assert raw_image_exists, f"Raw, extracted file at\n\t{file_path_raw}\nnot found"
             # Get t, r, c image from raw files
             im_raw = tiles_io._load_image(file_path_raw, file_type)
-            # zyx -> yxz
-            im_raw = im_raw.transpose((1, 2, 0))
             im_filtered, bad_columns = extract.strip_hack(im_raw)  # check for faulty columns
             assert bad_columns.size == 0, f"Bad y column(s) were found during {t=}, {r=}, {c=} image filtering"
             del im_raw

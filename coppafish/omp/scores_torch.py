@@ -2,7 +2,8 @@ import math as maths
 
 import numpy as np
 import torch
-from typing_extensions import assert_type
+
+from . import coefs_torch
 
 
 def score_coefficient_image(
@@ -32,10 +33,10 @@ def score_coefficient_image(
     Returns:
         `(n_points) tensor[float]`: score for each coefficient pixel.
     """
-    assert_type(coefficient_image, torch.tensor)
-    assert_type(points, torch.tensor)
-    assert_type(spot, torch.tensor)
-    assert_type(mean_spot, torch.tensor)
+    assert type(coefficient_image) is torch.Tensor
+    assert type(points) is torch.Tensor
+    assert type(spot) is torch.Tensor
+    assert type(mean_spot) is torch.Tensor
     assert coefficient_image.dim() == 3
     assert points.dim() == 2
     assert points.shape[0] > 0
@@ -71,10 +72,9 @@ def score_coefficient_image(
     coefficient_image_function = coefficient_image_function[
         point_min[0] : point_max[0], point_min[1] : point_max[1], point_min[2] : point_max[2]
     ]
-
-    positive = coefficient_image_function > 0
-    coefficient_image_function[~positive] = 0
-    coefficient_image_function[positive] /= coefficient_image_function[positive] + high_coefficient_bias
+    coefficient_image_function = coefs_torch.non_linear_function_coefficients(
+        coefficient_image_function, high_coefficient_bias
+    )
 
     results = torch.nn.functional.conv3d(
         coefficient_image_function[np.newaxis, np.newaxis],

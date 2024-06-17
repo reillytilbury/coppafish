@@ -1,208 +1,398 @@
-from ..call_spots.spot_colors import ColorPlotBase
-from ..call_spots.dot_product import view_score
-from ..call_spots.background import view_background
-from ...spot_colors.base import get_spot_colors
-from ...call_spots import omp_spot_score, get_spot_intensity
-from ...setup import Notebook
+import os
+from typing import Tuple
+
+import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.widgets import CheckButtons, Slider
 import numpy as np
-from typing import Optional, List, Tuple
+import torch
 
-plt.style.use("dark_background")
+from ... import spot_colors
+from ...call_spots import background_pytorch
+from ...omp import coefs_torch, scores_torch
+from ...setup import Notebook
 
 
-def get_coef_images(
-    nb: Notebook, spot_no: int, method, im_size: List[int]
-) -> Tuple[np.ndarray, List[float], List[float]]:
-    """
-    Gets image of $yxz$ dimension `(2*im_size[0]+1) x (2*im_size[1]+1) x (2*im_size[2]+1)` of the coefficients
-    fitted by omp for each gene.
-
-    Args:
-        nb: *Notebook* containing experiment details. Must have run at least as far as `call_reference_spots`.
-        spot_no: Spot of interest to get gene coefficient images for.
-        method: `'anchor'` or `'omp'`.
-            Which method of gene assignment used i.e. `spot_no` belongs to `ref_spots` or `omp` page of Notebook.
-        im_size: $yxz$ radius of image to get for each gene.
-
-    Returns:
-        `coef_images` - `float16 [n_genes x (2*im_size[0]+1) x (2*im_size[1]+1) x (2*im_size[2]+1)]`.
-            Image for each gene, axis order is $gyxz$.
-            `coef_images[g, 0, 0, 0]` refers to coefficient of gene g at `global_yxz = min_global_yxz`.
-            `coef_images[g, -1, -1, -1]` refers to coefficient of gene g at `global_yxz = max_global_yxz`.
-        `min_global_yxz` - `float [3]`. Min $yxz$ coordinates of image in global coordinates.
-        `max_global_yxz` - `float [3]`. Max $yxz$ coordinates of image in global coordinates.
-    """
-
-    if method.lower() == "omp":
-        page_name = "omp"
+def get_spot_position_and_tile(nb: Notebook, spot_no: int, method: str) -> Tuple[np.ndarray, int]:
+    if method in ("anchor", "prob"):
+        local_yxz = nb.ref_spots.local_yxz[spot_no]
+        tile = nb.ref_spots.tile[spot_no]
+    elif method == "omp":
+        local_yxz = nb.omp.local_yxz[spot_no]
+        tile = nb.omp.tile[spot_no]
     else:
-        page_name = "ref_spots"
-    t = nb.__getattribute__(page_name).tile[spot_no]
-    color_norm = nb.call_spots.color_norm_factor[t][np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)]
-    spot_yxz = nb.__getattribute__(page_name).local_yxz[spot_no]
-
-    # Subtlety here, may have y-axis flipped, but I think it is correct:
-    # note im_yxz[1] refers to point at max_y, min_x+1, z. So when reshape and set plot_extent, should be correct.
-    # I.e. im = np.zeros(49); im[1] = 1; im = im.reshape(7,7); plt.imshow(im, extent=[-0.5, 6.5, -0.5, 6.5])
-    # will show the value 1 at max_y, min_x+1.
-    im_yxz = np.array(
-        np.meshgrid(
-            np.arange(spot_yxz[0] - im_size[0], spot_yxz[0] + im_size[0] + 1)[::-1],
-            np.arange(spot_yxz[1] - im_size[1], spot_yxz[1] + im_size[1] + 1),
-            spot_yxz[2],
-        ),
-        dtype=np.int16,
-    ).T.reshape(-1, 3)
-    z = np.arange(-im_size[2], im_size[2] + 1)
-    im_yxz = np.vstack([im_yxz + [0, 0, val] for val in z])
-    im_diameter_yx = [2 * im_size[0] + 1, 2 * im_size[1] + 1]
-    spot_colors = (
-        get_spot_colors(
-            im_yxz,
-            t,
-            nb.file_names,
-            nb.basic_info,
-            nb.extract,
-            nb.filter,
-            nb.register,
-        )[0]
-        / color_norm
-    )
-
-    # Only look at pixels with high enough intensity - same as in full pipeline
-    spot_intensity = get_spot_intensity(np.abs(spot_colors))
-    config = nb.get_config()["omp"]
-    initial_intensity_thresh = 0
-
-    keep = spot_intensity > initial_intensity_thresh
-    bled_codes = nb.call_spots.bled_codes_ge
-    n_genes = bled_codes.shape[0]
-    bled_codes = np.asarray(
-        bled_codes[np.ix_(np.arange(n_genes), nb.basic_info.use_rounds, nb.basic_info.use_channels)]
-    )
-
-    dp_thresh = config["dp_thresh"]
-    if method.lower() == "omp":
-        alpha = config["alpha"]
-        beta = config["beta"]
-    else:
-        config_call_spots = nb.get_config()["call_spots"]
-        alpha = config_call_spots["alpha"]
-        beta = config_call_spots["beta"]
-    max_genes = config["max_genes"]
-    weight_coef_fit = config["weight_coef_fit"]
-
-    all_coefs = None
-    # FIXME: Does not work after the OMP refactor.
-    # all_coefs = np.zeros((spot_colors.shape[0], n_genes + nb.basic_info.n_channels))
-    # (
-    #     all_coefs[np.ix_(keep, np.arange(n_genes))],
-    #     all_coefs[np.ix_(keep, np.array(nb.basic_info.use_channels) + n_genes)],
-    # ) = get_all_coefs(spot_colors[keep], bled_codes, 0, 0, 0, alpha, beta, max_genes, weight_coef_fit)
-
-    n_genes = all_coefs.shape[1]
-    nz = len(z)
-    coef_images = np.zeros((n_genes, len(z), im_diameter_yx[0], im_diameter_yx[1]))
-    for g in range(n_genes):
-        ind = 0
-        for z in range(nz):
-            coef_images[g, z] = all_coefs[ind : ind + np.prod(im_diameter_yx), g].reshape(
-                im_diameter_yx[0], im_diameter_yx[1]
-            )
-            ind += np.prod(im_diameter_yx)
-    coef_images = np.moveaxis(coef_images, 1, -1)  # move z index to end
-    min_global_yxz = im_yxz.min(axis=0) + nb.stitch.tile_origin[t]
-    max_global_yxz = im_yxz.max(axis=0) + nb.stitch.tile_origin[t]
-    return coef_images.astype(np.float16), min_global_yxz, max_global_yxz
+        raise ValueError(f"Unknown gene calling method: {method}")
+    return local_yxz, int(tile)
 
 
-class view_omp(ColorPlotBase):
-    def __init__(self, nb: Notebook, spot_no: int, method: str = "omp", im_size: int = 8):
+class ViewOMPImage:
+    def __init__(
+        self,
+        nb: Notebook,
+        spot_no: int,
+        method: str,
+        im_size: int = 8,
+        z_planes: Tuple[int] = (-2, -1, 0, 1, 2),
+        init_select_gene: int = None,
+    ) -> None:
         """
-        Diagnostic to show omp coefficients of all genes in neighbourhood of spot.
-        Only genes for which a significant number of pixels are non-zero will be plotted.
-
-        !!! warning "Requires access to `nb.file_names.tile_dir`"
+        Display omp coefficients of all genes in around the local neighbourhood of spot.
 
         Args:
-            nb: Notebook containing experiment details. Must have run at least as far as `call_reference_spots`.
-            spot_no: Spot of interest to be plotted.
-            method: `'anchor'` or `'omp'`.
-                Which method of gene assignment used i.e. `spot_no` belongs to `ref_spots` or `omp` page of Notebook.
-            im_size: Radius of image to be plotted for each gene.
+            nb (Notebook): Notebook containing experiment details.
+            spot_no (int-like or none): Spot index to be plotted.
+            method (str): gene calling method.
+            im_size (int): number of pixels out from the central pixel to plot to create the square images.
+            z_planes (tuple of int): z planes to show. 0 is the central z plane.
+            init_select_gene (int): gene number to display initially. Default: the highest scoring gene.
         """
-        coef_images, min_global_yxz, max_global_yxz = get_coef_images(nb, spot_no, method, [im_size, im_size, 0])
+        assert type(nb) is Notebook
+        if spot_no is None:
+            return
+        assert type(int(spot_no)) is int
+        assert type(method) is str
+        assert type(im_size) is int
+        assert im_size >= 0
+        assert type(z_planes) is tuple
+        assert len(z_planes) > 2
+        tile_dir = nb.file_names.tile_dir
+        assert os.path.isdir(tile_dir), f"Viewing coefficients requires access to images expected at {tile_dir}"
+        assert init_select_gene is None or type(init_select_gene) is int
 
-        if method.lower() == "omp":
-            page_name = "omp"
-            config = nb.get_config()["thresholds"]
-            spot_score = omp_spot_score(nb.omp, spot_no)
-        else:
-            page_name = "ref_spots"
-            spot_score = nb.ref_spots.dot_product_gene_score[spot_no]
-        gene_no = nb.__getattribute__(page_name).gene_no[spot_no]
-        t = nb.__getattribute__(page_name).tile[spot_no]
-        spot_yxz = nb.__getattribute__(page_name).local_yxz[spot_no]
-        gene_name = nb.call_spots.gene_names[gene_no]
-        all_gene_names = list(nb.call_spots.gene_names) + [f"BG{i}" for i in range(nb.basic_info.n_channels)]
-        spot_yxz_global = spot_yxz + nb.stitch.tile_origin[t]
-        n_genes = nb.call_spots.bled_codes_ge.shape[0]
+        plt.style.use("dark_background")
 
-        n_nonzero_pixels_thresh = np.min([im_size, 5])  # If 5 pixels non-zero, plot that gene
-        plot_genes = np.where(np.sum(coef_images != 0, axis=(1, 2, 3)) > n_nonzero_pixels_thresh)[0]
-        coef_images = coef_images[plot_genes, :, :, 0]
-        n_plot = len(plot_genes)
-        # at most n_max_rows rows
-        if n_plot <= 16:
-            n_max_rows = 4
+        local_yxz, tile = get_spot_position_and_tile(nb, spot_no, method)
+        assert local_yxz.shape == (3,)
+
+        config = nb.init_config["omp"]
+
+        coord_min = (local_yxz - im_size).tolist()
+        coord_min[2] = local_yxz[2].item() + min(z_planes)
+        coord_max = (local_yxz + im_size + 1).tolist()
+        coord_max[2] = local_yxz[2].item() + max(z_planes) + 1
+        yxz = [np.arange(coord_min[i], coord_max[i]) for i in range(3)]
+        yxz = np.array(np.meshgrid(*[np.arange(coord_min[i], coord_max[i]) for i in range(3)])).reshape((3, -1)).T
+
+        spot_shape_yxz = tuple([coord_max[i] - coord_min[i] for i in range(3)])
+        n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
+        image_colours = np.zeros(spot_shape_yxz + (n_rounds_use, n_channels_use), dtype=np.float32)
+        for i, r in enumerate(nb.basic_info.use_rounds):
+            image_colours[:, :, :, i] = spot_colors.base.get_spot_colours_new(
+                nb.basic_info,
+                nb.file_names,
+                nb.extract,
+                nb.register,
+                nb.register_debug,
+                int(tile),
+                r,
+                yxz=yxz,
+                registration_type="flow_and_icp",
+            ).T.reshape((spot_shape_yxz + (n_channels_use,)))
+        image_colours = torch.asarray(image_colours, dtype=torch.float32)
+        colour_norm_factor = np.array(nb.call_spots.colour_norm_factor, dtype=np.float32)
+        colour_norm_factor = torch.asarray(colour_norm_factor).float()
+        bled_codes = nb.call_spots.bled_codes
+        n_genes = bled_codes.shape[0]
+        bled_codes = torch.asarray(bled_codes).float()
+
+        image_colours = image_colours.reshape((-1, n_rounds_use, n_channels_use))
+        bled_codes = bled_codes.reshape((n_genes, n_rounds_use * n_channels_use))
+
+        image_colours *= colour_norm_factor[[tile]]
+        image_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(image_colours)
+        image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
+        bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
+
+        coefficient_image = coefs_torch.compute_omp_coefficients(
+            image_colours,
+            bled_codes,
+            maximum_iterations=config["max_genes"],
+            background_coefficients=bg_coefficients,
+            background_codes=bg_codes,
+            dot_product_threshold=config["dp_thresh"],
+            dot_product_norm_shift=0.0,
+            weight_coefficient_fit=config["weight_coef_fit"],
+            alpha=config["alpha"],
+            beta=config["beta"],
+            do_not_compute_on=None,
+            force_cpu=config["force_cpu"],
+        ).toarray()
+        coefficient_image = torch.asarray(coefficient_image).T.reshape(
+            (len(nb.call_spots.gene_names),) + spot_shape_yxz
+        )
+
+        self.scores = []
+        for g in range(coefficient_image.shape[0]):
+            self.scores.append(
+                scores_torch.score_coefficient_image(
+                    coefficient_image[g],
+                    (torch.asarray(spot_shape_yxz) // 2)[np.newaxis],
+                    torch.asarray(nb.omp.spot),
+                    torch.asarray(nb.omp.mean_spot),
+                    config["high_coef_bias"],
+                ).item()
+            )
+        self.scores = np.array(self.scores, np.float32)
+
+        self.coefficient_image: np.ndarray = coefficient_image.numpy()
+
+        central_pixel = np.array(self.coefficient_image.shape[1:]) // 2
+        central_pixels = np.ix_(range(n_genes), [central_pixel[0]], [central_pixel[1]], [central_pixel[2]])
+        gene_is_selectable = ~np.isclose(self.coefficient_image[central_pixels].ravel(), 0)
+        if init_select_gene is not None:
+            gene_is_selectable[init_select_gene] = True
+        assert gene_is_selectable.ndim == 1
+
+        self.gene_names = nb.call_spots.gene_names
+        self.z_planes = z_planes
+        self.selectable_genes = np.where(gene_is_selectable)[0]
+        if init_select_gene is None:
+            self.selected_gene = self.selectable_genes[np.argmax(self.scores[self.selectable_genes])].item()
         else:
-            n_max_rows = int(np.ceil(np.sqrt(n_plot)))
-        n_cols = int(np.ceil(n_plot / n_max_rows))
-        subplot_row_columns = [int(np.ceil(n_plot / n_cols)), n_cols]
-        fig_size = np.clip([n_cols + 5, subplot_row_columns[0] + 4], 3, 12)
-        subplot_adjust = [0.05, 0.775, 0.05, 0.91]
-        super().__init__(
-            coef_images,
-            None,
-            subplot_row_columns,
-            subplot_adjust=subplot_adjust,
-            fig_size=fig_size,
-            cbar_pos=[0.9, 0.05, 0.03, 0.86],
-            slider_pos=[0.85, 0.05, 0.01, 0.86],
-        )
-        # set x, y coordinates to be those of the global coordinate system
-        plot_extent = [
-            min_global_yxz[1] - 0.5,
-            max_global_yxz[1] + 0.5,
-            min_global_yxz[0] - 0.5,
-            max_global_yxz[0] + 0.5,
-        ]
-        for i in range(self.n_images):
-            # Add cross-hair
-            self.ax[i].axes.plot(
-                [spot_yxz_global[1], spot_yxz_global[1]], [plot_extent[2], plot_extent[3]], "k", linestyle=":", lw=1
-            )
-            self.ax[i].axes.plot(
-                [plot_extent[0], plot_extent[1]], [spot_yxz_global[0], spot_yxz_global[0]], "k", linestyle=":", lw=1
-            )
-            self.im[i].set_extent(plot_extent)
-            self.ax[i].tick_params(labelbottom=False, labelleft=False)
-            # Add title
-            title_text = f"{plot_genes[i]}: {all_gene_names[plot_genes[i]]}"
-            if plot_genes[i] >= n_genes:
-                text_color = (0.7, 0.7, 0.7)  # If background, make grey
-                title_text = all_gene_names[plot_genes[i]]
-            elif plot_genes[i] == gene_no:
-                text_color = "g"
-            else:
-                text_color = "w"  # TODO: maybe make color same as used in plot for each gene
-            self.ax[i].set_title(title_text, color=text_color)
-        plt.subplots_adjust(hspace=0.32)
-        plt.suptitle(
-            f"OMP gene coefficients for spot {spot_no} (match" f" {str(np.around(spot_score, 2))} to {gene_name})",
-            x=(subplot_adjust[0] + subplot_adjust[1]) / 2,
-            size=13,
-        )
-        self.change_norm()
+            self.selected_gene = init_select_gene
+        self.iteration_count_image = (~np.isclose(self.coefficient_image, 0)).astype(int).sum(0)
+        self.mid_z = -min(self.z_planes)
+        self.function_coefficients = False
+        self.show_iteration_counts = False
+        self.high_coef_bias = config["high_coef_bias"]
+        self.draw_canvas()
         plt.show()
+
+    def draw_canvas(self) -> None:
+        self.fig, self.axes = plt.subplots(
+            nrows=2,
+            ncols=len(self.z_planes) + 1,
+            squeeze=False,
+            gridspec_kw={"width_ratios": [5] * len(self.z_planes) + [1] * 1, "height_ratios": [6, 1]},
+            layout="tight",
+        )
+        self.fig.subplots_adjust(bottom=0.25)
+        ax_function_coefs = self.axes[1, 1]
+        # Keep widgets in self otherwise they will get garbage collected and not respond to clicks anymore.
+        self.function_coefs_button = CheckButtons(
+            ax_function_coefs,
+            ["Non-linear function"],
+            actives=[self.function_coefficients],
+            frame_props={"edgecolor": "white", "facecolor": "white"},
+            check_props={"facecolor": "black"},
+        )
+        self.function_coefs_button.on_clicked(self.function_gene_coefficients_updated)
+        ax_slider: plt.Axes = self.axes[1, 0]
+        self.gene_slider = Slider(
+            ax_slider,
+            label="Gene",
+            valmin=self.selectable_genes.min(),
+            valmax=self.selectable_genes.max(),
+            valstep=self.selectable_genes,
+            valinit=self.selected_gene,
+        )
+        self.gene_slider.on_changed(self.gene_selected_updated)
+        ax_iteration_count = self.axes[1, 2]
+        self.show_iteration_count_button = CheckButtons(
+            ax_iteration_count,
+            ["Show iteration counts"],
+            actives=[self.show_iteration_counts],
+            frame_props={"edgecolor": "white", "facecolor": "white"},
+            check_props={"facecolor": "black"},
+        )
+        self.show_iteration_count_button.on_clicked(self.show_iteration_count_changed)
+        self.draw_data()
+
+    def draw_data(self) -> None:
+        cmap = mpl.cm.viridis
+
+        if self.show_iteration_counts:
+            norm = mpl.colors.Normalize(vmin=0, vmax=self.iteration_count_image.max())
+            image_data = self.iteration_count_image
+            title = "OMP Iteration Count"
+        else:
+            image_data = self.coefficient_image[self.selected_gene]
+            title = "OMP Coefficients\n"
+            title += f"Gene {self.selected_gene} {self.gene_names[self.selected_gene]}\n"
+            title += f" Score: {str(self.scores[self.selected_gene])[:4]}"
+            if self.function_coefficients:
+                norm = mpl.colors.Normalize(vmin=0, vmax=1)
+                image_data = coefs_torch.non_linear_function_coefficients(
+                    torch.asarray(image_data), self.high_coef_bias
+                ).numpy()
+            else:
+                abs_max = np.abs(self.coefficient_image).max()
+                norm = mpl.colors.Normalize(vmin=min(0, self.coefficient_image.min()), vmax=abs_max)
+
+        for ax in self.axes[0]:
+            ax.clear()
+        all_spines = ("top", "bottom", "left", "right")
+        for ax in self.axes[1]:
+            for spine in all_spines:
+                ax.spines[spine].set_visible(False)
+            ax.set_xticks([], [])
+            ax.set_yticks([], [])
+        self.fig.suptitle(title)
+        self.fig.colorbar(
+            mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
+            cax=self.axes[0, -1],
+            orientation="vertical",
+            label="",
+        )
+        for i, z_plane in enumerate(self.z_planes):
+            ax: plt.Axes = self.axes[0, i]
+            ax.clear()
+            ax.imshow(image_data[:, :, self.mid_z + z_plane], cmap=cmap, norm=norm)
+            ax_title = "Central plane"
+            if z_plane < 0:
+                ax_title = f"- {abs(z_plane)}"
+            if z_plane > 0:
+                ax_title = f"+ {abs(z_plane)}"
+            ax.set_title(ax_title)
+        self.function_coefs_button.active = not self.show_iteration_counts
+        self.gene_slider.active = not self.show_iteration_counts
+        plt.draw()
+
+    def function_gene_coefficients_updated(self, _) -> None:
+        self.function_coefficients = self.function_coefs_button.get_status()[0]
+        self.draw_data()
+
+    def show_iteration_count_changed(self, _) -> None:
+        self.show_iteration_counts = self.show_iteration_count_button.get_status()[0]
+        self.draw_data()
+
+    def gene_selected_updated(self, _) -> None:
+        self.selected_gene = int(self.gene_slider.val)
+        self.draw_data()
+
+
+class ViewOMPPixelCoefficients:
+    def __init__(self, nb: Notebook, spot_no: int, method: str, tile: int = None, local_yxz: np.ndarray = None) -> None:
+        """
+        Show the OMP coefficients for one pixel position over each OMP iteration.
+
+        Args:
+            nb (Notebook): the notebook.
+            spot_no (int): the spot index.
+            method (str): the method that the spot was found on. Can be 'anchor', 'prob' or 'omp'.
+            tile (int): tile of the pixel.
+            local_yxz (`(3) ndarray[int]`): position relative to tile to view. If tile and local_yxz are both given,
+                then spot_no and method are ignored.
+        """
+        assert type(nb) is Notebook
+        assert type(spot_no) is int
+        assert type(method) is str
+        assert method in ("anchor", "prob", "omp")
+        assert tile is None or type(tile) is int
+        assert local_yxz is None or type(local_yxz) is np.ndarray
+
+        if tile is None or local_yxz is None:
+            local_yxz, tile = get_spot_position_and_tile(nb, spot_no, method)
+
+        n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
+        image_colours = np.zeros((1, n_rounds_use, n_channels_use), dtype=np.float32)
+        for i, r in enumerate(nb.basic_info.use_rounds):
+            image_colours[:, i] = spot_colors.base.get_spot_colours_new(
+                nb.basic_info,
+                nb.file_names,
+                nb.extract,
+                nb.register,
+                nb.register_debug,
+                int(tile),
+                r,
+                yxz=local_yxz[np.newaxis],
+                registration_type="flow_and_icp",
+            ).T[np.newaxis]
+        image_colours = torch.asarray(image_colours, dtype=torch.float32)
+        colour_norm_factor = np.array(nb.call_spots.colour_norm_factor, dtype=np.float32)
+        colour_norm_factor = torch.asarray(colour_norm_factor).float()
+        bled_codes = nb.call_spots.bled_codes
+        n_genes = bled_codes.shape[0]
+        bled_codes = torch.asarray(bled_codes).float()
+
+        image_colours = image_colours.reshape((-1, n_rounds_use, n_channels_use))
+        bled_codes = bled_codes.reshape((n_genes, n_rounds_use * n_channels_use))
+
+        image_colours *= colour_norm_factor[[tile]]
+        image_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(image_colours)
+        image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
+        bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
+
+        config = nb.init_config["omp"]
+        # Get the maximum number of OMP gene assignments made and what genes.
+        coefficients = coefs_torch.compute_omp_coefficients(
+            image_colours,
+            bled_codes,
+            maximum_iterations=config["max_genes"],
+            background_coefficients=bg_coefficients,
+            background_codes=bg_codes,
+            dot_product_threshold=config["dp_thresh"],
+            dot_product_norm_shift=0.0,
+            weight_coefficient_fit=config["weight_coef_fit"],
+            alpha=config["alpha"],
+            beta=config["beta"],
+            do_not_compute_on=None,
+            force_cpu=config["force_cpu"],
+        ).toarray()[0]
+        self.maximum_iterations = (~np.isclose(coefficients, 0)).sum()
+        if self.maximum_iterations == 0:
+            raise ValueError(f"The selected pixel has no OMP gene assignments to display")
+        self.final_selected_genes = (~np.isclose(coefficients, 0)).nonzero()[0].tolist()
+        self.coefficients = np.zeros((self.maximum_iterations, len(self.final_selected_genes)), dtype=np.float32)
+        for i in range(self.maximum_iterations):
+            self.coefficients[i] = coefs_torch.compute_omp_coefficients(
+                image_colours,
+                bled_codes,
+                maximum_iterations=(i + 1),
+                background_coefficients=bg_coefficients,
+                background_codes=bg_codes,
+                dot_product_threshold=config["dp_thresh"],
+                dot_product_norm_shift=0.0,
+                weight_coefficient_fit=config["weight_coef_fit"],
+                alpha=config["alpha"],
+                beta=config["beta"],
+                do_not_compute_on=None,
+                force_cpu=config["force_cpu"],
+            ).toarray()[0][self.final_selected_genes]
+        self.local_yxz = local_yxz
+        self.gene_names = nb.call_spots.gene_names
+        self.show_iteration = self.maximum_iterations - 1
+        self.draw_canvas()
+        self.draw_data()
+        plt.show()
+
+    def draw_canvas(self) -> None:
+        plt.style.use("dark_background")
+        self.fig, self.axes = plt.subplots(2, 1, squeeze=False, gridspec_kw={"height_ratios": [7, 1]})
+        self.fig.suptitle(f"OMP at pixel {tuple(self.local_yxz.tolist())}")
+        ax_slider: plt.Axes = self.axes[1, 0]
+        self.iteration_slider = Slider(
+            ax_slider,
+            label="Iteration",
+            valmin=1,
+            valmax=self.maximum_iterations,
+            valstep=1,
+            valinit=self.maximum_iterations,
+        )
+        self.iteration_slider.active = True
+        self.iteration_slider.on_changed(self.show_iteration_changed)
+
+    def draw_data(self) -> None:
+        ax_plot: plt.Axes = self.axes[0, 0]
+        ax_plot.clear()
+        x_min, x_max = -0.5, self.maximum_iterations - 0.5
+        ax_plot.set_xlim(x_min, x_max)
+        abs_max = np.abs(self.coefficients).max()
+        ax_plot.set_ylim(-abs_max - 0.5, abs_max + 0.5)
+        ax_plot.hlines(0, x_min, x_max, colors="white", linewidths=1.0)
+        ax_plot.set_xlabel(f"Gene")
+        ax_plot.set_ylabel(f"Coefficient")
+        ax_plot.bar(
+            np.linspace(0, self.maximum_iterations, num=self.maximum_iterations, endpoint=False),
+            self.coefficients[self.show_iteration],
+            width=0.3,
+            color="whitesmoke",
+            edgecolor="dimgrey",
+            linewidth=1.5,
+            tick_label=[self.gene_names[i] for i in self.final_selected_genes],
+        )
+        plt.draw()
+
+    def show_iteration_changed(self, _) -> None:
+        self.show_iteration = (self.iteration_slider.val) - 1
+        self.draw_data()

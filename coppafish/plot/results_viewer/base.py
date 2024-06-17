@@ -20,8 +20,7 @@ from .. import call_spots as call_spots_plot
 from ...setup import Notebook
 from ..call_spots import gene_counts, view_bled_codes, view_bleed_matrix, view_codes, view_intensity, view_spot
 from ..call_spots_new import BGNormViewer, GEViewer, ViewAllGeneScores
-from ..omp import histogram_score, view_omp
-from ..omp.coefs import view_score
+from ..omp import histogram_score, ViewOMPImage, ViewOMPPixelCoefficients
 from .hotkeys import KeyBinds, ViewHotkeys
 
 try:
@@ -315,7 +314,7 @@ class Viewer:
         # we will change the z-coordinates of the spots to the current z-plane if they are within the z-thickness
         # of the current z-plane.
         current_z = self.viewer.dims.current_step[0]
-        for i, m in enumerate(self.method["names"]):
+        for _, m in enumerate(self.method["names"]):
             z_coords = self.spots[m].location[:, 0].copy()
             in_range = np.abs(z_coords - current_z) <= z_thick / 2
             z_coords[in_range] = current_z
@@ -450,14 +449,14 @@ class Viewer:
         self.legend["fig"].draw()
         self.update_genes_and_thresholds()
 
-    def get_selected_spot_index(self):
+    def get_selected_spot_index(self) -> int:
         """
         Get the index of the selected spot.
         """
         n_selected = len(self.viewer.layers[self.viewer.layers.selection.active.name].selected_data)
         if n_selected == 1:
             napari_layer_index = list(self.viewer.layers[self.viewer.layers.selection.active.name].selected_data)[0]
-            spot_index = self.spots[self.method["names"][self.method["active"]]].notebook_index[napari_layer_index]
+            spot_index = int(self.spots[self.method["names"][self.method["active"]]].notebook_index[napari_layer_index])
         elif n_selected > 1:
             self.viewer.status = f"{n_selected} spots selected - need 1 to run diagnostic"
             spot_index = None
@@ -780,7 +779,7 @@ class Viewer:
 
         @self.viewer.bind_key(KeyBinds.view_gene_efficiency)
         def call_to_view_gene_efficiency(viewer):
-            GEViewer(self.nb)
+            self.open_plot = GEViewer(self.nb)
 
         @self.viewer.bind_key(KeyBinds.view_gene_counts)
         def call_to_gene_counts(viewer):
@@ -808,11 +807,11 @@ class Viewer:
             if spot_index is not None:
                 view_spot(self.nb, spot_index, self.method["names"][self.method["active"]])
 
-        @self.viewer.bind_key(KeyBinds.view_spot_colours_and_weights)
-        def call_to_view_omp_score(viewer):
-            spot_index = self.get_selected_spot_index()
-            if spot_index is not None:
-                view_score(self.nb, spot_index, self.method["names"][self.method["active"]])
+        # @self.viewer.bind_key(KeyBinds.view_spot_colours_and_weights)
+        # def call_to_view_omp_score(viewer):
+        #     spot_index = self.get_selected_spot_index()
+        #     if spot_index is not None:
+        #         view_score(self.nb, spot_index, self.method["names"][self.method["active"]])
 
         @self.viewer.bind_key(KeyBinds.view_intensity_from_colour)
         def call_to_view_omp_score(viewer):
@@ -820,24 +819,19 @@ class Viewer:
             if spot_index is not None:
                 view_intensity(self.nb, spot_index, self.method["names"][self.method["active"]])
 
-        @self.viewer.bind_key(KeyBinds.view_omp_coefficients)
+        @self.viewer.bind_key(KeyBinds.view_omp_coef_image)
         def call_to_view_omp(viewer):
             spot_index = self.get_selected_spot_index()
             if spot_index is not None:
-                view_omp(self.nb, spot_index, self.method["names"][self.method["active"]])
+                self.open_plot = ViewOMPImage(self.nb, spot_index, self.method["names"][self.method["active"]])
 
-        # @self.viewer.bind_key(KeyBinds.view_omp_fit)
-        # def call_to_view_omp(viewer):
-        #     spot_index = self.get_selected_spot_index()
-        #     if spot_index is not None:
-        #         view_omp_fit(self.nb, spot_index, self.method["names"][self.method["active"]])
-
-        # TODO: Remove or refactor this as this as we don't have a score multiplier for omp
-        # @self.viewer.bind_key(KeyBinds.view_omp_score)
-        # def call_to_view_omp_score(viewer):
-        #     spot_index = self.get_selected_spot_index()
-        #     if spot_index is not None:
-        #         view_omp_score(self.nb, spot_index, self.method_buttons.method, self.omp_score_multiplier_slider.value())
+        @self.viewer.bind_key(KeyBinds.view_omp_pixel_weights)
+        def call_to_view_omp_weights(viewer):
+            spot_index = self.get_selected_spot_index()
+            if spot_index is not None:
+                self.open_plot = ViewOMPPixelCoefficients(
+                    self.nb, spot_index, self.method["names"][self.method["active"]]
+                )
 
 
 class Method(QMainWindow):

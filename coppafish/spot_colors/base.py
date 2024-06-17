@@ -1,8 +1,9 @@
-import os
-import zarr
+from typing import Any, List, Optional, Tuple, Union
+
 import numpy as np
+import numpy.typing as npt
+import torch
 from tqdm import tqdm
-from typing import Optional, List, Union, Tuple
 
 from ..setup import NotebookPage
 from ..utils import tiles_io
@@ -49,6 +50,196 @@ def apply_transform(
     return yxz_transform, in_range
 
 
+def get_spot_colours_new(
+    nbp_basic: NotebookPage,
+    nbp_file: NotebookPage,
+    nbp_extract: NotebookPage,
+    nbp_register: NotebookPage,
+    nbp_register_debug: NotebookPage,
+    tile: int,
+    round: int,
+    channels: Optional[Union[Tuple[int], int]] = None,
+    yxz: npt.NDArray[np.int_] = None,
+    registration_type: str = "flow_and_icp",
+    dtype: np.dtype = np.float32,
+    force_cpu: bool = True,
+) -> npt.NDArray[Any]:
+    """
+    Load and return registered image(s) colours. Image(s) are correctly centred around zero. Zeros are placed when the
+    position is out of bounds.
+
+    Args:
+        nbp_basic (NotebookPage): `basic_info` notebook page.
+        nbp_file (NotebookPage): `file_names` notebook page.
+        nbp_extract (NotebookPage): `extract` notebook page.
+        nbp_register (NotebookPage): `register` notebook page.
+        nbp_register_debug (NotebookPage): `register_debug` notebook page.
+        tile (int): tile index.
+        round (int): round index.
+        channels (tuple of ints or int): channel indices (index) to load. Default: sequencing channels.
+        yxz (`(n_points x 3) ndarray[int]`): specific points to retrieve relative to the reference image (the anchor
+            round/channel). Default: the entire image in the order such that
+            `image.reshape((len(channels) x im_y x im_x x im_z))` will return the entire image.
+        registration_type (str): registration method to apply up to. Can be 'flow' or 'flow_and_icp'. Default:
+            'flow_and_icp', the completed registration, after optical flow and ICP corrections.
+        dtype (dtype): data type to return the images into. This must support negative numbers. An integer dtype will
+            cause rounding errors. Default: np.float32.
+        force_cpu (bool): only use a CPU to run computations on. Default: true.
+
+    Returns:
+        `(len(channels) x n_points) ndarray[dtype]`) image: registered image intensities.
+
+    Notes:
+        - If you are planning to load in multiple channels, this function is faster if called once.
+        - float32 precision is used throughout intermediate steps.
+    """
+    assert type(nbp_basic) is NotebookPage
+    image_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
+    assert type(nbp_file) is NotebookPage
+    assert type(nbp_extract) is NotebookPage
+    assert type(nbp_register) is NotebookPage
+    assert type(nbp_register_debug) is NotebookPage
+    assert type(tile) is int
+    assert type(round) is int
+    if channels is None:
+        channels = nbp_basic.use_channels
+    if type(channels) is int:
+        channels = (channels,)
+    assert type(channels) is tuple
+    assert len(channels) > 0
+    if yxz is None:
+        yxz = [np.linspace(0, image_shape[i], image_shape[i], endpoint=False) for i in range(3)]
+        yxz = np.array(np.meshgrid(*yxz, indexing="ij")).reshape((3, -1)).astype(np.int32).T
+    assert type(yxz) is np.ndarray
+    assert yxz.shape[0] > 0
+    assert yxz.shape[1] == 3
+    assert registration_type in ("flow", "flow_and_icp")
+
+    run_on = torch.device("cpu")
+    if not force_cpu and torch.cuda.is_available():
+        run_on = torch.device("cuda")
+    n_points = yxz.shape[0]
+    half_pixels = [1 / image_shape[i] for i in range(3)]
+
+    def get_yxz_bounds(from_yxz: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        assert from_yxz.ndim == 3
+        assert from_yxz.shape[-1] == 3
+        yxz_mins = from_yxz.min(dim=0)[0].min(dim=0)[0] + 1
+        yxz_mins = torch.floor(((yxz_mins / torch.asarray(half_pixels)) - 1) * 0.5)
+        yxz_mins -= torch.asarray([5, 5, 1])
+        yxz_mins = torch.clamp(yxz_mins, torch.zeros(3), torch.asarray(image_shape)).int()
+        yxz_maxs = from_yxz.max(dim=0)[0].max(dim=0)[0] + 1
+        yxz_maxs = torch.ceil(((yxz_maxs / torch.asarray(half_pixels)) - 1) * 0.5)
+        yxz_maxs += torch.asarray([5, 5, 1])
+        yxz_maxs = torch.clamp(yxz_maxs, torch.zeros(3), torch.asarray(image_shape)).int()
+        assert yxz_mins.shape == (3,)
+        assert yxz_maxs.shape == (3,)
+        return yxz_mins, yxz_maxs
+
+    # 1: Affine transform every pixel position, keep them as floating points.
+    yxz_registered = torch.zeros((0, n_points, 3), dtype=torch.float32)
+    for c in channels:
+        affine = np.eye(4, 3)
+        if registration_type == "flow_and_icp" and c != nbp_basic.dapi_channel:
+            affine = nbp_register.icp_correction[tile, round, c].copy()
+        elif registration_type == "flow":
+            affine = nbp_register_debug.channel_correction[tile, c].copy()
+        assert affine.shape == (4, 3)
+        affine.flags.writeable = True
+        affine = torch.asarray(affine).float()
+        yxz_affine_c = torch.asarray(yxz).float()
+        yxz_affine_c = torch.nn.functional.pad(yxz_affine_c, (0, 1, 0, 0), "constant", 1)
+        yxz_affine_c = yxz_affine_c.to(run_on)
+        affine = affine.to(run_on)
+        yxz_affine_c = torch.matmul(yxz_affine_c, affine)
+        yxz_affine_c = yxz_affine_c.cpu()
+        affine = affine.cpu()
+        assert yxz_affine_c.shape == (n_points, 3)
+        for i in range(3):
+            yxz_affine_c[:, i] = (2 * yxz_affine_c[:, i] + 1) * half_pixels[i]
+            yxz_affine_c[:, i] -= 1
+        yxz_registered = torch.cat((yxz_registered, yxz_affine_c[np.newaxis]), dim=0).float()
+        del yxz_affine_c, affine
+    del yxz
+
+    if registration_type == "flow_and_icp":
+        # 2: Gather the optical flow shifts using interpolation from the affine positions.
+        # (3, 1, im_y, im_x, im_z).
+        flow_image = torch.zeros((3, 1) + image_shape).float()
+        yxz_minimums, yxz_maximums = get_yxz_bounds(yxz_registered)
+        flow_image[
+            :,
+            0,
+            yxz_minimums[0] : yxz_maximums[0],
+            yxz_minimums[1] : yxz_maximums[1],
+            yxz_minimums[2] : yxz_maximums[2],
+        ] = torch.asarray(
+            nbp_register.flow[
+                tile,
+                round,
+                :,
+                yxz_minimums[0] : yxz_maximums[0],
+                yxz_minimums[1] : yxz_maximums[1],
+                yxz_minimums[2] : yxz_maximums[2],
+            ]
+        )
+        del yxz_minimums, yxz_maximums
+        # The flow image takes the anchor image -> tile/round image so must invert the shift.
+        flow_image *= -1
+        flow_image = [flow_image[[i]] for i in range(3)]
+        # (1, 1, len(channels), n_points, 3). yxz becomes zxy to use the grid_sample function correctly.
+        yxz_registered = yxz_registered[np.newaxis, np.newaxis, :, :, [2, 1, 0]]
+        # Gives flow shifts in shape (3, len(channels), n_points).
+        optical_flow_shifts = torch.zeros((3, len(channels), n_points)).float()
+        for i in range(3):
+            optical_flow_shifts[i] = torch.nn.functional.grid_sample(
+                flow_image[i], yxz_registered, mode="bilinear", align_corners=False
+            )[0, 0, 0]
+        yxz_registered = yxz_registered[..., [2, 1, 0]]
+        del flow_image
+        # (len(channels), n_points, 3)
+        optical_flow_shifts = optical_flow_shifts.movedim(0, 1).movedim(1, 2)
+        assert optical_flow_shifts.shape == (len(channels), n_points, 3)
+        # Convert optical flow pixel shifts to grid sized shifts based on pytorch's grid_sample function.
+        for i in range(3):
+            optical_flow_shifts[:, :, i] *= half_pixels[i] * 2
+        # 3: Apply optical flow shifts to the yxz affine positions for final registered positions.
+        yxz_registered = yxz_registered[0, 0] + optical_flow_shifts
+        del optical_flow_shifts
+
+    # 4: Gather all unregistered channel images.
+    suffix = "_raw" if round == nbp_basic.pre_seq_round else ""
+    images = torch.zeros((len(channels),) + image_shape, dtype=torch.float32)
+    for c_i, c in enumerate(channels):
+        image_c = torch.zeros(image_shape).float()
+        yxz_minimums, yxz_maximums = get_yxz_bounds(yxz_registered)
+        yxz_subset = tuple([(yxz_minimums[i].item(), yxz_maximums[i].item()) for i in range(3)])
+        image_c[
+            yxz_subset[0][0] : yxz_subset[0][1],
+            yxz_subset[1][0] : yxz_subset[1][1],
+            yxz_subset[2][0] : yxz_subset[2][1],
+        ] = torch.asarray(
+            tiles_io.load_image(
+                nbp_file, nbp_basic, nbp_extract.file_type, tile, round, c, suffix=suffix, yxz=yxz_subset
+            )
+        ).float()
+        del yxz_minimums, yxz_maximums, yxz_subset
+        images[c_i] = torch.asarray(image_c).float()
+        del image_c
+
+    # 5: Use the yxz registered positions to gather from the images through interpolation.
+    # (len(channels), 1, im_y, im_x, im_z)
+    images = images[:, np.newaxis]
+    # (len(channels), 1, 1, n_points, 3)
+    yxz_registered = yxz_registered[:, np.newaxis, np.newaxis, :, [2, 1, 0]]
+    pixel_intensities = torch.nn.functional.grid_sample(images, yxz_registered, mode="bilinear", align_corners=False)
+    # (len(channels), n_points)
+    pixel_intensities = pixel_intensities[:, 0, 0, 0].numpy().astype(dtype)
+    assert pixel_intensities.shape == (len(channels), n_points)
+    return pixel_intensities
+
+
+# TODO: Remove the use of the old, slower, and less precise get_spot_colors function in the codebase.
 def get_spot_colors(
     yxz_base: np.ndarray,
     t: np.ndarray,
@@ -139,8 +330,8 @@ def get_spot_colors(
 
                 # Read in the shifted uint16 colors here, and remove shift later.
                 spot_colors[in_range, i, j] = tiles_io.load_image(
-                    nbp_file, nbp_basic, file_type, t, r, c, yxz_transform, apply_shift=False
-                )
+                    nbp_file, nbp_basic, file_type, t, r, c, apply_shift=False
+                )[tuple(yxz_transform.T)]
                 pbar.update(1)
             del flow_tr
 
