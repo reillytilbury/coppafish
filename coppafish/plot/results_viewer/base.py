@@ -456,14 +456,14 @@ class Viewer:
         n_selected = len(self.viewer.layers[self.viewer.layers.selection.active.name].selected_data)
         if n_selected == 1:
             napari_layer_index = list(self.viewer.layers[self.viewer.layers.selection.active.name].selected_data)[0]
-            spot_index = self.spots[self.method["names"][self.method["active"]]].notebook_index[napari_layer_index]
+            spot_index = int(self.spots[self.method["names"][self.method["active"]]].notebook_index[napari_layer_index])
         elif n_selected > 1:
             self.viewer.status = f"{n_selected} spots selected - need 1 to run diagnostic"
             spot_index = None
         else:
             self.viewer.status = "No spot selected :("
             spot_index = None
-        return int(spot_index)
+        return spot_index
 
     def create_gene_list(self, gene_marker_file: str, nb_gene_names: list) -> None:
         """
