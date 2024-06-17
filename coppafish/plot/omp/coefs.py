@@ -89,27 +89,23 @@ class ViewOMPImage:
                 registration_type="flow_and_icp",
             ).T.reshape((spot_shape_yxz + (n_channels_use,)))
         image_colours = torch.asarray(image_colours, dtype=torch.float32)
-        colour_norm_factor = np.array(nb.call_spots.color_norm_factor, dtype=np.float32)
-        colour_norm_factor = colour_norm_factor[
-            np.ix_(range(colour_norm_factor.shape[0]), nb.basic_info.use_rounds, nb.basic_info.use_channels)
-        ]
+        colour_norm_factor = np.array(nb.call_spots.colour_norm_factor, dtype=np.float32)
         colour_norm_factor = torch.asarray(colour_norm_factor).float()
-        bled_codes_ge = nb.call_spots.bled_codes_ge
-        n_genes = bled_codes_ge.shape[0]
-        bled_codes_ge = bled_codes_ge[np.ix_(range(n_genes), nb.basic_info.use_rounds, nb.basic_info.use_channels)]
-        bled_codes_ge = torch.asarray(bled_codes_ge.astype(np.float32))
+        bled_codes = nb.call_spots.bled_codes
+        n_genes = bled_codes.shape[0]
+        bled_codes = torch.asarray(bled_codes).float()
 
         image_colours = image_colours.reshape((-1, n_rounds_use, n_channels_use))
-        bled_codes_ge = bled_codes_ge.reshape((n_genes, n_rounds_use * n_channels_use))
+        bled_codes = bled_codes.reshape((n_genes, n_rounds_use * n_channels_use))
 
-        image_colours /= colour_norm_factor[[tile]]
+        image_colours *= colour_norm_factor[[tile]]
         image_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(image_colours)
         image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
         bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
 
         coefficient_image = coefs_torch.compute_omp_coefficients(
             image_colours,
-            bled_codes_ge,
+            bled_codes,
             maximum_iterations=config["max_genes"],
             background_coefficients=bg_coefficients,
             background_codes=bg_codes,
@@ -303,20 +299,16 @@ class ViewOMPPixelCoefficients:
                 registration_type="flow_and_icp",
             ).T[np.newaxis]
         image_colours = torch.asarray(image_colours, dtype=torch.float32)
-        colour_norm_factor = np.array(nb.call_spots.color_norm_factor, dtype=np.float32)
-        colour_norm_factor = colour_norm_factor[
-            np.ix_(range(colour_norm_factor.shape[0]), nb.basic_info.use_rounds, nb.basic_info.use_channels)
-        ]
+        colour_norm_factor = np.array(nb.call_spots.colour_norm_factor, dtype=np.float32)
         colour_norm_factor = torch.asarray(colour_norm_factor).float()
-        bled_codes_ge = nb.call_spots.bled_codes_ge
-        n_genes = bled_codes_ge.shape[0]
-        bled_codes_ge = bled_codes_ge[np.ix_(range(n_genes), nb.basic_info.use_rounds, nb.basic_info.use_channels)]
-        bled_codes_ge = torch.asarray(bled_codes_ge.astype(np.float32))
+        bled_codes = nb.call_spots.bled_codes
+        n_genes = bled_codes.shape[0]
+        bled_codes = torch.asarray(bled_codes).float()
 
         image_colours = image_colours.reshape((-1, n_rounds_use, n_channels_use))
-        bled_codes_ge = bled_codes_ge.reshape((n_genes, n_rounds_use * n_channels_use))
+        bled_codes = bled_codes.reshape((n_genes, n_rounds_use * n_channels_use))
 
-        image_colours /= colour_norm_factor[[tile]]
+        image_colours *= colour_norm_factor[[tile]]
         image_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(image_colours)
         image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
         bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
@@ -325,7 +317,7 @@ class ViewOMPPixelCoefficients:
         # Get the maximum number of OMP gene assignments made and what genes.
         coefficients = coefs_torch.compute_omp_coefficients(
             image_colours,
-            bled_codes_ge,
+            bled_codes,
             maximum_iterations=config["max_genes"],
             background_coefficients=bg_coefficients,
             background_codes=bg_codes,
@@ -345,7 +337,7 @@ class ViewOMPPixelCoefficients:
         for i in range(self.maximum_iterations):
             self.coefficients[i] = coefs_torch.compute_omp_coefficients(
                 image_colours,
-                bled_codes_ge,
+                bled_codes,
                 maximum_iterations=(i + 1),
                 background_coefficients=bg_coefficients,
                 background_codes=bg_codes,
@@ -367,7 +359,7 @@ class ViewOMPPixelCoefficients:
     def draw_canvas(self) -> None:
         plt.style.use("dark_background")
         self.fig, self.axes = plt.subplots(2, 1, squeeze=False, gridspec_kw={"height_ratios": [7, 1]})
-        self.fig.suptitle(f"OMP coefficients for pixel {tuple(self.local_yxz.tolist())}")
+        self.fig.suptitle(f"OMP at pixel {tuple(self.local_yxz.tolist())}")
         ax_slider: plt.Axes = self.axes[1, 0]
         self.iteration_slider = Slider(
             ax_slider,
@@ -388,6 +380,8 @@ class ViewOMPPixelCoefficients:
         abs_max = np.abs(self.coefficients).max()
         ax_plot.set_ylim(-abs_max - 0.5, abs_max + 0.5)
         ax_plot.hlines(0, x_min, x_max, colors="white", linewidths=1.0)
+        ax_plot.set_xlabel(f"Gene")
+        ax_plot.set_ylabel(f"Coefficient")
         ax_plot.bar(
             np.linspace(0, self.maximum_iterations, num=self.maximum_iterations, endpoint=False),
             self.coefficients[self.show_iteration],
