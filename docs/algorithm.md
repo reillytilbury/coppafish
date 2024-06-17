@@ -1,4 +1,4 @@
-## Call Spots
+# Call Spots Documentation
 
 The Call Reference Spots section of the pipeline is a method of gene calling which runs quickly on a small set of spots  ($\approx$ 50, 000 per tile) of the anchor image. Initially, this was our final mode of gene calling, but has since been superseded by OMP, which differs from Call Spots in that it runs on several more spots. That being said, the call spots section is still a crucial part of the pipeline as it estimates several important parameters used in the OMP section.
 
@@ -10,7 +10,7 @@ Some of the most important exported parameters of this section are:
 
 - **Bled Codes** $\mathbf{K}$: $(n_{\text{g}} \times n_{\text{r}} \times n_{\text{c}})$ array of the expected colour spectrum for each gene.
 
-### Algorithm Breakdown
+## Algorithm Breakdown
 
 <figure markdown="span">
   ![Image title](images/algorithm/call_spots/Call Spots Flowchart.png)
@@ -36,7 +36,7 @@ $$
  
 - A raw bleed matrix $\mathbf{B_{raw}}$ of shape $(n_{\text{dyes}} \times n_{\text{c}})$ obtained from images of free-floating drops of each dye.
 
-#### 0: Preprocessing
+### 0: Preprocessing
 The purpose of this step is to convert our raw pixels from integers between -15,000 and 50,000 to floating points numbers. We want to minimise the influence of variable brightness between different tiles, rounds and channels, and get rid of background fluorescence as much as possible. 
 
 We transform the raw spot colours via the following function:
@@ -53,10 +53,10 @@ In the formula above:
 
 %TODO: Add an image of a spot before anything, after scaling, then after removing background
 
-#### 1: Initial Gene Assignment
+### 1: Initial Gene Assignment
 The purpose of this step is to provide some gene assignments that will facilitate further calculations. This is necessary as there are many important variables (eg: tile-independent free bled codes for each gene $E_{g,r,c}$ or the tile-dependent free bled codes $D_{g,t,r,c}$) which cannot be calculated without sample spots of these genes. 
 
-##### The Naive Approach
+#### The Naive Approach
 The simplest way to do gene assignments would be:
 
 * Create an initial bled code $\tilde{\mathbf{K}}_g = \mathbf{C_g B}$ for each gene $g$ by matrix multiplying the code matrix $\mathbf{C_g}$ for each gene $g$ with the bleed matrix $\mathbf{B}$.
@@ -88,7 +88,7 @@ where $\lambda_{gr}$ is called the _gene efficiency_ of gene $g$ in round $r$.
 
 Since we have no prior estimate of $\lambda_{gr}$, we need a method which will normalise each spot colour $F_{src}$ in each round, thereby removing any systematic scaling between rounds before proceeding in a way similar to steps 2 and 3. 
 
-##### Probabilistic Gene Assignments using FVM
+#### Probabilistic Gene Assignments using FVM
 We are going to define a probability distribution of this spot $s$ belonging to dye $d$ in round $r$ that gets around the issues mentioned in the naive approach. Fix a spot $s$ and round $r$ and let $\mathbf{F_r}$ be this spot’s **L2-normalized** fluorescence vector (length $n_{\text{c}}$). Let $\mathbf{B_d}$ be the **L2-normalized** fluorescence vector (length $n_{\text{c}}$) of dye $d$.
 
 We'd like to assign a probability that any unit vector belongs to dye $d$. The simplest non-uniform distribution defined on the sphere is the [Fisher Von Mises distribution](https://en.wikipedia.org/wiki/Von_Mises%E2%80%93Fisher_distribution), which is just the restriction of a multivariate isotropic normal distribution to the unit sphere. This distribution has 2 parameters:
@@ -123,7 +123,7 @@ $$ \mathbb{P}[G = g \mid \mathbf{F} = \mathbf{f}] = \frac{\exp(\kappa \mathbf{b}
 
 where $\mathbf{U}$ is a matrix of shape $(n_g, n_r n_c)$ where each row $U_g = \mathbf{b_g}$. This shows that the value of $\kappa$ has no effect on the gene ordering, but just on the spread of probabilities among genes. A value of 0 yields a uniform distribution of probabilities between all genes, while a very large value of $\kappa$ is approximately 1 for the gene with the maximum dot product and 0 for all others.
 
-#### 2: Bleed Matrix Calculation
+### 2: Bleed Matrix Calculation
 The purpose of this step is to compute an updated estimate of the bleed matrix. To get a more accurate estimate of the colour spectrum for each dye $d$ we will find high probability spots for genes $g$ containing dye $d$ and then extract the rounds in which dye $d$ is supposed to be present. We will then use singular-value decomposition to get a representative vector for the set of samples. 
 
 Set some probability threshold $\alpha$ (by default, $\alpha = 0.9$). We define the following sets:
@@ -174,7 +174,7 @@ This method is preferable in that it assumes that rows of $\mathbf{J}$ are scale
 
 We then set the bleed matrix for dye $d$ to $\boldsymbol{\omega}$,  ie: $\mathbf{B_d} = \boldsymbol{\omega}$, which is a normalised fluorescence vector for dye $d$.
 
-#### 3: Free Bled Code Estimation
+### 3: Free Bled Code Estimation
 
 **Terminology:**
 
@@ -198,8 +198,7 @@ Our method of estimating $\mathbf{E_{g,r}}$ (and $\mathbf{D_{g,t, r}}$ just on a
 *The Bayes Mean biases the sample mean towards a prior vector. This is useful when the number of samples is small and we expect the points to have mean parallel to the prior vector.*
 
 
-
-##### The Parallel Biased Bayes Mean
+#### The Parallel Biased Bayes Mean
 
 Fix a gene $g$ and round $r$ and let $\mathbf{F_{1,r}}, \ldots, \mathbf{F_{n,r}}$  be the round $r$ fluorescence vectors of spots assigned to gene $g$ with high probability.
 
@@ -279,7 +278,7 @@ Plugging in $\mathbf{f} = \frac{1}{n}\sum_i \mathbf{F_{i, r}}$ yields our estima
   </figure>
 *Decreasing $\beta$ increases the component of the Bayes Mean $\boldsymbol{\hat{\mu}}$ perpendicular to the prior vector. The values of $\alpha^2$ and $\beta^2$ should be thought of as the number of spots needed to change the scale and direction respectively of the prior vector.*
 
-#### 4: Round and Channel Normalisation
+### 4: Round and Channel Normalisation
 
 The purpose of this step is to try and remove systematic brightness differences between rounds and channels and ensure that the dyes are well separated. 
 
@@ -316,6 +315,11 @@ $$
 
 We will use these instead of $E_{g,r,c}$ from here onwards.
 
+<figure markdown="span">
+  ![Image title](images/algorithm/call_spots/free vs constrained bled codes.png)
+</figure>
+*The `view_free_and_constrained_bled_codes` diagnostic shows the free tile-independent bled codes next to the constrained bled codes. The constrained bled codes have much more uniform colours within each gene. Note how the final round and channel has been scaled down and all of channel 15 has been scaled up.*
+### 5: Tile Normalisation
 #### 5: Tile Normalisation
 
 The purpose of this step is to remove brightness differences between tiles, and improve the round and channel normalisation we found in the previous step. We do this by finding a scale factor $Q_{t, r, c}$ such that 
@@ -354,7 +358,7 @@ $$
 </figure>
 *We can use the `view_scale_factors` diagnostic to view the round/channel scale, the tile scale and the tile scales relative to the round/channel scales. The final plot being non-uniform implies that the tile scale corrections are independent between different $(r, c)$ pairs.*
 
-#### 6 and 7: Application of Scales, Computation of Final Scores and Bleed Matrix
+### 6 and 7: Application of Scales, Computation of Final Scores and Bleed Matrix
 
 The purpose of this step is to bring all the components together and compute the final scores and bleed matrix.
 
