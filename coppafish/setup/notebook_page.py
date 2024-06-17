@@ -379,7 +379,8 @@ class NotebookPage:
                 "zarr",
                 "n_tiles x n_rounds x 3 x tile_sz x tile_sz x len(use_z)",
                 "The optical flow shifts for each image pixel after smoothing. The third axis is for the different "
-                + "image directions. 0 is the y shifts, 1 is the x shifts, 2 is the z shifts.",
+                + "image directions. 0 is the y shifts, 1 is the x shifts, 2 is the z shifts. "
+                + "flow[t, r] takes the anchor image to t/r image."
             ],
             "correlation": [
                 "zarr",

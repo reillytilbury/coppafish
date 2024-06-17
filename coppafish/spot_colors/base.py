@@ -1,4 +1,3 @@
-from concurrent.futures import ProcessPoolExecutor
 from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
@@ -6,7 +5,6 @@ import numpy.typing as npt
 import torch
 from tqdm import tqdm
 
-from .. import log
 from ..setup import NotebookPage
 from ..utils import tiles_io
 
@@ -122,8 +120,6 @@ def get_spot_colours_new(
         run_on = torch.device("cuda")
     n_points = yxz.shape[0]
     half_pixels = [1 / image_shape[i] for i in range(3)]
-    # If true, load in only a subset of the flow image to avoid too much disk loading.
-    load_subset = n_points < 40_000
 
     def get_yxz_bounds(from_yxz: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         assert from_yxz.ndim == 3
@@ -170,29 +166,28 @@ def get_spot_colours_new(
         # 2: Gather the optical flow shifts using interpolation from the affine positions.
         # (3, 1, im_y, im_x, im_z).
         flow_image = torch.zeros((3, 1) + image_shape).float()
-        if load_subset:
-            yxz_minimums, yxz_maximums = get_yxz_bounds(yxz_registered)
-            flow_image[
+        yxz_minimums, yxz_maximums = get_yxz_bounds(yxz_registered)
+        flow_image[
+            :,
+            0,
+            yxz_minimums[0] : yxz_maximums[0],
+            yxz_minimums[1] : yxz_maximums[1],
+            yxz_minimums[2] : yxz_maximums[2],
+        ] = torch.asarray(
+            nbp_register.flow[
+                tile,
+                round,
                 :,
-                0,
                 yxz_minimums[0] : yxz_maximums[0],
                 yxz_minimums[1] : yxz_maximums[1],
                 yxz_minimums[2] : yxz_maximums[2],
-            ] = torch.asarray(
-                nbp_register.flow[
-                    tile,
-                    round,
-                    :,
-                    yxz_minimums[0] : yxz_maximums[0],
-                    yxz_minimums[1] : yxz_maximums[1],
-                    yxz_minimums[2] : yxz_maximums[2],
-                ]
-            )
-            del yxz_minimums, yxz_maximums
-        else:
-            flow_image = torch.asarray(nbp_register.flow[tile, round]).float()[:, np.newaxis]
+            ]
+        )
+        del yxz_minimums, yxz_maximums
+        # The flow image takes the anchor image -> tile/round image so must invert the shift.
+        flow_image *= -1
         flow_image = [flow_image[[i]] for i in range(3)]
-        # (1, 1, len(channels), n_points, 3). yxz becomes zxy to use the grid_sample function.
+        # (1, 1, len(channels), n_points, 3). yxz becomes zxy to use the grid_sample function correctly.
         yxz_registered = yxz_registered[np.newaxis, np.newaxis, :, :, [2, 1, 0]]
         # Gives flow shifts in shape (3, len(channels), n_points).
         optical_flow_shifts = torch.zeros((3, len(channels), n_points)).float()
@@ -217,23 +212,18 @@ def get_spot_colours_new(
     images = torch.zeros((len(channels),) + image_shape, dtype=torch.float32)
     for c_i, c in enumerate(channels):
         image_c = torch.zeros(image_shape).float()
-        if load_subset:
-            yxz_minimums, yxz_maximums = get_yxz_bounds(yxz_registered)
-            yxz_subset = tuple([(yxz_minimums[i].item(), yxz_maximums[i].item()) for i in range(3)])
-            image_c[
-                yxz_subset[0][0] : yxz_subset[0][1],
-                yxz_subset[1][0] : yxz_subset[1][1],
-                yxz_subset[2][0] : yxz_subset[2][1],
-            ] = torch.asarray(
-                tiles_io.load_image(
-                    nbp_file, nbp_basic, nbp_extract.file_type, tile, round, c, suffix=suffix, yxz=yxz_subset
-                )
-            ).float()
-            del yxz_minimums, yxz_maximums, yxz_subset
-        else:
-            image_c = torch.asarray(
-                tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, tile, round, c, suffix=suffix)
-            ).float()
+        yxz_minimums, yxz_maximums = get_yxz_bounds(yxz_registered)
+        yxz_subset = tuple([(yxz_minimums[i].item(), yxz_maximums[i].item()) for i in range(3)])
+        image_c[
+            yxz_subset[0][0] : yxz_subset[0][1],
+            yxz_subset[1][0] : yxz_subset[1][1],
+            yxz_subset[2][0] : yxz_subset[2][1],
+        ] = torch.asarray(
+            tiles_io.load_image(
+                nbp_file, nbp_basic, nbp_extract.file_type, tile, round, c, suffix=suffix, yxz=yxz_subset
+            )
+        ).float()
+        del yxz_minimums, yxz_maximums, yxz_subset
         images[c_i] = torch.asarray(image_c).float()
         del image_c
 
