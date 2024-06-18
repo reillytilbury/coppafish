@@ -1,4 +1,4 @@
-2024/05/30 Alpha Update (v0.11.0):
+2024/mm/dd Alpha Update (v0.11.0):
  * OMP: OMP is now truly orthogonal. Before, the new gene was weighted using only the residual pixel colour. Now, all 
     genes are re-weighted using the full pixel colour and a new gene is found using the latest residual colour.
  * Viewer refactor: The viewer is more customisable, and users can now toggle whether they want each image shown to be
@@ -41,6 +41,8 @@
     computed for each tile.
  * OMP score threshold default 0.2 -> 0.3.
  * OMP scores now saved as float16, not int16.
+ * Logging: Package versions are now logged in the pipeline.log file.
+ * Filter: Warning issues when a filtered image contains adjacent pixels at the maximum possible integer value.
  * Removed legacy filter options difference of Hanning and image smoothing.
 
 

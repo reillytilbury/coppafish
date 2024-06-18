@@ -6,11 +6,12 @@ updated when there is evidence that it can perform better and that the current a
 ## Our Philosophy
 
 We follow some basic rules when coding. Anyone can code something that works, but coding it in a scaleable, 
-maintainable way is another struggle altogether. Knowledge written down in code twice is bad code. Don't Repeat 
-Yourself (DRY)!
+maintainable way is another struggle altogether.
 
 Here are some specific standards to follow:
 
+* Knowledge written down twice is bad code. Don't Repeat Yourself (DRY)!
+* If a bug is found, the bug must be automatically found if it is to occur again.
 * Every time a function is modified or created, a new unit test must be created for the function. A pre-existing unit 
 test can be drawn from to build a new unit test, but it should be clear in your mind that you are affectively building 
 a new function.
