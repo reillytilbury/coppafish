@@ -11,14 +11,11 @@ plt.style.use("dark_background")
 
 class histogram_score:
     ylim_tol = 0.2  # If fractional change in y limit is less than this, then leave it the same
-    check_tol = 1e-3  # If saved spot_score and that computed here differs by more than this and check=True, get error.
 
     def __init__(
         self,
         nb: Notebook,
-        method: str = "omp",
-        check: bool = False,
-        hist_spacing: float = 0.001,
+        hist_spacing: float = 0.01,
         show_plot: bool = True,
     ):
         """
@@ -26,80 +23,56 @@ class histogram_score:
         view the histogram of the score computed using various other configurations of `background` fitting
         and `gene_efficiency`. This allows one to see how the these affect the score.
 
-        If `method` is omp, this will show the histogram of omp score, computed with
-        `coppafish.call_spots.omp_spot_score`.
         There will also be the option to view the histograms shown for the anchor method.
         I.e. we compute the dot product score for the omp spots.
 
         Args:
             nb: *Notebook* containing at least `call_spots` page.
-            method: `'anchor'` or `'omp'`.
-                Which method of gene assignment used i.e. `spot_no` belongs to `ref_spots` or `omp` page of Notebook.
-            score_omp_multiplier: Can specify the value of score_omp_multiplier to use to compute omp score.
-                If `None`, will use value in config file.
-            check: If `True`, and `method='anchor'`, will check that scores computed here match those saved to Notebook.
             hist_spacing: Initial width of bin in histogram.
             show_plot: Whether to run `plt.show()` or not.
         """
         # Add data
         self.gene_names = nb.call_spots.gene_names
         self.n_genes = self.gene_names.size
+        self.n_rounds, self.n_channels = nb.call_spots.bled_codes.shape[1:]
         # Use all genes by default
         self.genes_use = np.arange(self.n_genes)
-        trc_index = np.ix_(nb.ref_spots.tile, nb.basic_info.use_rounds, nb.basic_info.use_channels)
 
         # Get spot colors
-        spot_colors_no_background = (
-            nb.ref_spots.colours[:, :, nb.basic_info.use_channels] - nb.ref_spots.background_strength
-        )
-        spot_colors = spot_colors_no_background / nb.call_spots.color_norm_factor[trc_index]
-        spot_colors_background = (
-            nb.ref_spots.colours[:, :, nb.basic_info.use_channels] / nb.call_spots.color_norm_factor[trc_index]
-        )
-        grc_ind = np.ix_(np.arange(self.n_genes), nb.basic_info.use_rounds, nb.basic_info.use_channels)
+        spot_colours_raw = nb.ref_spots.colours
+        colour_norm_factor = nb.call_spots.colour_norm_factor
+        spot_tile = nb.ref_spots.tile
+        spot_colours = spot_colours_raw * colour_norm_factor[spot_tile]
+        spot_colours_bg = np.repeat(np.percentile(spot_colours, 25, axis=1)[:, None, :], self.n_rounds, axis=1)
+        spot_colours_bg_removed = spot_colours - spot_colours_bg
+
         # Bled codes saved to Notebook should already have L2 norm = 1 over used_channels and rounds
-        bled_codes = nb.call_spots.bled_codes[grc_ind]
-        bled_codes_ge = nb.call_spots.bled_codes_ge[grc_ind]
+        bled_codes_initial = nb.call_spots.bleed_matrix[nb.call_spots.gene_codes]
+        bled_codes_initial /= np.linalg.norm(bled_codes_initial, axis=(1, 2), keepdims=True)
+        bled_codes = nb.call_spots.bled_codes
+
+        # reshape to 2D
+        spot_colours = spot_colours.reshape((spot_colours.shape[0], -1))
+        spot_colours_bg_removed = spot_colours_bg_removed.reshape((spot_colours_bg_removed.shape[0], -1))
+        bled_codes_initial = bled_codes_initial.reshape((bled_codes_initial.shape[0], -1))
+        bled_codes = bled_codes.reshape((bled_codes.shape[0], -1))
 
         # Save score_dp for original score, without background removal, without gene efficiency, and without both
         self.n_plots = 4
-        if method.lower() == "omp":
-            self.n_plots += 1
-            self.nbp_omp = nb.omp
-            self.gene_no = self.nbp_omp.gene_no
-            self.score = np.zeros((self.gene_no.size, self.n_plots), dtype=np.float32)
-            self.score[:, -1] = omp_spot_score(self.nbp_omp)
-            self.method = "OMP"
-        else:
-            self.gene_no = nb.ref_spots.gene_no
-            self.score = np.zeros((self.gene_no.size, self.n_plots), dtype=np.float32)
-            self.method = "Anchor"
+        self.gene_no = nb.ref_spots.dot_product_gene_no
+        self.score = np.zeros((self.gene_no.size, self.n_plots), dtype=np.float32)
+        self.method = "Anchor"
 
         self.use = np.isin(self.gene_no, self.genes_use)  # which spots to plot
 
         # DP score
-        n_spots = spot_colors.shape[0]
-        n_genes = bled_codes.shape[0]
-        # FIXME: Not working when method is omp
-        self.score[:, 0] = dot_product_score(spot_colors.reshape((n_spots, -1)), bled_codes_ge.reshape((n_genes, -1)))[
-            1
-        ]
-        if method.lower() != "omp" and check:
-            if np.max(np.abs(self.score[:, 0] - nb.ref_spots.dot_product_gene_score)) > self.check_tol:
-                raise ValueError(
-                    f"nb.ref_spots.scores differs to that computed here\n" f"Set check=False to get past this error"
-                )
-
+        self.score[:, 0] = dot_product_score(spot_colours_bg_removed, bled_codes)[1]
         # DP score no background
-        self.score[:, 1] = dot_product_score(
-            spot_colors_background.reshape((n_spots, -1)), bled_codes_ge.reshape((n_genes, -1))
-        )[1]
+        self.score[:, 1] = dot_product_score(spot_colours, bled_codes)[1]
         # DP score no gene efficiency
-        self.score[:, 2] = dot_product_score(spot_colors.reshape((n_spots, -1)), bled_codes.reshape((n_genes, -1)))[1]
+        self.score[:, 2] = dot_product_score(spot_colours_bg_removed, bled_codes_initial)[1]
         # DP score no background or gene efficiency
-        self.score[:, 3] = dot_product_score(
-            spot_colors_background.reshape((n_spots, -1)), bled_codes.reshape((n_genes, -1))
-        )[1]
+        self.score[:, 3] = dot_product_score(spot_colours, bled_codes_initial)[1]
 
         # Initialise plot
         self.fig, self.ax = plt.subplots(1, 1, figsize=(11, 5))
@@ -111,10 +84,7 @@ class histogram_score:
             top=self.subplot_adjust[3],
         )
         self.ax.set_ylabel(r"Number of Spots")
-        if method.lower() == "omp":
-            self.ax.set_xlabel(r"Score, $\gamma_s$ or $\Delta_s$")
-        else:
-            self.ax.set_xlabel(r"Score, $\Delta_s$")
+        self.ax.set_xlabel(r"Score, $\Delta_s$")
         self.ax.set_title(f"Distribution of Scores for all {self.method} spots")
 
         # Plot histograms
@@ -126,9 +96,7 @@ class histogram_score:
             y, x = np.histogram(self.score[self.use, i], hist_bins)
             x = x[:-1] + self.hist_spacing / 2  # so same length as x
             (self.plots[i],) = self.ax.plot(x, y, color=default_colors[i]["color"])
-            if method.lower() == "omp" and i < self.n_plots - 1:
-                self.plots[i].set_visible(False)
-            elif i > 0 and method.lower() != "omp":
+            if i > 0:
                 self.plots[i].set_visible(False)
 
         self.ax.set_xlim(0, 1)
@@ -138,10 +106,9 @@ class histogram_score:
         text_box_labels = ["Gene", "Histogram\nSpacing"]
         text_box_values = ["all", self.hist_spacing, ]
         text_box_funcs = [self.update_genes, self.update_hist_spacing]
-        if method.lower() != "omp":
-            text_box_labels = text_box_labels[:2]
-            text_box_values = text_box_values[:2]
-            text_box_funcs = text_box_funcs[:2]
+        text_box_labels = text_box_labels[:2]
+        text_box_values = text_box_values[:2]
+        text_box_funcs = text_box_funcs[:2]
         self.text_boxes = [None] * len(text_box_labels)
         for i in range(len(text_box_labels)):
             text_ax = self.fig.add_axes(
@@ -169,23 +136,21 @@ class histogram_score:
         # Add buttons to add/remove score_dp histograms
         self.buttons_ax = self.fig.add_axes([self.subplot_adjust[1] + 0.02, self.subplot_adjust[3] - 0.45, 0.15, 0.5])
         plt.axis("off")
-        self.button_labels = [
-            r"$\Delta_s$" + "\nDot Product Score",
-            r"$\Delta_s$" + "\nNo Background",
-            r"$\Delta_s$" + "\nNo Gene Efficiency",
-            r"$\Delta_s$" + "\nNo Background\nNo Gene Efficiency",
-        ]
+        self.button_labels = ["Dot Product "
+                              "\nScore",
+                              "No BG Removal",
+                              "No Free Bled "
+                              "\nCodes",
+                              "No BG Removal"
+                              "\nNo Free Bled "
+                              "\nCodes",]
         label_checked = [True, False, False, False]
-        if method.lower() == "omp":
-            self.button_labels += [r"$\gamma_s$" + "\nOMP Score"]
-            label_checked += [True]
-            label_checked[0] = False
         self.buttons = CheckButtons(
             self.buttons_ax,
             self.button_labels,
             label_checked,
             label_props={
-                "fontsize": [14] * self.n_plots,
+                "fontsize": [8] * self.n_plots,
                 "color": [default_colors[i]["color"] for i in range(self.n_plots)],
             },
             frame_props={"edgecolor": ["w"] * self.n_plots},

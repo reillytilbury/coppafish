@@ -764,11 +764,6 @@ class Viewer:
         def call_to_view_bg_norm(viewer):
             BGNormViewer(self.nb)
 
-        # TODO: Remove or refactor this as this is not at all how we currently calculate bleed matrix
-        # @self.viewer.bind_key(KeyBinds.view_bleed_matrix_calculation)
-        # def call_to_view_bm_calc(viewer):
-        #     ViewBleedCalc(self.nb)
-
         @self.viewer.bind_key(KeyBinds.view_bled_codes)
         def call_to_view_bm(viewer):
             view_bled_codes(self.nb)
