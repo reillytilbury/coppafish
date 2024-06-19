@@ -185,8 +185,8 @@ def get_spot_colours_new(
         )
         del yxz_minimums, yxz_maximums
         # The flow image takes the anchor image -> tile/round image so must invert the shift.
-        flow_image *= -1
-        flow_image = [flow_image[[i]] for i in range(3)]
+        flow_image = torch.negative(flow_image)
+        flow_image = flow_image[:, np.newaxis]
         # (1, 1, len(channels), n_points, 3). yxz becomes zxy to use the grid_sample function correctly.
         yxz_registered = yxz_registered[np.newaxis, np.newaxis, :, :, [2, 1, 0]]
         # Gives flow shifts in shape (3, len(channels), n_points).
