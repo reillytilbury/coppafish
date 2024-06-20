@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import time
 from typing import Any, Dict, Optional, Tuple
 
@@ -163,8 +164,19 @@ class Notebook:
         # to manually change variables that are already saved to disk. Even then, this function should be used as
         # little as possible as it will inevitably cause bugs.
         start_time = time.time()
-        for page in self._get_existing_pages():
-            page.resave(self._get_page_directory(page.name))
+        # for page in self._get_existing_pages():
+        #     page.resave(self._get_page_directory(page.name))
+        for filename in os.listdir(self._directory):
+            filepath = os.path.join(self._directory, filename)
+            if os.path.isfile(filepath) and filepath != self._get_metadata_path():
+                raise SystemError(f"Unexpected file called {filename} found in {self._directory}")
+            if os.path.isdir(filepath) and filename not in self._options:
+                raise SystemError(f"Unexpected directory called {filename} found in {self._directory}")
+            if os.path.isdir(filepath):
+                if filename in self._get_added_page_names():
+                    self.__getattribute__(filename).resave(filepath)
+                else:
+                    shutil.rmtree(filepath)
         os.remove(self._get_metadata_path())
         self._save_metadata()
         end_time = time.time()
@@ -176,7 +188,7 @@ class Notebook:
         """
         unique_versions = set()
         unique_versions.add(self._version)
-        for page in self._get_existing_pages():
+        for page in self._get_added_pages():
             unique_versions.add(page.version)
         return tuple(unique_versions)
 
@@ -214,7 +226,7 @@ class Notebook:
         """
         start_time = time.time()
         self._save_metadata()
-        for page in self._get_existing_pages():
+        for page in self._get_added_pages():
             page_dir = self._get_page_directory(page.name)
             page.save(page_dir)
         end_time = time.time()
@@ -235,12 +247,19 @@ class Notebook:
             loaded_page.load(page_path)
             self.__setattr__(page_name, loaded_page)
 
-    def _get_existing_pages(self) -> Tuple[NotebookPage]:
+    def _get_added_pages(self) -> Tuple[NotebookPage]:
         pages = []
         for page_name in self._options.keys():
             if self.has_page(page_name):
                 pages.append(self.__getattribute__(page_name))
         return tuple(pages)
+
+    def _get_added_page_names(self) -> Tuple[str]:
+        pages = self._get_added_pages()
+        names = []
+        for page in pages:
+            names.append(page.name)
+        return tuple(names)
 
     def _get_page_directory(self, page_name: str) -> str:
         assert type(page_name) is str
