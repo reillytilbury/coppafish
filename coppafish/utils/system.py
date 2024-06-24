@@ -1,6 +1,7 @@
 import os
 from pathlib import PurePath
 import shutil
+import sys
 from typing import Tuple
 import urllib
 
@@ -11,6 +12,16 @@ import torch
 VERSION_URL = "https://github.com/reillytilbury/coppafish/raw/HEAD/coppafish/_version.py"
 # The character(s) that encapsulate the software version tag in _version.py, in this case it is quotation marks
 VERSION_ENCAPSULATE = '"'
+
+
+def get_python_version() -> str:
+    """
+    Get the running Python version.
+
+    Returns:
+        str: python version as a string.
+    """
+    return sys.version.split()[0]
 
 
 def get_software_version() -> str:
