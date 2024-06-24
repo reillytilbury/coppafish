@@ -380,7 +380,7 @@ class NotebookPage:
                 "n_tiles x n_rounds x 3 x tile_sz x tile_sz x len(use_z)",
                 "The optical flow shifts for each image pixel after smoothing. The third axis is for the different "
                 + "image directions. 0 is the y shifts, 1 is the x shifts, 2 is the z shifts. "
-                + "flow[t, r] takes the anchor image to t/r image."
+                + "flow[t, r] takes the anchor image to t/r image.",
             ],
             "correlation": [
                 "zarr",
@@ -523,8 +523,7 @@ class NotebookPage:
         "call_spots": {
             "gene_names": [
                 "ndarray[str]",
-                "Numpy string array [n_genes]"
-                + "Names of all genes in the code book provided.",
+                "Numpy string array [n_genes]" + "Names of all genes in the code book provided.",
             ],
             "gene_codes": [
                 "ndarray[int]",
@@ -549,31 +548,31 @@ class NotebookPage:
                 "Numpy float array [n_tiles x n_rounds x n_channels_use]"
                 + "colour norm factor is a product of 2 scales. The second is the homogeneous scale which is the "
                 + "scale that maximises similarity between tile dependent free bled codes and the target bled codes. "
-                  "In doing so, we make the tile dependent codes as close as possible to the tile independent codes "
-                  "(ie: we homogenise these codes).",
+                "In doing so, we make the tile dependent codes as close as possible to the tile independent codes "
+                "(ie: we homogenise these codes).",
             ],
             "free_bled_codes": [
                 "ndarray[float]",
                 "Numpy float array [n_genes x n_tiles x n_rounds x n_channels_use]"
                 + "free_bled_codes[g, t] is approximately the mean of all spots assigned to gene g in tile t with high "
-                  "probability. It is not quite the mean because we have a prior that the channel vector for each "
-                  "round will be mostly parallel to the expected dye code for that gene in that round, so this is "
-                  "taken into account.",
+                "probability. It is not quite the mean because we have a prior that the channel vector for each "
+                "round will be mostly parallel to the expected dye code for that gene in that round, so this is "
+                "taken into account.",
             ],
             "free_bled_codes_tile_independent": [
                 "ndarray[float]",
                 "Numpy float array [n_genes x n_rounds x n_channels_use]"
                 + "Tile independent free bled codes. free_bled_codes_tile_independent[g] is approximately the mean "
-                  "of all spots assigned to gene g in all tiles with high probability. It is not quite the mean because"
-                  " we have a prior that the channel vector for each round will be mostly parallel to "
-                  "the expected dye code for that gene in that round, so this is taken into account.",
+                "of all spots assigned to gene g in all tiles with high probability. It is not quite the mean because"
+                " we have a prior that the channel vector for each round will be mostly parallel to "
+                "the expected dye code for that gene in that round, so this is taken into account.",
             ],
             "bled_codes": [
                 "ndarray[float]",
                 "Numpy float array [n_genes x n_rounds x n_channels_use]"
                 + "bled_codes[g, r, c] = target_scale[r, c] * free_bled_codes_tile_independent[g, r, c], "
-                  "meaning that these codes are scaled versions of the tile independent free bled codes that are "
-                  "scaled to make the intensities of each dye as close as possible to pre-specified target values.",
+                "meaning that these codes are scaled versions of the tile independent free bled codes that are "
+                "scaled to make the intensities of each dye as close as possible to pre-specified target values.",
             ],
             "bleed_matrix_raw": [
                 "ndarray[float]",
@@ -584,15 +583,15 @@ class NotebookPage:
                 "ndarray[float]",
                 "Numpy float array [n_dyes x n_channels_use]"
                 + "bleed_matrix_initial[d] is a vector of length n_channels_use that gives the expected intensity of "
-                  "dye d in each channel. This initial guess is obtained from a SVD of spots which belong to dye d "
-                  "with high probability. It differs from the final bleed matrix by a scale factor and by the spots "
-                  " used to calculate it.",
+                "dye d in each channel. This initial guess is obtained from a SVD of spots which belong to dye d "
+                "with high probability. It differs from the final bleed matrix by a scale factor and by the spots "
+                " used to calculate it.",
             ],
             "bleed_matrix": [
                 "ndarray[float]",
                 "Numpy float array [n_dyes x n_channels_use]"
                 + "bleed_matrix[d] is a vector of length n_channels_use that gives the expected intensity of dye d in "
-                  "each channel. This is the final bleed matrix and is obtained by computing the probabilities of "
+                "each channel. This is the final bleed matrix and is obtained by computing the probabilities of "
                 " scaled spots against the target bled codes.",
             ],
         },
@@ -637,8 +636,9 @@ class NotebookPage:
             ],
             "colours": [
                 "ndarray[float16]",
-                "Numpy `(n_spots x len(use_rounds) x len(use_channels))`"
-                + "Each spot's intensity in every sequencing round/channel before colour normalisation.",
+                "Numpy `(n_spots x len(use_rounds) x len(use_channels))`. "
+                + "Each spot's registered intensity in every sequencing round/channel. "
+                + "No postprocessing is applied to the colours.",
             ],
         },
         "thresholds": {

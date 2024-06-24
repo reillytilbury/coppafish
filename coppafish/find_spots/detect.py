@@ -95,9 +95,7 @@ def detect_spots(
     consider_yxz_se_shifted = tuple(consider_yxz_se_shifted.reshape((image.ndim, -1)))
     keep = (image[consider_yxz_se_shifted].reshape((n_consider, n_shifts)) <= consider_intensity[:, np.newaxis]).all(1)
 
-    if remove_duplicates:
-        peak_intensity = np.round(consider_intensity[keep]).astype(int)
-    else:
-        peak_intensity = consider_intensity[keep]
+    peak_intensity = consider_intensity[keep].astype(image.dtype)
     peak_yxz = consider_yxz.transpose()[keep]
+
     return peak_yxz.astype(int), peak_intensity

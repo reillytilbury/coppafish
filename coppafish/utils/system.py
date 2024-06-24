@@ -1,10 +1,12 @@
 import os
-import shutil
-import psutil
-import urllib
-import numpy as np
 from pathlib import PurePath
+import shutil
 from typing import Tuple
+import urllib
+
+import numpy as np
+import psutil
+import torch
 
 VERSION_URL = "https://github.com/reillytilbury/coppafish/raw/HEAD/coppafish/_version.py"
 # The character(s) that encapsulate the software version tag in _version.py, in this case it is quotation marks
@@ -55,14 +57,27 @@ def get_software_hash() -> str:
     return ""
 
 
-def get_available_memory() -> float:
+def get_available_memory(device: torch.device = None) -> float:
     """
-    Get system's available memory at the time of calling this function.
+    Get device's available memory at the time of calling this function.
+
+    Args:
+        - device (torch device): the device. Default: the cpu.
 
     Returns:
-        float: available memory in GB.
+        float: available memory, in GB.
     """
-    return psutil.virtual_memory().available / 1e9
+    if device is None:
+        device = torch.device("cpu")
+    assert type(device) is torch.device
+
+    if device == torch.device("cuda"):
+        device_properties = torch.cuda.get_device_properties(device)
+        return (device_properties.total_memory - torch.cuda.memory_allocated(device)) / 1e9
+    elif device == torch.device("cpu"):
+        return psutil.virtual_memory().available / 1e9
+    else:
+        raise ValueError(f"Unknown device {device}")
 
 
 def get_core_count() -> int:
