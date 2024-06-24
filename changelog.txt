@@ -5,14 +5,13 @@
     a max intensity projection or not, which is achieved by setting the max_intensity_projection variable in the viewer
     to True or False.
  * All output variables are now stored within the notebook except for extract and filter images.
- * The PSF used for image filtering is not computed anymore. It is given as an input. There is a default PSF located at 
-    coppafish/setup/default_psf.npz.
- * Images are now rotated during extract instead of filter. Hence, the config parameter `num_rotations` has been moved 
-    from the `filter` section to the `extract` section.
+ * Filter: The PSF used for image filtering is not computed anymore. It is given as an input. There is a default PSF 
+    located at coppafish/setup/default_psf.npz.
+ * Extract: Images are now rotated during extract instead of filter. Hence, the config parameter `num_rotations` has 
+    been moved from the `filter` section to the `extract` section.
  * The notebook has been refactored. It is now faster at saving, can save zarr arrays and has write protections.
- * Default z_plane_mean_warning 200 -> 125 in extract.
- * Moved bg_scale from filter page -> register page.
- * Incorrect numpy data types have been fixed within the notebook.
+ * Extract: Default z_plane_mean_warning 200 -> 125.
+ * Register: Moved bg_scale from filter page -> register page.
  * Viewer refactor: Viewer is now much faster and less laggy, due to the removal of a transparent copy of the spots, and
     the removal of spots not in the legend. The spots are also organised into 3 layers (1 for each method) instead of
     the old method of a layer for each symbol, which was slow.
@@ -43,6 +42,7 @@
  * Filter: Removed legacy filter options: difference of Hanning and image smoothing.
  * Filter: Warning issues when a filtered image contains adjacent pixels at the maximum possible integer value.
  * Logging: Package versions are now logged in the pipeline.log file.
+ * Incorrect numpy data types have been fixed within the notebook.
 
 
 2024/05/15 Alpha Update (v0.10.6):
