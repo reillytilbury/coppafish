@@ -13,7 +13,6 @@ def detect_spots(
     radius_xy: int,
     radius_z: int,
     remove_duplicates: bool = False,
-    se: Optional[torch.Tensor] = None,
     force_cpu: bool = True,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
@@ -30,9 +29,6 @@ def detect_spots(
             length in z will be 2 * radius_z - 1.
         - remove_duplicates: keep one pixel if two or more pixels are nearby local maxima and have same intensity.
             Default: false.
-        - se: `int [se_sz_y x se_sz_x x se_sz_z]`.
-            can give structuring element manually rather than using a cuboid element.
-            Must only contain zeros and ones.
         - force_cpu (bool): use only the CPU for computation in pytorch.
 
     Returns:
@@ -47,16 +43,16 @@ def detect_spots(
     assert type(radius_xy) is int
     assert type(radius_z) is int
     assert type(remove_duplicates) is bool
-    assert se is None or type(se) is torch.Tensor
     assert type(force_cpu) is bool
 
     # Image is mutable, so create image_temp.
     image_temp = image.detach().clone()
-    se = np.ones((2 * radius_xy - 1, 2 * radius_xy - 1, 2 * radius_z - 1), dtype=int)
     pad_size_y = radius_xy - 1
     pad_size_x = radius_xy - 1
     pad_size_z = radius_z - 1
-    # set central pixel to 0
+    # Structuring element.
+    se = np.ones((2 * radius_xy - 1, 2 * radius_xy - 1, 2 * radius_z - 1), dtype=int)
+    # Set central pixel to 0.
     se[np.ix_(*[(np.floor((se.shape[i] - 1) / 2).astype(int),) for i in range(se.ndim)])] = 0
     se_shifts = torch.asarray(np.array(utils.morphology.filter.get_shifts_from_kernel(se)))
 
