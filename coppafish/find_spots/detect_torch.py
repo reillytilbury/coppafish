@@ -1,5 +1,5 @@
 import math as maths
-from typing import Optional, Tuple
+from typing import Tuple
 
 import numpy as np
 import torch
