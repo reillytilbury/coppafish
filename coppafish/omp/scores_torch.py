@@ -20,11 +20,11 @@ def score_coefficient_image(
             non-computed or out of bounds coefficients will be zero.
         - spot (`(size_y x size_x x size_z) tensor[int]`): OMP spot shape. It is a made up of only zeros and ones.
             Ones indicate where the spot coefficient is likely to be positive.
-        - mean_spot (`(size_y x size_x x size_z) tensor[float32]`): OMP mean spot shape. This can range from -1 and
-            1.
+        - mean_spot (`(size_y x size_x x size_z) tensor[float32]`): OMP mean spot shape. This can range from -1 and 1.
         - high_coef_bias (float): specifies the constant used in the function applied to every coefficient. The function
             applied is `c / (c + high_coef_bias)` if c >= 0, 0 otherwise, where c is a coefficient value. This places
             higher scoring on larger coefficients.
+        - force_cpu (bool): use the CPU only, never the GPU. Default: true.
 
     Returns:
         (`(n_batches x im_y x im_x x im_z) tensor[float32]`) score_image: OMP score for every coefficient image pixel,

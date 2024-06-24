@@ -37,7 +37,7 @@ class ViewOMPImage:
         init_select_gene: int = None,
     ) -> None:
         """
-        Display omp coefficients of all genes in around the local neighbourhood of spot.
+        Display omp coefficients of all genes around the local neighbourhood of a spot.
 
         Args:
             nb (Notebook): Notebook containing experiment details.
@@ -75,6 +75,7 @@ class ViewOMPImage:
         yxz = np.array(np.meshgrid(*[np.arange(coord_min[i], coord_max[i]) for i in range(3)])).reshape((3, -1)).T
 
         spot_shape_yxz = tuple([coord_max[i] - coord_min[i] for i in range(3)])
+        central_yxz = tuple(torch.asarray(spot_shape_yxz)[np.newaxis].T.int() // 2)
         n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
         image_colours = np.zeros(spot_shape_yxz + (n_rounds_use, n_channels_use), dtype=np.float32)
         for i, r in enumerate(nb.basic_info.use_rounds):
@@ -117,7 +118,7 @@ class ViewOMPImage:
             beta=config["beta"],
             do_not_compute_on=None,
             force_cpu=config["force_cpu"],
-        ).toarray()
+        )
         coefficient_image = torch.asarray(coefficient_image).T.reshape(
             (len(nb.call_spots.gene_names),) + spot_shape_yxz
         )
@@ -126,12 +127,11 @@ class ViewOMPImage:
         for g in range(coefficient_image.shape[0]):
             self.scores.append(
                 scores_torch.score_coefficient_image(
-                    coefficient_image[g],
-                    (torch.asarray(spot_shape_yxz) // 2)[np.newaxis],
+                    coefficient_image[[g]],
                     torch.asarray(nb.omp.spot),
                     torch.asarray(nb.omp.mean_spot),
                     config["high_coef_bias"],
-                ).item()
+                )[0][central_yxz].item()
             )
         self.scores = np.array(self.scores, np.float32)
 
@@ -168,7 +168,6 @@ class ViewOMPImage:
             layout="constrained",
             num="OMP Image",
         )
-        self.fig.subplots_adjust(bottom=0.25)
         ax_function_coefs = self.axes[1, 1]
         # Keep widgets in self otherwise they will get garbage collected and not respond to clicks anymore.
         self.function_coefs_button = CheckButtons(
@@ -330,7 +329,7 @@ class ViewOMPPixelCoefficients:
             beta=config["beta"],
             do_not_compute_on=None,
             force_cpu=config["force_cpu"],
-        ).toarray()[0]
+        )[0].numpy()
         self.maximum_iterations = (~np.isclose(coefficients, 0)).sum()
         if self.maximum_iterations == 0:
             raise ValueError(f"The selected pixel has no OMP gene assignments to display")
@@ -350,7 +349,7 @@ class ViewOMPPixelCoefficients:
                 beta=config["beta"],
                 do_not_compute_on=None,
                 force_cpu=config["force_cpu"],
-            ).toarray()[0][self.final_selected_genes]
+            )[0].numpy()[self.final_selected_genes]
         self.local_yxz = local_yxz
         self.gene_names = nb.call_spots.gene_names
         self.show_iteration = self.maximum_iterations - 1
@@ -438,12 +437,12 @@ class ViewOMPPixelColours:
         n_genes = bled_codes.shape[0]
         bled_codes = torch.asarray(bled_codes).float()
 
-        image_colours = image_colours.reshape((-1, n_rounds_use, n_channels_use))
+        image_colours = image_colours.reshape((1, n_rounds_use, n_channels_use))
         bled_codes = bled_codes.reshape((n_genes, n_rounds_use * n_channels_use))
 
         image_colours *= colour_norm_factor[[tile]]
         image_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(image_colours)
-        image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
+        image_colours = image_colours.reshape((1, n_rounds_use * n_channels_use))
         self.true_pixel_colour: np.ndarray = image_colours.numpy().reshape((n_rounds_use, n_channels_use))
         bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
 
@@ -463,7 +462,7 @@ class ViewOMPPixelColours:
             beta=config["beta"],
             do_not_compute_on=None,
             force_cpu=config["force_cpu"],
-        ).toarray()[0]
+        )[0].numpy()
         final_selected_genes = (~np.isclose(coefficients, 0)).nonzero()[0]
         self.n_assigned_genes: int = (~np.isclose(coefficients, 0)).sum().item()
         if self.n_assigned_genes == 0:
@@ -484,7 +483,7 @@ class ViewOMPPixelColours:
                 beta=config["beta"],
                 do_not_compute_on=None,
                 force_cpu=config["force_cpu"],
-            ).toarray()[0][final_selected_genes]
+            )[0].numpy()[final_selected_genes]
         self.assigned_genes_names = nb.call_spots.gene_names[final_selected_genes]
         self.gene_bled_codes = bled_codes.numpy()[final_selected_genes].reshape((-1, n_rounds_use, n_channels_use))
         self.gene_bled_codes = self.gene_bled_codes[np.newaxis].repeat(self.n_assigned_genes + 1, axis=0)
