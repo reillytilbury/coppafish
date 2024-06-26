@@ -129,7 +129,13 @@ def run_omp(
             subset_colours = colour_image[index_min:index_max].astype(np.float32)
             subset_colours = torch.asarray(subset_colours)
             subset_colours *= colour_norm_factor[[t]]
-            subset_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(subset_colours)
+            bg_coefficients = torch.zeros((subset_colours.shape[0], n_channels_use), dtype=torch.float32)
+            bg_codes = torch.repeat_interleave(torch.eye(n_channels_use)[:, None, :], n_rounds_use, dim=1)
+            # give background_vectors an L2 norm of 1 so can compare coefficients with other genes.
+            bg_codes = bg_codes / torch.linalg.norm(bg_codes, axis=(1, 2), keepdims=True)
+            if config["fit_background"]:
+                subset_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(subset_colours)
+            bg_codes = bg_codes.float()
             bled_codes = nbp_call_spots.bled_codes
             assert (~np.isnan(bled_codes)).all(), "bled codes cannot contain nan values"
             assert np.allclose(np.linalg.norm(bled_codes, axis=(1, 2)), 1), "bled codes must be L2 normalised"
