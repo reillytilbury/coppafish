@@ -128,7 +128,8 @@ def run_omp(
             index_max = min(index_max, np.prod(tile_shape))
             subset_colours = colour_image[index_min:index_max].astype(np.float32)
             subset_colours = torch.asarray(subset_colours)
-            subset_colours *= colour_norm_factor[[t]]
+            if config["colour_normalise"]:
+                subset_colours *= colour_norm_factor[[t]]
             bg_coefficients = torch.zeros((subset_colours.shape[0], n_channels_use), dtype=torch.float32)
             bg_codes = torch.repeat_interleave(torch.eye(n_channels_use)[:, None, :], n_rounds_use, dim=1)
             # give background_vectors an L2 norm of 1 so can compare coefficients with other genes.
