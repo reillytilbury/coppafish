@@ -100,10 +100,17 @@ class ViewOMPImage:
         image_colours = image_colours.reshape((-1, n_rounds_use, n_channels_use))
         bled_codes = bled_codes.reshape((n_genes, n_rounds_use * n_channels_use))
 
-        image_colours *= colour_norm_factor[[tile]]
-        image_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(image_colours)
-        image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
+        if config["colour_normalise"]:
+            image_colours *= colour_norm_factor[[tile]]
+        bg_coefficients = torch.zeros((image_colours.shape[0], n_channels_use), dtype=torch.float32)
+        bg_codes = torch.repeat_interleave(torch.eye(n_channels_use)[:, None, :], n_rounds_use, dim=1)
+        # give background_vectors an L2 norm of 1 so can compare coefficients with other genes.
+        bg_codes = bg_codes / torch.linalg.norm(bg_codes, axis=(1, 2), keepdims=True)
+        if config["fit_background"]:
+            subset_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(subset_colours)
+        bg_codes = bg_codes.float()
         bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
+        image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
 
         coefficient_image = coefs_torch.compute_omp_coefficients(
             image_colours,
@@ -282,6 +289,7 @@ class ViewOMPPixelCoefficients:
         assert tile is None or type(tile) is int
         assert local_yxz is None or type(local_yxz) is np.ndarray
 
+        config = nb.init_config["omp"]
         if tile is None or local_yxz is None:
             local_yxz, tile = get_spot_position_and_tile(nb, spot_no, method)
 
@@ -306,15 +314,21 @@ class ViewOMPPixelCoefficients:
         n_genes = bled_codes.shape[0]
         bled_codes = torch.asarray(bled_codes).float()
 
-        image_colours = image_colours.reshape((-1, n_rounds_use, n_channels_use))
+        image_colours = image_colours.reshape((1, n_rounds_use, n_channels_use))
         bled_codes = bled_codes.reshape((n_genes, n_rounds_use * n_channels_use))
 
-        image_colours *= colour_norm_factor[[tile]]
-        image_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(image_colours)
-        image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
+        if config["colour_normalise"]:
+            image_colours *= colour_norm_factor[[tile]]
+        bg_coefficients = torch.zeros((1, n_channels_use), dtype=torch.float32)
+        bg_codes = torch.repeat_interleave(torch.eye(n_channels_use)[:, None, :], n_rounds_use, dim=1)
+        # give background_vectors an L2 norm of 1 so can compare coefficients with other genes.
+        bg_codes = bg_codes / torch.linalg.norm(bg_codes, axis=(1, 2), keepdims=True)
+        if config["fit_background"]:
+            subset_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(subset_colours)
+        bg_codes = bg_codes.float()
         bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
+        image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
 
-        config = nb.init_config["omp"]
         # Get the maximum number of OMP gene assignments made and what genes.
         coefficients = coefs_torch.compute_omp_coefficients(
             image_colours,
@@ -415,7 +429,9 @@ class ViewOMPPixelColours:
         assert type(method) is str
         assert method in ("omp", "prob", "anchor")
 
+        config = nb.init_config["omp"]
         self.local_yxz, tile = get_spot_position_and_tile(nb, spot_no, method)
+
         n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
         image_colours = np.zeros((1, n_rounds_use, n_channels_use), dtype=np.float32)
         for i, r in enumerate(nb.basic_info.use_rounds):
@@ -440,13 +456,18 @@ class ViewOMPPixelColours:
         image_colours = image_colours.reshape((1, n_rounds_use, n_channels_use))
         bled_codes = bled_codes.reshape((n_genes, n_rounds_use * n_channels_use))
 
-        image_colours *= colour_norm_factor[[tile]]
-        image_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(image_colours)
-        image_colours = image_colours.reshape((1, n_rounds_use * n_channels_use))
+        if config["colour_normalise"]:
+            image_colours *= colour_norm_factor[[tile]]
+        bg_coefficients = torch.zeros((1, n_channels_use), dtype=torch.float32)
+        bg_codes = torch.repeat_interleave(torch.eye(n_channels_use)[:, None, :], n_rounds_use, dim=1)
+        # give background_vectors an L2 norm of 1 so can compare coefficients with other genes.
+        bg_codes = bg_codes / torch.linalg.norm(bg_codes, axis=(1, 2), keepdims=True)
+        if config["fit_background"]:
+            subset_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(subset_colours)
+        bg_codes = bg_codes.float()
         self.true_pixel_colour: np.ndarray = image_colours.numpy().reshape((n_rounds_use, n_channels_use))
         bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
-
-        config = nb.init_config["omp"]
+        image_colours = image_colours.reshape((1, n_rounds_use * n_channels_use))
 
         # Get the maximum number of OMP gene assignments made and what genes.
         coefficients = coefs_torch.compute_omp_coefficients(
