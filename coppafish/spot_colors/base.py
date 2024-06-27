@@ -102,7 +102,7 @@ def get_spot_colours_new(
     assert type(tile) is int
     assert type(round) is int
     if channels is None:
-        channels = nbp_basic.use_channels
+        channels = tuple(nbp_basic.use_channels)
     if type(channels) is int:
         channels = (channels,)
     assert type(channels) is tuple

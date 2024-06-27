@@ -4,13 +4,16 @@ import numpy as np
 from coppafish.utils import base
 
 
-def test_to_deep_tuple():
-    assert base.to_deep_tuple(list()) == tuple()
-    assert base.to_deep_tuple([[0, 2, 3], [1, 4], []]) == ((0, 2, 3), (1, 4), tuple())
-    assert base.to_deep_tuple(([0, 2, 3], [1, 4], [])) == ((0, 2, 3), (1, 4), tuple())
-    assert base.to_deep_tuple([[0, 2, [0]], [1, 4], []]) == ((0, 2, (0,)), (1, 4), tuple())
-    assert base.to_deep_tuple([[0, 2, (0,)], [1, 4], []]) == ((0, 2, (0,)), (1, 4), tuple())
-    assert base.to_deep_tuple([["fg" * 400], ["a" * 300]]) == (("fg" * 400,), ("a" * 300,))
+def test_to_deep_convert():
+    assert base.deep_convert(list()) == tuple()
+    assert base.deep_convert([[0, 2, 3], [1, 4], []]) == ((0, 2, 3), (1, 4), tuple())
+    assert base.deep_convert(([0, 2, 3], [1, 4], [])) == ((0, 2, 3), (1, 4), tuple())
+    assert base.deep_convert([[0, 2, [0]], [1, 4], []]) == ((0, 2, (0,)), (1, 4), tuple())
+    assert base.deep_convert([[0, 2, (0,)], [1, 4], []]) == ((0, 2, (0,)), (1, 4), tuple())
+    assert base.deep_convert([["fg" * 400], ["a" * 300]]) == (("fg" * 400,), ("a" * 300,))
+    assert base.deep_convert(((0, 1), (0,)), list) == [[0, 1], [0]]
+    assert base.deep_convert([], list) == []
+    assert base.deep_convert([], tuple) == tuple()
 
 
 def test_get_function_name():

@@ -151,6 +151,6 @@ def get_file_names(nb: Notebook):
                 setup.config.get_config(nb.config_path)["extract"]["file_type"],
             )
 
-    nbp.tile = utils.base.to_deep_tuple(tile_names.tolist())
-    nbp.tile_unfiltered = utils.base.to_deep_tuple(tile_names_unfiltered.tolist())
+    nbp.tile = utils.base.deep_convert(tile_names.tolist())
+    nbp.tile_unfiltered = utils.base.deep_convert(tile_names_unfiltered.tolist())
     return nbp

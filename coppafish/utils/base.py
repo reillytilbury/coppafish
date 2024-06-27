@@ -1,28 +1,38 @@
-import os
-import tqdm
 import inspect
 import itertools
-import numpy as np
+import os
 from pathlib import PurePath
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+
+import numpy as np
 import numpy.typing as npt
-from typing import Any, Callable, Iterable, Tuple, Union, Dict, List, Optional
+import tqdm
 
-from ..setup import Notebook
 from .. import log
+from ..setup import Notebook
 
 
-def to_deep_tuple(value: Iterable[Any], conversion: Callable = tuple, /) -> Tuple[Any]:
+def deep_convert(value: Iterable[Any], conversion: Callable = tuple, /) -> Tuple[Any]:
     """
     Convert the iterable and all nested iterables inside into datatype specified by the given conversion function.
+    The function does not try to convert strings or numpy arrays, even though they are iterable.
+
+    Args:
+        - value (Iterable): the iterable value to convert.
+        - conversion (Callable): a function capable of being input an iterable and converting it to another iterable.
+            Common examples are `tuple` and `list`.
     """
     assert hasattr(value, "__iter__"), "value must be iterable to convert to a tuple"
 
-    result = conversion()
-    for subvalue in value:
-        if hasattr(subvalue, "__iter__") and type(subvalue) is not str:
-            result += (to_deep_tuple(subvalue, conversion),)
+    result = [None] * len(value)
+    for i, subvalue in enumerate(value):
+        iterable = hasattr(subvalue, "__iter__")
+        iterable = iterable and type(subvalue) is not str and type(subvalue) is not np.ndarray
+        if iterable:
+            result[i] = deep_convert(subvalue, conversion)
         else:
-            result += (subvalue,)
+            result[i] = subvalue
+    result = conversion(result)
     return result
 
 
@@ -86,8 +96,8 @@ def set_notebook_tile_dir(notebook_path: str, new_tile_dir: str) -> None:
     nb.file_names.scale = os.path.join(new_tile_dir, old_name)
     old_tile: tuple = nb.file_names.tile
     old_tile_unfiltered = nb.file_names.tile_unfiltered
-    new_tile = to_deep_tuple(old_tile, list)
-    new_tile_unfiltered = to_deep_tuple(old_tile_unfiltered, list)
+    new_tile = deep_convert(old_tile, list)
+    new_tile_unfiltered = deep_convert(old_tile_unfiltered, list)
     for i, j, k in itertools.product(range(len(old_tile)), range(len(old_tile[0])), range(len(old_tile[0][0]))):
         old_tile_ijk = os.path.normpath(old_tile[i][j][k])
         new_tile[i][j][k] = os.path.join(nb.file_names.tile_dir, PurePath(old_tile_ijk).name)
@@ -96,9 +106,9 @@ def set_notebook_tile_dir(notebook_path: str, new_tile_dir: str) -> None:
             nb.file_names.tile_unfiltered_dir, PurePath(old_tile_unfiltered_ijk).name
         )
     del nb.file_names.tile
-    nb.file_names.tile = to_deep_tuple(new_tile)
+    nb.file_names.tile = deep_convert(new_tile)
     del nb.file_names.tile_unfiltered
-    nb.file_names.tile_unfiltered = to_deep_tuple(new_tile_unfiltered)
+    nb.file_names.tile_unfiltered = deep_convert(new_tile_unfiltered)
 
     nb.resave()
 

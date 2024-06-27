@@ -416,7 +416,7 @@ def set_basic_info_new(config: dict) -> NotebookPage:
 
     if nbp.use_dyes is None:
         del nbp.use_dyes
-        nbp.use_dyes = utils.base.to_deep_tuple(np.arange(len(nbp.dye_names)).tolist())
+        nbp.use_dyes = utils.base.deep_convert(np.arange(len(nbp.dye_names)).tolist())
         nbp.n_dyes = len(nbp.use_dyes)
 
     # If preseq round is a file, set pre_seq_round to True, else False and raise warning that pre_seq_round is not a

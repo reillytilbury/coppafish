@@ -6,6 +6,7 @@ import tempfile
 import numpy as np
 import zarr
 
+from coppafish import utils
 from coppafish.setup.notebook import Notebook
 from coppafish.setup.notebook_page import NotebookPage
 
@@ -46,9 +47,9 @@ def test_notebook_creation() -> None:
         assert np.allclose(nb.debug.b, b)
         assert np.allclose(nb.debug.c, c)
         assert np.allclose(nb.debug.d, d)
-        assert type(nb.debug.d) is tuple
-        assert nb.debug.e == e
-        assert type(nb.debug.e) is tuple
+        assert type(nb.debug.d) is list
+        assert nb.debug.e == utils.base.deep_convert(e, list)
+        assert type(nb.debug.e) is list
         assert np.allclose(nb.debug.f, f)
         assert nb.debug.g is g
         assert np.allclose(nb.debug.h, h)
@@ -79,6 +80,8 @@ def test_notebook_creation() -> None:
     nb_page.c = c
     try:
         nb_page.d = (5, "4", True)
+        nb_page.d = (5, "4")
+        nb_page.d = (5, 0.5)
         assert False, "Should not be able to set a tuple[int] type like this"
     except TypeError:
         pass

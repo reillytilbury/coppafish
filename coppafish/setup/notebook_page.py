@@ -38,7 +38,9 @@ class NotebookPage:
     # Each page variable is given a list. The list contains a datatype(s) in the first index followed by a description.
     # A variable can be allowed to take multiple datatypes by separating them with an ' or '. Check the supported
     # types by looking at the function _is_types at the end of this file. The 'tuple' is a special datatype that can be
-    # nested. For example, tuple[tuple[int]] is a valid datatype.
+    # nested. For example, tuple[tuple[int]] is a valid datatype. Also, when a `tuple` type variable is returned by a
+    # page, it actually gives a nested `list` instead. This is for backwards compatibility reasons. Modifying the list
+    # (like using the `.append` method) will not change the variable saved to disk.
     _datatype_separator: str = " or "
     _datatype_nest_start: str = "["
     _datatype_nest_end: str = "]"
@@ -867,6 +869,15 @@ class NotebookPage:
 
         object.__setattr__(self, name, value)
 
+    def __getattribute__(self, name: str, /) -> Any:
+        """
+        Deals with syntax 'value = notebook_page.name' when `name` exists in the page already.
+        """
+        result = object.__getattribute__(self, name)
+        if type(result) is tuple:
+            result = utils.base.deep_convert(result, list)
+        return result
+
     def get_variable_count(self) -> int:
         return len(self._get_variables())
 
@@ -949,7 +960,7 @@ class NotebookPage:
                 value = json.loads(file.read())["value"]
                 # A JSON file does not support saving tuples, they must be converted back to tuples here.
                 if type(value) is list:
-                    value = utils.base.to_deep_tuple(value)
+                    value = utils.base.deep_convert(value)
             return value
         elif file_suffix == ".npz":
             return np.load(file_path)["arr_0"]

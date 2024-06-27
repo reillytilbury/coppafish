@@ -441,7 +441,7 @@ def register(
                 im_r = im_r[bright]
                 bg_scale[t, r, c] = np.median(im_r) / np.median(im_pre)
 
-        bg_scale = utils.base.to_deep_tuple(bg_scale.tolist())
+        bg_scale = utils.base.deep_convert(bg_scale.tolist())
         log.debug("Compute background scale factors complete")
     # Now add the bg_scale to the nbp_filter page. To do this we need to delete the bg_scale attribute.
     nbp.bg_scale = bg_scale
