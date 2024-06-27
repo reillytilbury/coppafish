@@ -20,7 +20,7 @@ from .. import call_spots as call_spots_plot
 from ...setup import Notebook
 from ..call_spots import gene_counts, view_bled_codes, view_bleed_matrix, view_codes, view_intensity, view_spot
 from ..call_spots_new import BGNormViewer, GEViewer, ViewAllGeneScores
-from ..omp import histogram_score, ViewOMPImage, ViewOMPPixelCoefficients
+from ..omp import histogram_score, ViewOMPImage, ViewOMPPixelCoefficients, ViewOMPPixelColours
 from .hotkeys import KeyBinds, ViewHotkeys
 
 try:
@@ -825,13 +825,19 @@ class Viewer:
             if spot_index is not None:
                 self.open_plot = ViewOMPImage(self.nb, spot_index, self.method["names"][self.method["active"]])
 
-        @self.viewer.bind_key(KeyBinds.view_omp_pixel_weights)
+        @self.viewer.bind_key(KeyBinds.view_omp_pixel_coefficients)
         def call_to_view_omp_weights(viewer):
             spot_index = self.get_selected_spot_index()
             if spot_index is not None:
                 self.open_plot = ViewOMPPixelCoefficients(
                     self.nb, spot_index, self.method["names"][self.method["active"]]
                 )
+
+        @self.viewer.bind_key(KeyBinds.view_omp_pixel_colours)
+        def call_to_view_omp_colours(viewer):
+            spot_index = self.get_selected_spot_index()
+            if spot_index is not None:
+                self.open_plot = ViewOMPPixelColours(self.nb, spot_index, self.method["names"][self.method["active"]])
 
 
 class Method(QMainWindow):

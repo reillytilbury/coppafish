@@ -5,14 +5,15 @@
     a max intensity projection or not, which is achieved by setting the max_intensity_projection variable in the viewer
     to True or False.
  * All output variables are now stored within the notebook except for extract and filter images.
- * The PSF used for image filtering is not computed anymore. It is given as an input. There is a default PSF located at 
-    coppafish/setup/default_psf.npz.
- * Images are now rotated during extract instead of filter. Hence, the config parameter `num_rotations` has been moved 
-    from the `filter` section to the `extract` section.
+ * Filter: The PSF used for image filtering is not computed anymore. It is given as an input. There is a default PSF 
+    located at coppafish/setup/default_psf.npz.
+ * Extract: Images are now rotated during extract instead of filter. Hence, the config parameter `num_rotations` has 
+    been moved from the `filter` section to the `extract` section.
+ * OMP: Pixel colours are not background fitted before being run through OMP. OMP stop iterating on a pixel if the 
+    background gets fitted anyway and the background fitting may be removing important colour information.
  * The notebook has been refactored. It is now faster at saving, can save zarr arrays and has write protections.
- * Default z_plane_mean_warning 200 -> 125 in extract.
- * Moved bg_scale from filter page -> register page.
- * Incorrect numpy data types have been fixed within the notebook.
+ * Extract: Default z_plane_mean_warning 200 -> 125.
+ * Register: Moved bg_scale from filter page -> register page.
  * Viewer refactor: Viewer is now much faster and less laggy, due to the removal of a transparent copy of the spots, and
     the removal of spots not in the legend. The spots are also organised into 3 layers (1 for each method) instead of
     the old method of a layer for each symbol, which was slow.
@@ -39,11 +40,11 @@
  * Stitching: The stitching diagnostics have been replaced with 2 new viewers, one for viewing the image as a
     checkerboard patten in green and red, with overlapping regions in yellow, and the other for viewing the shifts
     computed for each tile.
- * OMP score threshold default 0.2 -> 0.3.
- * OMP scores now saved as float16, not int16.
- * Logging: Package versions are now logged in the pipeline.log file.
+ * OMP: Scores now saved as float16, not int16.
+ * Filter: Removed legacy filter options: difference of Hanning and image smoothing.
  * Filter: Warning issues when a filtered image contains adjacent pixels at the maximum possible integer value.
- * Removed legacy filter options difference of Hanning and image smoothing.
+ * Logging: Package versions are now logged in the pipeline.log file.
+ * Incorrect numpy data types have been fixed within the notebook.
 
 
 2024/05/15 Alpha Update (v0.10.6):

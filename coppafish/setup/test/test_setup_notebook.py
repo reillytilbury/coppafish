@@ -165,6 +165,16 @@ def test_notebook_creation() -> None:
     nb = Notebook(nb_path)
     _check_variables(nb)
 
+    # Check that the resave function can safely remove pages.
+    del nb.debug
+    nb.resave()
+    assert not nb.has_page("debug")
+    assert not os.path.exists(os.path.join(nb_path, "debug"))
+
+    nb = Notebook(nb_path)
+    assert not nb.has_page("debug")
+    assert not os.path.exists(os.path.join(nb_path, "debug"))
+
     # Delete the temporary notebook once done testing.
     shutil.rmtree(nb_path)
 

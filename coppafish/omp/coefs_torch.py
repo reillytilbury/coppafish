@@ -20,7 +20,7 @@ def non_linear_function_coefficients(coefficients: torch.Tensor, a: float) -> to
     0 for x <= 0.
 
     Args:
-        - coefficients (`(im_y x im_x x im_z) tensor`): OMP coefficient image.
+        - coefficients (`tensor`): OMP coefficient image. Can be any shape.
         - a (float): a constant.
 
     Returns:
@@ -28,7 +28,6 @@ def non_linear_function_coefficients(coefficients: torch.Tensor, a: float) -> to
     """
     assert type(coefficients) is torch.Tensor
     assert type(a) is float
-    assert coefficients.ndim == 3
 
     result = coefficients.detach().clone()
     positives = coefficients > 0
@@ -50,7 +49,7 @@ def compute_omp_coefficients(
     beta: float,
     do_not_compute_on: Optional[torch.Tensor] = None,
     force_cpu: bool = True,
-) -> scipy.sparse.csr_matrix:
+) -> torch.Tensor:
     """
     Find OMP coefficients on all pixels.
 
@@ -71,17 +70,11 @@ def compute_omp_coefficients(
         alpha (float): OMP weighting parameter. Applied if weight_coefficient_fit is true.
         beta (float): OMP weighting parameter. Applied if weight_coefficient_fit is true.
         do_not_compute_on (`(n_pixels) tensor[bool]`): if true on a pixel, the pixel is not computed on, every
-            coefficient remains zero.
+            coefficient remains zero. Default: compute on every pixel.
         force_cpu (bool): force the computation to run on a CPU, even if a GPU is available.
 
     Returns:
-        - (`(n_pixels x n_genes) sparse csr_matrix`) pixel_coefficients: OMP
-            coefficients for every pixel. Since most coefficients are zero, the results are stored as a sparse matrix.
-            Flattening the image dimensions is done using pytorch's reshape method for consistency.
-
-    Notes:
-        - A csr matrix is fast at row slicing, which is why we use it. I.e. it is fast at pixel_coefficients[:, [g]]
-            for a gene g.
+        - (`(n_pixels x n_genes) tensor[float32]`) pixel_coefficients: OMP coefficients for every pixel.
     """
     assert type(pixel_colours) is torch.Tensor
     assert type(bled_codes) is torch.Tensor
@@ -137,7 +130,7 @@ def compute_omp_coefficients(
     iterate_on_pixels = torch.logical_not(torch.isclose(pixel_colours, torch.asarray(0).float()).all(dim=1)).to(run_on)
     iterate_on_pixels = torch.logical_and(iterate_on_pixels, do_not_compute_on.logical_not_())
     # Start with a lil_matrix when populating results as this is faster than the csr matrix.
-    coefficient_image = scipy.sparse.lil_matrix(np.zeros((n_pixels, n_genes), dtype=np.float32))
+    coefficient_image = torch.zeros((n_pixels, n_genes), dtype=torch.float32)
 
     for i in range(maximum_iterations):
         best_genes, pass_threshold, inverse_variance = get_next_best_gene(
@@ -168,15 +161,12 @@ def compute_omp_coefficients(
             weight=torch.sqrt(inverse_variance) if weight_coefficient_fit else None,
         )
 
-        # Populate sparse matrix with the updated coefficient results
-        selected_pixels = torch.nonzero(genes_added[:, i] != NO_GENE_SELECTION, as_tuple=True)[0].cpu().tolist()
+        selected_pixels = torch.nonzero(genes_added[:, i] != NO_GENE_SELECTION, as_tuple=True)[0].cpu()
         for j in range(i + 1):
-            selected_genes = genes_added[:, j][selected_pixels].cpu().int().tolist()
-            coefficient_image[selected_pixels, selected_genes] = (
-                genes_added_coefficients[selected_pixels, j].cpu().tolist()
-            )
+            selected_genes = genes_added[:, j][selected_pixels].cpu().int()
+            coefficient_image[selected_pixels, selected_genes] = genes_added_coefficients[selected_pixels, j].cpu()
 
-    return coefficient_image.tocsr()
+    return coefficient_image
 
 
 def get_next_best_gene(
@@ -242,7 +232,6 @@ def get_next_best_gene(
     assert background_variance.dim() == 2
 
     n_pixels, n_rounds_channels = residual_pixel_colours.shape
-    n_genes = all_bled_codes.shape[1]
 
     # Ensure bled_codes are normalised for each gene
     all_bled_codes /= torch.linalg.norm(all_bled_codes, dim=0, keepdim=True)
@@ -261,22 +250,10 @@ def get_next_best_gene(
     ignore_genes = background_genes[np.newaxis].repeat_interleave(n_pixels, dim=0)
     ignore_genes = torch.cat((ignore_genes, genes_added), dim=1)
     n_genes_ignore = ignore_genes.shape[1]
-    # Pick the best scoring one for each pixel
-    all_gene_scores = torch.full(
-        (n_pixels, n_genes), fill_value=np.nan, device=coefficients.device, dtype=torch.float32
-    )
-    # Sometimes, not all pixels can be dot product scored at once due to RAM limitations, so adding a for loop.
-    batch_pixels = int((2.1e8 * utils.system.get_available_memory()) // (n_genes * n_rounds_channels))
-    n_batches = maths.ceil(consider_pixels.sum().item() / batch_pixels)
-    for i in range(n_batches):
-        index_min, index_max = (i * batch_pixels), min((i + 1) * batch_pixels, consider_pixels.size(0))
-        consider_batch = consider_pixels[index_min:index_max]
-        all_gene_scores[index_min:index_max][consider_batch] = dot_product_pytorch.dot_product_score(
-            residual_pixel_colours[index_min:index_max][consider_batch],
-            all_bled_codes.T,
-            inverse_variances[index_min:index_max][consider_batch],
-            norm_shift,
-        )[3]
+    # Pick the best scoring gene for each pixel.
+    all_gene_scores = dot_product_pytorch.dot_product_score(
+        residual_pixel_colours, all_bled_codes.T, inverse_variances, norm_shift
+    )[3]
     best_genes = torch.full((n_pixels,), fill_value=NO_GENE_SELECTION, device=coefficients.device, dtype=torch.int16)
     best_genes[consider_pixels] = torch.argmax(torch.abs(all_gene_scores[consider_pixels]), dim=1).type(torch.int16)
     best_scores = torch.full((n_pixels,), fill_value=np.nan, device=coefficients.device, dtype=torch.float32)

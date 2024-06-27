@@ -12,25 +12,33 @@ def compute_mean_spot_from(
     force_cpu: bool = True,
 ) -> torch.Tensor:
     """
-    Compute the mean spot from the given positions on the given image in a cuboid local region around each spot.
+    Compute the mean spot from the given positions on the given image in a cuboid local region centred around each
+    given spot position. The mean spot is the mean of the image signs in the cuboid region.
 
     Args:
         image (`(im_y x im_x x im_z) tensor`): image. Any out of bounds retrievals around spots are set to zero.
-        spot_positions_yxz (`(n_spots x 3) tensor`): every spot position to use to compute the spot.
-        spot_shape (`tuple of three ints`): spot size in y, x, and z respectively.
+        spot_positions_yxz (`(n_spots x 3) tensor`): every spot position to use to compute the spot. If n_spots is 0,
+            a mean spot of zeros is returned.
+        spot_shape (`tuple of three ints`): spot size in y, x, and z respectively. This is the size of the cuboids
+            around each spot position. This must be an odd number in each dimension so the spot position can be centred.
         mean_sign_threshold (float): any mean spot shape value above this threshold is set to one in the spot shape.
         force_cpu (bool): only use the CPU to run computations.
 
     Returns:
-        (`spot_shape tensor`) mean_spot: the mean of the signs of the coefficient.
+        (`spot_shape tensor[float32]`) mean_spot: the mean of the signs of the coefficient.
     """
     assert type(image) is torch.Tensor
     assert type(spot_positions_yxz) is torch.Tensor
     assert image.dim() == 3
     assert spot_positions_yxz.dim() == 2
-    assert spot_positions_yxz.shape[0] > 0, "require at least one spot position to compute the spot shape from"
+    assert type(spot_shape) is tuple
+    assert len(spot_shape) == 3
+    assert all([type(spot_shape[i]) is int for i in range(3)])
     assert len(spot_shape) == 3, "spot_shape must be a tuple with 3 integer numbers"
     assert (torch.asarray(spot_shape) % 2 != 0).all(), "spot_shape must be all odd numbers"
+
+    if spot_positions_yxz.shape[0] == 0:
+        return torch.zeros(spot_shape).float()
 
     cpu = torch.device("cpu")
     run_on = cpu
@@ -62,6 +70,9 @@ def compute_mean_spot_from(
     spot_image_values = torch.sign(image_padded[tuple(spot_positions_yxz)]).float()
 
     mean_spot[tuple(spot_shift_positions)] = spot_image_values.reshape((n_shifts, n_spots)).mean(dim=1)
+
+    assert mean_spot.max() <= 1
+    assert mean_spot.min() >= -1
 
     return mean_spot.to(cpu)
 

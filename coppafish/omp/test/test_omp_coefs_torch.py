@@ -1,7 +1,5 @@
 import numpy as np
-import scipy
 import torch
-from typing_extensions import assert_type
 
 from coppafish.omp import coefs_torch
 
@@ -20,13 +18,15 @@ def test_compute_omp_coefficients() -> None:
     bled_codes[1, 0, 1] = 0.5
     bled_codes[1, 0, 2] = 1.5
     bled_codes = bled_codes.reshape((n_genes, n_rounds_use * n_channels_use))
+    pixel_colours[0] += bled_codes[0]
+    pixel_colours[0] += 2 * bled_codes[1]
     maximum_iterations = 3
-    background_coefficients = torch.rand((n_pixels, n_channels_use)).float() * 0.2
+    background_coefficients = torch.rand((n_pixels, n_channels_use)).float() * 0.002
     background_codes = torch.zeros((n_channels_use, n_rounds_use, n_channels_use), dtype=torch.float32)
     for c in range(n_channels_use):
         background_codes[c, :, c] = 1
     background_codes = background_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
-    dot_product_threshold = 0.01
+    dot_product_threshold = 0.0001
     dot_product_norm_shift = torch.rand(1).item() * 0.01
     weight_coefficient_fit = [True, False]
     alpha = torch.rand(1).item() * 0.02
@@ -44,7 +44,7 @@ def test_compute_omp_coefficients() -> None:
             alpha,
             beta,
         )
-        assert_type(pixel_coefficients, scipy.sparse.csr_matrix)
+        assert type(pixel_coefficients) is torch.Tensor
         assert pixel_coefficients.shape == (n_pixels, n_genes)
 
 
