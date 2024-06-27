@@ -616,31 +616,16 @@ class NotebookPage:
                 + ""
                 + "0 means unsure of sign.",
             ],
-            "local_yxz": [
-                "ndarray[int16]",
-                "Numpy array [n_spots, 3]"
-                + "`local_yxz[s]` are the $yxz$ coordinates of spot $s$ found on `tile[s]`, `ref_round`, `ref_channel`."
-                + "To get `global_yxz`, add `nb.stitch.tile_origin[tile[s]]`.",
-            ],
-            "scores": [
-                "ndarray[float16]",
-                "Numpy array [n_spots]"
-                + "For each spot `s`, specified by position `local_yxz[s]` at tile `tile[s]` with gene read `gene_no[s]`, "
-                + "has gene read score of `scores[s]`. Each score is between 0 and 1.",
-            ],
-            "tile": [
-                "ndarray[int16]",
-                "Numpy array [n_spots]" + "Tile each spot was found on.",
-            ],
-            "gene_no": [
-                "ndarray[int16]",
-                "Numpy array [n_spots]" + "`gene_no[s]` is the index of the gene assigned to spot $s$.",
-            ],
-            "colours": [
-                "ndarray[float16]",
-                "Numpy `(n_spots x len(use_rounds) x len(use_channels))`. "
-                + "Each spot's registered intensity in every sequencing round/channel. "
-                + "No postprocessing is applied to the colours.",
+            "results": [
+                "zgroup",
+                "A zarr group containing all OMP spots. Each tile's results are separated into subgroups. "
+                + "For example, you can access tile 0's subgroup by doing `nb.omp.results['tile_0']`. Each tile "
+                + "subgroup contains 4 zarr arrays: local_yxz, scores, gene_no, and colours. Each has dtype int16, "
+                + "float16, int16, and float16 respectively. Each has shape (n_spots, 3), (n_spots), (n_spots), "
+                + "(n_spots) respectively. "
+                + "To gather tile 0's spot's local_yxz's into memory, do `nb.omp.results['tile_0/local_yxz'][:]`. "
+                + "The local_yxz positions are relative to the tile. To convert these to global spot positions "
+                + "requires adding the tile_origin from the 'stitch' page.",
             ],
         },
         "thresholds": {

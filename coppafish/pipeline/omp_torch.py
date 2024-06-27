@@ -6,6 +6,7 @@ import numpy as np
 import scipy
 import torch
 import tqdm
+import zarr
 
 from .. import log, spot_colors, utils
 from ..call_spots import background_pytorch
@@ -72,12 +73,9 @@ def run_omp(
     colour_norm_factor = torch.asarray(colour_norm_factor).float()
     first_tile: int = nbp_basic.use_tiles[0]
 
-    # Results are appended to these arrays.
-    spots_local_yxz = torch.zeros((0, 3), dtype=torch.int16)
-    spots_tile = torch.zeros(0, dtype=torch.int16)
-    spots_gene_no = torch.zeros(0, dtype=torch.int16)
-    spots_score = torch.zeros(0, dtype=torch.float16)
-    spots_colours = np.zeros((0, n_rounds_use, n_channels_use), dtype=np.float16)
+    # Each tile's results are appended to the zarr.Group.
+    group_path = os.path.join(nbp_file.output_dir, "results.zgroup")
+    results = zarr.group(store=group_path, zarr_version=2)
 
     for t in nbp_basic.use_tiles:
         # STEP 1: Load every registered sequencing round/channel image into memory
@@ -225,6 +223,13 @@ def run_omp(
             nbp.spot = np.array(spot)
             log.info("Computing OMP spot and mean spot complete")
 
+        tile_results = results.create_group(f"tile_{t}")
+        n_chunk_max = 600_000
+        t_spots_local_yxz = tile_results.zeros("local_yxz", shape=(0, 3), chunks=(n_chunk_max, 3), dtype=np.int16)
+        t_spots_tile = tile_results.zeros("tile", shape=0, chunks=(n_chunk_max,), dtype=np.int16)
+        t_spots_gene_no = tile_results.zeros("gene_no", shape=0, chunks=(n_chunk_max,), dtype=np.int16)
+        t_spots_score = tile_results.zeros("scores", shape=0, chunks=(n_chunk_max,), dtype=np.float16)
+
         # TODO: This can be sped up when there is sufficient RAM by running on multiple genes at once.
         for g in tqdm.trange(n_genes, desc=f"Scoring/detecting spots", unit="gene", postfix=postfix):
             # STEP 3: Score every gene's coefficient image.
@@ -253,24 +258,29 @@ def run_omp(
             g_spots_tile = torch.full((n_g_spots,), t).to(torch.int16)
             g_spots_gene_no = torch.full((n_g_spots,), g).to(torch.int16)
 
-            # Add new results.
-            spots_local_yxz = torch.cat((spots_local_yxz, g_spots_local_yxz), dim=0)
-            spots_score = torch.cat((spots_score, g_spot_scores), dim=0)
-            spots_tile = torch.cat((spots_tile, g_spots_tile), dim=0)
-            spots_gene_no = torch.cat((spots_gene_no, g_spots_gene_no), dim=0)
+            # Append new results.
+
+            t_spots_local_yxz.append(g_spots_local_yxz.numpy(), axis=0)
+            t_spots_score.append(g_spot_scores.numpy(), axis=0)
+            t_spots_tile.append(g_spots_tile.numpy(), axis=0)
+            t_spots_gene_no.append(g_spots_gene_no.numpy(), axis=0)
             del g_spots_local_yxz, g_spot_scores, g_spots_tile, g_spots_gene_no
 
         del coefficients
-        t_spots = spots_tile == t
-        if t_spots.sum() == 0:
+        if t_spots_tile.size == 0:
             raise ValueError(
                 f"No OMP spots found on tile {t}. Please check that registration and call spots is working. "
                 + "If so, consider adjusting OMP config parameters."
             )
         # For each detected spot, save the image intensity at its location, without background fitting.
         log.debug(f"Gathering spot colours")
-        t_local_yxzs = spots_local_yxz[t_spots].int().numpy()
-        t_spots_colours = np.zeros((t_spots.sum(), n_rounds_use, n_channels_use), dtype=np.float16)
+        t_local_yxzs = t_spots_local_yxz[:]
+        t_spots_colours = tile_results.zeros(
+            "colours",
+            shape=(t_spots_tile.size, n_rounds_use, n_channels_use),
+            dtype=np.float16,
+            chunks=(n_chunk_max, 1, 1),
+        )
         for i, r in enumerate(nbp_basic.use_rounds):
             t_spots_colours[:, i] = spot_colors.base.get_spot_colours_new(
                 nbp_basic,
@@ -284,15 +294,11 @@ def run_omp(
                 dtype=np.float16,
                 force_cpu=config["force_cpu"],
             ).T
-        spots_colours = np.append(spots_colours, t_spots_colours, axis=0)
+        del t_spots_local_yxz, t_spots_tile, t_spots_gene_no, t_spots_score, t_spots_colours
+        del t_local_yxzs, tile_results
         log.debug(f"Gathering spot colours complete")
-        del t_spots, t_local_yxzs, t_spots_colours
 
-    nbp.local_yxz = np.array(spots_local_yxz)
-    nbp.scores = np.array(spots_score)
-    nbp.tile = np.array(spots_tile)
-    nbp.gene_no = np.array(spots_gene_no)
-    nbp.colours = spots_colours
+    nbp.results = results
     log.info("OMP complete")
 
     return nbp
