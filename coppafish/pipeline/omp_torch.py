@@ -246,6 +246,7 @@ def run_omp(
             )
             del g_scores
             g_spots_local_yxz = g_spots_local_yxz.to(torch.int16)
+            g_spot_scores = g_spot_scores.to(torch.float16)
             n_g_spots = g_spot_scores.size(0)
             if n_g_spots == 0:
                 continue
@@ -259,6 +260,7 @@ def run_omp(
             spots_gene_no = torch.cat((spots_gene_no, g_spots_gene_no), dim=0)
             del g_spots_local_yxz, g_spot_scores, g_spots_tile, g_spots_gene_no
 
+        del coefficients
         t_spots = spots_tile == t
         if t_spots.sum() == 0:
             raise ValueError(
