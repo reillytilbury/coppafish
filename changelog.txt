@@ -11,7 +11,8 @@
     been moved from the `filter` section to the `extract` section.
  * OMP: Pixel colours are not background fitted before being run through OMP. OMP stop iterating on a pixel if the 
     background gets fitted anyway and the background fitting may be removing important colour information.
- * The notebook has been refactored. It is now faster at saving, can save zarr arrays and has write protections.
+ * The notebook has been refactored. It is now faster at saving, can save zarr arrays/groups, and has write protections.
+ * OMP: Less memory intensive by saving each tile's results separately. The results are also now compressed.
  * Extract: Default z_plane_mean_warning 200 -> 125.
  * Register: Moved bg_scale from filter page -> register page.
  * Viewer refactor: Viewer is now much faster and less laggy, due to the removal of a transparent copy of the spots, and

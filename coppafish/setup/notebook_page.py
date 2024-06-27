@@ -369,26 +369,26 @@ class NotebookPage:
                 + "or if one of the tiles is not used in the pipeline.",
             ],
             "dapi_image": [
-                "zarr",
+                "zarray",
                 "uint16 array (im_y x im_x x im_z). "
                 + "Fused large dapi image created by merging all tiles together after stitch shifting is applied.",
             ],
         },
         "register": {
             "flow": [
-                "zarr",
+                "zarray",
                 "n_tiles x n_rounds x 3 x tile_sz x tile_sz x len(use_z)",
                 "The optical flow shifts for each image pixel after smoothing. The third axis is for the different "
                 + "image directions. 0 is the y shifts, 1 is the x shifts, 2 is the z shifts. "
                 + "flow[t, r] takes the anchor image to t/r image.",
             ],
             "correlation": [
-                "zarr",
+                "zarray",
                 "n_tiles x n_rounds x tile_sz x tile_sz x len(use_z)",
                 "The optical flow correlations.",
             ],
             "flow_raw": [
-                "zarr",
+                "zarray",
                 "n_tiles x n_rounds x 3 x tile_sz x tile_sz x len(use_z)",
                 "The optical flow shifts for each image pixel before smoothing. The third axis is for the different "
                 + "image directions. 0 is the y shifts, 1 is the x shifts, 2 is the z shifts.",
@@ -407,20 +407,20 @@ class NotebookPage:
                 + "Zeros if not using the preseq round.",
             ],
             "anchor_images": [
-                "zarr",
+                "zarray",
                 "Numpy uint8 array `(n_tiles x 2 x im_y x im_x x im_z)`"
                 + "A subset of the anchor image after all image registration is applied. "
                 + "The second axis is for the channels. 0 is the dapi channel, 1 is the anchor reference channel.",
             ],
             "round_images": [
-                "zarr",
+                "zarray",
                 "Numpy uint8 array `(n_tiles x n_rounds x 3 x im_y x im_x x im_z)`"
                 + "A subset of the anchor image after all image registration is applied. "
                 + "The third axis is for the registration step. 0 is before register, 1 is after optical flow, 2 is "
                 + "after optical flow and ICP",
             ],
             "channel_images": [
-                "zarr",
+                "zarray",
                 "Numpy uint8 array `(n_tiles x n_channels x 3 x im_y x im_x x im_z)`"
                 + "The third axis is for the registration step. 0 is before register, 1 is after optical flow, 2 is "
                 + "after optical flow and ICP",
@@ -702,20 +702,22 @@ class NotebookPage:
             "l": ["ndarray[bool]"],
             "m": ["ndarray[str]"],
             "n": ["ndarray[uint]"],
-            "o": ["zarr"],
+            "o": ["zarray"],
+            "p": ["zgroup"],
         },
     }
-    _type_prefixes: Dict[str, str] = {
-        "int": "json",
-        "float": "json",
-        "str": "json",
-        "bool": "json",
-        "file": "json",
-        "dir": "json",
-        "tuple": "json",
-        "none": "json",
-        "ndarray": "npz",
-        "zarr": "zarr",
+    _type_suffixes: Dict[str, str] = {
+        "int": ".json",
+        "float": ".json",
+        "str": ".json",
+        "bool": ".json",
+        "file": ".json",
+        "dir": ".json",
+        "tuple": ".json",
+        "none": ".json",
+        "ndarray": ".npz",
+        "zarray": ".zarray",
+        "zgroup": ".zgroup",
     }
 
     def __init__(self, page_name: str) -> None:
@@ -803,17 +805,20 @@ class NotebookPage:
 
         temp_directories: List[tempfile.TemporaryDirectory] = []
         for variable_name, description in self._get_variables().items():
-            prefix = self._type_str_to_prefix(description[0].split(self._datatype_separator)[0])
-            variable_path = self._get_variable_path(page_directory, variable_name, prefix)
+            suffix = self._type_str_to_suffix(description[0].split(self._datatype_separator)[0])
+            variable_path = self._get_variable_path(page_directory, variable_name, suffix)
 
-            if prefix == "zarr":
+            if suffix in (".zarray", ".zgroup"):
                 # Zarr files are saved outside the page during re-save as they are not kept in memory.
                 temp_directory = tempfile.TemporaryDirectory()
-                temp_zarr_path = os.path.join(temp_directory.name, f"{variable_name}.{prefix}")
+                temp_zarr_path = os.path.join(temp_directory.name, f"{variable_name}.{suffix}")
                 temp_directories.append(temp_directory)
                 shutil.copytree(variable_path, temp_zarr_path)
                 shutil.rmtree(variable_path)
-                self.__setattr__(variable_name, zarr.open_array(temp_zarr_path))
+                if suffix == ".zarray":
+                    self.__setattr__(variable_name, zarr.open_array(temp_zarr_path))
+                elif suffix == ".zgroup":
+                    self.__setattr__(variable_name, zarr.open_group(temp_zarr_path))
                 continue
 
             os.remove(variable_path)
@@ -837,8 +842,9 @@ class NotebookPage:
         valid_types = self._get_expected_types(variable_name)
         if len(self._get_variables()[variable_name]) > 1:
             variable_desc = "".join(self._get_variables()[variable_name][1:])
-        print(f"Variable {variable_name} in {self._name}:")
-        print(f"\tValid types: {valid_types}")
+        print(f"Variable {variable_name}:")
+        print(f"\tPage: {self._name}")
+        print(f"\tValid type(s): {valid_types}")
         print(f"\tDescription: {variable_desc}")
 
     def __setattr__(self, name: str, value: Any, /) -> None:
@@ -900,72 +906,84 @@ class NotebookPage:
         return self._get_variables()[name][0]
 
     def _save_variable(self, name: str, value: Any, types_as_str: str, page_directory: str) -> None:
-        file_prefix = self._type_str_to_prefix(types_as_str.split(self._datatype_separator)[0])
-        new_path = self._get_variable_path(page_directory, name, file_prefix)
+        file_suffix = self._type_str_to_suffix(types_as_str.split(self._datatype_separator)[0])
+        new_path = self._get_variable_path(page_directory, name, file_suffix)
 
-        if file_prefix == "json":
+        if file_suffix == ".json":
             with open(new_path, "x") as file:
                 file.write(json.dumps({"value": value}, indent=4))
-        elif file_prefix == "npz":
+        elif file_suffix == ".npz":
             value.setflags(write=False)
             np.savez_compressed(new_path, value)
-        elif file_prefix == "zarr":
+        elif file_suffix == ".zarray":
             if type(value) is not zarr.Array:
                 raise TypeError(f"Variable {name} is of type {type(value)}, expected zarr.Array")
             old_path = os.path.abspath(value.store.path)
             shutil.copytree(old_path, new_path)
-            saved_value = zarr.open_array(store=new_path, mode="r+")
-            saved_value.read_only = True
+            new_array = zarr.open_array(store=new_path, mode="r+")
+            new_array.read_only = True
             if os.path.normpath(old_path) != os.path.normpath(new_path):
                 # Delete the old location of the zarr array.
                 shutil.rmtree(old_path)
-            self.__setattr__(name, saved_value)
+            self.__setattr__(name, new_array)
+        elif file_suffix == ".zgroup":
+            if type(value) is not zarr.Group:
+                raise TypeError(f"Variable {name} is of type {type(value)}, expected zarr.Group")
+            old_path = os.path.abspath(value.store.path)
+            shutil.copytree(old_path, new_path)
+            new_group = zarr.open_group(store=new_path, mode="r")
+            if os.path.normpath(old_path) != os.path.normpath(new_path):
+                # Delete the old location of the zarr array.
+                shutil.rmtree(old_path)
+            self.__setattr__(name, new_group)
         else:
-            raise NotImplementedError(f"File prefix {file_prefix} is not supported")
+            raise NotImplementedError(f"File suffix {file_suffix} is not supported")
 
     def _load_variable(self, name: str, page_directory: str) -> Any:
         types_as_str = self._get_variables()[name][0].split(self._datatype_separator)
-        file_prefix = self._type_str_to_prefix(types_as_str[0])
-        file_path = self._get_variable_path(page_directory, name, file_prefix)
+        file_suffix = self._type_str_to_suffix(types_as_str[0])
+        file_path = self._get_variable_path(page_directory, name, file_suffix)
 
-        if file_prefix == "json":
+        if file_suffix == ".json":
             with open(file_path, "r") as file:
                 value = json.loads(file.read())["value"]
                 # A JSON file does not support saving tuples, they must be converted back to tuples here.
                 if type(value) is list:
                     value = utils.base.to_deep_tuple(value)
             return value
-        elif file_prefix == "npz":
+        elif file_suffix == ".npz":
             return np.load(file_path)["arr_0"]
-        elif file_prefix == "zarr":
+        elif file_suffix == ".zarray":
             return zarr.open_array(file_path)
+        elif file_suffix == ".zgroup":
+            return zarr.open_group(file_path)
         else:
-            raise NotImplementedError(f"File prefix {file_prefix} is not supported")
+            raise NotImplementedError(f"File suffix {file_suffix} is not supported")
 
     def _get_variable_path(self, page_directory: str, variable_name: str, suffix: str) -> str:
         assert type(page_directory) is str
         assert type(variable_name) is str
         assert type(suffix) is str
 
-        return str(os.path.abspath(os.path.join(page_directory, f"{variable_name}.{suffix}")))
+        return str(os.path.abspath(os.path.join(page_directory, f"{variable_name}{suffix}")))
 
     def _sanity_check_options(self) -> None:
         # Only multiple datatypes can be options for the same variable if they save to the same save file type. So, a
         # variable's type cannot be "ndarray[int] or zarr" because they save into different file types.
         for page_name, page_options in self._options.items():
             for var_name, var_list in page_options.items():
-                unique_prefixes = set()
+                unique_suffixes = set()
                 types_as_str = var_list[0]
                 for type_as_str in types_as_str.split(self._datatype_separator):
-                    unique_prefixes.add(self._type_str_to_prefix(type_as_str))
-                if len(unique_prefixes) > 1:
+                    unique_suffixes.add(self._type_str_to_suffix(type_as_str))
+                if len(unique_suffixes) > 1:
                     raise TypeError(
                         f"Variable {var_name} in page {page_name} has incompatible types: "
-                        + f"{' and '.join(unique_prefixes)} in _options"
+                        + f"{' and '.join(unique_suffixes)} in _options"
                     )
 
-    def _type_str_to_prefix(self, type_as_str: str) -> str:
-        return self._type_prefixes[type_as_str.split(self._datatype_nest_start)[0]]
+    def _type_str_to_suffix(self, type_as_str: str) -> str:
+        return self._type_suffixes[type_as_str.split(self._datatype_nest_start)[0]]
 
     def _is_types(self, value: Any, types_as_str: str) -> bool:
         valid_types: List[str] = types_as_str.split(self._datatype_separator)
@@ -1022,10 +1040,12 @@ class NotebookPage:
             return self._is_ndarray_of_dtype(value, (str, np.str_))
         elif type_as_str == "ndarray[bool]":
             return self._is_ndarray_of_dtype(value, (bool, np.bool_))
-        elif type_as_str == "zarr":
+        elif type_as_str == "zarray":
             return type(value) is zarr.Array
+        elif type_as_str == "zgroup":
+            return type(value) is zarr.Group
         else:
-            raise TypeError(f"Unexpected type '{type_as_str}' found in _options in NotebookPage")
+            raise TypeError(f"Unexpected type '{type_as_str}' found in _options in NotebookPage class")
 
     def _is_ndarray_of_dtype(self, variable: Any, valid_dtypes: Tuple[np.dtype], /) -> bool:
         assert type(valid_dtypes) is tuple
