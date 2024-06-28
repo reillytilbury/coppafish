@@ -418,8 +418,8 @@ def call_reference_spots(
         nbp_ref_spots: NotebookPage
             The reference spots notebook page.
     """
-    log.debug("Call spots started", {"call_spots": config})
-    nbp = NotebookPage("call_spots")
+    log.debug("Call spots started")
+    nbp = NotebookPage("call_spots", {"call_spots": config})
 
     # load in frequently used variables
     spot_colours = nbp_ref_spots.colours.astype(float)
