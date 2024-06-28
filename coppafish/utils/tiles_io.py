@@ -28,8 +28,6 @@ def get_compressor_and_chunks(
     # chunk size and compression level, it was found that zstd, chunk size of 1x2x2 and compression level 3 was
     # fast at the sum of full image reading + writing times while still compressing the files to ~70-80%.
     # Benchmarking done by Paul Shuker (paul.shuker@outlook.com), January 2024.
-    blosc.use_threads = True
-    blosc.set_nthreads(utils.system.get_core_count())
     if image_z_index is None:
         image_z_index = np.argmin(image_shape).item()
     if optimised_for == OptimisedFor.FULL_READ_AND_WRITE:
@@ -118,6 +116,8 @@ def _save_image(
     if image.dtype != IMAGE_SAVE_DTYPE:
         raise ValueError(f"Expected image dtype {IMAGE_SAVE_DTYPE}, got {image.dtype}")
 
+    blosc.use_threads = True
+    blosc.set_nthreads(utils.system.get_core_count())
     if optimised_for is None:
         optimised_for = OptimisedFor.FULL_READ_AND_WRITE
     if file_type.lower() == ".npy":
