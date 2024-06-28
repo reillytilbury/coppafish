@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import shutil
@@ -20,7 +21,14 @@ class NotebookPage:
     name = property(get_page_name)
 
     # Attribute names allowed to be set inside the notebook page that are not in _options.
-    _VALID_ATTRIBUTE_NAMES = ("_name", "_time_created", "_version")
+    _valid_attribute_names = ("_name", "_time_created", "_version", "_associated_configs")
+
+    _associated_configs: Dict[str, Dict[str, Any]]
+
+    def get_associated_configs(self) -> Dict[str, Dict[str, Any]]:
+        return self._associated_configs
+
+    associated_configs = property(get_associated_configs)
 
     _metadata_name: str = "_metadata.json"
 
@@ -29,6 +37,7 @@ class NotebookPage:
     _time_created_key: str = "time_created"
     _version: str
     _version_key: str = "version"
+    _associated_config_key: str = "associated_configs"
 
     def get_version(self) -> str:
         return self._version
@@ -707,12 +716,14 @@ class NotebookPage:
         "zgroup": ".zgroup",
     }
 
-    def __init__(self, page_name: str) -> None:
+    def __init__(self, page_name: str, associated_config: Dict[str, Dict[str, Any]] = {}) -> None:
         """
         Initialise a new, empty notebook page.
 
         Args:
             - page_name (str): the notebook page name. Must exist within _options in the notebook page class.
+            - associated_config (dict): dictionary containing string keys of config section names. Values are the
+                config's dictionary.
 
         Notes:
             - The way that the notebook handles zarr arrays is special since they must not be kept in memory. To give
@@ -723,11 +734,19 @@ class NotebookPage:
                 zarr array is accessed in a page, it gives you the zarr.Array class, which can then be put into memory
                 as a numpy array when indexed.
         """
+        assert type(associated_config) is dict
+        for key in associated_config:
+            assert type(key) is str
+            assert type(associated_config[key]) is dict
+            for subkey in associated_config[key]:
+                assert type(subkey) is str
+
         if page_name not in self._options.keys():
             raise ValueError(f"Could not find _options for page called {page_name}")
         self._name = page_name
         self._time_created = time.time()
         self._version = utils.system.get_software_version()
+        self._associated_configs = copy.deepcopy(associated_config)
         self._sanity_check_options()
 
     def save(self, page_directory: str, /) -> None:
@@ -838,7 +857,7 @@ class NotebookPage:
         """
         Deals with syntax `notebook_page.name = value`.
         """
-        if name in self._VALID_ATTRIBUTE_NAMES:
+        if name in self._valid_attribute_names:
             object.__setattr__(self, name, value)
             return
 
@@ -871,18 +890,21 @@ class NotebookPage:
         return self._options[self._name]
 
     def _save_metadata(self, file_path: str) -> None:
-        assert not os.path.isfile(file_path), f"Metadata file at {file_path} should not exist"
+        if os.path.isfile(file_path):
+            raise SystemError(f"Metadata file at {file_path} already exists")
 
         metadata = {
             self._page_name_key: self._name,
             self._time_created_key: self._time_created,
             self._version_key: self._version,
+            self._associated_config_key: self._associated_configs,
         }
         with open(file_path, "x") as file:
             file.write(json.dumps(metadata, indent=4))
 
     def _load_metadata(self, file_path: str) -> None:
-        assert os.path.isfile(file_path), f"Metadata file at {file_path} not found"
+        if not os.path.isfile(file_path):
+            raise FileNotFoundError(f"Metadata file at {file_path} not found")
 
         metadata: dict = None
         with open(file_path, "r") as file:
@@ -891,6 +913,7 @@ class NotebookPage:
         self._name = metadata[self._page_name_key]
         self._time_created = metadata[self._time_created_key]
         self._version = metadata[self._version_key]
+        self._associated_configs = metadata[self._associated_config_key]
 
     def _get_metadata_path(self, page_directory: str) -> str:
         return os.path.join(page_directory, self._metadata_name)

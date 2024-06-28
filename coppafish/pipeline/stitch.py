@@ -23,7 +23,7 @@ def stitch(config: dict, nbp_basic: NotebookPage, nbp_file: NotebookPage, nbp_ex
         new `stitch` notebook page.
     """
     log.debug("Stitch started")
-    nbp = NotebookPage("stitch")
+    nbp = NotebookPage("stitch", {"stitch": config})
 
     # initialize the variables
     overlap = config["expected_overlap"]

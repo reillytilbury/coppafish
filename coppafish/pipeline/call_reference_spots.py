@@ -1,4 +1,5 @@
 import itertools
+from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -388,7 +389,7 @@ def view_scale_factors(
 
 def call_reference_spots(
     config: dict, nbp_ref_spots: NotebookPage, nbp_file: NotebookPage, nbp_basic: NotebookPage
-) -> [NotebookPage, NotebookPage]:
+) -> Tuple[NotebookPage, NotebookPage]:
     """
     Function to do gene assignments to reference spots. In doing so we compute some important parameters for the
     downstream analysis.
@@ -417,7 +418,7 @@ def call_reference_spots(
         nbp_ref_spots: NotebookPage
             The reference spots notebook page.
     """
-    log.debug("Call spots started")
+    log.debug("Call spots started", {"call_spots": config})
     nbp = NotebookPage("call_spots")
 
     # load in frequently used variables

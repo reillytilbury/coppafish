@@ -26,7 +26,7 @@ def get_file_names(nb: Notebook):
         nb: *Notebook* containing at least the `basic_info` page.
     """
     config = setup.config.get_config(nb.config_path)["file_names"]
-    nbp = NotebookPage("file_names")
+    nbp = NotebookPage("file_names", {"file_names": config})
     # Copy some variables that are in config to page.
     nbp.input_dir = config["input_dir"]
     nbp.output_dir = config["output_dir"]

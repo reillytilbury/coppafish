@@ -42,8 +42,8 @@ def run_filter(
     if not nbp_basic.is_3d:
         NotImplementedError(f"2d coppafish is not stable, very sorry! :9")
 
-    nbp = NotebookPage("filter")
-    nbp_debug = NotebookPage("filter_debug")
+    nbp = NotebookPage("filter", {"filter": config})
+    nbp_debug = NotebookPage("filter_debug", {"filter": config})
 
     log.debug("Filter started")
     start_time = time.time()

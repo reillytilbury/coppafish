@@ -59,7 +59,7 @@ def run_omp(
     log.debug(f"{torch.cuda.is_available()=}")
     log.debug(f"{config['force_cpu']=}")
 
-    nbp = NotebookPage("omp")
+    nbp = NotebookPage("omp", {"omp": config})
 
     # We want exact, reproducible results.
     torch.backends.cudnn.deterministic = True

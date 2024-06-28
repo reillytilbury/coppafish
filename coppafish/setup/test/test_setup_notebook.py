@@ -18,7 +18,7 @@ def test_notebook_creation() -> None:
     if os.path.isdir(nb_path):
         shutil.rmtree(nb_path)
     config_path = os.path.abspath("dslkhgdsjlgh")
-    nb = Notebook(nb_path, config_path, True)
+    nb = Notebook(nb_path, config_path)
 
     assert nb.has_page("debug") == False
     assert nb.config_path == config_path
@@ -203,7 +203,3 @@ def test_notebook_creation() -> None:
     # Clean any temporary files/directories.
     temp_zarr.cleanup()
     temp_zgroup.cleanup()
-
-
-if __name__ == "__main__":
-    test_notebook_creation()

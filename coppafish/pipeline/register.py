@@ -56,8 +56,8 @@ def register(
     # Part 0: Initialisation
     # Initialise frequently used variables
     log.debug("Register started")
-    nbp = NotebookPage("register")
-    nbp_debug = NotebookPage("register_debug")
+    nbp = NotebookPage("register", {"register": config})
+    nbp_debug = NotebookPage("register_debug", {"register": config})
     use_tiles, use_rounds, use_channels = (
         list(nbp_basic.use_tiles),
         list(nbp_basic.use_rounds),
