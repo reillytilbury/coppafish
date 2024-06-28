@@ -4,7 +4,7 @@ import numpy as np
 from coppafish.utils import base
 
 
-def test_to_deep_convert():
+def test_deep_convert():
     assert base.deep_convert(list()) == tuple()
     assert base.deep_convert([[0, 2, 3], [1, 4], []]) == ((0, 2, 3), (1, 4), tuple())
     assert base.deep_convert(([0, 2, 3], [1, 4], [])) == ((0, 2, 3), (1, 4), tuple())
