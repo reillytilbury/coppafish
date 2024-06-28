@@ -19,6 +19,7 @@ import pandas
 import scipy.stats
 from tqdm import tqdm
 
+from ..omp import base as omp_base
 from .. import utils
 from ..pipeline import run
 
@@ -1062,13 +1063,12 @@ class RoboMinnie:
             )
 
         assert nb.has_page("omp"), f"OMP not found in notebook at {config_filepath}"
-        # Keep the OMP spot intensities, assigned gene, assigned tile number and the spot positions in the class
-        # instance
-        self.omp_spot_intensities = np.ones_like(nb.omp.gene_no)
-        self.omp_spot_scores = nb.omp.scores
-        self.omp_gene_numbers = nb.omp.gene_no
-        self.omp_tile_number = nb.omp.tile
-        self.omp_spot_local_positions = nb.omp.local_yxz  # yxz position of each gene found
+        # Keep the OMP spot intensities, assigned gene, assigned tile number and the spot positions in the robominnie
+        # class
+        self.omp_spot_scores = omp_base.get_all_scores(nb.basic_info, nb.omp)[0]
+        self.omp_spot_intensities = np.ones_like(self.omp_spot_scores, np.float16)
+        self.omp_gene_numbers, self.omp_tile_number = omp_base.get_all_gene_no(nb.basic_info, nb.omp)
+        self.omp_spot_local_positions = omp_base.get_all_local_yxz(nb.basic_info, nb.omp)[0]
         assert (
             self.omp_gene_numbers.shape[0] == self.omp_spot_local_positions.shape[0]
         ), "Mismatch in spot count in omp.gene_numbers and omp.local_positions"

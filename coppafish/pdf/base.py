@@ -1,17 +1,19 @@
 import os
 import textwrap
+from typing import List, Optional, Tuple, Union
 import webbrowser
-import numpy as np
-from tqdm import tqdm
+
 import matplotlib as mpl
+from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 from matplotlib.transforms import ScaledTranslation
-from matplotlib.backends.backend_pdf import PdfPages
-from typing import Union, Optional, Tuple, List
+import numpy as np
+from tqdm import tqdm
 
+from .. import log
+from ..omp import base as omp_base
 from ..setup import Notebook, NotebookPage
 from ..utils import tiles_io
-from .. import log
 
 
 # Plot settings
@@ -341,15 +343,16 @@ class BuildPDF:
                 plt.close(fig)
 
                 for i in range(10):
-                    fig = self.create_omp_gene_counts_fig(nb.file_names, nb.ref_spots, nb.omp, score_threshold=i * 0.1)
+                    fig = self.create_omp_gene_counts_fig(
+                        nb.basic_info, nb.file_names, nb.ref_spots, nb.omp, score_threshold=i * 0.1
+                    )
                     pdf.savefig(fig)
                     plt.close(fig)
 
                 for t in nb.basic_info.use_tiles:
-                    keep = nb.omp.tile == t
                     fig = self.create_positions_histograms(
-                        nb.omp.scores[keep],
-                        nb.omp.local_yxz[keep],
+                        nb.omp.results[f"tile_{t}/scores"][:],
+                        nb.omp.results[f"tile_{t}/local_yxz"][:],
                         DEFAULT_OMP_SCORE,
                         title=f"Spot position histograms for {t=}, scores " + r"$\geq$" + str(DEFAULT_OMP_SCORE),
                         use_z=nb.basic_info.use_z,
@@ -636,16 +639,15 @@ class BuildPDF:
         bar_x = np.arange(0, median_scores.size, dtype=float) + 0.5
         ticks = []
         labels = []
-        scores: np.ndarray = omp_page.scores
-        tile: np.ndarray = omp_page.tile
-        local_z: np.ndarray = omp_page.local_yxz[:, 2]
         i = 0
         for t in basic_info_page.use_tiles:
+            t_scores: np.ndarray = omp_page.results[f"tile_{t}/scores"][:]
+            t_z_local: np.ndarray = omp_page.results[f"tile_{t}/local_yxz"][:, 2]
             for z in basic_info_page.use_z:
-                spot_counts[i] = np.logical_and(tile == t, local_z == z).sum()
-                scores_t_z = scores[np.logical_and(tile == t, local_z == z)]
-                if scores_t_z.size > 0:
-                    median_scores[i] = np.median(scores_t_z)
+                spot_counts[i] = (t_z_local == z).sum()
+                t_z_scores = t_scores[t_z_local == z]
+                if t_z_scores.size > 0:
+                    median_scores[i] = np.median(t_z_scores)
                 if z == basic_info_page.use_z[len(basic_info_page.use_z) // 2]:
                     labels.append(f"Tile {t}")
                     ticks.append(bar_x[i])
@@ -673,8 +675,11 @@ class BuildPDF:
         axes[0, 0].spines["bottom"].set_visible(True)
 
         # Create a histogram showing the distribution of OMP spot scores
+        all_scores = np.zeros(0, dtype=np.float16)
+        for t in basic_info_page.use_tiles:
+            all_scores = np.append(all_scores, omp_page.results[f"tile_{t}/scores"][:], 0)
         axes[1, 0].set_title(f"Score distribution")
-        axes[1, 0].hist(scores, bins=200, color="red", edgecolor="black", linewidth=0.25)
+        axes[1, 0].hist(all_scores, bins=200, color="red", edgecolor="black", linewidth=0.25)
         axes[1, 0].set_xlabel("Spot score")
         axes[1, 0].set_xlim([0, 1])
         axes[1, 0].set_ylabel("Spot count")
@@ -699,7 +704,7 @@ class BuildPDF:
             )
             for row in range(axes.shape[0])
         ]
-        z_offsets = [-2, 0, +2]
+        z_offsets = [-1, 0, +1]
         mean_spot_shape = omp_page.mean_spot
         if mean_spot_shape is not None:
             mid_z = mean_spot_shape.shape[2] // 2
@@ -745,7 +750,12 @@ class BuildPDF:
         return fig
 
     def create_omp_gene_counts_fig(
-        self, file_page: NotebookPage, ref_spots_page: NotebookPage, omp_page: NotebookPage, score_threshold: float = 0
+        self,
+        basic_info_page: NotebookPage,
+        file_page: NotebookPage,
+        ref_spots_page: NotebookPage,
+        omp_page: NotebookPage,
+        score_threshold: float = 0,
     ) -> mpl.figure.Figure:
         """Creates a gene count bar chart. Each bar is coloured based on the median spot score of the gene."""
         fig, axes = self.create_empty_page(1, 2, gridspec_kw={"width_ratios": [24, 1]})
@@ -759,13 +769,15 @@ class BuildPDF:
         else:
             gene_names = [f"gene_{g}" for g in range(n_genes)]
 
-        scores = omp_page.scores
-        gene_numbers = omp_page.gene_no[scores >= score_threshold]
-        unique_genes, counts = np.unique(gene_numbers, return_counts=True)
+        all_scores = omp_base.get_all_scores(basic_info_page, omp_page)[0]
+        all_gene_no = omp_base.get_all_gene_no(basic_info_page, omp_page)[0]
+        all_gene_no = all_gene_no[all_scores >= score_threshold]
+        all_scores = all_scores[all_scores >= score_threshold]
+        unique_genes, counts = np.unique(all_gene_no, return_counts=True)
         for g, gene_name in enumerate(gene_names):
             if np.isin(g, unique_genes):
                 gene_counts.append(int(counts[unique_genes == g].item()))
-                scores_g = scores[np.logical_and(omp_page.gene_no == g, scores >= score_threshold)]
+                scores_g = all_scores[all_gene_no == g]
                 median_scores.append(float(np.median(scores_g)))
             else:
                 gene_counts.append(0)
