@@ -85,6 +85,7 @@ def initialize_nb(config_path: str) -> Notebook:
     log.info(
         f" COPPAFISH v{utils.system.get_software_version()} ".center(utils.system.current_terminal_size_xy(-33)[0], "=")
     )
+    log.base.log_package_versions()
 
     if utils.system.get_software_version() not in nb.get_unqiue_versions():
         log.warn(

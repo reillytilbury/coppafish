@@ -102,7 +102,7 @@ def get_spot_colours_new(
     assert type(tile) is int
     assert type(round) is int
     if channels is None:
-        channels = nbp_basic.use_channels
+        channels = tuple(nbp_basic.use_channels)
     if type(channels) is int:
         channels = (channels,)
     assert type(channels) is tuple
@@ -185,17 +185,15 @@ def get_spot_colours_new(
         )
         del yxz_minimums, yxz_maximums
         # The flow image takes the anchor image -> tile/round image so must invert the shift.
-        flow_image *= -1
-        flow_image = [flow_image[[i]] for i in range(3)]
+        flow_image = torch.negative(flow_image)
         # (1, 1, len(channels), n_points, 3). yxz becomes zxy to use the grid_sample function correctly.
         yxz_registered = yxz_registered[np.newaxis, np.newaxis, :, :, [2, 1, 0]]
-        # Gives flow shifts in shape (3, len(channels), n_points).
-        optical_flow_shifts = torch.zeros((3, len(channels), n_points)).float()
-        for i in range(3):
-            optical_flow_shifts[i] = torch.nn.functional.grid_sample(
-                flow_image[i], yxz_registered, mode="bilinear", align_corners=False
-            )[0, 0, 0]
-        yxz_registered = yxz_registered[..., [2, 1, 0]]
+        # The affine must be applied to each optical flow shift direction.
+        yxz_registered = yxz_registered.repeat_interleave(3, dim=0)
+        optical_flow_shifts = torch.nn.functional.grid_sample(
+            flow_image, yxz_registered, mode="bilinear", align_corners=False
+        )[:, 0, 0]
+        yxz_registered = yxz_registered[0, :, :, :, [2, 1, 0]]
         del flow_image
         # (len(channels), n_points, 3)
         optical_flow_shifts = optical_flow_shifts.movedim(0, 1).movedim(1, 2)

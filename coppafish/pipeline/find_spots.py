@@ -43,7 +43,7 @@ def find_spots(
     use_tiles, use_rounds, use_channels = nbp_basic.use_tiles, nbp_basic.use_rounds, nbp_basic.use_channels
 
     # Phase 0: Initialisation
-    nbp = NotebookPage("find_spots")
+    nbp = NotebookPage("find_spots", {"find_spots": config})
     if nbp_basic.is_3d is False:
         # set z details to None if using 2d pipeline
         config["radius_z"] = None

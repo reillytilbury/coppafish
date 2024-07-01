@@ -28,8 +28,6 @@ def get_compressor_and_chunks(
     # chunk size and compression level, it was found that zstd, chunk size of 1x2x2 and compression level 3 was
     # fast at the sum of full image reading + writing times while still compressing the files to ~70-80%.
     # Benchmarking done by Paul Shuker (paul.shuker@outlook.com), January 2024.
-    blosc.use_threads = True
-    blosc.set_nthreads(utils.system.get_core_count())
     if image_z_index is None:
         image_z_index = np.argmin(image_shape).item()
     if optimised_for == OptimisedFor.FULL_READ_AND_WRITE:
@@ -118,6 +116,8 @@ def _save_image(
     if image.dtype != IMAGE_SAVE_DTYPE:
         raise ValueError(f"Expected image dtype {IMAGE_SAVE_DTYPE}, got {image.dtype}")
 
+    blosc.use_threads = True
+    blosc.set_nthreads(utils.system.get_core_count())
     if optimised_for is None:
         optimised_for = OptimisedFor.FULL_READ_AND_WRITE
     if file_type.lower() == ".npy":
@@ -212,7 +212,7 @@ def save_image(
     Wrapper function to save tiles as npy files with correct shift. Moves z-axis to first axis before saving as it is
     quicker to load in this order. Tile `t` is saved to the path `nbp_file.tile[t,r,c]`, the path must contain an
     extension of `'.npy'`. The tile is saved as a `uint16`, so clipping may occur if the image contains really large
-    values.
+    values. A warning is issued if the image contains adjacent clipped pixels.
 
     Args:
         nbp_file (NotebookPage): `file_names` notebook page.
@@ -234,49 +234,51 @@ def save_image(
     """
     assert image.ndim == 3, "`image` must be 3 dimensional"
 
-    if nbp_basic.is_3d:
-        if c is None:
-            log.error(ValueError("3d image but channel not given."))
-        if not apply_shift or (c == nbp_basic.dapi_channel):
-            # If dapi is given then image should already by uint16 so no clipping
-            percent_clipped_pixels = (image < 0).sum()
-            percent_clipped_pixels += (image > get_pixel_max()).sum()
-            image = image.astype(IMAGE_SAVE_DTYPE)
-        elif apply_shift and c != nbp_basic.dapi_channel:
-            # need to shift and clip image so fits into uint16 dtype.
-            # clip at 1 not 0 because 0 (or -tile_pixel_value_shift)
-            # will be used as an invalid value when reading in spot_colors.
-            percent_clipped_pixels = ((image + nbp_basic.tile_pixel_value_shift) < 1).sum()
-            percent_clipped_pixels += ((image + nbp_basic.tile_pixel_value_shift) > get_pixel_max()).sum()
-            image = np.clip(
-                image + nbp_basic.tile_pixel_value_shift,
-                1,
-                get_pixel_max(),
-                np.zeros_like(image, dtype=np.uint16),
-                casting="unsafe",
-            )
-        percent_clipped_pixels *= 100 / image.size
-        message = f"{t=}, {r=}, {c=} saved image has clipped {round(percent_clipped_pixels, 5)}% of pixels"
-        if percent_clip_warn is not None and percent_clipped_pixels >= percent_clip_warn:
-            log.warn(message)
-        if percent_clip_error is not None and percent_clipped_pixels >= percent_clip_error:
-            log.error(message)
-        if percent_clipped_pixels >= 1:
-            log.debug(message)
-        # In 3D, cannot possibly save any un-used channel hence no exception for this case.
-        expected_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
-        if not utils.errors.check_shape(image, expected_shape):
-            log.error(utils.errors.ShapeError("tile to be saved", image.shape, expected_shape))
-        # yxz -> zxy
-        image = np.swapaxes(image, 2, 0)
-        # zxy -> zyx
-        image = np.swapaxes(image, 1, 2)
-        file_path = nbp_file.tile[t][r][c]
-        file_path = file_path[: file_path.index(file_type)] + suffix + file_type
-        _save_image(image, file_path, file_type, optimised_for=OptimisedFor.Z_PLANE_READ)
-        return image
-    else:
+    if not nbp_basic.is_3d:
         log.error(NotImplementedError("2D image saving is currently not supported"))
+
+    if c is None:
+        log.error(ValueError("3d image but channel not given."))
+    if not apply_shift or (c == nbp_basic.dapi_channel):
+        # If dapi is given then image should already by uint16 so no clipping
+        percent_clipped_pixels = (image < 0).sum()
+        percent_clipped_pixels += (image > get_pixel_max()).sum()
+        image = image.astype(IMAGE_SAVE_DTYPE)
+    elif apply_shift and c != nbp_basic.dapi_channel:
+        # need to shift and clip image so fits into uint16 dtype.
+        # clip at 1 not 0 because 0 (or -tile_pixel_value_shift)
+        # will be used as an invalid value when reading in spot_colors.
+        percent_clipped_pixels = ((image + nbp_basic.tile_pixel_value_shift) < 1).sum()
+        percent_clipped_pixels += ((image + nbp_basic.tile_pixel_value_shift) > get_pixel_max()).sum()
+        image = np.clip(
+            image + nbp_basic.tile_pixel_value_shift,
+            1,
+            get_pixel_max(),
+            np.zeros_like(image, dtype=np.uint16),
+            casting="unsafe",
+        )
+    percent_clipped_pixels *= 100 / image.size
+    message = f"{t=}, {r=}, {c=} saved image has clipped {round(percent_clipped_pixels, 5)}% of pixels"
+    if percent_clip_warn is not None and percent_clipped_pixels >= percent_clip_warn:
+        log.warn(message)
+    if percent_clip_error is not None and percent_clipped_pixels >= percent_clip_error:
+        log.error(message)
+    if percent_clipped_pixels >= 1:
+        log.debug(message)
+    if utils.clipping.contains_adjacent_max_pixels(image):
+        log.warn(f"{t=}, {r=}, {c=} filtered image contains adjacent pixels at the maximum possible value")
+    # In 3D, cannot possibly save any un-used channel hence no exception for this case.
+    expected_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
+    if not utils.errors.check_shape(image, expected_shape):
+        log.error(utils.errors.ShapeError("tile to be saved", image.shape, expected_shape))
+    # yxz -> zxy
+    image = np.swapaxes(image, 2, 0)
+    # zxy -> zyx
+    image = np.swapaxes(image, 1, 2)
+    file_path = nbp_file.tile[t][r][c]
+    file_path = file_path[: file_path.index(file_type)] + suffix + file_type
+    _save_image(image, file_path, file_type, optimised_for=OptimisedFor.Z_PLANE_READ)
+    return image
 
 
 def load_image(

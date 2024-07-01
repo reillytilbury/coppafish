@@ -1,12 +1,12 @@
 from datetime import datetime
 import logging
 import socket
+import subprocess
 import time
 import traceback
 from typing import Any, Callable, Union
 
-from ..utils import email
-
+from ..utils import email, system
 
 DEBUG = 10
 INFO = 20
@@ -155,6 +155,28 @@ def append_to_log_file(message: str) -> None:
         return
     with open(_log_file, "a") as log_file:
         log_file.write(message + "\n")
+
+
+def log_package_versions(severity: int = DEBUG) -> None:
+    """
+    Log the current Python version and the Python package versions.
+
+    Args:
+        severity (int, optional): the log severity. Default: debug.
+    """
+    log(f"Python=={system.get_python_version()}", severity=severity)
+    pip_list = str(subprocess.run(["python", "-m", "pip", "list"], capture_output=True, text=True).stdout)
+    pip_list: list[str] = pip_list.split("\n")
+    pip_list = pip_list[2:-1]
+    names = []
+    versions = []
+    for package in pip_list:
+        package = package.strip()
+        separation_index = package.index(" ")
+        names.append(package[:separation_index])
+        versions.append(package[separation_index:].strip())
+    for name, version in zip(names, versions):
+        log(f"{name}=={version}", severity=severity)
 
 
 class LogError(Exception):

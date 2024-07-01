@@ -1,5 +1,6 @@
-import torch
 from typing import Tuple
+
+import torch
 
 
 def dot_product_score(

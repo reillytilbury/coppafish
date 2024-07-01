@@ -17,9 +17,15 @@ import tifffile
 
 from . import legend
 from .. import call_spots as call_spots_plot
+from ...omp import base as omp_base
 from ...setup import Notebook
 from ..call_spots import view_bled_codes, view_bleed_matrix, view_codes, view_spot, BGNormViewer, GEViewer
-from ..omp import ViewOMPImage, ViewOMPPixelCoefficients
+from ..omp import (
+    ViewOMPImage,
+    ViewOMPPixelCoefficients,
+    ViewOMPPixelColours,
+    histogram_score,
+)
 from .hotkeys import KeyBinds, ViewHotkeys
 
 try:
@@ -560,13 +566,13 @@ class Viewer:
         gene_no = [nb.ref_spots.dot_product_gene_no, np.argmax(nb.ref_spots.gene_probabilities, axis=1)]
         intensity = [nb.ref_spots.intensity, nb.ref_spots.intensity]
         if nb.has_page("omp"):
-            score.append(nb.omp.scores)
-            gene_no.append(nb.omp.gene_no)
-            omp_colours = nb.omp.colours.copy()
-            omp_colours_float = omp_colours * colour_norm_factor[tile[-1]]
+            score.append(omp_base.get_all_scores(nb.basic_info, nb.omp)[0])
+            gene_no.append(omp_base.get_all_gene_no(nb.basic_info, nb.omp)[0])
+            omp_colours, omp_tiles = omp_base.get_all_colours(nb.basic_info, nb.omp)
+            omp_colours_float = omp_colours * colour_norm_factor[omp_tiles]
             intensity_omp = np.median(np.max(omp_colours_float, axis=-1), axis=-1)
             intensity.append(intensity_omp)
-            colours.append(nb.omp.colours)
+            colours.append(omp_colours)
 
         # add all spots of shown genes to the napari viewer. If a gene is not shown, the spots will be disregarded.
         visible_genes = np.where([g.active for g in self.genes])[0]
@@ -819,13 +825,19 @@ class Viewer:
             if spot_index is not None:
                 self.open_plot = ViewOMPImage(self.nb, spot_index, self.method["names"][self.method["active"]])
 
-        @self.viewer.bind_key(KeyBinds.view_omp_pixel_weights)
+        @self.viewer.bind_key(KeyBinds.view_omp_pixel_coefficients)
         def call_to_view_omp_weights(viewer):
             spot_index = self.get_selected_spot_index()
             if spot_index is not None:
                 self.open_plot = ViewOMPPixelCoefficients(
                     self.nb, spot_index, self.method["names"][self.method["active"]]
                 )
+
+        @self.viewer.bind_key(KeyBinds.view_omp_pixel_colours)
+        def call_to_view_omp_colours(viewer):
+            spot_index = self.get_selected_spot_index()
+            if spot_index is not None:
+                self.open_plot = ViewOMPPixelColours(self.nb, spot_index, self.method["names"][self.method["active"]])
 
 
 class Method(QMainWindow):

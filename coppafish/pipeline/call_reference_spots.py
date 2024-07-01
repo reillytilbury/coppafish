@@ -1,4 +1,5 @@
 import itertools
+from typing import Tuple
 import numpy as np
 
 from .. import log
@@ -13,7 +14,7 @@ except ModuleNotFoundError:
 
 def call_reference_spots(
     config: dict, nbp_ref_spots: NotebookPage, nbp_file: NotebookPage, nbp_basic: NotebookPage
-) -> [NotebookPage, NotebookPage]:
+) -> Tuple[NotebookPage, NotebookPage]:
     """
     Function to do gene assignments to reference spots. In doing so we compute some important parameters for the
     downstream analysis.
@@ -43,7 +44,7 @@ def call_reference_spots(
             The reference spots notebook page.
     """
     log.debug("Call spots started")
-    nbp = NotebookPage("call_spots")
+    nbp = NotebookPage("call_spots", {"call_spots": config})
 
     # load in frequently used variables
     spot_colours = nbp_ref_spots.colours.astype(float)

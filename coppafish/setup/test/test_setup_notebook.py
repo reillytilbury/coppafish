@@ -1,10 +1,12 @@
 import os
 from pathlib import PurePath
 import shutil
+import tempfile
 
 import numpy as np
 import zarr
 
+from coppafish import utils
 from coppafish.setup.notebook import Notebook
 from coppafish.setup.notebook_page import NotebookPage
 
@@ -16,7 +18,7 @@ def test_notebook_creation() -> None:
     if os.path.isdir(nb_path):
         shutil.rmtree(nb_path)
     config_path = os.path.abspath("dslkhgdsjlgh")
-    nb = Notebook(nb_path, config_path, True)
+    nb = Notebook(nb_path, config_path)
 
     assert nb.has_page("debug") == False
     assert nb.config_path == config_path
@@ -45,9 +47,9 @@ def test_notebook_creation() -> None:
         assert np.allclose(nb.debug.b, b)
         assert np.allclose(nb.debug.c, c)
         assert np.allclose(nb.debug.d, d)
-        assert type(nb.debug.d) is tuple
-        assert nb.debug.e == e
-        assert type(nb.debug.e) is tuple
+        assert type(nb.debug.d) is list
+        assert nb.debug.e == utils.base.deep_convert(e, list)
+        assert type(nb.debug.e) is list
         assert np.allclose(nb.debug.f, f)
         assert nb.debug.g is g
         assert np.allclose(nb.debug.h, h)
@@ -57,10 +59,16 @@ def test_notebook_creation() -> None:
         assert np.allclose(nb.debug.l, l)
         assert (nb.debug.m == m).all()
         assert np.allclose(nb.debug.n, n)
-        zarr_path = os.path.abspath(nb.debug.o.store.path)
-        assert os.path.isdir(zarr_path)
-        assert len(os.listdir(zarr_path)) > 0
-        assert PurePath(nb_path) in PurePath(zarr_path).parents
+        zarray_path = os.path.abspath(nb.debug.o.store.path)
+        assert os.path.isdir(zarray_path)
+        assert len(os.listdir(zarray_path)) > 0
+        assert PurePath(nb_path) in PurePath(zarray_path).parents
+        zgroup_path = os.path.abspath(nb.debug.p.store.path)
+        assert os.path.isdir(zgroup_path)
+        assert len(os.listdir(zgroup_path)) > 0
+        assert type(nb.debug.p["subgroup"]) is zarr.Group
+        assert type(nb.debug.p["subarray.zarr"]) is zarr.Array
+        assert nb.debug.p["subarray.zarr"].shape == (10, 5)
 
     nb_page.a = a
     try:
@@ -72,6 +80,8 @@ def test_notebook_creation() -> None:
     nb_page.c = c
     try:
         nb_page.d = (5, "4", True)
+        nb_page.d = (5, "4")
+        nb_page.d = (5, 0.5)
         assert False, "Should not be able to set a tuple[int] type like this"
     except TypeError:
         pass
@@ -120,20 +130,32 @@ def test_notebook_creation() -> None:
     except ValueError:
         pass
 
-    zarr_path = os.path.join(os.getcwd(), ".test_array.zarr")
+    temp_zarr = tempfile.TemporaryDirectory()
     array_saved = np.zeros((4, 8), dtype=np.float32)
     zarr_array_temp = zarr.open_array(
-        store=zarr_path, shape=array_saved.shape, dtype="|f4", zarr_version=2, chunks=(2, 4), mode="w"
+        store=temp_zarr.name, shape=array_saved.shape, dtype="|f4", zarr_version=2, chunks=(2, 4), mode="w"
     )
     zarr_array_temp[:] = array_saved.copy()
 
-    assert nb_page.get_unset_variables() == ("o",)
+    assert nb_page.get_unset_variables() == ("o", "p")
 
     nb_page.o = zarr_array_temp
     del zarr_array_temp
 
-    assert len(nb_page.get_unset_variables()) == 0
+    assert len(nb_page.get_unset_variables()) == 1
     assert nb_page.name == "debug"
+
+    try:
+        nb += nb_page
+        assert False, f"Shoul not be able to add an unfinished page to the notebook"
+    except ValueError:
+        pass
+
+    temp_zgroup = tempfile.TemporaryDirectory()
+    group = zarr.group(store=temp_zgroup.name, zarr_version=2)
+    group.create_dataset("subarray.zarr", shape=(10, 5), dtype=np.int16)
+    group.create_group("subgroup")
+    nb_page.p = group
 
     nb += nb_page
 
@@ -165,9 +187,19 @@ def test_notebook_creation() -> None:
     nb = Notebook(nb_path)
     _check_variables(nb)
 
+    # Check that the resave function can safely remove pages.
+    del nb.debug
+    nb.resave()
+    assert not nb.has_page("debug")
+    assert not os.path.exists(os.path.join(nb_path, "debug"))
+
+    nb = Notebook(nb_path)
+    assert not nb.has_page("debug")
+    assert not os.path.exists(os.path.join(nb_path, "debug"))
+
     # Delete the temporary notebook once done testing.
     shutil.rmtree(nb_path)
 
-
-if __name__ == "__main__":
-    test_notebook_creation()
+    # Clean any temporary files/directories.
+    temp_zarr.cleanup()
+    temp_zgroup.cleanup()

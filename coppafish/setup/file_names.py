@@ -26,7 +26,7 @@ def get_file_names(nb: Notebook):
         nb: *Notebook* containing at least the `basic_info` page.
     """
     config = setup.config.get_config(nb.config_path)["file_names"]
-    nbp = NotebookPage("file_names")
+    nbp = NotebookPage("file_names", {"file_names": config})
     # Copy some variables that are in config to page.
     nbp.input_dir = config["input_dir"]
     nbp.output_dir = config["output_dir"]
@@ -151,6 +151,6 @@ def get_file_names(nb: Notebook):
                 setup.config.get_config(nb.config_path)["extract"]["file_type"],
             )
 
-    nbp.tile = utils.base.to_deep_tuple(tile_names.tolist())
-    nbp.tile_unfiltered = utils.base.to_deep_tuple(tile_names_unfiltered.tolist())
+    nbp.tile = utils.base.deep_convert(tile_names.tolist())
+    nbp.tile_unfiltered = utils.base.deep_convert(tile_names_unfiltered.tolist())
     return nbp

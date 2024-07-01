@@ -1,10 +1,11 @@
-import os
 import json
+import os
+
 import numpy as np
 
-from ..setup import NotebookPage
-from .. import utils, setup
+from .. import setup, utils
 from .. import log
+from ..setup import NotebookPage
 
 
 def set_basic_info(config_file: dict, config_basic: dict, n_rounds: int = 7) -> NotebookPage:
@@ -290,18 +291,19 @@ def set_basic_info_new(config: dict) -> NotebookPage:
     Returns:
         - `NotebookPage[basic_info]` - Page contains information that is used at all stages of the pipeline.
     """
-    # Initialize Notebook
-    nbp = NotebookPage("basic_info")
+    # Break the page contents up into 2 types, contents that must be read in from the config and those that can
+    # be computed from the metadata.
+    config_file: dict = config["file_names"]
+    config_basic: dict = config["basic_info"]
 
-    # Now break the page contents up into 2 types, contents that must be read in from the config and those that can
-    # be computed from the metadata
-    config_file = config["file_names"]
-    config_basic = config["basic_info"]
+    # Initialize Notebook
+    associated_configs = {"basic_info": config_basic, "file_names": config_file}
+    nbp = NotebookPage("basic_info", associated_configs)
 
     # Stage 1: Compute metadata. This is done slightly differently in the 3 cases of different raw extensions
     raw_extension = utils.nd2.get_raw_extension(config_file["input_dir"])
     all_files = []
-    for root, directories, filenames in os.walk(config_file["input_dir"]):
+    for root, _, filenames in os.walk(config_file["input_dir"]):
         for filename in filenames:
             all_files.append(os.path.join(root, filename))
     all_files.sort()
@@ -416,7 +418,7 @@ def set_basic_info_new(config: dict) -> NotebookPage:
 
     if nbp.use_dyes is None:
         del nbp.use_dyes
-        nbp.use_dyes = utils.base.to_deep_tuple(np.arange(len(nbp.dye_names)).tolist())
+        nbp.use_dyes = utils.base.deep_convert(np.arange(len(nbp.dye_names)).tolist())
         nbp.n_dyes = len(nbp.use_dyes)
 
     # If preseq round is a file, set pre_seq_round to True, else False and raise warning that pre_seq_round is not a

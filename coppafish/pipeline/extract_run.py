@@ -34,7 +34,7 @@ def run_extract(
             NotImplementedError(f"coppafish 2d is not in a stable state, please contact a dev to add this. Sorry! ;(")
         )
 
-    nbp = NotebookPage("extract")
+    nbp = NotebookPage("extract", {"extract": config})
     nbp.file_type = config["file_type"]
     nbp.num_rotations = config["num_rotations"]
 
