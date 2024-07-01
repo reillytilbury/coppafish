@@ -19,12 +19,12 @@ from . import legend
 from .. import call_spots as call_spots_plot
 from ...omp import base as omp_base
 from ...setup import Notebook
-from ..call_spots import view_bled_codes, view_bleed_matrix, view_codes, view_spot, BGNormViewer, GEViewer
+from ..call_spots import (view_bled_codes, view_bleed_matrix, view_codes, view_spot, BGNormViewer, GEViewer,
+                          ViewAllGeneHistograms, HistogramScore)
 from ..omp import (
     ViewOMPImage,
     ViewOMPPixelCoefficients,
     ViewOMPPixelColours,
-    histogram_score,
 )
 from .hotkeys import KeyBinds, ViewHotkeys
 
@@ -775,21 +775,15 @@ class Viewer:
 
         @self.viewer.bind_key(KeyBinds.view_all_gene_scores)
         def call_to_view_all_hists(viewer):
-            ViewAllGeneScores(self.nb)
+            ViewAllGeneHistograms(self.nb)
 
         @self.viewer.bind_key(KeyBinds.view_gene_efficiency)
         def call_to_view_gene_efficiency(viewer):
             self.open_plot = GEViewer(self.nb)
 
-        @self.viewer.bind_key(KeyBinds.view_gene_counts)
-        def call_to_gene_counts(viewer):
-            score_thresh = self.sliders["score_range"].value()[0]
-            intensity_thresh = self.sliders["intensity_thresh"].value()
-            gene_counts(self.nb, None, None, score_thresh, intensity_thresh)
-
         @self.viewer.bind_key(KeyBinds.view_histogram_scores)
         def call_to_view_omp_score(viewer):
-            histogram_score(self.nb, self.method["names"][self.method["active"]])
+            HistogramScore(self.nb, self.method["names"][self.method["active"]])
 
         @self.viewer.bind_key(KeyBinds.view_scaled_k_means)
         def call_to_view_omp_score(viewer):
@@ -812,12 +806,6 @@ class Viewer:
         #     spot_index = self.get_selected_spot_index()
         #     if spot_index is not None:
         #         view_score(self.nb, spot_index, self.method["names"][self.method["active"]])
-
-        @self.viewer.bind_key(KeyBinds.view_intensity_from_colour)
-        def call_to_view_omp_score(viewer):
-            spot_index = self.get_selected_spot_index()
-            if spot_index is not None:
-                view_intensity(self.nb, spot_index, self.method["names"][self.method["active"]])
 
         @self.viewer.bind_key(KeyBinds.view_omp_coef_image)
         def call_to_view_omp(viewer):
