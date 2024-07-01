@@ -2,7 +2,7 @@ import json
 import os
 import shutil
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional, Tuple
 
 import numpy as np
 
@@ -20,23 +20,13 @@ class Notebook:
 
     _config_path: Optional[str]
 
-    def get_config_path(self) -> str:
+    def get_config_path(self) -> Optional[str]:
         return self._config_path
 
     config_path = property(get_config_path)
 
     _metadata_name = "_metadata.json"
 
-    # The notebook stores the config as a dict from when it was first instantiated. This way any changes to a page's
-    # config can be detected when comparing to the config on disk that the user may have modified.
-    _init_config: Dict[str, Dict[str, Any]]
-
-    def get_init_config(self) -> Dict[str, Dict[str, Any]]:
-        return self._init_config
-
-    init_config = property(get_init_config)
-
-    _init_config_key = "initial_config"
     _time_created: float
     _time_created_key = "time_created"
     _version: str
@@ -87,7 +77,7 @@ class Notebook:
         ],
     }
 
-    def __init__(self, notebook_dir: str, config_path: Optional[str] = None, debugging: bool = False, /) -> None:
+    def __init__(self, notebook_dir: str, config_path: Optional[str] = None) -> None:
         """
         Load the notebook found at the given directory. Or, if the directory does not exist, create the directory.
 
@@ -111,10 +101,6 @@ class Notebook:
                 raise ValueError(f"To create a new notebook, config_path must be specified")
             log.info(f"Creating notebook at {self._directory}")
             os.mkdir(self._directory)
-            if not debugging:
-                self._init_config = config.get_config(self._config_path)
-            else:
-                self._init_config = dict()
             self._save()
         self._load()
 
@@ -137,7 +123,7 @@ class Notebook:
 
         if page.name not in self._debug_page and len(self._get_modified_config_variables()) > 0:
             log.warn(
-                f"The config at {self.config_path} has modified variables: "
+                f"The config at {self.config_path} has modified variable(s): "
                 + ", ".join(self._get_modified_config_variables())
                 + " since the pipeline was first started. Continue at your own risk."
             )
@@ -270,36 +256,37 @@ class Notebook:
         assert self.config_path is not None
 
         modified_variables = tuple()
-        version_mismatch_msg = "Is the notebook for a different software version?"
+        msg_prefix = f"Config at {self.config_path} is missing"
+        msg_suffix = (
+            "Is the notebook from a different software version? If you are unsure, it "
+            + "is recommended to delete the notebook and re-run the pipeline."
+        )
         config_on_disk = config.get_config(self.config_path)
 
-        for config_section in self._init_config.keys():
-            if config_section not in config_on_disk:
-                raise ValueError(
-                    f"Config at {self.config_path} is missing section {config_section}. " + version_mismatch_msg
-                )
-            for config_variable_name, value in self._init_config[config_section].items():
-                is_equal = False
-                if config_variable_name not in config_on_disk[config_section].keys():
-                    log.warn(
-                        f"Config at {self.config_path} is missing the variable named {config_variable_name} in section "
-                        + f"{config_section}. {version_mismatch_msg}"
-                    )
-                    modified_variables += (config_variable_name,)
+        for page in self._get_added_pages():
+            for config_section in page.associated_configs:
+                if config_section not in config_on_disk:
+                    log.warn(f"{msg_prefix} section {config_section}. {msg_suffix}")
                     continue
-                config_variable = config_on_disk[config_section][config_variable_name]
-                if value == config_variable:
-                    is_equal = True
-                if type(value) is list:
-                    array_0 = np.array(value)
-                    array_1 = np.array(config_variable)
-                    # This is dumb. But, it works.
-                    if isinstance(array_0.dtype.type(), (str, np.str_)):
-                        is_equal = (array_0 == array_1).all()
-                    else:
-                        is_equal = np.allclose(array_0, array_1)
-                if not is_equal:
-                    modified_variables += (config_variable_name,)
+                for var_name, value in page.associated_configs[config_section].items():
+                    is_equal = False
+                    if var_name not in config_on_disk[config_section].keys():
+                        log.warn(f"{msg_prefix} variable named {var_name} in section {config_section}. {msg_suffix}")
+                        modified_variables += (var_name,)
+                        continue
+                    config_variable = config_on_disk[config_section][var_name]
+                    if value == config_variable:
+                        is_equal = True
+                    if type(value) is list:
+                        array_0 = np.array(value)
+                        array_1 = np.array(config_variable)
+                        # This is dumb. But, it works.
+                        if isinstance(array_0.dtype.type(), (str, np.str_)):
+                            is_equal = (array_0 == array_1).all()
+                        else:
+                            is_equal = np.allclose(array_0, array_1)
+                    if not is_equal:
+                        modified_variables += (var_name,)
         return modified_variables
 
     def _save_metadata(self) -> None:
@@ -311,7 +298,6 @@ class Notebook:
         metadata = {
             self._time_created_key: self._time_created,
             self._version_key: self._version,
-            self._init_config_key: self._init_config,
         }
         with open(file_path, "x") as file:
             file.write(json.dumps(metadata, indent=4))
@@ -327,7 +313,6 @@ class Notebook:
             metadata = json.loads(file.read())
         self._version = metadata[self._version_key]
         self._time_created = metadata[self._time_created_key]
-        self._init_config = metadata[self._init_config_key]
 
     def _get_metadata_path(self) -> str:
         return os.path.join(self._directory, self._metadata_name)

@@ -17,10 +17,17 @@ import tifffile
 
 from . import legend
 from .. import call_spots as call_spots_plot
+from ...omp import base as omp_base
 from ...setup import Notebook
-from ..call_spots import gene_counts, view_bled_codes, view_bleed_matrix, view_codes, view_intensity, view_spot
+from ..call_spots import gene_counts, view_bled_codes, view_bleed_matrix, view_codes
+from ..call_spots import view_intensity, view_spot
 from ..call_spots_new import BGNormViewer, GEViewer, ViewAllGeneScores
-from ..omp import histogram_score, ViewOMPImage, ViewOMPPixelCoefficients, ViewOMPPixelColours
+from ..omp import (
+    ViewOMPImage,
+    ViewOMPPixelCoefficients,
+    ViewOMPPixelColours,
+    histogram_score,
+)
 from .hotkeys import KeyBinds, ViewHotkeys
 
 try:
@@ -561,13 +568,13 @@ class Viewer:
         gene_no = [nb.ref_spots.dot_product_gene_no, np.argmax(nb.ref_spots.gene_probabilities, axis=1)]
         intensity = [nb.ref_spots.intensity, nb.ref_spots.intensity]
         if nb.has_page("omp"):
-            score.append(nb.omp.scores)
-            gene_no.append(nb.omp.gene_no)
-            omp_colours = nb.omp.colours.copy()
-            omp_colours_float = omp_colours * colour_norm_factor[tile[-1]]
+            score.append(omp_base.get_all_scores(nb.basic_info, nb.omp)[0])
+            gene_no.append(omp_base.get_all_gene_no(nb.basic_info, nb.omp)[0])
+            omp_colours, omp_tiles = omp_base.get_all_colours(nb.basic_info, nb.omp)
+            omp_colours_float = omp_colours * colour_norm_factor[omp_tiles]
             intensity_omp = np.median(np.max(omp_colours_float, axis=-1), axis=-1)
             intensity.append(intensity_omp)
-            colours.append(nb.omp.colours)
+            colours.append(omp_colours)
 
         # add all spots of shown genes to the napari viewer. If a gene is not shown, the spots will be disregarded.
         visible_genes = np.where([g.active for g in self.genes])[0]

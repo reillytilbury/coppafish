@@ -33,9 +33,9 @@
     * [Viewing images](https://reillytilbury.github.io/coppafish/diagnostics/#viewing-images)
 * [Advanced Usage](https://reillytilbury.github.io/coppafish/advanced_usage/)
 * [Troubleshoot](https://reillytilbury.github.io/coppafish/troubleshoot/)
+* [Algorithm](https://reillytilbury.github.io/coppafish/algorithm/)
 * [Contributing](https://reillytilbury.github.io/coppafish/contributing/)
 * [Glossary](https://reillytilbury.github.io/coppafish/glossary/)
-* [Call Spots](https://reillytilbury.github.io/coppafish/call_spots/)
 ![](https://github.com/jduffield65/coppafish/blob/main/docs/images/readme_viewer.png?raw=true)
 
 For more information on coppafish's method, please see the [documentation](https://jduffield65.github.io/coppafish/) 

@@ -74,21 +74,21 @@ def detect_spots(
     if (consider_yxz <= np.iinfo(np.int32).max).all():
         consider_yxz = consider_yxz.to(torch.int32)
 
-    run_on = torch.device("cpu")
-    if torch.cuda.is_available() and not force_cpu:
-        run_on = torch.device("cuda")
-
     n_consider = consider_yxz.shape[1]
     n_shifts = se_shifts.shape[1]
     paddings = (pad_size_z, pad_size_z, pad_size_x, pad_size_x, pad_size_y, pad_size_y)
     image_temp = torch.nn.functional.pad(image_temp, paddings, mode="constant", value=0)
 
+    run_on = torch.device("cpu")
+    if torch.cuda.is_available() and not force_cpu:
+        run_on = torch.device("cuda")
+    # If there are too many potential spots in consider_yxz, then we must run through a subset at a time.
+    n_consider_max = maths.floor(utils.system.get_available_memory(run_on) * 4.1e6 / n_shifts)
+
     keep = torch.zeros((n_consider,), dtype=bool, device=run_on)
     image_temp = image_temp.to(run_on)
     se_shifts = se_shifts.to(run_on)
 
-    # If there are too many potential spots in consider_yxz, then we must run through a subset at a time.
-    n_consider_max = maths.floor(utils.system.get_available_memory(run_on) * 4.1e6 / n_shifts)
     for i in range(maths.ceil(n_consider / n_consider_max)):
         index_min, index_max = i * n_consider_max, (i + 1) * n_consider_max
         index_max = min(index_max, n_consider)

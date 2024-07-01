@@ -133,9 +133,9 @@ def load_dask(nbp_file: NotebookPage, nbp_basic: NotebookPage, r: int) -> Tuple[
     if nbp_file.raw_extension != "jobs":
         if nbp_basic.use_anchor:
             # always have anchor as first round after imaging rounds
-            round_files = list(nbp_file.round) + [nbp_file.anchor]
+            round_files = nbp_file.round + [nbp_file.anchor]
         else:
-            round_files = list(nbp_file.round)
+            round_files = nbp_file.round
         if nbp_basic.use_preseq:
             round_files = round_files + [nbp_file.pre_seq]
         round_file = os.path.join(nbp_file.input_dir, round_files[r])

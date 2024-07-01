@@ -1,5 +1,4 @@
 import os
-import math as maths
 from typing import Tuple
 
 import matplotlib as mpl
@@ -11,6 +10,7 @@ import torch
 from ... import spot_colors
 from ...call_spots import background_pytorch
 from ...omp import coefs_torch, scores_torch
+from ...omp import base as omp_base
 from ...setup import Notebook
 
 
@@ -19,8 +19,9 @@ def get_spot_position_and_tile(nb: Notebook, spot_no: int, method: str) -> Tuple
         local_yxz = nb.ref_spots.local_yxz[spot_no]
         tile = nb.ref_spots.tile[spot_no]
     elif method == "omp":
-        local_yxz = nb.omp.local_yxz[spot_no]
-        tile = nb.omp.tile[spot_no]
+        all_local_yxz, all_tile = omp_base.get_all_local_yxz(nb.basic_info, nb.omp)
+        local_yxz = all_local_yxz[spot_no]
+        tile = all_tile[spot_no].item()
     else:
         raise ValueError(f"Unknown gene calling method: {method}")
     return local_yxz, int(tile)
