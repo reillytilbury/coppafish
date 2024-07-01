@@ -18,9 +18,8 @@ import tifffile
 from . import legend
 from .. import call_spots as call_spots_plot
 from ...setup import Notebook
-from ..call_spots import gene_counts, view_bled_codes, view_bleed_matrix, view_codes, view_intensity, view_spot
-from ..call_spots_new import BGNormViewer, GEViewer, ViewAllGeneScores
-from ..omp import histogram_score, ViewOMPImage, ViewOMPPixelCoefficients
+from ..call_spots import view_bled_codes, view_bleed_matrix, view_codes, view_spot, BGNormViewer, GEViewer
+from ..omp import ViewOMPImage, ViewOMPPixelCoefficients
 from .hotkeys import KeyBinds, ViewHotkeys
 
 try:

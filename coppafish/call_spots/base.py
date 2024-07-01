@@ -1,8 +1,9 @@
 from scipy.spatial import KDTree
+from scipy.sparse.linalg import svds
 import numpy as np
-from typing import List, Tuple
+from typing import List
 
-from .. import utils, log
+from .. import log
 
 
 def get_non_duplicate(
@@ -53,219 +54,75 @@ def get_non_duplicate(
     return not_duplicate
 
 
-def get_bled_codes(gene_codes: np.ndarray, bleed_matrix: np.ndarray, gene_efficiency: np.ndarray) -> np.ndarray:
+def bayes_mean(
+    spot_colours: np.ndarray, prior_colours: np.ndarray, conc_param_parallel: float, conc_param_perp: float
+) -> np.ndarray:
     """
-    This gets ```bled_codes``` such that the spot_color of a gene ```g``` in round ```r``` is expected to be a constant
-    multiple of ```bled_codes[g, r]```.
-    This function should be run with full bleed_matrix with any rounds/channels/dyes outside those using set to nan.
-    Otherwise, will get confusion with dye indices in `gene_codes` being outside size of `bleed_matrix`.
+    This function computes the posterior mean of the spot colours under a prior distribution with mean prior_colours
+    and covariance matrix given by a diagonal matrix with diagonal entry conc_param_parallel for the direction parallel
+    to prior_colours and conc_param_perp for the direction orthogonal to prior_colours.
 
     Args:
-        gene_codes: ```int [n_genes x n_rounds]```.
-            ```gene_codes[g, r]``` indicates the dye that should be present for gene ```g``` in round ```r```.
-        bleed_matrix: ```float [n_channels x n_dyes]```.
-            Expected intensity of dye ```d``` is a constant multiple of ```bleed_matrix[:, d]```.
-        gene_efficiency: ```float [n_genes, n_rounds]```.
-            Efficiency of gene ```g``` in round ```r``` is ```gene_efficiency[g, r]```.
+        spot_colours: np.ndarray [n_spots x n_channels_use]
+            The spot colours for each spot.
+        prior_colours: np.ndarray [n_channels_use]
+            The prior mean colours.
+        conc_param_parallel: np.ndarray [n_channels_use]
+            The concentration parameter for the direction parallel to prior_colours.
+        conc_param_perp: np.ndarray [n_channels_use]
+            The concentration parameter for the direction orthogonal to prior_colours.
+    """
+    n_spots, data_sum = len(spot_colours), np.sum(spot_colours, axis=0)
+    # deal with the case where there are no spots
+    if n_spots == 0:
+        return prior_colours
+
+    prior_direction = prior_colours / np.linalg.norm(prior_colours)  # normalized prior direction
+    sum_parallel = (data_sum @ prior_direction) * prior_direction  # projection of data sum along prior direction
+    sum_perp = data_sum - sum_parallel  # projection of data sum orthogonal to mean direction
+
+    # now compute the weighted sum of the posterior mean for parallel and perpendicular directions
+    posterior_parallel = (sum_parallel + conc_param_parallel * prior_direction) / (n_spots + conc_param_parallel)
+    posterior_perp = sum_perp / (n_spots + conc_param_perp)
+    return posterior_parallel + posterior_perp
+
+
+def compute_bleed_matrix(
+    spot_colours: np.ndarray, gene_no: np.ndarray, gene_codes: np.ndarray, n_dyes: int
+) -> np.ndarray:
+    """
+    Function to compute the bleed matrix from the spot colours and the gene assignments.
+    Args:
+        spot_colours: np.ndarray [n_spots x n_rounds x n_channels_use]
+            The spot colours for each spot in each round and channel.
+        gene_no: np.ndarray [n_spots]
+            The gene assignment for each spot.
+        gene_codes: np.ndarray [n_genes x n_rounds]
+            The gene codes for each gene in each round.
+        n_dyes: int
+            The number of dyes.
 
     Returns:
-        ```float [n_genes x n_rounds x n_channels]```.
-            ```bled_codes``` such that ```spot_color``` of a gene ```g```
-            in round ```r``` is expected to be a constant multiple of ```bled_codes[g, r]```. bled_codes[g] will
-            all have a norm of one.
+        bleed_matrix: np.ndarray [n_dyes x n_channels_use]
+            The bleed matrix.
     """
-    n_genes, n_rounds = gene_codes.shape[0], gene_codes.shape[1]
-    n_channels, n_dyes = bleed_matrix.shape
-    if not utils.errors.check_shape(gene_codes, [n_genes, n_rounds]):
-        log.error(utils.errors.ShapeError("gene_codes", gene_codes.shape, (n_genes, n_rounds)))
-    if gene_codes.max() >= n_dyes:
-        ind_1, ind_2 = np.where(gene_codes == gene_codes.max())
-        log.error(
-            ValueError(
-                f"gene_code for gene {ind_1[0]}, round {ind_2[0]} has a dye with index {gene_codes.max()}"
-                f" but there are only {n_dyes} dyes."
-            )
-        )
-    if gene_codes.min() < 0:
-        ind_1, ind_2 = np.where(gene_codes == gene_codes.min())
-        log.error(ValueError(
-            f"gene_code for gene {ind_1[0]}, round {ind_2[0]} has a dye with a negative index:" f" {gene_codes.min()}"
-        ))
+    assert len(spot_colours) == len(gene_no), "Spot colours and gene_no must have the same length."
+    n_spots, n_rounds, n_channels_use = spot_colours.shape
+    bleed_matrix = np.zeros((n_dyes, n_channels_use))
 
-    bled_codes = np.zeros((n_genes, n_rounds, n_channels))
-    for g in range(n_genes):
+    # loop over all dyes, find the spots which are meant to be dye d in round r, and compute the SVD
+    for d in range(n_dyes):
+        dye_d_colours = []
         for r in range(n_rounds):
-            for c in range(n_channels):
-                bled_codes[g, r, c] = gene_efficiency[g, r] * bleed_matrix[c, gene_codes[g, r]]
+            relevant_genes = np.where(gene_codes[:, r] == d)[0]
+            relevant_gene_mask = np.isin(gene_no, relevant_genes)
+            dye_d_colours.append(spot_colours[relevant_gene_mask, r, :])
+        # now we have all the good colours for dye d, compute the SVD
+        dye_d_colours = np.concatenate(dye_d_colours, axis=0)
+        u, s, v = svds(dye_d_colours, k=1)
+        v = v[0]
+        # make sure largest entry in v is positive
+        v *= np.sign(v[np.argmax(np.abs(v))])
+        bleed_matrix[d] = v
 
-    # Give all bled codes an L2 norm of 1
-    norm_factor = np.linalg.norm(bled_codes, axis=(1, 2))
-    bled_codes = bled_codes / norm_factor[:, None, None]
-    return bled_codes
-
-
-def compute_gene_efficiency(
-    spot_colours: np.ndarray,
-    bled_codes: np.ndarray,
-    gene_no: np.ndarray,
-    gene_score: np.ndarray,
-    gene_codes: np.ndarray,
-    intensity: np.ndarray,
-    spot_number_threshold: int = 25,
-    score_threshold: float = 0.8,
-    intensity_threshold: float = 0,
-) -> Tuple[np.ndarray, np.ndarray, list]:
-    """
-    Compute gene efficiency and gene coefficients from spot colours and bleed matrix.
-
-    Args:
-        spot_colours: `float [n_spots x n_rounds x n_channels]`.
-            Spot colours normalised to equalise intensities between channels (and rounds). (BG Removed)
-        bled_codes: `float [n_genes x n_rounds x n_channels]`.
-        gene_no: `int [n_spots]`. Gene number for each spot.
-        gene_score: `float [n_spots]`. Score for each spot.
-        gene_codes: `int [n_genes x n_rounds]`.
-            Gene codes for each gene.
-        intensity: `float [n_spots]`.
-            Intensity of each spot.
-        spot_number_threshold: `int`.
-            Minimum number of spots required to compute gene efficiency.
-        score_threshold: `float`.
-            Minimum score required to compute gene efficiency.
-        intensity_threshold: `float`.
-            Minimum intensity required to compute gene efficiency.
-
-    #TODO: Add documentation for the returns
-    """
-    n_spots, n_rounds, n_channels = spot_colours.shape
-    n_genes = gene_codes.shape[0]
-    gene_efficiency = np.ones([n_genes, n_rounds])
-    dye_efficiency = np.ones([n_genes, n_rounds, 0]).tolist()
-    use_ge = np.zeros(n_spots, dtype=bool)
-
-    # Compute gene efficiency for each gene and round.
-    for g in range(n_genes):
-        gene_g_mask = (gene_no == g) * (gene_score > score_threshold) * (intensity > intensity_threshold)
-        # Skip gene if not enough spots.
-        if np.sum(gene_g_mask) < spot_number_threshold:
-            continue
-        use_ge += gene_g_mask
-        gene_g_spot_colours = spot_colours[gene_g_mask]
-        dye_efficiency_g = np.ones([gene_g_spot_colours.shape[0], n_rounds])
-        for r in range(n_rounds):
-            # Compute gene efficiency for each round. This is just the best scaling factor to match the mean/median
-            # spot colour to the expected spot colour.
-            expected_spot_colour = bled_codes[g, r]
-            observed_spot_colour = gene_g_spot_colours[:, r]
-            for s in range(observed_spot_colour.shape[0]):
-                a = observed_spot_colour[s]
-                b = expected_spot_colour
-                # Compute scaling factor.
-                dye_efficiency_g[s, r] = np.dot(a, b) / np.dot(b, b)
-            # Compute gene efficiency as the median dye efficiency across spots.
-            gene_efficiency[g, r] = np.median(dye_efficiency_g[:, r])
-            dye_efficiency[g][r] = dye_efficiency_g[:, r]
-
-    # Set negative values to 0.
-    gene_efficiency[gene_efficiency < 0] = 0
-
-    return gene_efficiency, use_ge, dye_efficiency
-
-
-def matrix_match(
-    Y: np.ndarray, X: np.ndarray, u: np.ndarray, v: np.ndarray, alpha: float = 0, beta: float = 0, n_iters: int = 50
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    This function solves the following problem: given two matrices Y and X (n rows and m columns each), find two
-    vectors u and v (of length n and m respectively) such that Y_ij ~ u_i * X_ij * v_j for all i and j. This is
-    achieved approximately by minimising the squared error between Y and u * X * v.
-    Args:
-        Y: target matrix (n rows, m columns) to be matched
-        X: input matrix (n rows, m columns)
-        u: initial guess for u (n entries)
-        v: initial guess for v (m entries)
-        alpha: weight of the L2 regularisation term on u
-        beta: weight of the L2 regularisation term on v
-        n_iters: number of iterations to run the algorithm for
-
-    Returns:
-        u, v: solutions to the problem. These are vectors of length n and m respectively. u will be L2 normalised,
-
-    """
-    u_init, v_init = u.copy(), v.copy()
-    n, m = Y.shape
-    eta, theta = np.zeros(n), np.zeros(m)
-    W = Y * X
-    for iter in range(n_iters):
-        for i in range(n):
-            eta[i] = 1 / (np.sum((X[i] * v) ** 2) + alpha)
-        for j in range(m):
-            theta[j] = 1 / (np.sum((X[:, j] * u) ** 2) + beta)
-        u = (W @ v + alpha * u_init) * eta
-        u /= np.linalg.norm(u)
-        v = (W.T @ u + beta * v_init) * theta
-    return u, v
-
-
-def matrix_match_exact(Y: np.ndarray, X: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    This function solves the following problem: given two matrices Y and X (n rows and m columns each), find two
-    vectors u and v (of length n and m respectively) such that Y_ij ~ u_i * X_ij * v_j for all i and j. We do this by
-    solving the problem u_i * Y_ij ~ X_ij * v_j for all i and j, and then inverting the u_i. The problem is constrained
-    so that u_i and v_j are nonzero and u has unit L2 norm. When this is the case it can be shown that the solution is
-    the eigenvector of W @ W.T with the largest eigenvalue, where W = Y * X.
-
-    Args:
-        Y: target matrix (n rows, m columns) to be matched
-        X: input matrix (n rows, m columns)
-
-    Returns:
-        u, v: solutions to the problem. These are vectors of length n and m respectively. u will be L2 normalised,
-        v will not.
-    """
-    W = Y * X
-    u_evals, u_evecs = np.linalg.eig(W @ W.T)
-    v_evals, v_evecs = np.linalg.eig(W.T @ W)
-    u_evals, u_evecs = np.real(u_evals), np.real(u_evecs)
-    v_evals, v_evecs = np.real(v_evals), np.real(v_evecs)
-    u = u_evecs[:, np.argmax(u_evals)]
-    v = v_evecs[:, np.argmax(v_evals)]
-    u /= np.linalg.norm(u)
-    B = u @ W @ v
-    C = np.sum((X * X) @ (v * v))
-    v = v * B / C
-    u = 1 / u
-
-    return u, v
-
-
-def matrix_match_with_prior(
-    Y: np.ndarray, X: np.ndarray, u_init: np.ndarray, v_init: np.ndarray, alpha: float = 0, beta: float = 0
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    This function solves the following problem: given two matrices Y and X (n rows and m columns each), find two
-    vectors u and v (of length n and m respectively) such that Y_ij ~ u_i * X_ij * v_j for all i and j. We do this by
-    solving the problem u_i * Y_ij ~ X_ij * v_j for all i and j, and then inverting the u_i. The problem is constrained
-    so that u_i is close to u_init_i and v_j is close to v_init_j. The problem is also constrained so that u_i has unit
-    L2 norm. When this is the case, the solutions can be written in closed form.
-    Args:
-        Y: target matrix (n rows, m columns) to be matched
-        X: input matrix (n rows, m columns)
-        u_init: initial guess for u (n entries)
-        v_init: initial guess for v (m entries)
-        alpha: weight of the L2 regularisation term on u
-        beta: weight of the L2 regularisation term on v
-
-    Returns:
-        u, v: solutions to the problem. These are vectors of length n and m respectively. u will be L2 normalised,
-    """
-    n, m = Y.shape
-    W = Y * X
-    eta = 1 / ((1 + alpha) * (1 + beta))
-    u_operator = np.linalg.inv(np.eye(n) - eta * W @ W.T)
-    v_operator = np.linalg.inv(np.eye(m) - eta * W.T @ W)
-    u = u_operator @ (alpha * u_init + beta * W @ v_init)
-    v = v_operator @ (beta * v_init + alpha * W.T @ u)
-    u /= np.linalg.norm(u)
-    u = 1 / u
-    return u, v
+    return bleed_matrix

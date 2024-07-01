@@ -1,5 +1,3 @@
-import os
-
 import numpy as np
 from matplotlib import pyplot as plt
 from ...setup import Notebook
@@ -94,7 +92,7 @@ class view_bled_codes(ColorPlotBase):
         self.im_data = [val[:, :, self.gene_no] for val in self.im_data_3d]
         for i in range(self.n_images):
             # change image to different normalisation and change clim
-            self.im[i].set_data(self.im_data[i] * self.color_norm[i] if self.method == 'raw' else self.im_data[i])
+            self.im[i].set_data(self.im_data[i] * self.colour_norm[i] if self.method == 'raw' else self.im_data[i])
         self.update_title()
         self.im[-1].axes.figure.canvas.draw()
 
