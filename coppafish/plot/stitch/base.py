@@ -15,17 +15,14 @@ def view_stitch_checkerboard(nb: Notebook, downsample_factor_yx: int = 4):
         downsample_factor_yx: amount to downsample the tiles by in y and x
     """
     # load in frequently used variables
-    use_tiles = nb.basic_info.use_tiles
+    use_tiles = list(nb.basic_info.use_tiles)
     tilepos_yx = nb.basic_info.tilepos_yx[use_tiles]
-    tile_origin = nb.stitch.tile_origins[use_tiles] - np.min(nb.stitch.tile_origins[use_tiles], axis=0)
+    tile_origin = nb.stitch.tile_origin[use_tiles] - np.min(nb.stitch.tile_origin[use_tiles], axis=0)
     downsample_vector = np.array([downsample_factor_yx, downsample_factor_yx, 1])
     tile_origin = tile_origin // downsample_vector
     # convert tile_origin from yxz to zyx
     tile_origin = tile_origin[:, [2, 0, 1]]
-    mid_z, tile_size = nb.basic_info.nz // 2, nb.basic_info.tile_sz
-    yxz_ind = [np.arange(mid_z - 10, mid_z + 10, 1),
-               np.arange(0, tile_size, downsample_factor_yx),
-               np.arange(0, tile_size, downsample_factor_yx)]
+    mid_z = nb.basic_info.nz // 2
     tiles = []
     viewer = napari.Viewer()
 
@@ -34,16 +31,17 @@ def view_stitch_checkerboard(nb: Notebook, downsample_factor_yx: int = 4):
         tile = tiles_io.load_image(nbp_file=nb.file_names, nbp_basic=nb.basic_info,
                                    file_type=nb.extract.file_type,
                                    t=t, r=nb.basic_info.anchor_round, c=nb.basic_info.dapi_channel,
-                                   yxz=yxz_ind)
+                                   yxz=(None, None, (mid_z - 20, mid_z + 20)))
         # convert tile from yxz to zyx
-        tile = np.moveaxis(tile, 0, -1)
+        tile = np.moveaxis(tile, -1, 0)
+        tile = tile[:, ::downsample_factor_yx, ::downsample_factor_yx]
         tiles.append(tile)
 
     # Create the checkerboard pattern
-    for t in use_tiles:
-        y, x = tilepos_yx[t]
+    for i, t in enumerate(use_tiles):
+        y, x = tilepos_yx[i]
         colour = 'red' if (y + x) % 2 == 0 else 'green'
-        viewer.add_image(tiles[t], name=f'tile_{t}', translate=tile_origin[t], blending='additive', colormap=colour)
+        viewer.add_image(tiles[i], name=f'tile_{t}', translate=tile_origin[i], blending='additive', colormap=colour)
 
     napari.run()
 

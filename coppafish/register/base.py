@@ -262,7 +262,7 @@ def optical_flow_register(
     sample_factor_yx: int = 4,
     window_radius: int = 5,
     smooth_threshold: float = 0.9,
-    smooth_sigma: float = 10,
+    smooth_sigma: list = [20, 20, 2],
     clip_val: np.ndarray = np.array([40, 40, 15]),
     n_cores: Optional[int] = None,
 ):
@@ -523,17 +523,23 @@ def interpolate_flow(
     tile: int,
     round: int,
     threshold: float = 0.95,
-    sigma: float = 10,
+    sigma: list = [20, 20, 2],
     upsample_factor_yx: int = 4,
     loc: str = "",
 ):
     """
-    Interpolate the flow based on the correlation between the base and target images
+    Interpolate the flow based on the correlation between the base and target images.
+
+    The interpolation is done between by smoothing the flow at the good locations and taking the ratio of this with
+    the smoothed indicator of the good locations.
+
+    This smoothing is done in 3D with sigma much smaller in z than xy to avoid getting rid of variable shifts in z.
+
     Args:
         flow: 3 x n_y x n_x x n_z array of flow in y, x and z
         correlation: n_y x n_x x n_z array of correlation coefficients
         threshold: threshold for correlation coefficient
-        sigma: standard deviation of the Gaussian filter
+        sigma: standard deviation of the Gaussian filter to be used for smoothing the flow
         upsample_factor_yx: int specifying the upsample factor in y and x
         loc: str specifying the location to save/ load the interpolated flow
     """
@@ -541,10 +547,9 @@ def interpolate_flow(
     # threshold the correlation
     mask = correlation >= np.quantile(correlation, threshold)
     flow_indicator = mask.astype(np.float32)
-    # smooth the flow indicator
-    flow_indicator_smooth = gaussian_filter(flow_indicator, sigma, truncate=4)
-    # smooth the flow
-    flow = np.array([gaussian_filter(flow[i] * flow_indicator, sigma) for i in range(3)])
+    flow_indicator_smooth = gaussian_filter(flow_indicator, sigma, truncate=6)
+    for i in range(3):
+        flow[i] = gaussian_filter(flow[i] * flow_indicator, sigma, truncate=6)
     # divide the flow by the smoothed indicator
     flow = np.array([flow[i] / flow_indicator_smooth for i in range(3)])
     # remove nan values

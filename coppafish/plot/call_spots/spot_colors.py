@@ -1,21 +1,28 @@
-import matplotlib.pyplot as plt
 import matplotlib as mpl
-import numpy as np
-from matplotlib.widgets import Button, RangeSlider
-from ...call_spots.qual_check import omp_spot_score, get_intensity_thresh
-from ...setup import Notebook
-from ...spot_colors.base import get_spot_colors, remove_background
-import matplotlib
 from typing import List, Optional, Tuple, Union
+import matplotlib.colors as colors
+from matplotlib.patches import Rectangle
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Button, Slider, RangeSlider
+import mplcursors
+import numpy as np
 
-plt.style.use("dark_background")
+from ...call_spots.qual_check import omp_spot_score
+from ...spot_colors import base
+from ...setup import Notebook
+
+try:
+    import importlib_resources
+except ModuleNotFoundError:
+    import importlib.resources as importlib_resources
 try:
     # So matplotlib plots pop out
     # Put in try so don't get error when unit testing in continuous integration
     # which is in headless mode
-    matplotlib.use("qtagg")
+    mpl.use("qtagg")
 except ImportError:
     pass
+plt.style.use("dark_background")
 
 
 class ColorPlotBase:
@@ -31,7 +38,7 @@ class ColorPlotBase:
         button_pos: Optional[List] = None,
     ):
         """
-        This is the base class for plots with multiple subplots and with a slider to change the color axis and a button
+        This is the base class for plots with multiple subplots and with a slider to change the colour axis and a button
         to change the normalisation.
         After initialising, the function `change_norm()` should be run to plot normalised images.
         This will change `self.method` from `'raw'` to `'norm'`.
@@ -56,10 +63,10 @@ class ColorPlotBase:
                 I.e., we don't want subplot to overlap with cbar, slider or buttom and this ensures that.
                 If not given, will be set to `[0.07, 0.775, 0.095, 0.94]`.
             cbar_pos: `[left, bottom, width, height]`
-                Position of color axis.
+                Position of colour axis.
                 If not given, will be set to `[0.9, 0.15, 0.03, 0.8]`.
             slider_pos: `[left, bottom, width, height]`
-                Position of slider that controls color axis.
+                Position of slider that controls colour axis.
                 If not given, will be set to `[0.85, 0.15, 0.01, 0.8]`.
             button_pos: `[left, bottom, width, height]`
                 Position of button which triggers change of normalisation.
@@ -84,16 +91,16 @@ class ColorPlotBase:
         if not isinstance(norm_factor, list):
             # allow for different norm for each image
             if norm_factor is None:
-                self.color_norm = None
+                self.colour_norm = None
             else:
-                self.color_norm = [
+                self.colour_norm = [
                     norm_factor,
                 ] * self.n_images
         else:
-            self.color_norm = norm_factor
+            self.colour_norm = norm_factor
         self.im_data = [val for val in images]  # put in order channels, rounds
-        self.method = "raw" if self.color_norm is not None else "norm"
-        if self.color_norm is None:
+        self.method = "raw" if self.colour_norm is not None else "norm"
+        if self.colour_norm is None:
             self.caxis_info = {"norm": {}}
         else:
             self.caxis_info = {"norm": {}, "raw": {}}
@@ -102,7 +109,7 @@ class ColorPlotBase:
                 im_data = self.im_data
                 self.caxis_info[key]["format"] = "%.2f"
             else:
-                im_data = [self.im_data[i] * self.color_norm[i] for i in range(self.n_images)]
+                im_data = [self.im_data[i] * self.colour_norm[i] for i in range(self.n_images)]
                 self.caxis_info[key]["format"] = "%.0f"
             self.caxis_info[key]["min"] = np.min([im.min() for im in im_data] + [-1e-20])
             self.caxis_info[key]["max"] = np.max([im.max() for im in im_data] + [1e-20])
@@ -111,7 +118,7 @@ class ColorPlotBase:
             self.caxis_info[key]["min"] = -self.caxis_info[key]["max"]
             self.caxis_info[key]["clims"] = [self.caxis_info[key]["min"], self.caxis_info[key]["max"]]
             # cmap_norm is so cmap is white at 0.
-            self.caxis_info[key]["cmap_norm"] = matplotlib.colors.TwoSlopeNorm(
+            self.caxis_info[key]["cmap_norm"] = mpl.colors.TwoSlopeNorm(
                 vmin=self.caxis_info[key]["min"], vcenter=0, vmax=self.caxis_info[key]["max"]
             )
 
@@ -135,12 +142,12 @@ class ColorPlotBase:
             # For 3D data, start by showing just the first plane
             self.im_data_3d = self.im_data.copy()
             self.im_data = [val[:, :, 0] for val in self.im_data_3d]
-            if self.color_norm is not None:
-                self.color_norm_3d = self.color_norm.copy()
-                self.color_norm = [val[:, :, 0] for val in self.color_norm_3d]
+            if self.colour_norm is not None:
+                self.colour_norm_3d = self.colour_norm.copy()
+                self.colour_norm = [val[:, :, 0] for val in self.colour_norm_3d]
         else:
             self.im_data_3d = None
-            self.color_norm_3d = None
+            self.colour_norm_3d = None
         # initialise plots with a zero array
         for i in range(self.n_images):
             self.im[i] = self.ax[i].imshow(
@@ -153,32 +160,32 @@ class ColorPlotBase:
         self.fig.colorbar(self.im[0], cax=cbar_ax)
 
         self.slider_ax = self.fig.add_axes(self.slider_pos)
-        self.color_slider = None
-        if self.color_norm is not None:
-            self.norm_button_color = "white"
-            self.norm_button_color_press = "red"
+        self.colour_slider = None
+        if self.colour_norm is not None:
+            self.norm_button_colour = "white"
+            self.norm_button_colour_press = "red"
             if self.method == "raw":
-                current_color = self.norm_button_color_press
+                current_colour = self.norm_button_colour_press
             else:
-                current_color = self.norm_button_color
+                current_colour = self.norm_button_colour
             self.norm_button_ax = self.fig.add_axes(button_pos)
             self.norm_button = Button(self.norm_button_ax, "Norm", hovercolor="0.275")
-            self.norm_button.label.set_color(current_color)
+            self.norm_button.label.set_color(current_colour)
             self.norm_button.on_clicked(self.change_norm)
 
     def change_clim(self, val: List):
         """
-        Function triggered on change of color axis slider.
+        Function triggered on change of colour axis slider.
 
         Args:
             val: `[min_caxis, max_caxis]`
-                Color axis of plots will be changed to these values.
+                colour axis of plots will be changed to these values.
         """
         if val[0] >= 0:
-            # cannot have positive lower bound with diverging colormap
+            # cannot have positive lower bound with diverging colourmap
             val[0] = -1e-20
         if val[1] <= 0:
-            # cannot have negative upper bound with diverging colormap
+            # cannot have negative upper bound with diverging colourmap
             val[1] = 1e-20
         self.caxis_info[self.method]["clims"] = val
         for im in self.im:
@@ -188,25 +195,25 @@ class ColorPlotBase:
     def change_norm(self, event=None):
         """
         Function triggered on press of normalisation button.
-        Will either multiply or divide each image by the relevant `color_norm`.
+        Will either multiply or divide each image by the relevant `colour_norm`.
         """
         # need to make new slider at each button press because min/max will change
         self.slider_ax.remove()
         self.slider_ax = self.fig.add_axes(self.slider_pos)
-        if self.color_norm is not None:
+        if self.colour_norm is not None:
             self.method = "norm" if self.method == "raw" else "raw"  # change to the other method
             if self.method == "raw":
-                # Change color of text when button pressed
-                self.norm_button.label.set_color(self.norm_button_color_press)
+                # Change colour of text when button pressed
+                self.norm_button.label.set_color(self.norm_button_colour_press)
             else:
-                self.norm_button.label.set_color(self.norm_button_color)
+                self.norm_button.label.set_color(self.norm_button_colour)
         for i in range(self.n_images):
             # change image to different normalisation and change clim
-            self.im[i].set_data(self.im_data[i] * self.color_norm[i] if self.method == "raw" else self.im_data[i])
+            self.im[i].set_data(self.im_data[i] * self.colour_norm[i] if self.method == "raw" else self.im_data[i])
             self.im[i].set_norm(self.caxis_info[self.method]["cmap_norm"])
             self.im[i].set_clim(self.caxis_info[self.method]["clims"][0], self.caxis_info[self.method]["clims"][1])
 
-        self.color_slider = RangeSlider(
+        self.colour_slider = RangeSlider(
             ax=self.slider_ax,
             label="Clim",
             valmin=self.caxis_info[self.method]["min"],
@@ -215,88 +222,85 @@ class ColorPlotBase:
             orientation="vertical",
             valfmt=self.caxis_info[self.method]["format"],
         )
-        self.color_slider.on_changed(self.change_clim)
+        self.colour_slider.on_changed(self.change_clim)
         self.im[-1].axes.figure.canvas.draw()
 
 
 class view_codes(ColorPlotBase):
     def __init__(self, nb: Notebook, spot_no: int, method: str = "anchor", bg_removed=False, save_loc: str = None):
         """
-        Diagnostic to compare `spot_color` to `bled_code` of predicted gene.
+        Diagnostic to compare `spot_colour` to `bled_code` of predicted gene.
 
         Args:
             nb: Notebook containing experiment details. Must have run at least as far as `call_reference_spots`.
             spot_no: Spot of interest to be plotted.
             bg_removed: Whether to plot background removed data.
-            method: `'anchor'` or `'omp'`.
+            method: `'anchor'` or `'omp'` or `'prob'`.
                 Which method of gene assignment used i.e. `spot_no` belongs to `ref_spots` or `omp` page of Notebook.
         """
+        assert method.lower() in ["anchor", "omp", "prob"], "method must be 'anchor', 'omp' or 'prob'"
         if method.lower() == "omp":
             page_name = "omp"
             t = nb.omp.tile[spot_no]
             spot_score = omp_spot_score(nb.omp, spot_no)
-            self.spot_color = nb.omp.colours[spot_no]
+            self.spot_colour = nb.omp.colours[spot_no]
         else:
             page_name = "ref_spots"
             spot_score = nb.ref_spots.dot_product_gene_score[spot_no]
             t = nb.ref_spots.tile[spot_no]
-            self.spot_color = nb.ref_spots.colours[spot_no][
-                np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
-            ]
+            self.spot_colour = nb.ref_spots.colours[spot_no]
 
-        if np.ndim(nb.call_spots.color_norm_factor) == 3:
-            color_norm = nb.call_spots.color_norm_factor[t][
-                np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
-            ]
+        if np.ndim(nb.call_spots.colour_norm_factor) == 3:
+            colour_norm = nb.call_spots.colour_norm_factor[t]
         else:
-            color_norm = nb.call_spots.color_norm_factor[np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)]
-        # Get spot color after background fitting
+            colour_norm = nb.call_spots.colour_norm_factor
+        # Get spot colour after background fitting
         if method.lower() == "omp":
-            self.spot_color_pb = remove_background(self.spot_color[None].astype(float))[0][0] / color_norm
-            self.spot_color = self.spot_color / color_norm
+            self.spot_colour_pb = base.remove_background(self.spot_colour[None].astype(float))[0][0] * colour_norm
+            self.spot_colour = self.spot_colour * colour_norm
         else:
             # remove background codes. To do this, repeat background_strentgh along a new axis for rounds
-            self.spot_color = self.spot_color / color_norm
-            background_strength = np.percentile(self.spot_color, 25, axis=0)
-            background_strength = np.repeat(background_strength[None, :], self.spot_color.shape[0], axis=0)
-            self.spot_color_pb = self.spot_color - background_strength
+            self.spot_colour = self.spot_colour * colour_norm
+            background_strength = np.percentile(self.spot_colour, 25, axis=0)
+            background_strength = np.repeat(background_strength[None, :], self.spot_colour.shape[0], axis=0)
+            self.spot_colour_pb = self.spot_colour - background_strength
         self.background_removed = bg_removed
-        self.spot_color, self.spot_color_pb = self.spot_color.transpose(), self.spot_color_pb.transpose()
-        color_norm = color_norm.transpose()
+        self.spot_colour, self.spot_colour_pb = self.spot_colour.transpose(), self.spot_colour_pb.transpose()
+        colour_norm = colour_norm.transpose()
 
-        gene_no = nb.__getattribute__(page_name).gene_no[spot_no]
+        if method.lower() == "omp":
+            gene_no = nb.omp.gene_no[spot_no]
+        elif method.lower() == "anchor":
+            gene_no = nb.ref_spots.dot_product_gene_no[spot_no]
+        elif method.lower() == "prob":
+            gene_no = np.argmax(nb.ref_spots.gene_probabilities[spot_no])
         gene_name = nb.call_spots.gene_names[gene_no]
-        gene_color = nb.call_spots.bled_codes_ge[gene_no][
-            np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
-        ].transpose()
+        gene_colour = nb.call_spots.bled_codes[gene_no].transpose()
         if bg_removed:
-            colour = self.spot_color_pb
+            colour = self.spot_colour_pb
         else:
-            colour = self.spot_color
+            colour = self.spot_colour
         super().__init__(
-            [colour, gene_color], color_norm, slider_pos=[0.85, 0.2, 0.01, 0.75], cbar_pos=[0.9, 0.2, 0.03, 0.75]
+            [colour, gene_colour], colour_norm, slider_pos=[0.85, 0.2, 0.01, 0.75], cbar_pos=[0.9, 0.2, 0.03, 0.75]
         )
         self.ax[0].set_title(f"Spot {spot_no}: match {str(np.around(spot_score, 2))} " f"to {gene_name}")
         self.ax[1].set_title(f"Predicted code for Gene {gene_no}: {gene_name}")
         self.ax[0].set_yticks(ticks=np.arange(self.im_data[0].shape[0]), labels=nb.basic_info.use_channels)
         self.ax[1].set_xticks(ticks=np.arange(self.im_data[0].shape[1]))
-        self.ax[1].set_xticklabels(
-            ["{:.0f} ({:.2f})".format(r, nb.call_spots.gene_efficiency[gene_no, r]) for r in nb.basic_info.use_rounds]
-        )
-        self.ax[1].set_xlabel("Round (Gene Efficiency)")
-        self.fig.supylabel("Color Channel")
+        self.ax[1].set_xlabel("Round")
+        self.fig.supylabel("colour Channel")
         # for each round, plot a green circle in the channel which is highest for that round
-        n_channels, n_rounds = gene_color.shape
+        n_channels, n_rounds = gene_colour.shape
         max_channels = np.zeros((n_rounds, n_channels), dtype=bool)
         max_channel_share = np.zeros((n_rounds, n_channels))
         total_intensity = 0
         for r in range(n_rounds):
             # we will add all channels with intensity > 0.25 * sum of all channels
-            round_color = gene_color[:, r] / np.sum(gene_color[:, r])
-            good_channels = np.where(round_color > 0.25)[0]
+            round_colour = gene_colour[:, r] / np.sum(gene_colour[:, r])
+            good_channels = np.where(round_colour > 0.25)[0]
             max_channels[r, good_channels] = True
-            max_channel_share[r, good_channels] = gene_color[good_channels, r]
-            total_intensity += np.sum(gene_color[good_channels, r])
+            max_channel_share[r, good_channels] = gene_colour[good_channels, r]
+            total_intensity += np.sum(gene_colour[good_channels, r])
         n_circles = np.sum(max_channels)
         max_channel_share *= n_circles / total_intensity
         for j in range(2):
@@ -322,7 +326,7 @@ class view_codes(ColorPlotBase):
 
         self.background_button_ax = self.fig.add_axes([0.85, 0.1, 0.1, 0.05])
         self.background_button = Button(self.background_button_ax, "Background", hovercolor="0.275")
-        self.background_button.label.set_color(self.norm_button_color)
+        self.background_button.label.set_color(self.norm_button_colour)
         self.background_button.on_clicked(self.change_background)
 
         self.change_norm()  # initialise with method = 'norm'
@@ -335,20 +339,20 @@ class view_codes(ColorPlotBase):
     def change_background(self, event=None):
         """
         Function triggered on press of background button.
-        Will either remove/add background contribution to spot_color
+        Will either remove/add background contribution to spot_colour
         """
         # need to make new slider at each button press because min/max will change
         if not self.background_removed:
-            self.im_data[0] = self.spot_color_pb
+            self.im_data[0] = self.spot_colour_pb
             self.background_removed = True
-            # Change color when pressed
-            self.background_button.label.set_color(self.norm_button_color_press)
+            # Change colour when pressed
+            self.background_button.label.set_color(self.norm_button_colour_press)
         else:
-            self.im_data[0] = self.spot_color
+            self.im_data[0] = self.spot_colour
             self.background_removed = False
-            self.background_button.label.set_color(self.norm_button_color)
+            self.background_button.label.set_color(self.norm_button_colour)
         # Change norm method before call change_norm so overall it does not change
-        if self.color_norm is not None:
+        if self.colour_norm is not None:
             self.method = "norm" if self.method == "raw" else "raw"  # change to the other method
         self.change_norm()
 
@@ -356,81 +360,75 @@ class view_codes(ColorPlotBase):
 class view_spot(ColorPlotBase):
     def __init__(self, nb: Notebook, spot_no: int, method: str = "anchor", im_size: int = 8):
         """
-        Diagnostic to show intensity of each color channel / round in neighbourhood of spot.
+        Diagnostic to show intensity of each colour channel / round in neighbourhood of spot.
         Will show a grid of `n_use_channels x n_use_rounds` subplots.
 
         Args:
             nb: Notebook containing experiment details. Must have run at least as far as `call_reference_spots`.
             spot_no: Spot of interest to be plotted.
-            method: `'anchor'` or `'omp'`.
+            method: `'anchor'` or `'omp'` or `'prob'`.
                 Which method of gene assignment used i.e. `spot_no` belongs to `ref_spots` or `omp` page of Notebook.
             im_size: Radius of image to be plotted for each channel/round.
 
         Notes:
             - Requires access to `nb.file_names.tile_dir`.
         """
+        assert method.lower() in ["anchor", "omp", "prob"], "method must be 'anchor', 'omp' or 'prob'"
         if method.lower() == "omp":
-            config = nb.get_config()["thresholds"]
-            page_name = "omp"
-            t = nb.omp.tile[spot_no]
+            t = int(nb.omp.tile[spot_no])
             spot_score = omp_spot_score(nb.omp, spot_no)
+            gene_no = nb.omp.gene_no[spot_no]
+            spot_yxz = nb.omp.local_yxz[spot_no]
         else:
-            page_name = "ref_spots"
-            t = nb.ref_spots.tile[spot_no]
+            t = int(nb.ref_spots.tile[spot_no])
             spot_score = nb.ref_spots.dot_product_gene_score[spot_no]
-        if np.ndim(nb.call_spots.color_norm_factor) == 3:
-            color_norm = nb.call_spots.color_norm_factor[t][
-                np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
-            ].T
-        else:
-            color_norm = nb.call_spots.color_norm_factor[np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)].T
-        gene_no = nb.__getattribute__(page_name).gene_no[spot_no]
-        t = nb.__getattribute__(page_name).tile[spot_no]
-        spot_yxz = nb.__getattribute__(page_name).local_yxz[spot_no]
+            gene_no = nb.ref_spots.dot_product_gene_no[spot_no] if method.lower() == "anchor" else np.argmax(
+                nb.ref_spots.gene_probabilities[spot_no]
+            )
+            spot_yxz = nb.ref_spots.local_yxz[spot_no]
 
+        # get gene name, code and colours
+        colour_norm = nb.call_spots.colour_norm_factor[t].T
         gene_name = nb.call_spots.gene_names[gene_no]
         gene_code = nb.call_spots.gene_codes[gene_no].copy()
-        gene_color = nb.call_spots.bled_codes_ge[gene_no][
-            np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
-        ].transpose()
-        gene_color_flat = gene_color.flatten()
-        n_use_channels, n_use_rounds = color_norm.shape
-        color_norm = [val for val in color_norm.flatten()]
+        gene_colour = nb.call_spots.bled_codes[gene_no].transpose()
+        n_use_channels, n_use_rounds = colour_norm.shape
+        colour_norm = [val for val in colour_norm.flatten()]
         spot_yxz_global = spot_yxz + nb.stitch.tile_origin[t]
-        im_size = [im_size, im_size]  # Useful for debugging to have different im_size_y, im_size_x.
-        # Subtlety here, may have y-axis flipped, but I think it is correct:
-        # note im_yxz[1] refers to point at max_y, min_x+1, z. So when reshape and set plot_extent, should be correct.
-        # I.e. im = np.zeros(49); im[1] = 1; im = im.reshape(7,7); plt.imshow(im, extent=[-0.5, 6.5, -0.5, 6.5])
-        # will show the value 1 at max_y, min_x+1.
         im_yxz = np.array(
             np.meshgrid(
-                np.arange(spot_yxz[0] - im_size[0], spot_yxz[0] + im_size[0] + 1)[::-1],
-                np.arange(spot_yxz[1] - im_size[1], spot_yxz[1] + im_size[1] + 1),
+                np.arange(spot_yxz[0] - im_size, spot_yxz[0] + im_size + 1)[::-1],
+                np.arange(spot_yxz[1] - im_size, spot_yxz[1] + im_size + 1),
                 spot_yxz[2],
             ),
             dtype=np.int16,
         ).T.reshape(-1, 3)
-        im_diameter = [2 * im_size[0] + 1, 2 * im_size[1] + 1]
-        spot_colors = get_spot_colors(
-            yxz_base=im_yxz,
-            t=t,
-            bg_scale=nb.filter.bg_scale,
-            file_type=nb.extract.file_type,
-            nbp_file=nb.file_names,
-            nbp_basic=nb.basic_info,
-            nbp_register=nb.register,
-        )[0]
-        spot_colors = np.moveaxis(spot_colors, 1, 2)  # put round as the last axis to match color_norm
-        spot_colors = spot_colors.reshape(im_yxz.shape[0], -1)
+        im_diameter = [2 * im_size + 1, 2 * im_size + 1]
+        spot_colours = np.zeros((n_use_rounds, n_use_channels, im_diameter[0] * im_diameter[1]))
+
+        # get spot colours for each round and channel
+        for r in range(n_use_rounds):
+            spot_colours[r] = base.get_spot_colours_new(nbp_basic=nb.basic_info,
+                                                        nbp_file=nb.file_names,
+                                                        nbp_extract=nb.extract,
+                                                        nbp_register=nb.register,
+                                                        nbp_register_debug=nb.register_debug,
+                                                        tile=t,
+                                                        round=r,
+                                                        channels=nb.basic_info.use_channels,
+                                                        yxz=im_yxz)
+        # put round as the last axis to match colour_norm
+        spot_colours = spot_colours.transpose(2, 1, 0)
+        spot_colours = spot_colours.reshape(im_diameter[0] * im_diameter[1], n_use_channels * n_use_rounds)
         # reshape
         cr_images = [
-            spot_colors[:, i].reshape(im_diameter[0], im_diameter[1]) / color_norm[i]
-            for i in range(spot_colors.shape[1])
+            spot_colours[:, i].reshape(im_diameter[0], im_diameter[1]) * colour_norm[i]
+            for i in range(n_use_rounds * n_use_channels)
         ]
         subplot_adjust = [0.07, 0.775, 0.075, 0.92]
         super().__init__(
             cr_images,
-            color_norm,
+            colour_norm,
             subplot_row_columns=[n_use_channels, n_use_rounds],
             subplot_adjust=subplot_adjust,
             fig_size=(13, 8),
@@ -443,17 +441,17 @@ class view_spot(ColorPlotBase):
             im_yxz[:, 0].max() + 0.5 + nb.stitch.tile_origin[t, 0],
         ]
         # for each round, plot a green circle in the channel which is highest for that round
-        n_channels, n_rounds = gene_color.shape
+        n_channels, n_rounds = gene_colour.shape
         max_channels = np.zeros((n_rounds, n_channels), dtype=bool)
         max_channel_share = np.zeros((n_rounds, n_channels))
         total_intensity = 0
         for r in range(n_rounds):
             # we will add all channels with intensity > 0.25 * sum of all channels
-            round_color = gene_color[:, r] / np.sum(gene_color[:, r])
-            good_channels = np.where(round_color > 0.25)[0]
+            round_colour = gene_colour[:, r] / np.sum(gene_colour[:, r])
+            good_channels = np.where(round_colour > 0.25)[0]
             max_channels[r, good_channels] = True
-            max_channel_share[r, good_channels] = gene_color[good_channels, r]
-            total_intensity += np.sum(gene_color[good_channels, r])
+            max_channel_share[r, good_channels] = gene_colour[good_channels, r]
+            total_intensity += np.sum(gene_colour[good_channels, r])
         n_circles = np.sum(max_channels)
         max_channel_share *= n_circles / total_intensity
         max_channels = max_channels.transpose().flatten()
@@ -461,26 +459,26 @@ class view_spot(ColorPlotBase):
         for i in range(self.n_images):
             # Add cross-hair
             if max_channels[i]:
-                cross_hair_color = "lime"  # different color if expected large intensity
+                cross_hair_colour = "lime"  # different color if expected large intensity
                 linestyle = "--"
                 self.ax[i].tick_params(color="lime", labelcolor="lime")
                 for spine in self.ax[i].spines.values():
                     spine.set_edgecolor("lime")
                     spine.set_linewidth(max_channel_share[i])
             else:
-                cross_hair_color = "k"
+                cross_hair_colour = "k"
                 linestyle = ":"
             self.ax[i].axes.plot(
                 [spot_yxz_global[1], spot_yxz_global[1]],
                 [plot_extent[2], plot_extent[3]],
-                cross_hair_color,
+                cross_hair_colour,
                 linestyle=linestyle,
                 lw=1,
             )
             self.ax[i].axes.plot(
                 [plot_extent[0], plot_extent[1]],
                 [spot_yxz_global[0], spot_yxz_global[0]],
-                cross_hair_color,
+                cross_hair_colour,
                 linestyle=linestyle,
                 lw=1,
             )
@@ -491,11 +489,11 @@ class view_spot(ColorPlotBase):
                 self.ax[i].set_ylabel(f"{nb.basic_info.use_channels[int(i/n_use_rounds)]}")
             if i >= self.n_images - n_use_rounds:
                 r = nb.basic_info.use_rounds[i - (self.n_images - n_use_rounds)]
-                self.ax[i].set_xlabel("{:.0f} ({:.2f})".format(r, nb.call_spots.gene_efficiency[gene_no, r]))
+                self.ax[i].set_xlabel(f'{r}')
 
         self.ax[0].set_xticks([spot_yxz_global[1]])
         self.ax[0].set_yticks([spot_yxz_global[0]])
-        self.fig.supylabel("Color Channel", size=14)
+        self.fig.supylabel("colour Channel", size=14)
         self.fig.supxlabel("Round (Gene Efficiency)", size=14, x=(subplot_adjust[0] + subplot_adjust[1]) / 2)
         plt.suptitle(
             f"Spot {spot_no}: match {str(np.around(spot_score, decimals=2))} " f"to {gene_name}. Code = {gene_code}",
@@ -506,59 +504,469 @@ class view_spot(ColorPlotBase):
         plt.show()
 
 
-class view_intensity(ColorPlotBase):
-    def __init__(self, nb: Notebook, spot_no: int, method: str = "anchor"):
+# We are now going to create a new class that will allow us to view the spots used to calculate the gene efficiency
+# for a given gene. This will be useful for checking that the spots used are representative of the gene as a whole.
+class GEViewer:
+    def __init__(self, nb: Notebook):
         """
-        Diagnostic to show how intensity is computed from `spot_color`.
-
+        Diagnostic to show the n_genes x n_rounds gene efficiency matrix as a heatmap.
         Args:
             nb: Notebook containing experiment details. Must have run at least as far as `call_reference_spots`.
-            spot_no: Spot of interest to be plotted.
-            method: `'anchor'` or `'omp'`.
-                Which method of gene assignment used i.e. `spot_no` belongs to `ref_spots` or `omp` page of Notebook.
         """
-        if method.lower() == "omp":
-            page_name = "omp"
-            t = nb.omp.tile[spot_no]
-            config = nb.get_config()["thresholds"]
-        else:
-            page_name = "ref_spots"
-            t = nb.ref_spots.tile[spot_no]
-        color_norm = nb.call_spots.color_norm_factor[t][
-            np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
-        ].transpose()
-        intensity_saved = nb.__getattribute__(page_name).intensity[spot_no]
-        intensity_thresh = get_intensity_thresh(nb)
-        spot_color = (
-            nb.__getattribute__(page_name)
-            .colors[spot_no][np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)]
-            .transpose()
-            / color_norm
-        )
-        subplot_adjust = [0.07, 0.775, 0.1, 0.91]
-        super().__init__([spot_color], color_norm, subplot_adjust=subplot_adjust)
-        if intensity_saved > intensity_thresh:
-            color = "w"
-        else:
-            color = "r"
-        spot_color_symbol = r"$\mathbf{\zeta_s}$"
-        intensity_symbol = r"$\chi_s$, (median of $\max_c\zeta_{s_{rc}}$ indicated in green)"
-        self.ax[0].set_title(
-            f"Spot Color, {spot_color_symbol}, for spot {spot_no}\n"
-            f"Intensity, {intensity_symbol} = {str(np.around(intensity_saved, 3))}",
-            color=color,
-        )
-        self.ax[0].set_yticks(ticks=np.arange(self.im_data[0].shape[0]), labels=nb.basic_info.use_channels)
-        self.ax[0].set_xticks(ticks=np.arange(self.im_data[0].shape[1]), labels=nb.basic_info.use_rounds)
-        self.ax[0].set_xlabel("Round")
-        self.fig.supylabel("Color Channel")
-        # Highlight max channel in each round which contributes to intensity
-        max_channels = np.argmax(self.im_data[0], axis=0)
-        for r in range(len(nb.basic_info.use_rounds)):
-            # can't add rectangle to multiple axes hence second for loop
-            rectangle = plt.Rectangle(
-                (r - 0.5, max_channels[r] - 0.5), 1, 1, fill=False, ec="lime", linestyle=":", lw=4
-            )
-            self.ax[0].add_patch(rectangle)
-        self.change_norm()  # initialise with method = 'norm'
+        self.nb = nb
+        self.n_genes = nb.call_spots.gene_efficiency.shape[0]
+        self.fig, self.ax = plt.subplots(figsize=(10, 10))
+        gene_efficiency = nb.call_spots.gene_efficiency
+        self.ax.imshow(gene_efficiency, cmap="viridis", vmin=0, vmax=gene_efficiency.max(), aspect="auto")
+        self.ax.set_xlabel("Round")
+        self.ax.set_ylabel("Gene")
+        self.ax.set_xticks(ticks=np.arange(gene_efficiency.shape[1]))
+        self.ax.set_yticks([])
+
+        # add colorbar
+        self.ax.set_title("Gene Efficiency")
+        cax = self.fig.add_axes([0.95, 0.1, 0.03, 0.8])
+        cbar = self.fig.colorbar(self.ax.images[0], cax=cax)
+        cbar.set_label("Gene Efficiency")
+
+        # Adding gene names to y-axis would be too crowded. We will use mplcursors to show gene name of gene[r] when
+        # hovering over row r of the heatmap. This means we need to only extract the y position of the mouse cursor.
+        gene_names = nb.call_spots.gene_names
+        mplcursors.cursor(self.ax, hover=True).connect("add", lambda sel: self.plot_gene_name(sel.index[0]))
+        # 2. Allow genes to be selected by clicking on them
+        mplcursors.cursor(self.ax, hover=False).connect("add", lambda sel: GESpotViewer(nb, sel.index[0]))
+        # 3. We would like to add a white rectangle around the observed spot when we hover over it. We will
+        # use mplcursors to do this. We need to add a rectangle to the plot when hovering over a gene.
+        # We also want to turn off annotation when hovering over a gene so we will use the `hover=False` option.
+        mplcursors.cursor(self.ax, hover=2).connect("add", lambda sel: self.add_rectangle(sel.index[0]))
+
         plt.show()
+
+    def add_rectangle(self, index):
+        # We need to remove any existing rectangles from the plot
+        index = max(0, index)
+        index = min(index, self.n_genes - 1)
+        for rectangle in self.ax.patches:
+            rectangle.remove()
+        # We can then add a new rectangle to the plot
+        self.ax.add_patch(Rectangle((-0.5, index - 0.5), self.nb.basic_info.n_rounds, 1, fill=False, edgecolor="white"))
+
+    def plot_gene_name(self, index):
+        # We need to remove any existing gene names from the plot
+        index = max(0, index)
+        index = min(index, self.n_genes - 1)
+        for text in self.ax.texts:
+            text.remove()
+        # We can then add a new gene name to the top right of the plot in size 20 font
+        self.ax.text(
+            1.05,
+            1.05,
+            self.nb.call_spots.gene_names[index],
+            transform=self.ax.transAxes,
+            size=20,
+            horizontalalignment="right",
+            verticalalignment="top",
+            color="white",
+        )
+
+
+class GESpotViewer:
+    def __init__(self, nb: Notebook, gene_index: int = 0, use_ge=True):
+        """
+        Diagnostic to show the spots used to calculate the gene efficiency for a given gene.
+        Args:
+            nb: Notebook containing experiment details. Must have run at least as far as `call_reference_spots`.
+            iteration: iteration of call spots that we would like to view
+            gene_index: Index of gene to be plotted.
+        """
+        self.nb = nb
+        self.gene_index = gene_index
+        self.n_genes = nb.call_spots.gene_efficiency.shape[0]
+        self.mode = "C"
+        self.use_ge = use_ge
+        # Load spots
+        self.load_spots(gene_index)
+        # Now initialise the plot, adding fig and ax attributes to the class
+        self.plot()
+
+        plt.show()
+
+    def load_spots(self, gene_index: int, use_ge=True):
+        nb = self.nb
+        n_channels = len(nb.basic_info.use_channels)
+        # First we need to find the spots used to calculate the gene efficiency for the given gene.
+        initial_assignment = np.argmax(nb.ref_spots.gene_probabilities, axis=1)
+        if use_ge:
+            self.gene_g_mask = nb.call_spots.use_ge * (initial_assignment == gene_index)
+        else:
+            self.gene_g_mask = nb.ref_spots.gene_no == gene_index
+        # self.gene_g_mask = nb.ref_spots.gene_no == gene_index
+        spots = nb.ref_spots.colours[self.gene_g_mask][:, :, nb.basic_info.use_channels]
+        # remove background codes. To do this, repeat background_strenth along a new axis for rounds
+        background_strength = nb.ref_spots.background_strength[self.gene_g_mask]
+        # remove background from spots
+        spots = spots - background_strength
+        spots = spots.reshape((spots.shape[0], spots.shape[1] * spots.shape[2]))
+        colour_norm = np.repeat(
+            np.mean(nb.call_spots.colour_norm_factor, axis=0)[
+                np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
+            ].reshape((1, -1)),
+            spots.shape[0],
+            axis=0,
+        )
+        self.spots = spots * colour_norm
+        # order spots by nb.ref_spots.scores
+        # self.spots = self.spots[np.argsort(nb.ref_spots.scores[self.gene_g_mask]), :]
+        # We need to find the expected spot profile for each round/channel
+        self.spots_expected = nb.call_spots.bled_codes[self.gene_index, :, nb.basic_info.use_channels].T
+        # normalise so that mean brightness is the same as that of the observed spots
+        mean_row_strength = np.mean(np.sum(self.spots, axis=1))
+        self.spots_expected = self.spots_expected.reshape((1, -1)) * mean_row_strength / np.sum(self.spots_expected)
+        self.spots_expected = np.repeat(self.spots_expected, self.spots.shape[0], axis=0)
+        # Now for each spot we would like to store a dye_efficiency vector. This is the least squares solution to
+        # the equation spots[i, r, :] = dye_efficiency * spots_expected[0, r, :].
+        auxilliary_spots = self.spots.reshape((self.spots.shape[0], self.spots.shape[1] // n_channels, n_channels))
+        auxilliary_spots_expected = self.spots_expected.reshape(
+            (self.spots.shape[0], self.spots.shape[1] // n_channels, n_channels)
+        )[0, :, :]
+        self.dye_efficiency = np.zeros((auxilliary_spots.shape[0], auxilliary_spots.shape[1]))
+
+        for s in range(auxilliary_spots.shape[0]):
+            for r in range(auxilliary_spots.shape[1]):
+                a = auxilliary_spots[s, r]
+                b = auxilliary_spots_expected[r]
+                self.dye_efficiency[s, r] = np.dot(a, b) / np.dot(b, b)
+
+        self.dye_efficiency_norm = self.dye_efficiency / np.linalg.norm(self.dye_efficiency, axis=1)[:, np.newaxis]
+        # Estimate parameters of VMF distribution for dye efficiency norm
+        r_bar = np.linalg.norm(np.mean(self.dye_efficiency_norm, axis=0))
+        self.mu_hat = np.mean(self.dye_efficiency_norm, axis=0) / r_bar
+        self.kappa_hat = r_bar * (nb.basic_info.n_rounds - r_bar**2) / (1 - r_bar**2)
+        self.likelihood = np.sum(
+            np.repeat(self.mu_hat[np.newaxis, :], self.spots.shape[0], axis=0) * self.dye_efficiency_norm, axis=1
+        )
+
+        # order spots by likelihood of dye efficiency
+        self.spots = self.spots[np.argsort(self.likelihood), :]
+        self.spot_id = np.where(self.gene_g_mask)[0][np.argsort(self.likelihood)]
+
+    def plot_ge_cmap(self):
+        if not hasattr(self, "fig"):
+            self.fig, self.ax = plt.subplots(1, 2, figsize=(10, 10))
+        else:
+            del self.fig, self.ax
+            self.fig, self.ax = plt.subplots(1, 2, figsize=(10, 10))
+        # Now we can plot the spots. We want to create 2 subplots. One with the spots observed and one with the expected
+        # spots. We will use the same color scale for both subplots.
+        vmax = np.max([np.percentile(self.spots, 99), np.percentile(self.spots_expected, 99)])
+        vmin = np.min([np.percentile(self.spots, 1), np.percentile(self.spots_expected, 1)])
+        # We can then plot the spots observed and the spots expected.
+        self.ax[0].imshow(self.spots, cmap="viridis", vmin=vmin, vmax=vmax, aspect="auto", interpolation="none")
+        self.ax[1].imshow(
+            self.spots_expected, cmap="viridis", vmin=vmin, vmax=vmax, aspect="auto", interpolation="none"
+        )
+        # We can then add titles and axis labels to the subplots.
+        self.ax[0].set_ylim(0, self.spots.shape[0])
+        self.ax[1].set_ylim(0, self.spots.shape[0])
+        self.ax[0].set_xlim(-0.5, self.spots.shape[1] - 0.5)
+        self.ax[1].set_xlim(-0.5, self.spots.shape[1] - 0.5)
+        self.ax[0].set_title("Observed Spot Colours")
+        self.ax[1].set_title("Expected Spot Colours")
+        self.ax[0].set_xlabel("Spot Colour (flattened)")
+        self.ax[1].set_xlabel("Spot Colour (flattened)")
+        self.ax[0].set_ylabel("Spot")
+        self.ax[1].set_ylabel("Spot")
+
+        # We would like to add red vertical lines to show the start of each round.
+        for j in range(2):
+            for i in range(self.nb.basic_info.n_rounds):
+                self.ax[j].axvline(i * len(self.nb.basic_info.use_channels) - 0.5, color="r")
+
+        # Set supertitle, colorbar and show plot
+        self.fig.suptitle(
+            "Gene Efficiency Calculation for Gene "
+            + self.nb.call_spots.gene_names[self.gene_index]
+            + ". \n Estimated concentration parameter = "
+            + str(np.round(self.kappa_hat, 2))
+        )
+
+        # Add gene efficiency plot on top of prediction on the right
+        ge = self.nb.call_spots.gene_efficiency[self.gene_index]
+        ge_max = np.max(self.nb.call_spots.gene_efficiency)
+        ge = ge * self.spots.shape[0] / ge_max
+        ge = np.repeat(ge, self.nb.basic_info.n_rounds)
+        # Now clip the gene efficiency to be between 0 and the number of spots
+        ge = np.clip(ge, 0, self.spots.shape[0] - 1)
+        # We can then plot the gene efficiency
+        self.ax[1].plot(ge, color="w")
+        # plot a white line at the gene efficiency of 1.
+        self.ax[1].axhline(0, color="w", linestyle="--", label="Gene Efficiency = " + str(np.round(ge_max, 2)))
+        self.ax[1].axhline(self.spots.shape[0] / ge_max, color="w", linestyle="--", label="Gene Efficiency = 1")
+        self.ax[1].axhline(self.spots.shape[0] - 1, color="w", linestyle="--", label="Gene Efficiency = 0")
+        self.ax[1].legend(loc="upper right")
+
+        # For each round, we'd like to plot the dye efficiencies associated with the spots in this gene and round.
+        # First, for each round, sort dye_efficiencies in ascending order, then clip between 0 and ge_max.
+        for r in range(self.nb.basic_info.n_rounds):
+            dye_efficiency = self.dye_efficiency[:, r]
+            dye_efficiency = np.sort(dye_efficiency)
+            dye_efficiency = np.clip(dye_efficiency, 0, ge_max)
+            # Now we can plot the dye efficiencies. We want to plot them on the left subplot, and we want each round's
+            # dye efficiencies to be in between the red lines corresponding to that round.
+            # In order to make the dye_efficiencies appear in the correct place, we need to scale and shift them like
+            # we did with gene efficiency.
+            dye_efficiency = dye_efficiency * self.spots.shape[0] / ge_max
+            x_start, x_end = (
+                r * len(self.nb.basic_info.use_channels) - 0.5,
+                (r + 1) * len(self.nb.basic_info.use_channels) - 0.5,
+            )
+            self.ax[0].plot(np.linspace(x_start, x_end, len(dye_efficiency)), dye_efficiency, color="w")
+
+        # Add simple colorbar. Move this a little up to make space for the button.
+        cax = self.fig.add_axes([0.925, 0.1, 0.03, 0.7])
+        self.fig.colorbar(
+            plt.cm.ScalarMappable(norm=colors.Normalize(vmin=vmin, vmax=vmax), cmap="viridis"),
+            cax=cax,
+            label="Spot Colour",
+        )
+        self.add_cmap_widgets()
+        self.fig.canvas.draw_idle()
+
+    def plot_ge_hist(self, percentile=95):
+        """
+        Plot n_rounds histograms of all gene_efficiencies for each spot in each round.
+        """
+        nb = self.nb
+        gene_code = nb.call_spots.gene_codes[self.gene_index]
+
+        if not hasattr(self, "fig"):
+            # Create figure and axis
+            self.fig, self.ax = plt.subplots(1, nb.basic_info.n_rounds, figsize=(20, 5))
+        else:
+            del self.fig, self.ax
+            # Create figure and axis
+            self.fig, self.ax = plt.subplots(1, nb.basic_info.n_rounds, figsize=(20, 5))
+
+        fig, ax = self.fig, self.ax
+        # Loop through each round and plot the histogram of dye efficiencies
+        for r in range(self.nb.basic_info.n_rounds):
+            # Take max efficiency as percentile of rc_spot_intensity
+            max_efficiency = np.percentile(self.dye_efficiency_norm, percentile)
+            # Now plot both spot intensities on the same histogram
+            ax[r].hist(self.dye_efficiency_norm[:, r], bins=np.linspace(0, max_efficiency, 20), density=True)
+
+            # Add a box in the top right of the plot with the Gene Efficiency
+            ge = nb.call_spots.gene_efficiency[self.gene_index, r]
+            ax[r].set_yticks([])
+            ax[r].set_xticks([])
+            ax[r].set_xlabel("Relative Dye Efficiency \n Gene Efficiency = " + str(np.round(ge, 2)))
+            ax[r].set_ylabel("Frequency")
+
+        # Adjust subplots to leave space on the right for the legend and buttons
+        fig.subplots_adjust(right=0.9)
+
+        # Add a single legend on the top right of the figure. Want to take only first 2 labels from ax 0
+        legend_ax = fig.add_axes([0.925, 0.9, 0.05, 0.05])
+        legend_ax.axis("off")
+        fig.suptitle("Histogram of relative dye efficiencies for Gene " + nb.call_spots.gene_names[self.gene_index])
+        self.add_hist_widgets()
+        fig.canvas.draw_idle()
+
+    def plot(self):
+        # Get rid of any existing plots
+        if hasattr(self, "fig"):
+            plt.close(self.fig)
+
+        # Plot the correct plot
+        if self.mode == "C":
+            self.plot_ge_cmap()
+        elif self.mode == "H":
+            self.plot_ge_hist()
+
+        self.add_switch_buttons()
+
+    def button_cmap_clicked(self, event):
+        self.mode = "C"
+        self.plot()
+
+    def button_all_clicked(self, event):
+        self.use_ge = not self.use_ge
+        self.load_spots(self.gene_index, self.use_ge)
+        self.plot()
+
+    def button_hist_clicked(self, event):
+        self.mode = "H"
+        self.plot()
+
+    def add_switch_buttons(self):
+        # Add 2 buttons on the bottom right of the figure allowing the user to choose between viewing the
+        # histogram or the colourmap. Make text black so that it is visible on the white background.
+        ax_button = self.fig.add_axes([0.925, 0.05, 0.02, 0.03])
+        self.button_hist = Button(ax_button, "H", color="black")
+        self.button_hist.on_clicked(self.button_hist_clicked)
+        ax_button_cmap = self.fig.add_axes([0.95, 0.05, 0.02, 0.03])
+        self.button_cmap = Button(ax_button_cmap, "C", color="black")
+        self.button_cmap.on_clicked(self.button_cmap_clicked)
+        # Add button to show all spots in the gene. Put this in the top right of the figure
+        ax_button_show_all = self.fig.add_axes([0.925, 0.825, 0.05, 0.05])
+        self.button_all = Button(ax_button_show_all, "ALL", color="black")
+        self.button_all.on_clicked(self.button_all_clicked)
+
+    def add_cmap_widgets(self):
+        # Initialise buttons and cursors
+        # 1. We would like each row of the plot to be clickable, so that we can view the observed spot.
+        mplcursors.cursor(self.ax[0], hover=False).connect(
+            "add", lambda sel: view_codes(self.nb, self.spot_id[sel.index[0]])
+        )
+        # 2. We would like to add a white rectangle around the observed spot when we hover over it
+        mplcursors.cursor(self.ax[0], hover=2).connect("add", lambda sel: self.add_rectangle(sel.index[0]))
+
+    def add_hist_widgets(self):
+        # Add a slider on the right of the figure allowing the user to choose the percentile of the histogram
+        # to use as the maximum intensity. This slider should be the same dimensions as the colorbar and should
+        # be in the same position as the colorbar. We should slide vertically to change the percentile.
+        self.ax_slider = self.fig.add_axes([0.94, 0.15, 0.02, 0.6])
+        self.slider = Slider(self.ax_slider, "Percentile", 80, 100, valinit=90, orientation="vertical")
+        self.slider.on_changed(lambda val: self.update_hist(int(val)))
+
+    def update_hist(self, percentile):
+        nb = self.nb
+        fig, ax = self.fig, self.ax
+        # Loop through each round and plot the histogram of dye efficiencies
+        for r in range(self.nb.basic_info.n_rounds):
+            # Take max efficiency as percentile of rc_spot_intensity
+            max_efficiency = np.percentile(self.dye_efficiency_norm, percentile)
+            # Now plot both spot intensities on the same histogram
+            ax[r].cla()
+            ax[r].hist(self.dye_efficiency_norm[:, r], bins=np.linspace(0, max_efficiency, 20), density=True)
+
+            # Add a box in the top right of the plot with the Gene Efficiency
+            ge = nb.call_spots.gene_efficiency[self.gene_index, r]
+            ax[r].set_yticks([])
+            ax[r].set_xticks([])
+            ax[r].set_xlabel("Spot Intensity \n Gene Efficiency = " + str(np.round(ge, 2)))
+            ax[r].set_ylabel("Frequency")
+
+        # Adjust subplots to leave space on the right for the legend and buttons
+        fig.subplots_adjust(right=0.9)
+        fig.canvas.draw_idle()
+
+    def add_rectangle(self, index):
+        # We need to remove any existing rectangles from the plot
+        index = max(0, index)
+        index = min(index, self.spots.shape[0] - 1)
+        for rectangle in self.ax[0].patches:
+            rectangle.remove()
+        # We can then add a new rectangle to the plot
+        self.ax[0].add_patch(
+            Rectangle(
+                (-0.5, index - 0.5),
+                self.nb.basic_info.n_rounds * len(self.nb.basic_info.use_channels),
+                1,
+                fill=False,
+                edgecolor="white",
+            )
+        )
+
+
+class BGNormViewer:
+    """
+    This function will plot all spots before and after background subtraction and order them by background noise.
+    We will then plot the normalised spots too.
+    """
+
+    def __init__(self, nb):
+        self.nb = nb
+        isolated = nb.ref_spots.isolated
+        tile = nb.ref_spots.tile
+        n_spots = np.sum(isolated)
+        n_rounds, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
+        norm_factor = nb.call_spots.colour_norm_factor[tile][isolated]
+        background_noise = nb.ref_spots.background_strength[isolated]
+
+        spot_colour_raw = nb.ref_spots.colours.copy()[isolated][:, :, nb.basic_info.use_channels]
+        spot_colour_no_bg = spot_colour_raw - background_noise
+        spot_colour_normed_no_bg = spot_colour_no_bg * norm_factor[isolated]
+        # Now we'd like to order the spots by background noise in descending order
+        background_noise = np.sum(abs(background_noise), axis=(1, 2))
+        spot_colour_raw = spot_colour_raw[np.argsort(background_noise)[::-1]]
+        spot_colour_no_bg = spot_colour_no_bg[np.argsort(background_noise)[::-1]]
+        spot_colour_normed_no_bg = spot_colour_normed_no_bg[np.argsort(background_noise)[::-1]]
+        # Finally, we need to reshape the spots to be n_spots x n_rounds * n_channels. Since we want the channels to be
+        # in consecutive blocks of size n_rounds, we can reshape by first switching the round and channel axes.
+        spot_colour_raw = spot_colour_raw.transpose((0, 2, 1))
+        spot_colour_raw = spot_colour_raw.reshape((n_spots, n_rounds * n_channels_use))
+        spot_colour_no_bg = spot_colour_no_bg.transpose((0, 2, 1))
+        spot_colour_no_bg = spot_colour_no_bg.reshape((n_spots, n_rounds * n_channels_use))
+        spot_colour_normed_no_bg = spot_colour_normed_no_bg.transpose((0, 2, 1))
+        spot_colour_normed_no_bg = spot_colour_normed_no_bg.reshape((n_spots, n_rounds * n_channels_use))
+
+        # We're going to make a little viewer to show spots before and after background subtraction
+        colour_scaling_factor = 10
+        fig, ax = plt.subplots(1, 3, figsize=(10, 5))
+        max_intensity = np.max(spot_colour_raw)
+        min_intensity = np.min(spot_colour_raw)
+        ax[0].imshow(
+            spot_colour_raw,
+            aspect="auto",
+            vmin=min_intensity * colour_scaling_factor,
+            vmax=max_intensity * colour_scaling_factor,
+            interpolation="none",
+        )
+        ax[0].set_title("Before background subtraction and normalisation")
+        ax[0].set_xticks([])
+
+        max_intensity = np.max(spot_colour_no_bg)
+        min_intensity = np.min(spot_colour_no_bg)
+        ax[1].imshow(
+            spot_colour_no_bg,
+            aspect="auto",
+            vmin=min_intensity * colour_scaling_factor,
+            vmax=max_intensity * colour_scaling_factor,
+            interpolation="none",
+        )
+        ax[1].set_title("After bg removal, before normalisation")
+        ax[1].set_xticks([])
+
+        max_intensity = np.max(spot_colour_normed_no_bg)
+        min_intensity = np.min(spot_colour_normed_no_bg)
+        ax[2].imshow(
+            spot_colour_normed_no_bg,
+            aspect="auto",
+            vmin=min_intensity * colour_scaling_factor,
+            vmax=max_intensity * colour_scaling_factor,
+            interpolation="none",
+        )
+        ax[2].set_title("After background subtraction and normalisation")
+        ax[2].set_xticks([])
+
+        # Now add vertical dashed red lines to separate channels
+        for i in range(n_rounds - 1):
+            for j in range(3):
+                ax[j].axvline((i + 1) * n_channels_use - 0.5, color="r", linestyle="--")
+
+        # For each ax, add the channels to the x axis. Since the x axis has n_rounds channels, followed by n_rounds
+        # channels, etc, we only need to add the channels once. We want to add the channel name at the bottom of
+        # each set of channels, so we'll add the channel name at the position of the middle channel in each set
+        for i in range(n_channels_use):
+            y_pos = int(n_spots * (1 + 0.05))
+            for j in range(3):
+                ax[j].text(i * n_rounds + n_rounds // 2, y_pos, nb.basic_info.use_channels[i], color="w", fontsize=10)
+
+        # Add a title
+        fig.suptitle("Background subtraction and normalisation", fontsize=16)
+
+        plt.show()
+
+    # add slider to allow us to vary value of interp between 0 and 1 and update plot
+    # def add_hist_widgets(self):
+    #     Add a slider on the right of the figure allowing the user to choose the percentile of the histogram
+    #     to use as the maximum intensity. This slider should be the same dimensions as the colorbar and should
+    #     be in the same position as the colorbar. We should slide vertically to change the percentile.
+    # self.ax_slider = self.fig.add_axes([0.94, 0.15, 0.02, 0.6])
+    # self.slider = Slider(self.ax_slider, 'Interpolation Coefficient', 0, 1, valinit=0, orientation='vertical')
+    # self.slider.on_changed(lambda val: self.update_hist(int(val)))
+    #
+    # TODO: Add 2 buttons, one for separating normalisation by channel and one for separating by round and channel
+
+

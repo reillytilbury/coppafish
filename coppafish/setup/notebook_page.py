@@ -510,7 +510,7 @@ class NotebookPage:
                 "ndarray[float]",
                 "Numpy float32 array [n_spots]. "
                 + "$\\chi_s = \\underset{r}{\\mathrm{median}}(\\max_c\\zeta_{s_{rc}})$"
-                + "where $\\pmb{\\zeta}_s=$ `colors[s, r]/color_norm_factor[r]`.",
+                + "where $\\pmb{\\zeta}_s=$ `colors[s, r]*colour_norm_factor[r]`.",
             ],
             "dot_product_gene_no": [
                 "ndarray[int16]",
