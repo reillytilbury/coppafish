@@ -15,10 +15,6 @@ supports saving as uncompressed numpy arrays by setting `file_type` to `.npy` in
 
 Extract also saves metadata inside of the `tile_dir` directory if the raw files are ND2 format.
 
-Extract takes $\textsf{n_pixels}\times1.2\times10^{-8}$ minutes to complete from raw npy files on a local NVMe SSD and
-$\textsf{n_pixels}\times7\times10^{-7}$ minutes to complete from raw ND2 files with 100MB/s reading speed, where
-$\textsf{n_pixels}$ is the total number of pixels in your dataset[^1].
-
 ## Filter
 
 All images are filtered to help minimise scattering of light (bright points will appear as cones initially, hence the
@@ -26,8 +22,6 @@ name "Point Spread Function") and emphasise spots. A given point spread function
 images.
 
 After filtering is applied, the images are scaled by a computed scale factor and then saved in `uint16` format again.
-
-Filter takes $\textsf{n_pixels}\times4\times10^{-8}$ minutes.
 
 ## Find spots
 
@@ -38,8 +32,6 @@ is chosen at random. Warnings and errors are raised if there are too few spots d
 be customised, see `find_spots` section in the
 <a href="https://github.com/reillytilbury/coppafish/blob/alpha/coppafish/setup/settings.default.ini" target="_blank">
 config</a> default file for variable names.
-
-Find spots takes $\textsf{n_pixels}\times3\times10^{-9}$ minutes.
 
 ## Register
 
@@ -54,7 +46,7 @@ overlapping genes to be detected. It is an iterative,
 <a href="https://en.wikipedia.org/wiki/Greedy_algorithm" target="_blank">greedy algorithm</a> that runs on individual
 pixels of the images. At each OMP iteration, a new gene is assigned to the pixel. OMP is also self-correcting.
 "Orthogonal" refers to how OMP will re-compute its gene contributions after every iteration by least squares.
-Background genes[^2] are considered valid genes in OMP. The iterations stop if:
+Background genes[^1] are considered valid genes in OMP. The iterations stop if:
 
 * `max_genes` in the `omp` config section is reached.
 * assigning the next best gene to the pixel does not have a dot product score above `dp_thresh` in the `omp` config.
@@ -80,14 +72,21 @@ is part of the gene calling pipeline, known for its simpler and more intuitive m
 OMP and call spots have similar gene reads. But, you should expect to see more gene calls made by OMP compared to call
 spots.
 
-OMP takes $\textsf{n_pixels}\times2\times10^{-7}$ minutes for pytorch CPU and $\textsf{n_pixels}\times1.4\times10^{-7}$
-for pytorch GPU.
+## Runtime
+
+For an estimate of your pipeline runtime, in the Python terminal:
+```python
+from coppafish.utils import estimate_runtime
+
+estimate_runtime()
+```
+then type in the relevant information when prompted[^2].
 
 
 [^1]:
-    All time estimations are rough and made using CPU pytorch with an Intel i9-13900K @ 5.500GHz unless otherwise
-    stated.
-[^2]:
     Background genes refer to constant pixel intensity across all sequencing rounds in one channel. This is an
     indicator of an anomalous fluorescing feature that is not a spot. No spot codes are made to be the same channel in
     all rounds so they are not mistaken with background fluorescence.
+[^2]:
+    All time estimations are made using an Intel i9-13900K @ 5.500GHz, NVIDIA RTX 4070Ti Super, and NVMe local SSD. 
+    Raw, ND2 files were saved on a server with read speed of ~200MB/s.
