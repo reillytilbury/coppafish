@@ -83,7 +83,7 @@ def call_reference_spots(
 
     # 2. Compute gene probabilities for each spot
     bled_codes = raw_bleed_matrix[gene_codes]
-    gene_prob_initial = gene_prob_score(spot_colours, bled_codes)
+    gene_prob_initial = gene_prob_score(spot_colours, bled_codes, kappa=config["kappa"])
 
     # 3. Use spots with score above threshold to work out global dye codes
     prob_mode_initial, prob_score_initial = np.argmax(gene_prob_initial, axis=1), np.max(gene_prob_initial, axis=1)
@@ -151,7 +151,7 @@ def call_reference_spots(
     # 7. update the normalised spots and the bleed matrix, then do a second round of gene assignments with the free
     # bled codes
     spot_colours = spot_colours * tile_scale[spot_tile, :, :]  # update the spot colours
-    gene_prob = gene_prob_score(spot_colours=spot_colours, bled_codes=bled_codes)  # update probs
+    gene_prob = gene_prob_score(spot_colours=spot_colours, bled_codes=bled_codes, kappa=config["kappa"]) # update probs
     prob_mode, prob_score = np.argmax(gene_prob, axis=1), np.max(gene_prob, axis=1)
     gene_dot_products = dot_product_score(
         spot_colours=spot_colours.reshape((n_spots, n_rounds * n_channels_use)),

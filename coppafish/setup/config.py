@@ -133,6 +133,7 @@ _options = {
         "gene_prob_threshold": "number",
         "target_values": "tuple_number",
         "d_max": "tuple_number",
+        "kappa": "number",
         "concentration_parameter_parallel": "number",
         "concentration_parameter_perpendicular": "number",
     },
