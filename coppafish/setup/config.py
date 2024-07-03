@@ -185,6 +185,7 @@ _options = {
 # "maybe" types come from the Haskell convention whereby it can either hold a
 # value or be empty, where empty in this case is defined as an empty string.
 # In practice, this means the option is optional.
+separate_tuples = lambda x: [y.replace("(", "").replace(")", "") for y in x.replace(" ", "").split("),(")]
 _option_type_checkers = {
     "int": lambda x: re.match("-?[0-9]+", x) is not None,
     "number": lambda _: re.match("-?[0-9]+(\\.[0-9]+)?$", "-123") is not None,
@@ -203,7 +204,8 @@ _option_type_checkers = {
     "maybe_str": lambda x: x.strip() == "" or _option_type_checkers["str"](x),
     "maybe_tuple_str": lambda x: x.strip() == "" or _option_type_checkers["tuple_str"](x),
     "maybe_file": lambda x: x.strip() == "" or _option_type_checkers["file"](x),
-    "maybe_tuple_tuple_int": lambda x: x.strip() == "" or all([_option_type_checkers["tuple_int"](y) for y in x]),
+    "maybe_tuple_tuple_int": lambda x: x.strip() == ""
+    or all([_option_type_checkers["tuple_int"](y) for y in separate_tuples(x)]),
 }
 _option_formatters = {
     "int": lambda x: int(x),
@@ -224,7 +226,7 @@ _option_formatters = {
     "maybe_tuple_str": lambda x: None if x == "" else _option_formatters["tuple_str"](x),
     "maybe_file": lambda x: None if x == "" else _option_formatters["file"](x),
     "maybe_tuple_tuple_int": lambda x: (
-        None if x == "" else tuple([tuple(_option_formatters["tuple_int"](y)) for y in x])
+        None if x == "" else tuple([_option_formatters["tuple_int"](y) for y in separate_tuples(x)])
     ),
 }
 
