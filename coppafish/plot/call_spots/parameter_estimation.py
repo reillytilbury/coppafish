@@ -1,32 +1,28 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from typing import Tuple
+from ...setup import Notebook
 
 
 def view_free_and_constrained_bled_codes(
-    free_bled_codes_tile_indep: np.ndarray,
-    bled_codes: np.ndarray,
-    rc_scale: np.ndarray,
-    gene_names: np.ndarray,
-    n_spots: np.ndarray,
+    nb: Notebook,
     show: bool = True,
 ) -> None:
     """
     Function to plot the free and constrained bleed codes for each gene.
     Args:
-        free_bled_codes_tile_indep: np.ndarray [n_genes x n_rounds x n_channels_use]
-            The free bled codes.
-        bled_codes: np.ndarray [n_genes x n_rounds x n_channels_use]
-            The constrained bled codes.
-        rc_scale: np.ndarray [n_rounds x n_channels_use]
-            The scale factor for each round and channel.
-        gene_names: np.ndarray [n_genes]
-            The gene names.
-        n_spots: np.ndarray [n_genes]
-            The number of spots for each gene.
+        nb: Notebook
+            The notebook object. Should contain ref spots and call spots pages.
         show: bool (default=True)
             Whether to show the plot. If False, the plot is not shown. False only for testing purposes.
     """
+    free_bled_codes_tile_indep = nb.call_spots.free_bled_codes_tile_independent
+    bled_codes = nb.call_spots.bled_codes
+    rc_scale = nb.call_spots.rc_scale
+    gene_names = nb.call_spots.gene_names
+    gene_no = np.argmax(nb.ref_spots.gene_probabilities, axis=1)
+    n_spots = np.array([np.sum(gene_no == i) for i in range(len(gene_names))])
+
     n_columns = 9
     n_genes, n_rounds, n_channels_use = free_bled_codes_tile_indep.shape
     n_rows = n_genes // n_columns + 1
@@ -62,29 +58,26 @@ def view_free_and_constrained_bled_codes(
 
 
 def view_tile_bled_codes(
-    free_bled_codes: np.ndarray,
-    free_bled_codes_tile_indep: np.ndarray,
-    gene_names: np.ndarray,
-    use_tiles: np.ndarray,
-    gene: int,
+    nb: Notebook,
+    gene: int = 0,
     show: bool = True,
 ) -> None:
     """
     Function to plot the free bled codes for each tile for a given gene.
     Args:
-        free_bled_codes: np.ndarray [n_genes x n_tiles x n_rounds x n_channels_use]
-            The free bled codes.
-        free_bled_codes_tile_indep: np.ndarray [n_genes x n_rounds x n_channels_use]
-            The tile independent free bled codes.
-        gene_names: np.ndarray [n_genes]
-            The gene names.
-        use_tiles: np.ndarray [n_tiles]
-            The tiles to use.
+        nb: Notebook
+            The notebook object. Should contain call_spots page.
         gene: int
             The gene to plot.
         show: bool (default=True)
             Whether to show the plot. If False, the plot is not shown. False only for testing purposes.
     """
+    free_bled_codes = nb.call_spots.free_bled_codes
+    free_bled_codes_tile_indep = nb.call_spots.free_bled_codes_tile_independent
+    gene_names = nb.call_spots.gene_names
+    use_tiles = nb.basic_info.use_tiles
+
+    # plot the free bled codes for each tile
     n_columns = 4
     _, _, n_rounds, n_channels_use = free_bled_codes.shape
     n_tiles = len(use_tiles)
@@ -117,36 +110,27 @@ def view_tile_bled_codes(
 
 
 def view_rc_scale_regression(
-    rc_scale: np.ndarray,
-    gene_codes: np.ndarray,
-    d_max: np.ndarray,
-    target_values: np.ndarray,
-    free_bled_codes_tile_indep: np.ndarray,
-    n_spots: np.ndarray,
-    use_channels: Tuple[list, np.ndarray],
+    nb: Notebook,
     show: bool = True,
 ) -> None:
     """
     Plotter to show the regression of the round_channel scale factor for each round and channel.
     Args:
-        rc_scale: np.ndarray [n_rounds x n_channels_use]
-            The round_channel scale factor.
-        gene_codes: np.ndarray [n_genes x n_rounds]
-            gene_codes[g, r] is the expected dye for gene g in round r.
-        d_max: np.ndarray [n_channels_use]
-            d_max[c] is the dye with the highest expression in channel c.
-        target_values: np.ndarray [n_dyes]
-            target_values[d] is the target value for dye d in its brightest channel.
-        free_bled_codes_tile_indep: np.ndarray [n_genes x n_rounds x n_channels_use]
-            The tile independent free bled codes.
-        n_spots: np.ndarray [n_genes]
-            The number of spots for each gene.
-        use_channels: np.ndarray [n_channels_use]
-            The channels to use.
+        nb: Notebook
+            The notebook object. Should contain call_spots page.
         show: bool (default=True)
             Whether to show the plot. If False, the plot is not shown. False only for testing purposes.
 
     """
+    rc_scale = nb.call_spots.rc_scale
+    gene_codes = nb.call_spots.gene_codes
+    d_max = np.argmax(nb.call_spots.bleed_matrix, axis=1)
+    target_values = nb.call_spots.associated_configs["call_spots"]["target_values"]
+    free_bled_codes_tile_indep = nb.call_spots.free_bled_codes_tile_independent
+    gene_no = np.argmax(nb.ref_spots.gene_probabilities, axis=1)
+    n_spots = np.array([np.sum(gene_no == i) for i in range(len(gene_no))])
+    use_channels = nb.basic_info.use_channels
+
     n_genes, n_rounds, n_channels_use = free_bled_codes_tile_indep.shape
     fig, ax = plt.subplots(n_channels_use, 1)
     for c in range(n_channels_use):
@@ -203,41 +187,33 @@ def view_rc_scale_regression(
 
 
 def view_tile_scale_regression(
-    tile_scale: np.ndarray,
-    gene_codes: np.ndarray,
-    d_max: np.ndarray,
-    target_bled_codes: np.ndarray,
-    free_bled_codes: np.ndarray,
-    n_spots: np.ndarray,
-    t: int,
-    use_channels: Tuple[list, np.ndarray],
+    nb: Notebook,
+    t: int = 0,
     show: bool = True,
 ) -> None:
     """
     Plotter to show the regression of the tile scale factor for tile t for all rounds and channels.
 
     Args:
-        tile_scale: np.ndarray [n_tiles x n_rounds x n_channels_use]
-            The tile scale factor.
-        gene_codes: np.ndarray [n_genes x n_rounds]
-            gene_codes[g, r] is the expected dye for gene g in round r.
-        d_max: np.ndarray [n_channels_use]
-            d_max[c] is the dye with the highest expression in channel c.
-        target_bled_codes: np.ndarray [n_genes x n_rounds x n_channels_use]
-            The target bled codes. bled_codes[g, r, c] = free_bled_codes_tile_indep[g, r, c] * rc_scale[r, c]
-        free_bled_codes: np.ndarray [n_genes x n_tiles x n_rounds x n_channels_use]
-            The free bled codes.
-        n_spots: np.ndarray [n_genes]
-            The number of spots for each gene.
-        t: int
+        nb: Notebook
+            The notebook object. Should contain call_spots page.
+        t: int (default=0)
             The tile to plot.
-        use_channels: list or np.ndarray
-            The channels to use.
         show: bool (default=True)
             Whether to show the plot. If False, the plot is not shown. False only for testing purposes.
 
     """
+    tile_scale = nb.call_spots.tile_scale
+    gene_codes = nb.call_spots.gene_codes
+    d_max = np.argmax(nb.call_spots.bleed_matrix, axis=1)
+    target_bled_codes = nb.call_spots.bled_codes
+    free_bled_codes = nb.call_spots.free_bled_codes
+    gene_no = np.argmax(nb.ref_spots.gene_probabilities, axis=1)
+    n_spots = np.array([np.sum(gene_no == i) for i in range(len(gene_no))])
+    use_channels = nb.basic_info.use_channels
     n_tiles, n_rounds, n_channels_use = tile_scale.shape
+
+    # plot the tile scale factors for tile
     fig, ax = plt.subplots(n_rounds, n_channels_use)
     for r, c in np.ndindex(n_rounds, n_channels_use):
         relevant_genes = np.where(gene_codes[:, r] == d_max[c])[0]
@@ -268,34 +244,27 @@ def view_tile_scale_regression(
 
 
 def view_scale_factors(
-    tile_scale: np.ndarray,
-    rc_scale: np.ndarray,
-    use_tiles: Tuple[list, np.ndarray],
-    use_rounds: Tuple[list, np.ndarray],
-    use_channels: Tuple[list, np.ndarray],
+    nb: Notebook,
     show: bool = True,
 ) -> None:
     """
     Function to plot the tile scale factors for each tile, round and channel.
     Args:
-        tile_scale: np.ndarray [n_tiles x n_rounds x n_channels_use]
-            The tile scale factors.
-        rc_scale: np.ndarray [n_rounds x n_channels_use]
-            The round_channel scale factors.
-        use_tiles: np.ndarray
-            The tiles to use.
-        use_rounds: np.ndarray
-            The rounds to use.
-        use_channels:  np.ndarray
-            The channels to use.
+        nb: Notebook
+            The notebook object. Should contain call_spots page.
         show: bool (default=True)
             Whether to show the plot. If False, the plot is not shown. False only for testing purposes.
     """
+    tile_scale = nb.call_spots.tile_scale
+    rc_scale = nb.call_spots.rc_scale
+    use_tiles, use_rounds, use_channels = nb.basic_info.use_tiles, nb.basic_info.use_rounds, nb.basic_info.use_channels
     tile_scale = tile_scale[use_tiles]
     relative_scale = tile_scale / rc_scale[None, :, :]
     n_tiles, n_rounds, n_channels_use = tile_scale.shape
     tile_scale = tile_scale.reshape((n_tiles * n_rounds, n_channels_use))
     relative_scale = relative_scale.reshape((n_tiles * n_rounds, n_channels_use))
+
+    # plot the scale factors
     fig, ax = plt.subplots(1, 3)
     ax[0].imshow(rc_scale, cmap="viridis")
     ax[0].set_xticks(np.arange(n_channels_use), labels=use_channels)

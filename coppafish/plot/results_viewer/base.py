@@ -512,8 +512,8 @@ class Viewer:
                 )
             else:
                 invisible_colour = np.array([0, 0, 0])
-                invisible_symbol_mpl = "o"
-                invisible_symbol_napari = "o"
+                invisible_symbol_mpl = None
+                invisible_symbol_napari = None
                 genes.append(
                     Gene(
                         name=g,
@@ -783,7 +783,7 @@ class Viewer:
 
         @self.viewer.bind_key(KeyBinds.view_histogram_scores)
         def call_to_view_omp_score(viewer):
-            HistogramScore(self.nb, self.method["names"][self.method["active"]])
+            HistogramScore(self.nb)
 
         @self.viewer.bind_key(KeyBinds.view_scaled_k_means)
         def call_to_view_omp_score(viewer):

@@ -33,7 +33,6 @@ def test_all_viewers():
                                                     free_bled_codes=free_bled_codes, n_spots=n_spots, t=0,
                                                     use_channels=np.arange(n_channels), show=False)
 
-
     # 5. view_scale_factors
     parameter_estimation.view_scale_factors(tile_scale=tile_scale, rc_scale=rc_scale, use_tiles=np.arange(n_tiles),
                                             use_rounds=np.arange(n_rounds), use_channels=np.arange(n_channels),
