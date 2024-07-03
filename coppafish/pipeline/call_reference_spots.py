@@ -24,8 +24,9 @@ def call_reference_spots(
             The configuration dictionary for the call spots page. Should contain the following keys:
             - gene_prob_threshold: float
                 The threshold for the gene probability score.
-            - target_values: list (length n_dyes)
-                The target values for each dye.
+            - target_values: list (length n_channels_use)
+                If d_max[c] is the dye which channel c is brightest in, then target_values[c] is the value that we will
+                try to scale all instances of d_max[c] to in this channel.
             - concentration_param_parallel: float
                 The concentration parameter for the parallel direction of the prior.
             - concentration_param_perpendicular: float
@@ -45,6 +46,11 @@ def call_reference_spots(
     """
     log.debug("Call spots started")
     nbp = NotebookPage("call_spots", {"call_spots": config})
+
+    # assert shape constraints
+    target_values, d_max = config["target_values"], config["d_max"]
+    assert len(config["target_values"]) == len(config["d_max"]) == len(nbp_basic.use_channels), (
+        "The target values, d_max and use_channels should have the same length.")
 
     # load in frequently used variables
     spot_colours = nbp_ref_spots.colours.astype(float)
@@ -84,8 +90,6 @@ def call_reference_spots(
     prob_threshold = min(config["gene_prob_threshold"], np.percentile(prob_score_initial, 90))
     good = prob_score_initial > prob_threshold
     bleed_matrix_initial = compute_bleed_matrix(spot_colours[good], prob_mode_initial[good], gene_codes, n_dyes)
-    d_max = np.argmax(bleed_matrix_initial, axis=0)
-
     # 4. Compute the free_bled_codes
     free_bled_codes = np.zeros((n_genes, n_tiles, n_rounds, n_channels_use))
     free_bled_codes_tile_indep = np.zeros((n_genes, n_rounds, n_channels_use))
@@ -121,7 +125,7 @@ def call_reference_spots(
         if np.sum(n_spots_per_gene) == 0:
             continue
         rc_scale[r, c] = np.sum(
-            np.sqrt(n_spots_per_gene) * free_bled_codes_tile_indep[rc_genes, r, c] * config["target_values"][d_max[c]]
+            np.sqrt(n_spots_per_gene) * free_bled_codes_tile_indep[rc_genes, r, c] * target_values[c]
         ) / np.sum(np.sqrt(n_spots_per_gene) * free_bled_codes_tile_indep[rc_genes, r, c] ** 2)
     bled_codes = free_bled_codes_tile_indep * rc_scale[None, :, :]
     # normalise the constrained bled codes
