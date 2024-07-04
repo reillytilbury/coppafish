@@ -2,15 +2,6 @@ import numpy as np
 from skimage import data
 
 from coppafish.register import preprocessing as reg_pre
-from coppafish.utils import tiles_io
-
-
-def test_apply_image_shift():
-    rng = np.random.RandomState(0)
-    im = rng.randint(np.iinfo(np.uint16).max, size=(2, 3, 4, 5))
-    output = tiles_io.offset_pixels_by(im, -5)
-    assert output.dtype.name == "int32", "Expected output to be of type `np.int32`"
-    assert (output == (im.astype(np.int32) - 5)).all(), "Unexpected output after image shift"
 
 
 def test_replace_scale():
