@@ -142,7 +142,7 @@ def run_filter(nb: Notebook) -> None:
     """
     if not nb.has_page("filter"):
         config = setup.config.get_config(nb.config_path)
-        nbp, nbp_debug = filter_run.run_filter(config["filter"], nb.file_names, nb.basic_info, nb.extract)
+        nbp, nbp_debug = filter_run.run_filter(config["filter"], nb.file_names, nb.basic_info)
         nb += nbp
         nb += nbp_debug
     else:
@@ -169,8 +169,6 @@ def run_find_spots(nb: Notebook) -> Notebook:
             config["find_spots"],
             nb.file_names,
             nb.basic_info,
-            nb.extract,
-            nb.filter,
             nb.filter.auto_thresh,
         )
         nb += nbp
@@ -194,7 +192,7 @@ def run_stitch(nb: Notebook) -> None:
     """
     config = setup.config.get_config(nb.config_path)
     if not nb.has_page("stitch"):
-        nbp = stitch.stitch(config["stitch"], nb.basic_info, nb.file_names, nb.extract)
+        nbp = stitch.stitch(config["stitch"], nb.basic_info, nb.file_names)
         nb += nbp
     else:
         log.warn(utils.warnings.NotebookPageWarning("stitch"))
@@ -220,7 +218,6 @@ def run_register(nb: Notebook) -> None:
             nb.basic_info,
             nb.file_names,
             nb.extract,
-            nb.filter,
             nb.find_spots,
             config["register"],
             pre_seq_blur_radius=None,

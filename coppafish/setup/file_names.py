@@ -126,7 +126,7 @@ def get_file_names(nb: Notebook):
                 nbp.tile_unfiltered_dir,
                 round_files,
                 nb.basic_info.n_tiles,
-                nb.get_config()["extract"]["file_type"],
+                ".zarr",
                 nb.basic_info.n_channels,
                 jobs=True,
             )
@@ -139,7 +139,7 @@ def get_file_names(nb: Notebook):
                 nbp.tile_unfiltered_dir,
                 round_files,
                 nb.basic_info.n_tiles,
-                setup.config.get_config(nb.config_path)["extract"]["file_type"],
+                ".zarr",
                 nb.basic_info.n_channels,
             )
         else:
@@ -148,7 +148,7 @@ def get_file_names(nb: Notebook):
                 nbp.tile_unfiltered_dir,
                 round_files,
                 nb.basic_info.n_tiles,
-                setup.config.get_config(nb.config_path)["extract"]["file_type"],
+                ".zarr",
             )
 
     nbp.tile = utils.base.deep_convert(tile_names.tolist())

@@ -35,7 +35,7 @@ def view_filtered_images(
 
     for t, r, c in itertools.product(tiles, rounds, channels):
         file_path = nb.file_names.tile_unfiltered[t][r][c]
-        if not tiles_io.image_exists(file_path, nb.extract.file_type):
+        if not tiles_io.image_exists(file_path):
             log.warn(f"Image at {file_path} not found, skipping")
             continue
         image_trc = tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t, r, c)

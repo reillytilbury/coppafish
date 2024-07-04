@@ -279,10 +279,6 @@ class NotebookPage:
             ],
         },
         "extract": {
-            "file_type": [
-                "str",
-                "File type used to save tiles after extraction.",
-            ],
             "num_rotations": [
                 "int",
                 "The number of 90 degree anti-clockwise rotations applied to every image.",
@@ -501,7 +497,7 @@ class NotebookPage:
                 "Numpy array [n_spots]. Tile each spot was found on.",
             ],
             "colours": [
-                "ndarray[int32]",
+                "ndarray[float32]",
                 "Numpy array [n_spots x n_rounds x n_channels]. "
                 + "`[s, r, c]` is the intensity of spot $s$ on round $r$, channel $c$."
                 + "`-tile_pixel_value_shift` if that round/channel not used otherwise integer.",
@@ -1055,6 +1051,8 @@ class NotebookPage:
             return self._is_ndarray_of_dtype(value, (np.float16, np.float32, np.float64))
         elif type_as_str == "ndarray[float16]":
             return self._is_ndarray_of_dtype(value, (np.float16,))
+        elif type_as_str == "ndarray[float32]":
+            return self._is_ndarray_of_dtype(value, (np.float32,))
         elif type_as_str == "ndarray[str]":
             return self._is_ndarray_of_dtype(value, (str, np.str_))
         elif type_as_str == "ndarray[bool]":

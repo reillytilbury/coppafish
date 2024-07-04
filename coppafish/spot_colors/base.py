@@ -1,9 +1,11 @@
+import itertools
 from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
 import torch
 from tqdm import tqdm
+import zarr
 
 from ..setup import NotebookPage
 from ..utils import tiles_io
@@ -51,11 +53,13 @@ def apply_transform(
 
 
 def get_spot_colours_new(
-    nbp_basic: NotebookPage,
-    nbp_file: NotebookPage,
-    nbp_extract: NotebookPage,
-    nbp_register: NotebookPage,
-    nbp_register_debug: NotebookPage,
+    all_images: Tuple[Tuple[Tuple[zarr.Array]]],
+    flow: zarr.Array,
+    icp_correction: np.ndarray,
+    channel_correction: np.ndarray,
+    use_channels: List[int],
+    dapi_channel: int,
+    pre_seq_round: int,
     tile: int,
     round: int,
     channels: Optional[Union[Tuple[int], int]] = None,
@@ -65,18 +69,25 @@ def get_spot_colours_new(
     force_cpu: bool = True,
 ) -> npt.NDArray[Any]:
     """
-    Load and return registered image(s) colours. Image(s) are correctly centred around zero. Zeros are placed when the
-    position is out of bounds.
+    Load and return registered sequence image(s) colours. Image(s) are correctly centred around zero. Zeros are placed
+    when the position is out of bounds.
 
     Args:
-        nbp_basic (NotebookPage): `basic_info` notebook page.
-        nbp_file (NotebookPage): `file_names` notebook page.
-        nbp_extract (NotebookPage): `extract` notebook page.
-        nbp_register (NotebookPage): `register` notebook page.
-        nbp_register_debug (NotebookPage): `register_debug` notebook page.
+        all_images (tuple of tuple of tuple of zarrays with shape `(im_y x im_x x im_z)`): all images.
+            all_images[t][r][c] is for tile t, round r, channel c. None is placed for round/channel combinations that
+            are not possible.
+        flow (`(n_tiles x n_rounds x 3 x im_y x im_x x im_z) zarray`): optical flow shifts that take the anchor image
+            to the tile/round.
+        icp_correction (`(n_tiles x n_rounds x n_channels x 4 x 3) ndarray[float]`): affine correction applied to
+            anchor image after optical flow correction.
+        channel_correction (`(n_tiles x n_channels x 4 x 3) ndarray[float]`): affine channel correction applied to
+            anchor image after optical flow correction.
+        use_channels (list of int): all sequencing channels.
+        dapi_channel (int): the dapi channel index.
+        pre_seq_round (int): the presequence round index.
         tile (int): tile index.
         round (int): round index.
-        channels (tuple of ints or int): channel indices (index) to load. Default: sequencing channels.
+        channels (tuple of ints or int): sequence channel indices (index) to load. Default: sequencing channels.
         yxz (`(n_points x 3) ndarray[int]`): specific points to retrieve relative to the reference image (the anchor
             round/channel). Default: the entire image in the order such that
             `image.reshape((len(channels) x im_y x im_x x im_z))` will return the entire image.
@@ -93,16 +104,30 @@ def get_spot_colours_new(
         - If you are planning to load in multiple channels, this function is faster if called once.
         - float32 precision is used throughout intermediate steps.
     """
-    assert type(nbp_basic) is NotebookPage
-    image_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
-    assert type(nbp_file) is NotebookPage
-    assert type(nbp_extract) is NotebookPage
-    assert type(nbp_register) is NotebookPage
-    assert type(nbp_register_debug) is NotebookPage
+    assert type(all_images) is tuple
+    assert type(all_images[0]) is tuple
+    assert type(all_images[0][0]) is tuple
+    for i, j, k in itertools.product(range(len(all_images)), range(len(all_images[0])), range(len(all_images[0][0]))):
+        image = all_images[i][j][k]
+        assert image is None or type(image) is zarr.Array, f"Got wrong type: {type(image)}"
+        if image is not None:
+            image_shape = image.shape
+    assert type(flow) is zarr.Array
+    assert flow.shape[2:] == (3,) + image_shape
+    assert type(icp_correction) is np.ndarray
+    assert icp_correction.shape[:2] == flow.shape[:2]
+    assert icp_correction.shape[3:] == (4, 3)
+    assert type(channel_correction) is np.ndarray
+    assert channel_correction.shape[0] == flow.shape[0]
+    assert channel_correction.shape[1] == icp_correction.shape[2]
+    assert channel_correction.shape[2:] == (4, 3)
+    assert type(use_channels) is list
+    assert type(dapi_channel) is int
+    assert type(pre_seq_round) is int
     assert type(tile) is int
     assert type(round) is int
     if channels is None:
-        channels = tuple(nbp_basic.use_channels)
+        channels = tuple(use_channels)
     if type(channels) is int:
         channels = (channels,)
     assert type(channels) is tuple
@@ -140,10 +165,10 @@ def get_spot_colours_new(
     yxz_registered = torch.zeros((0, n_points, 3), dtype=torch.float32)
     for c in channels:
         affine = np.eye(4, 3)
-        if registration_type == "flow_and_icp" and c != nbp_basic.dapi_channel:
-            affine = nbp_register.icp_correction[tile, round, c].copy()
+        if registration_type == "flow_and_icp" and c != dapi_channel:
+            affine = icp_correction[tile, round, c].copy()
         elif registration_type == "flow":
-            affine = nbp_register_debug.channel_correction[tile, c].copy()
+            affine = channel_correction[tile, c].copy()
         assert affine.shape == (4, 3)
         affine.flags.writeable = True
         affine = torch.asarray(affine).float()
@@ -174,7 +199,7 @@ def get_spot_colours_new(
             yxz_minimums[1] : yxz_maximums[1],
             yxz_minimums[2] : yxz_maximums[2],
         ] = torch.asarray(
-            nbp_register.flow[
+            flow[
                 tile,
                 round,
                 :,
@@ -205,23 +230,23 @@ def get_spot_colours_new(
         yxz_registered = yxz_registered[0, 0] + optical_flow_shifts
         del optical_flow_shifts
 
-    # 4: Gather all unregistered channel images.
-    suffix = "_raw" if round == nbp_basic.pre_seq_round else ""
+    # 4: Gather all unregistered channel image data.
     images = torch.zeros((len(channels),) + image_shape, dtype=torch.float32)
     for c_i, c in enumerate(channels):
         image_c = torch.zeros(image_shape).float()
         yxz_minimums, yxz_maximums = get_yxz_bounds(yxz_registered)
         yxz_subset = tuple([(yxz_minimums[i].item(), yxz_maximums[i].item()) for i in range(3)])
+        image_c_subset = all_images[tile][round][c][
+            yxz_subset[0][0] : yxz_subset[0][1],
+            yxz_subset[1][0] : yxz_subset[1][1],
+            yxz_subset[2][0] : yxz_subset[2][1],
+        ]
         image_c[
             yxz_subset[0][0] : yxz_subset[0][1],
             yxz_subset[1][0] : yxz_subset[1][1],
             yxz_subset[2][0] : yxz_subset[2][1],
-        ] = torch.asarray(
-            tiles_io.load_image(
-                nbp_file, nbp_basic, nbp_extract.file_type, tile, round, c, suffix=suffix, yxz=yxz_subset
-            )
-        ).float()
-        del yxz_minimums, yxz_maximums, yxz_subset
+        ] = torch.asarray(image_c_subset).float()
+        del yxz_minimums, yxz_maximums, yxz_subset, image_c_subset
         images[c_i] = torch.asarray(image_c).float()
         del image_c
 
@@ -242,14 +267,13 @@ def get_spot_colors(
     yxz_base: np.ndarray,
     t: np.ndarray,
     bg_scale: Optional[Tuple[Tuple[Tuple[float]]]],
-    file_type: str,
     nbp_file: NotebookPage,
     nbp_basic: NotebookPage,
     nbp_register: NotebookPage,
     use_rounds: Optional[List[int]] = None,
     use_channels: Optional[List[int]] = None,
     return_in_bounds: bool = False,
-    output_dtype: np.dtype = np.int32,
+    output_dtype: np.dtype = np.float32,
 ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Takes some spots found on the reference round, and computes the corresponding spot intensity
@@ -263,7 +287,6 @@ def get_spot_colors(
         t: `int`. Tile number.
         bg_scale: `float [n_tiles x n_rounds x n_channels]` scale factors to apply to background images before
             subtraction. If 'None', no background subtraction will be performed.
-        file_type: `str`. Type of file to read in. E.g. '.zarr' or '.npy'.
         nbp_file: `file_names` notebook page.
         nbp_basic: `basic_info` notebook page.
         nbp_register: `register` notebook page.
@@ -296,7 +319,7 @@ def get_spot_colors(
         bg_scale = np.array(bg_scale, dtype=np.float32)
 
     n_spots = yxz_base.shape[0]
-    no_verbose = n_spots < 10000
+    no_verbose = n_spots < 10_000
     # note using nan means can't use integer even though data is integer
     n_use_rounds = len(use_rounds)
     n_use_channels = len(use_channels)
@@ -309,7 +332,7 @@ def get_spot_colors(
         tile_sz = np.asarray([nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)], dtype=np.int16)
 
     with tqdm(total=n_use_rounds * n_use_channels, disable=no_verbose) as pbar:
-        pbar.set_description(f"Reading {n_spots} spot_colors from {file_type} files")
+        pbar.set_description(f"Reading {n_spots} spot_colors")
         for i, r in enumerate(use_rounds):
             flow_tr = nbp_register.flow[t, r]
             for j, c in enumerate(use_channels):
@@ -326,10 +349,9 @@ def get_spot_colors(
                     pbar.update(1)
                     continue
 
-                # Read in the shifted uint16 colors here, and remove shift later.
-                spot_colors[in_range, i, j] = tiles_io.load_image(
-                    nbp_file, nbp_basic, file_type, t, r, c, apply_shift=False
-                )[tuple(yxz_transform.T)]
+                # Read in the shifted float16 colours here, and remove shift later.
+                spot_colors[in_range, i, j] = tiles_io.load_image(nbp_file, nbp_basic, t, r, c)[tuple(yxz_transform.T)]
+                spot_colors[in_range, i, j] += nbp_basic.tile_pixel_value_shift
                 pbar.update(1)
             del flow_tr
 
@@ -348,7 +370,7 @@ def get_spot_colors(
         bg_colours = np.repeat(spot_colors[:, -1, :][:, None, :], n_use_rounds - 1, axis=1).astype(np.float32)
         bg_colours = np.maximum(bg_colours, 0)
         bg_colours *= bg_scale[t][np.ix_(use_rounds[:-1], use_channels)][None, :, :]
-        bg_colours = bg_colours.astype(np.int32)
+        bg_colours = bg_colours.astype(output_dtype)
         # set bg colours to 0 if spot is in bad rc
         for rc in bad_rc:
             r, c = use_rounds.index(rc[0]), use_channels.index(rc[1])

@@ -72,7 +72,7 @@ def get_reference_spots(
 
     # Only save used rounds/channels initially
     n_use_rounds, n_use_channels, n_use_tiles = len(use_rounds), len(use_channels), len(use_tiles)
-    spot_colours = np.zeros((0, n_use_rounds, n_use_channels), dtype=np.int32)
+    spot_colours = np.zeros((0, n_use_rounds, n_use_channels), dtype=np.float32)
     local_yxz = np.zeros((0, 3), dtype=np.int16)
     bg_colours = np.zeros_like(spot_colours)
     isolated = np.zeros(0, dtype=bool)
@@ -87,7 +87,6 @@ def get_reference_spots(
             yxz_base=nd_local_yxz[in_tile],
             t=t,
             bg_scale=nbp_register.bg_scale,
-            file_type=nbp_extract.file_type,
             nbp_file=nbp_file,
             nbp_basic=nbp_basic,
             nbp_register=nbp_register,

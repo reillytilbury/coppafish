@@ -82,7 +82,6 @@ _options = {
         "log_name": "str",
     },
     "extract": {
-        "file_type": "str",
         "num_rotations": "int",
         "z_plane_mean_warning": "number",
     },

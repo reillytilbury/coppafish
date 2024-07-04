@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 import numpy.typing as npt
 import tqdm
+import zarr
 
 from .. import log
 from ..setup import Notebook
@@ -15,7 +16,7 @@ from ..setup import Notebook
 def deep_convert(value: Iterable[Any], conversion: Callable = tuple, /) -> Tuple[Any]:
     """
     Convert the iterable and all nested iterables inside into datatype specified by the given conversion function.
-    The function does not try to convert strings or numpy arrays, even though they are iterable.
+    The function does not try to convert strings, numpy arrays and zarrays, even though they are iterable.
 
     Args:
         - value (Iterable): the iterable value to convert.
@@ -28,6 +29,7 @@ def deep_convert(value: Iterable[Any], conversion: Callable = tuple, /) -> Tuple
     for i, subvalue in enumerate(value):
         iterable = hasattr(subvalue, "__iter__")
         iterable = iterable and type(subvalue) is not str and type(subvalue) is not np.ndarray
+        iterable = iterable and type(subvalue) is not zarr.Array
         if iterable:
             result[i] = deep_convert(subvalue, conversion)
         else:

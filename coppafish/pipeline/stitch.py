@@ -6,10 +6,10 @@ import zarr
 
 from .. import log, stitch as stitch_base
 from ..setup import NotebookPage
-from ..utils import tiles_io, system
+from ..utils import tiles_io
 
 
-def stitch(config: dict, nbp_basic: NotebookPage, nbp_file: NotebookPage, nbp_extract: NotebookPage) -> NotebookPage:
+def stitch(config: dict, nbp_basic: NotebookPage, nbp_file: NotebookPage) -> NotebookPage:
     """
     Run tile stitching. Tiles are shifted to better align using the DAPI images.
 
@@ -38,9 +38,7 @@ def stitch(config: dict, nbp_basic: NotebookPage, nbp_file: NotebookPage, nbp_ex
     # load the tiles
     tiles = []
     for t in tqdm(use_tiles, total=n_tiles_use, desc="Loading tiles"):
-        tile = tiles_io.load_image(
-            nbp_file=nbp_file, nbp_basic=nbp_basic, file_type=nbp_extract.file_type, t=t, r=anchor_round, c=dapi_channel
-        )
+        tile = tiles_io.load_image(nbp_file=nbp_file, nbp_basic=nbp_basic, t=t, r=anchor_round, c=dapi_channel)[:]
         tiles.append(tile)
     tiles = np.array(tiles)
 

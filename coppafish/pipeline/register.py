@@ -1,6 +1,5 @@
 import itertools
 import os
-import pickle
 from typing import Tuple, Union
 
 import numpy as np
@@ -19,7 +18,6 @@ def register(
     nbp_basic: NotebookPage,
     nbp_file: NotebookPage,
     nbp_extract: NotebookPage,
-    nbp_filter: NotebookPage,
     nbp_find_spots: NotebookPage,
     config: dict,
     pre_seq_blur_radius: Union[None, float] = None,
@@ -141,21 +139,19 @@ def register(
         anchor_image = tiles_io.load_image(
             nbp_file,
             nbp_basic,
-            nbp_extract.file_type,
             t=t,
             r=nbp_basic.anchor_round,
             c=nbp_basic.dapi_channel,
-        )
+        )[:]
         for r in tqdm(use_rounds, desc="Round", total=len(use_rounds)):
             round_image = tiles_io.load_image(
                 nbp_file,
                 nbp_basic,
-                nbp_extract.file_type,
                 t=t,
                 r=r,
                 c=nbp_basic.dapi_channel,
                 suffix="_raw" if r == nbp_basic.pre_seq_round else "",
-            )
+            )[:]
             # Now run the registration algorithm on this tile and round
             register_base.optical_flow_register(
                 target=round_image,
@@ -172,9 +168,9 @@ def register(
                 clip_val=config["flow_clip"],
                 n_cores=config["flow_cores"],
             )
-            nbp.flow_raw = zarr.open_array(raw_loc)
-            nbp.correlation = zarr.open_array(corr_loc)
-            nbp.flow = zarr.open_array(smooth_loc)
+            nbp.flow_raw = zarr.open_array(raw_loc, "r")
+            nbp.correlation = zarr.open_array(corr_loc, "r")
+            nbp.flow = zarr.open_array(smooth_loc, "r")
     del anchor_image, round_image
 
     # Part 3: ICP
@@ -345,31 +341,25 @@ def register(
             image_preseq = tiles_io.load_image(
                 nbp_file,
                 nbp_basic,
-                nbp_extract.file_type,
                 t=t,
                 r=nbp_basic.pre_seq_round,
                 c=c,
                 suffix="_raw",
-                apply_shift=True,
-            )
+            )[:]
             image_preseq = scipy.ndimage.gaussian_filter(image_preseq, pre_seq_blur_radius)
-            tiles_io.save_image(
-                nbp_file, nbp_basic, nbp_extract.file_type, image_preseq, t=t, r=nbp_basic.pre_seq_round, c=c
-            )
+            tiles_io.save_image(nbp_file, nbp_basic, image_preseq, t=t, r=nbp_basic.pre_seq_round, c=c)
         for t in use_tiles:
             image_preseq = tiles_io.load_image(
                 nbp_file,
                 nbp_basic,
-                nbp_extract.file_type,
                 t=t,
                 r=nbp_basic.pre_seq_round,
                 c=nbp_basic.dapi_channel,
                 suffix="_raw",
-            )
+            )[:]
             tiles_io.save_image(
                 nbp_file,
                 nbp_basic,
-                nbp_extract.file_type,
                 image_preseq,
                 t=t,
                 r=nbp_basic.pre_seq_round,
@@ -389,18 +379,15 @@ def register(
         mid_z = len(nbp_basic.use_z) // 2
         tile_centre = (nbp_basic.tile_sz // 2, nbp_basic.tile_sz // 2, mid_z)
         yx_rad, z_rad = min(nbp_basic.tile_sz // 2 - 1, 250), min(len(nbp_basic.use_z) // 2 - 1, 5)
-        yxz = (
-            (tile_centre[0] - yx_rad, tile_centre[0] + yx_rad + 1),
-            (tile_centre[1] - yx_rad, tile_centre[1] + yx_rad + 1),
-            (mid_z - z_rad, mid_z + z_rad + 1),
-        )
+        yxz_mins = (tile_centre[0] - yx_rad, tile_centre[1] - yx_rad, mid_z - z_rad)
+        yxz_maxs = (tile_centre[0] + yx_rad + 1, tile_centre[1] + yx_rad + 1, mid_z + z_rad + 1)
         flow_ind = np.ix_(
             np.arange(3),
-            np.arange(tile_centre[0] - yx_rad, tile_centre[0] + yx_rad + 1),
-            np.arange(tile_centre[1] - yx_rad, tile_centre[1] + yx_rad + 1),
-            np.arange(mid_z - z_rad, mid_z + z_rad + 1),
+            np.arange(yxz_mins[0], yxz_maxs[0]),
+            np.arange(yxz_mins[1], yxz_maxs[1]),
+            np.arange(yxz_mins[2], yxz_maxs[2]),
         )
-        new_origin = np.array([yxz[0][0], yxz[1][0], yxz[2][0]])
+        new_origin = np.array([min for min in yxz_mins])
         for t, c in tqdm(
             itertools.product(use_tiles, use_channels),
             desc="Computing background scale factors",
@@ -411,14 +398,12 @@ def register(
             im_pre = tiles_io.load_image(
                 nbp_file,
                 nbp_basic,
-                nbp_extract.file_type,
                 t=t,
                 r=r_pre,
                 c=c,
                 suffix="_raw",
-                apply_shift=True,
-                yxz=yxz,
             )
+            im_pre = im_pre[yxz_mins[0] : yxz_maxs[0], yxz_mins[1] : yxz_maxs[1], yxz_mins[2] : yxz_maxs[2]]
             im_pre = preprocessing.transform_im(im_pre, affine_correction, flow_t_pre, flow_ind)
             im_pre = im_pre[:, :, z_rad - 1 : z_rad + 1]
             bright = im_pre > np.percentile(im_pre, 99)
@@ -429,13 +414,11 @@ def register(
                 im_r = tiles_io.load_image(
                     nbp_file,
                     nbp_basic,
-                    nbp_extract.file_type,
                     t=t,
                     r=r,
                     c=c,
-                    apply_shift=True,
-                    yxz=yxz,
                 )
+                im_r = im_r[yxz_mins[0] : yxz_maxs[0], yxz_mins[1] : yxz_maxs[1], yxz_mins[2] : yxz_maxs[2]]
                 im_r = preprocessing.transform_im(im_r, affine_correction, flow_t_r, flow_ind)
                 im_r = im_r[:, :, z_rad - 1 : z_rad + 1]
                 im_r = im_r[bright]

@@ -13,12 +13,31 @@ from .. import log, utils
 from ..setup import NotebookPage
 
 
-IMAGE_SAVE_DTYPE = np.uint16
+EXTRACT_IMAGE_DTYPE = np.uint16
+FILTER_IMAGE_DTYPE = np.float16
 
 
 class OptimisedFor(enum.Enum):
     FULL_READ_AND_WRITE = enum.auto()
     Z_PLANE_READ = enum.auto()
+
+
+def add_suffix_to_path(file_path: str, suffix: str) -> str:
+    """
+    Add the suffix string to the given file path by placing the suffix before the last '.' character. For example
+    "hi.exe" with suffix "_there" will become "hi_there.exe".
+
+    Args:
+        - file_path (str): the file path, must contain at least one '.' character.
+        - suffix (str): the suffix to add.
+    """
+    assert type(file_path) is str
+    assert "." in file_path
+    assert type(suffix) is str
+
+    file_type_start = len(file_path) - file_path[::-1].index(".") - 1
+    file_path = file_path[:file_type_start] + suffix + file_path[file_type_start:]
+    return file_path
 
 
 def get_compressor_and_chunks(
@@ -56,47 +75,23 @@ def get_compressor_and_chunks(
     return compressor, chunks
 
 
-def get_pixel_max() -> int:
+def image_exists(file_path: str) -> bool:
     """
-    Get the maximum pixel value that can be saved in an image.
-    """
-    return np.iinfo(IMAGE_SAVE_DTYPE).max
-
-
-def get_pixel_min() -> int:
-    """
-    Get the minimum pixel value that can be saved in an image.
-    """
-    return np.iinfo(IMAGE_SAVE_DTYPE).min
-
-
-def image_exists(file_path: str, file_type: str) -> bool:
-    """
-    Checks if a tile exists at the given path locations.
+    Checks if an image exists at the given path location.
 
     Args:
         file_path (str): tile path.
-        file_type (str): file type.
 
     Returns:
         bool: tile existence.
-
-    Raises:
-        ValueError: unsupported file type.
     """
-    if file_type.lower() == ".npy":
-        return os.path.isfile(file_path)
-    elif file_type.lower() == ".zarr":
-        # Require a non-empty zarr directory
-        return os.path.isdir(file_path) and len(os.listdir(file_path)) > 0
-    else:
-        log.error(ValueError(f"Unsupported file_type: {file_type.lower()}"))
+    # Require a non-empty zarr directory
+    return os.path.isdir(file_path) and len(os.listdir(file_path)) > 0
 
 
 def _save_image(
-    image: npt.NDArray[np.uint16],
+    image: npt.NDArray[Union[np.float16, np.uint16]],
     file_path: str,
-    file_type: str,
     optimised_for: OptimisedFor = None,
 ) -> None:
     """
@@ -106,239 +101,152 @@ def _save_image(
     Args:
         image ((nz x ny x nx) ndarray[uint16]): image to save.
         file_path (str): file path.
-        file_type (str): file type, case insensitive.
         optimised_for (literal[int]): what speed to optimise compression for. Affects the blosc compressor. Default:
             optimised for full image reading + writing time.
-
-    Raises:
-        ValueError: unsupported file_type or optimised_for.
     """
-    if image.dtype != IMAGE_SAVE_DTYPE:
-        raise ValueError(f"Expected image dtype {IMAGE_SAVE_DTYPE}, got {image.dtype}")
+    if image.dtype != FILTER_IMAGE_DTYPE and image.dtype != EXTRACT_IMAGE_DTYPE:
+        raise ValueError(f"Expected image dtype {FILTER_IMAGE_DTYPE}, got {image.dtype}")
+    if optimised_for is None:
+        optimised_for = OptimisedFor.FULL_READ_AND_WRITE
 
     blosc.use_threads = True
     blosc.set_nthreads(utils.system.get_core_count())
-    if optimised_for is None:
-        optimised_for = OptimisedFor.FULL_READ_AND_WRITE
-    if file_type.lower() == ".npy":
-        np.save(file_path, image)
-    elif file_type.lower() == ".zarr":
-        compressor, chunks = get_compressor_and_chunks(optimised_for, image.shape)
-        zarray = zarr.open(
-            store=file_path,
-            shape=image.shape,
-            mode="w",
-            zarr_version=2,
-            chunks=chunks,
-            dtype="|u2",
-            compressor=compressor,
-        )
-        zarray[:] = image
-    else:
-        raise ValueError(f"Unsupported `file_type`: {file_type.lower()}")
+    compressor, chunks = get_compressor_and_chunks(optimised_for, image.shape)
+    zarray = zarr.open(
+        store=file_path,
+        shape=image.shape,
+        mode="w",
+        zarr_version=2,
+        chunks=chunks,
+        dtype=image.dtype,
+        compressor=compressor,
+    )
+    zarray[:] = image
 
 
-def _load_image(
-    file_path: str, file_type: str, yxz: Optional[Tuple[Tuple[int], None]] = None
-) -> npt.NDArray[np.uint16]:
+def _load_image(file_path: str) -> zarr.Array:
     """
-    Read in image from file_path location.
+    Read in zarr array from file_path location.
 
     Args:
         file_path (str): image location.
-        file_type (str): file type. Either `'.npy'` or `'.zarr'`.
-        yxz (tuple): a tuple of length 3. Contains tuples of length 2 and nones which specify the dimension minimum
-            (inclusive) and maximum (exclusive) values to grab. Can be none to grab the entire dimension. For example,
-            yxz=(None, (0, 25), None) would return all y values, x values from 0 to 24 (inclusive), and all z values
-            to given an image of shape `(im_y x 25 x im_z)`. The image will always be returned with three-dimensions.
-            Default: retrieve the entire image.
 
-    Returns `(im_y x im_x x im_z) ndarray[uint16]`: loaded image.
-
-    Raises:
-        ValueError: unsupported file type.
+    Returns `(im_y x im_x x im_z) zarray[float16` for filter image, `uint16` for extract image`]`: loaded image.
     """
-    if yxz is None:
-        yxz = (None,) * 3
-    assert type(yxz) is tuple
-    assert len(yxz) == 3
-
-    image = None
-    if file_type.lower() == ".npy":
-        image = np.load(file_path, mmap_mode=None)[:]
-    elif file_type.lower() == ".zarr":
-        image = zarr.open(file_path, mode="r")
-    else:
-        log.error(ValueError(f"Unsupported `file_type`: {file_type.lower()}"))
-
-    shape_yxz = (image.shape[1], image.shape[2], image.shape[0])
-    dim_indices_yxz = tuple()
-    for dim, yxz_dim in enumerate(yxz):
-        if yxz_dim is None:
-            dim_indices_yxz += ((0, shape_yxz[dim]),)
-            continue
-        assert type(yxz_dim) is tuple, f"Expected tuple in yxz at index {dim} if not None, got {yxz_dim}"
-        assert len(yxz_dim) == 2, f"Tuple must be length 2 inside of yxz, image min (inclusive) and max (exclusive)."
-        assert type(yxz_dim[0]) is int and type(yxz_dim[1]) is int, f"Must be ints inside tuple in yxz, got {yxz_dim}"
-        assert yxz_dim[0] < yxz_dim[1], f"The maximum must be greater than the minimum"
-        assert yxz_dim[0] >= 0, f"The yxz minimum must be >= 0, got {yxz_dim[0]} for image dim {dim}"
-        assert yxz_dim[1] <= shape_yxz[dim], f"The yxz maximum must be <= {shape_yxz[dim]}, got {yxz_dim[1]}"
-        dim_indices_yxz += (yxz_dim,)
-    image = image[
-        dim_indices_yxz[2][0] : dim_indices_yxz[2][1],
-        dim_indices_yxz[0][0] : dim_indices_yxz[0][1],
-        dim_indices_yxz[1][0] : dim_indices_yxz[1][1],
-    ]
-    # zyx -> yxz.
-    image = image.transpose((1, 2, 0))
-
-    return image
+    return zarr.open(file_path, mode="r")
 
 
 def save_image(
     nbp_file: NotebookPage,
     nbp_basic: NotebookPage,
-    file_type: str,
-    image: npt.NDArray[np.int32],
+    image: npt.NDArray[np.float16],
     t: int,
     r: int,
-    c: Optional[int] = None,
+    c: int,
     suffix: str = "",
-    apply_shift: bool = True,
-    percent_clip_warn: float = None,
-    percent_clip_error: float = None,
-) -> npt.NDArray[np.uint16]:
+) -> None:
     """
-    Wrapper function to save tiles as npy files with correct shift. Moves z-axis to first axis before saving as it is
-    quicker to load in this order. Tile `t` is saved to the path `nbp_file.tile[t,r,c]`, the path must contain an
-    extension of `'.npy'`. The tile is saved as a `uint16`, so clipping may occur if the image contains really large
-    values. A warning is issued if the image contains adjacent clipped pixels.
+    Save the filtered tile/round/channel image as float16.
 
     Args:
         nbp_file (NotebookPage): `file_names` notebook page.
         nbp_basic (NotebookPage): `basic_info` notebook page.
-        file_type (str): the saving file type. Can be `'.npy'` or `'.zarr'`.
-        image (`[ny x nx x nz] ndarray[int32]` or `[n_channels x ny x nx] ndarray[int32]`): image to save.
+        image (`(im_y x im_x x im_z) ndarray[float16 or float32]`): image to save.
         t (int): npy tile index considering.
         r (int): round considering.
-        c (int, optional): channel considering. Default: not given, raises error when `nbp_basic.is_3d == True`.
-        suffix (str, optional): suffix to add to file name before the file extension. Default: empty.
-        apply_shift (bool, optional): if true and saving a non-dapi channel, will apply the shift to the image.
-        n_clip_warn (int, optional): if the number of pixels clipped off by saving is at least this number, a warning
-            is logged. Default: never warn.
-        n_clip_error (int, optional): if the number of pixels clipped off by saving is at least this number, then an
-            error is raised. Default: never raise an error.
-
-    Returns:
-        `(nz x ny x nx) ndarray[uint16]`: the saved, manipulated image.
+        c (int): channel considering.
+        suffix (str, optional): suffix to add to file name before the file extension. Default: no suffix.
     """
+    assert type(image) is np.ndarray
     assert image.ndim == 3, "`image` must be 3 dimensional"
-
+    assert image.dtype == np.float16 or image.dtype == np.float32 or image.dtype == np.float64
     if not nbp_basic.is_3d:
         log.error(NotImplementedError("2D image saving is currently not supported"))
-
-    if c is None:
-        log.error(ValueError("3d image but channel not given."))
-    if not apply_shift or (c == nbp_basic.dapi_channel):
-        # If dapi is given then image should already by uint16 so no clipping
-        percent_clipped_pixels = (image < 0).sum()
-        percent_clipped_pixels += (image > get_pixel_max()).sum()
-        image = image.astype(IMAGE_SAVE_DTYPE)
-    elif apply_shift and c != nbp_basic.dapi_channel:
-        # need to shift and clip image so fits into uint16 dtype.
-        # clip at 1 not 0 because 0 (or -tile_pixel_value_shift)
-        # will be used as an invalid value when reading in spot_colors.
-        percent_clipped_pixels = ((image + nbp_basic.tile_pixel_value_shift) < 1).sum()
-        percent_clipped_pixels += ((image + nbp_basic.tile_pixel_value_shift) > get_pixel_max()).sum()
-        image = np.clip(
-            image + nbp_basic.tile_pixel_value_shift,
-            1,
-            get_pixel_max(),
-            np.zeros_like(image, dtype=np.uint16),
-            casting="unsafe",
-        )
-    percent_clipped_pixels *= 100 / image.size
-    message = f"{t=}, {r=}, {c=} saved image has clipped {round(percent_clipped_pixels, 5)}% of pixels"
-    if percent_clip_warn is not None and percent_clipped_pixels >= percent_clip_warn:
-        log.warn(message)
-    if percent_clip_error is not None and percent_clipped_pixels >= percent_clip_error:
-        log.error(message)
-    if percent_clipped_pixels >= 1:
-        log.debug(message)
-    if utils.clipping.contains_adjacent_max_pixels(image):
-        log.warn(f"{t=}, {r=}, {c=} filtered image contains adjacent pixels at the maximum possible value")
-    # In 3D, cannot possibly save any un-used channel hence no exception for this case.
     expected_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
     if not utils.errors.check_shape(image, expected_shape):
         log.error(utils.errors.ShapeError("tile to be saved", image.shape, expected_shape))
-    # yxz -> zxy
-    image = np.swapaxes(image, 2, 0)
-    # zxy -> zyx
-    image = np.swapaxes(image, 1, 2)
-    file_path = nbp_file.tile[t][r][c]
-    file_path = file_path[: file_path.index(file_type)] + suffix + file_type
-    _save_image(image, file_path, file_type, optimised_for=OptimisedFor.Z_PLANE_READ)
-    return image
+
+    image = image.astype(np.float16, casting="same_kind")
+    file_path: str = nbp_file.tile[t][r][c]
+    file_path = add_suffix_to_path(file_path, suffix)
+    _save_image(image, file_path, optimised_for=OptimisedFor.Z_PLANE_READ)
 
 
 def load_image(
     nbp_file: NotebookPage,
     nbp_basic: NotebookPage,
-    file_type: str,
     t: int,
     r: int,
     c: int,
-    yxz: Optional[Tuple[Tuple[int], None]] = None,
-    apply_shift: bool = True,
     suffix: str = "",
-) -> Union[npt.NDArray[np.uint16], npt.NDArray[np.int32]]:
+) -> zarr.Array:
     """
-    Loads in image corresponding to desired tile, round and channel from the relevant npy file.
+    Loads in filtered image corresponding to desired tile, round and channel.
 
     Args:
         nbp_file (NotebookPage): `file_names` notebook page.
         nbp_basic (NotebookPage): `basic_info` notebook page.
-        file_type (str): the saved file type. Either `'.npy'` or `'.zarr'`.
         t (int): npy tile index considering.
         r (int): round considering.
         c (int): channel considering.
-        yxz (tuple): a tuple of length 3. Contains tuples of length 2 and nones which specify the dimension minimum
-            (inclusive) and maximum (exclusive) values to grab. Can be none to grab the entire dimension. For example,
-            yxz=(None, (0, 25), None) would return all y values, x values from 0 to 24 (inclusive), and all z values
-            to given an image of shape `(im_y x 25 x im_z)`. The image will always be returned with three-dimensions.
-            Default: retrieve the entire image.
-        apply_shift (bool, optional): if true and loading in a non-dapi channel, will apply the shift to the image to
-            centre the zero correctly. This will convert the image from uint16 to int32.
         suffix (str, optional): suffix to add to file name to load from. Default: no suffix.
 
     Returns:
-        (`(sz_y x sz_x x sz_z) ndarray`): loaded image.
-
-    Notes:
-        - May want to disable `apply_shift` to save memory as there will be no dtype conversion. If loading in DAPI,
-            dtype is always `uint16` as there is no pixel shift.
+        (`(im_y x im_x x im_z) zarray[float32]`): loaded image. It is a zarr view of the array which will do
+            on-the-fly datatype conversion to float32 when data is gathered.
     """
     assert type(nbp_basic) is NotebookPage
     assert type(nbp_file) is NotebookPage
-    assert type(file_type) is str
     assert type(t) is int, f"Got type {type(t)} instead"
     assert type(r) is int
     assert type(c) is int
-    assert yxz is None or type(yxz) is tuple
 
     file_path = nbp_file.tile[t][r][c]
-    file_path = file_path[: file_path.index(file_type)] + suffix + file_type
+    file_path = add_suffix_to_path(file_path, suffix)
 
-    if not image_exists(file_path, file_type):
-        log.error(FileNotFoundError(f"Could not find image at {file_path} to load from"))
+    if not image_exists(file_path):
+        raise FileNotFoundError(f"Could not find image at {file_path} to load from")
 
     # Image is in shape yxz.
-    image = _load_image(file_path, file_type, yxz)
-
-    # Apply shift if not DAPI channel
-    if apply_shift and c != nbp_basic.dapi_channel:
-        image = offset_pixels_by(image, -nbp_basic.tile_pixel_value_shift)
+    image = _load_image(file_path)
+    image = image.astype(np.float32)
     return image
+
+
+def load_filter_images(nbp_basic: NotebookPage, nbp_file: NotebookPage) -> Tuple[Tuple[Tuple[zarr.Array]]]:
+    """
+    Gives the zarray for every tile, round, and channel filter image that is possible. This is lazy loading, so none
+    of the images are in memory until they are indexed/sliced.
+
+    Args:
+        nbp_basic (notebook page): `basic_info` notebook page.
+        nbp_file (notebook page): `file_names` notebook page.
+
+    Returns:
+        (tuple of tuple of tuple of zarrays with shape `(im_y x im_x im_z)`) images: lazy-loaded images. None is
+            placed when the image does not exist. images[t][r][c] gives the zarray for tile t, round r, channel c.
+    """
+    assert type(nbp_basic) is NotebookPage
+    assert type(nbp_file) is NotebookPage
+
+    indices = utils.indexing.create(
+        nbp_basic,
+        include_anchor_round=True,
+        include_anchor_channel=True,
+        include_preseq_round=True,
+        include_dapi_preseq=True,
+        include_dapi_seq=True,
+        include_dapi_anchor=True,
+    )
+    output_size = np.array(utils.base.deep_convert(indices, list)).max(0) + 1
+    output_size = output_size.tolist()
+    result = utils.base.deep_convert((((((None,) * output_size[2]),) * output_size[1]),) * output_size[0], list)
+    for t, r, c in indices:
+        suffix = "_raw" if r == nbp_basic.pre_seq_round else ""
+        result[t][r][c] = load_image(nbp_file, nbp_basic, t, r, c, suffix)
+    result = utils.base.deep_convert(result, tuple)
+
+    return result
 
 
 def get_npy_tile_ind(
@@ -368,18 +276,3 @@ def get_npy_tile_ind(
         return npy_index[0]
     else:
         return npy_index
-
-
-def offset_pixels_by(image: npt.NDArray[np.uint16], tile_pixel_value_shift: int) -> npt.NDArray[np.int32]:
-    """
-    Apply an integer, negative shift to every image pixel and convert datatype from uint16 to int32.
-
-    Args:
-        image (`ndarray[uint16]`): image to shift.
-        tile_pixel_value_shift (int): shift.
-
-    Returns:
-        `ndarray[int32]`: shifted image.
-    """
-    assert tile_pixel_value_shift <= 0, "Cannot shift by a positive number"
-    return image.astype(np.int32) + tile_pixel_value_shift
