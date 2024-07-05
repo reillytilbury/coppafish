@@ -99,18 +99,18 @@ class ColorPlotBase:
         else:
             self.colour_norm = norm_factor
         self.im_data = [val for val in images]  # put in order channels, rounds
-        self.method = "raw" if self.colour_norm is not None else "norm"
+        self.method = "norm" if self.colour_norm is not None else "raw"
         if self.colour_norm is None:
             self.caxis_info = {"norm": {}}
         else:
             self.caxis_info = {"norm": {}, "raw": {}}
         for key in self.caxis_info:
-            if key == "norm":
+            if key == "raw":
                 im_data = self.im_data
-                self.caxis_info[key]["format"] = "%.2f"
+                self.caxis_info[key]["format"] = "%.0f"
             else:
                 im_data = [self.im_data[i] * self.colour_norm[i] for i in range(self.n_images)]
-                self.caxis_info[key]["format"] = "%.0f"
+                self.caxis_info[key]["format"] = "%.2f"
             self.caxis_info[key]["min"] = np.min([im.min() for im in im_data] + [-1e-20])
             self.caxis_info[key]["max"] = np.max([im.max() for im in im_data] + [1e-20])
             self.caxis_info[key]["max"] = np.max([self.caxis_info[key]["max"], -self.caxis_info[key]["min"]])
@@ -162,8 +162,8 @@ class ColorPlotBase:
         self.slider_ax = self.fig.add_axes(self.slider_pos)
         self.colour_slider = None
         if self.colour_norm is not None:
-            self.norm_button_colour = "white"
-            self.norm_button_colour_press = "red"
+            self.norm_button_colour = "red"
+            self.norm_button_colour_press = "white"
             if self.method == "raw":
                 current_colour = self.norm_button_colour_press
             else:
@@ -209,7 +209,7 @@ class ColorPlotBase:
                 self.norm_button.label.set_color(self.norm_button_colour)
         for i in range(self.n_images):
             # change image to different normalisation and change clim
-            self.im[i].set_data(self.im_data[i] * self.colour_norm[i] if self.method == "raw" else self.im_data[i])
+            self.im[i].set_data(self.im_data[i] * self.colour_norm[i] if self.method == "norm" else self.im_data[i])
             self.im[i].set_norm(self.caxis_info[self.method]["cmap_norm"])
             self.im[i].set_clim(self.caxis_info[self.method]["clims"][0], self.caxis_info[self.method]["clims"][1])
 
@@ -240,27 +240,26 @@ class view_codes(ColorPlotBase):
         """
         assert method.lower() in ["anchor", "omp", "prob"], "method must be 'anchor', 'omp' or 'prob'"
         if method.lower() == "omp":
-            page_name = "omp"
             t = nb.omp.tile[spot_no]
             spot_score = omp_spot_score(nb.omp, spot_no)
             self.spot_colour = nb.omp.colours[spot_no]
-        else:
-            page_name = "ref_spots"
+        elif method.lower() == "anchor":
             spot_score = nb.ref_spots.dot_product_gene_score[spot_no]
             t = nb.ref_spots.tile[spot_no]
             self.spot_colour = nb.ref_spots.colours[spot_no]
-
-        if np.ndim(nb.call_spots.colour_norm_factor) == 3:
-            colour_norm = nb.call_spots.colour_norm_factor[t]
         else:
-            colour_norm = nb.call_spots.colour_norm_factor
+            spot_score = np.max(nb.ref_spots.gene_probabilities[spot_no])
+            t = nb.ref_spots.tile[spot_no]
+            self.spot_colour = nb.ref_spots.colours[spot_no]
+
+        colour_norm = nb.call_spots.colour_norm_factor[t]
         # Get spot colour after background fitting
         if method.lower() == "omp":
             self.spot_colour_pb = base.remove_background(self.spot_colour[None].astype(float))[0][0] * colour_norm
-            self.spot_colour = self.spot_colour * colour_norm
+            self.spot_colour = self.spot_colour
         else:
             # remove background codes. To do this, repeat background_strentgh along a new axis for rounds
-            self.spot_colour = self.spot_colour * colour_norm
+            self.spot_colour = self.spot_colour
             background_strength = np.percentile(self.spot_colour, 25, axis=0)
             background_strength = np.repeat(background_strength[None, :], self.spot_colour.shape[0], axis=0)
             self.spot_colour_pb = self.spot_colour - background_strength
@@ -275,11 +274,12 @@ class view_codes(ColorPlotBase):
         elif method.lower() == "prob":
             gene_no = np.argmax(nb.ref_spots.gene_probabilities[spot_no])
         gene_name = nb.call_spots.gene_names[gene_no]
-        gene_colour = nb.call_spots.bled_codes[gene_no].transpose()
         if bg_removed:
             colour = self.spot_colour_pb
         else:
             colour = self.spot_colour
+        gene_colour = (nb.call_spots.bled_codes[gene_no].transpose() * np.linalg.norm(colour)
+                       / np.linalg.norm(nb.call_spots.bled_codes[gene_no])) / 2
         super().__init__(
             [colour, gene_colour], colour_norm, slider_pos=[0.85, 0.2, 0.01, 0.75], cbar_pos=[0.9, 0.2, 0.03, 0.75]
         )
@@ -326,7 +326,7 @@ class view_codes(ColorPlotBase):
 
         self.background_button_ax = self.fig.add_axes([0.85, 0.1, 0.1, 0.05])
         self.background_button = Button(self.background_button_ax, "Background", hovercolor="0.275")
-        self.background_button.label.set_color(self.norm_button_colour)
+        self.background_button.label.set_color(self.norm_button_colour_press)
         self.background_button.on_clicked(self.change_background)
 
         self.change_norm()  # initialise with method = 'norm'
@@ -346,11 +346,11 @@ class view_codes(ColorPlotBase):
             self.im_data[0] = self.spot_colour_pb
             self.background_removed = True
             # Change colour when pressed
-            self.background_button.label.set_color(self.norm_button_colour_press)
+            self.background_button.label.set_color(self.norm_button_colour)
         else:
             self.im_data[0] = self.spot_colour
             self.background_removed = False
-            self.background_button.label.set_color(self.norm_button_colour)
+            self.background_button.label.set_color(self.norm_button_colour_press)
         # Change norm method before call change_norm so overall it does not change
         if self.colour_norm is not None:
             self.method = "norm" if self.method == "raw" else "raw"  # change to the other method

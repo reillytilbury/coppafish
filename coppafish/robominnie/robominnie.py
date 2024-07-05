@@ -986,7 +986,11 @@ class RoboMinnie:
         pearson_r_thresh = 0.25
         round_registration_channel = {self.dapi_channel if (self.include_dapi and register_with_dapi) else ''}
         icp_min_spots = 10
-
+        
+        [call_spots]
+        target_values = 1, 1, 1, 1, 1
+        d_max = 0, 1, 2, 3, 4
+        
         [omp]
         max_genes = {omp_iterations}
         shape_isolation_distance_yx = 8
