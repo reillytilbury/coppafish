@@ -78,11 +78,6 @@ def run_filter(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage) ->
         nbp_debug.psf = psf
     else:
         nbp_debug.psf = None
-    compute_scale = True
-    if os.path.isfile(nbp_file.scale):
-        scale = float(filter_base.get_scale_from_txt(nbp_file.scale)[0])
-        log.info(f"Using image scale {scale} found at {nbp_file.scale}")
-        compute_scale = False
 
     indices = indexing.create(
         nbp_basic,
@@ -111,7 +106,7 @@ def run_filter(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage) ->
                     "exists": str(filtered_image_exists).lower(),
                 }
             )
-            if filtered_image_exists and auto_thresh[t, r, c] != INVALID_AUTO_THRESH and compute_scale == False:
+            if filtered_image_exists and auto_thresh[t, r, c] != INVALID_AUTO_THRESH:
                 # We already have everything we need for this tile, round, channel image.
                 pbar.update()
                 continue
@@ -135,14 +130,7 @@ def run_filter(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage) ->
             elif c != nbp_basic.dapi_channel:
                 if (im_filtered > np.iinfo(np.int32).max).sum() > 0:
                     log.warn(f"Converting to int32 has cut off pixels for {t=}, {r=}, {c=} filtered image")
-                if compute_scale:
-                    compute_scale = False
-                    scale = 1.0
-                    log.debug(f"{scale=} computed from {t=}, {r=}, {c=}")
-                    # Save scale in case need to re-run without the notebook
-                    filter_base.save_scale(nbp_file.scale, scale, scale)
-                # Scale non DAPI images up by scale (or anchor_scale) factor after all filtering
-                im_filtered = im_filtered.astype(np.float64) * scale
+                im_filtered = im_filtered.astype(np.float64)
                 im_filtered = np.rint(im_filtered, np.zeros_like(im_filtered, dtype=np.int32), casting="unsafe")
                 auto_thresh[t, r, c] = filter_base.compute_auto_thresh(
                     im_filtered, config["auto_thresh_multiplier"], nbp_debug.z_info
@@ -175,7 +163,6 @@ def run_filter(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage) ->
             del im_filtered, saved_im
 
     nbp.auto_thresh = auto_thresh
-    nbp.image_scale = scale
     end_time = time.time()
     nbp_debug.time_taken = end_time - start_time
     log.debug("Filter complete")

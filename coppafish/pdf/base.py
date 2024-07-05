@@ -483,10 +483,9 @@ class BuildPDF:
             output += time_taken
         if filter_debug_page.r_dapi is not None:
             # Filtering DAPI is true
-            output += f"dapi filtering with r_dapi: {filter_debug_page.r_dapi}\n"
+            output += f"dapi filtering with r_dapi: {filter_debug_page.r_dapi}"
         else:
-            output += f"no dapi filtering\n"
-        output += f"computed image scale: {filter_page.image_scale}"
+            output += f"no dapi filtering"
         return output
 
     def create_pixel_value_hists(

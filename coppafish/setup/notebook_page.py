@@ -291,12 +291,6 @@ class NotebookPage:
                 + "`auto_thresh[t, r, c]` is the threshold spot intensity for tile $t$, round $r$, channel $c$"
                 + "used for spot detection in the `find_spots` step of the pipeline.",
             ],
-            "image_scale": [
-                "float",
-                "Every non-DAPI image is scaled by this number after filtering. It is computed using the first non-DAPI "
-                + "image in filter. The scaling helps to use more of the uint16 integer range when saving the images for "
-                + "improved pixel value precision.",
-            ],
         },
         "filter_debug": {
             "r_dapi": [

@@ -92,9 +92,6 @@ _options = {
         "deconvolve": "bool",
         "wiener_constant": "number",
         "wiener_pad_shape": "tuple_int",
-        "scale_multiplier": "number",
-        "percent_clip_warn": "number",
-        "percent_clip_error": "number",
     },
     "find_spots": {
         "radius_xy": "int",

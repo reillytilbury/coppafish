@@ -6,6 +6,7 @@
     to True or False.
  * All output variables are now stored within the notebook except for extract and filter images.
  * Filter: Filtered images are now saved as float16 instead of uint16.
+ * Filter: Filtered images are not scaled anymore.
  * Filter: The PSF used for image filtering is not computed anymore. It is given as an input. There is a default PSF 
     located at coppafish/setup/default_psf.npz.
  * Extract: Images are now rotated during extract instead of filter. Hence, the config parameter `num_rotations` has 
