@@ -53,13 +53,12 @@ def apply_transform(
 
 
 def get_spot_colours_new(
-    all_images: Tuple[Tuple[Tuple[zarr.Array]]],
+    all_images: Tuple[Tuple[Tuple[Union[zarr.Array, np.ndarray]]]],
     flow: zarr.Array,
     icp_correction: np.ndarray,
     channel_correction: np.ndarray,
     use_channels: List[int],
     dapi_channel: int,
-    pre_seq_round: int,
     tile: int,
     round: int,
     channels: Optional[Union[Tuple[int], int]] = None,
@@ -73,18 +72,17 @@ def get_spot_colours_new(
     when the position is out of bounds.
 
     Args:
-        all_images (tuple of tuple of tuple of zarrays with shape `(im_y x im_x x im_z)`): all images.
+        all_images (tuple of tuple of tuple of zarrays or ndarrays with shape `(im_y x im_x x im_z)`): all images.
             all_images[t][r][c] is for tile t, round r, channel c. None is placed for round/channel combinations that
             are not possible.
-        flow (`(n_tiles x n_rounds x 3 x im_y x im_x x im_z) zarray`): optical flow shifts that take the anchor image
-            to the tile/round.
+        flow (`(n_tiles x n_rounds x 3 x im_y x im_x x im_z) zarray or ndarray`): optical flow shifts that take the
+            anchor image to the tile/round.
         icp_correction (`(n_tiles x n_rounds x n_channels x 4 x 3) ndarray[float]`): affine correction applied to
             anchor image after optical flow correction.
         channel_correction (`(n_tiles x n_channels x 4 x 3) ndarray[float]`): affine channel correction applied to
             anchor image after optical flow correction.
         use_channels (list of int): all sequencing channels.
-        dapi_channel (int): the dapi channel index.
-        pre_seq_round (int): the presequence round index.
+        dapi_channel (int): the dapi channel index. Only the channel correction affine is used on the DAPI channel.
         tile (int): tile index.
         round (int): round index.
         channels (tuple of ints or int): sequence channel indices (index) to load. Default: sequencing channels.
@@ -102,17 +100,18 @@ def get_spot_colours_new(
 
     Notes:
         - If you are planning to load in multiple channels, this function is faster if called once.
-        - float32 precision is used throughout intermediate steps.
+        - float32 precision is used throughout intermediate steps. If you do not have sufficient memory, then yxz can
+            be used to run on fewer points at once.
     """
     assert type(all_images) is tuple
     assert type(all_images[0]) is tuple
     assert type(all_images[0][0]) is tuple
     for i, j, k in itertools.product(range(len(all_images)), range(len(all_images[0])), range(len(all_images[0][0]))):
         image = all_images[i][j][k]
-        assert image is None or type(image) is zarr.Array, f"Got wrong type: {type(image)}"
+        assert image is None or type(image) is zarr.Array or type(image) is np.ndarray, f"Bad type: {type(image)}"
         if image is not None:
             image_shape = image.shape
-    assert type(flow) is zarr.Array
+    assert type(flow) is zarr.Array or type(flow) is np.ndarray
     assert flow.shape[2:] == (3,) + image_shape
     assert type(icp_correction) is np.ndarray
     assert icp_correction.shape[:2] == flow.shape[:2]
@@ -123,7 +122,6 @@ def get_spot_colours_new(
     assert channel_correction.shape[2:] == (4, 3)
     assert type(use_channels) is list
     assert type(dapi_channel) is int
-    assert type(pre_seq_round) is int
     assert type(tile) is int
     assert type(round) is int
     if channels is None:
@@ -262,7 +260,7 @@ def get_spot_colours_new(
     return pixel_intensities
 
 
-# TODO: Remove the use of the old, slower, and less precise get_spot_colors function in the codebase.
+# TODO: Remove the use of the old, slower, less precise, and untested get_spot_colors function.
 def get_spot_colors(
     yxz_base: np.ndarray,
     t: np.ndarray,
@@ -293,7 +291,7 @@ def get_spot_colors(
         use_rounds: `int [n_use_rounds]`.
             Rounds you would like to find the `spot_color` for.
             Error will raise if transform is zero for particular round.
-            If `None`, all rounds in `nbp_basic.use_rounds` used.
+            If `None`, all rounds in `nbp_basic.use_rounds` are used.
         use_channels: `int [n_use_channels]`.
             Channels you would like to find the `spot_color` for.
             Error will raise if transform is zero for particular channel.

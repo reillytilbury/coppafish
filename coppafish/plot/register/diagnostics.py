@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import napari
 import nd2
-import zarr
 import numpy as np
 from qtpy.QtCore import Qt
 from scipy.ndimage import affine_transform
@@ -13,6 +12,7 @@ from scipy.spatial import KDTree
 import skimage
 from superqt import QRangeSlider
 from tqdm import tqdm
+import zarr
 
 from coppafish.find_spots import spot_yxz
 from coppafish.register import preprocessing
@@ -584,8 +584,8 @@ def view_optical_flow(nb: Notebook, t: int, r: int):
         r: round number
     """
     # Load the data
-    base = load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=7, c=0)
-    target = load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=0)
+    base = load_image(nb.file_names, nb.basic_info, t=t, r=7, c=0)
+    target = load_image(nb.file_names, nb.basic_info, t=t, r=r, c=0)
     ny, nx, nz = base.shape
     coord_order = ["y", "x", "z"]
     coords = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing="ij"))
@@ -794,7 +794,7 @@ def view_camera_correction(nb: Notebook):
         mid_z = fluorescent_beads.shape[0] // 2
         fluorescent_beads = fluorescent_beads[mid_z, :, :, :]
     # if fluorescent bead images are for all channels, just take one from each camera
-    cam_channels =[0, 9, 18, 23]
+    cam_channels = [0, 9, 18, 23]
     if len(fluorescent_beads) == 28:
         fluorescent_beads = fluorescent_beads[cam_channels]
 
@@ -812,7 +812,7 @@ def view_camera_correction(nb: Notebook):
 
     # get the spots from the circle detection
     bead_point_clouds = []
-    bead_radii = nb.get_config()['register']['bead_radii']
+    bead_radii = nb.get_config()["register"]["bead_radii"]
     for i in range(4):
         edges = skimage.feature.canny(fluorescent_beads[i], sigma=3, low_threshold=10, high_threshold=50)
         hough_res = skimage.transform.hough_circle(edges, bead_radii)
@@ -821,8 +821,10 @@ def view_camera_correction(nb: Notebook):
         )
         cy, cx = cy.astype(int), cx.astype(int)
         values = fluorescent_beads[i][cy, cx]
-        cy_rand, cx_rand = (np.random.randint(0, fluorescent_beads[i].shape[0] - 1, 100),
-                            np.random.randint(0, fluorescent_beads[i].shape[1] - 1, 100))
+        cy_rand, cx_rand = (
+            np.random.randint(0, fluorescent_beads[i].shape[0] - 1, 100),
+            np.random.randint(0, fluorescent_beads[i].shape[1] - 1, 100),
+        )
         noise = np.mean(fluorescent_beads[i][cy_rand, cx_rand])
         keep = values > noise
         cy, cx = cy[keep], cx[keep]
@@ -849,16 +851,16 @@ def view_camera_correction(nb: Notebook):
         # add unregistered points and images
         viewer.add_image(
             fluorescent_beads[c],
-            name=f'Camera {cam_channels[c]} image',
+            name=f"Camera {cam_channels[c]} image",
             colormap=colours[c],
             blending="additive",
             visible=False,
         )
         viewer.add_points(
             bead_point_clouds[c],
-            name=f'Camera {cam_channels[c]} points',
+            name=f"Camera {cam_channels[c]} points",
             face_color=colours[c],
-            symbol='o',
+            symbol="o",
             size=5,
             blending="additive",
             visible=False,
@@ -866,16 +868,16 @@ def view_camera_correction(nb: Notebook):
         # add registered points and images
         viewer.add_image(
             fluorescent_beads_transformed[c],
-            name=f'Camera {cam_channels[c]} transformed image',
+            name=f"Camera {cam_channels[c]} transformed image",
             colormap=colours[c],
             blending="additive",
             visible=True,
         )
         viewer.add_points(
             bead_point_clouds_transformed[c],
-            name=f'Camera {cam_channels[c]} transformed points',
+            name=f"Camera {cam_channels[c]} transformed points",
             face_color=colours[c],
-            symbol='x',
+            symbol="x",
             size=5,
             blending="additive",
             visible=True,
@@ -883,16 +885,16 @@ def view_camera_correction(nb: Notebook):
     # Add the anchor channel image and points
     viewer.add_image(
         fluorescent_beads[-1],
-        name=f'Camera {cam_channels[-1]} image',
+        name=f"Camera {cam_channels[-1]} image",
         colormap=colours[-1],
         blending="additive",
         visible=False,
     )
     viewer.add_points(
         bead_point_clouds[-1],
-        name=f'Camera {cam_channels[-1]} points',
-        face_color='white',
-        symbol='o',
+        name=f"Camera {cam_channels[-1]} points",
+        face_color="white",
+        symbol="o",
         size=5,
         blending="additive",
         visible=False,

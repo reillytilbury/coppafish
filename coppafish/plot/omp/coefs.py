@@ -7,7 +7,7 @@ from matplotlib.widgets import CheckButtons, Slider
 import numpy as np
 import torch
 
-from ... import spot_colors
+from ... import spot_colors, utils
 from ...call_spots import background_pytorch
 from ...omp import coefs_torch, scores_torch
 from ...omp import base as omp_base
@@ -79,13 +79,15 @@ class ViewOMPImage:
         central_yxz = tuple(torch.asarray(spot_shape_yxz)[np.newaxis].T.int() // 2)
         n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
         image_colours = np.zeros(spot_shape_yxz + (n_rounds_use, n_channels_use), dtype=np.float32)
+        all_images = utils.tiles_io.load_filter_images(nb.basic_info, nb.file_names)
         for i, r in enumerate(nb.basic_info.use_rounds):
             image_colours[:, :, :, i] = spot_colors.base.get_spot_colours_new(
-                nb.basic_info,
-                nb.file_names,
-                nb.extract,
-                nb.register,
-                nb.register_debug,
+                all_images,
+                nb.register.flow,
+                nb.register.icp_correction,
+                nb.register_debug.channel_correction,
+                nb.basic.use_channels,
+                nb.basic.dapi_channel,
                 int(tile),
                 r,
                 yxz=yxz,
@@ -270,150 +272,6 @@ class ViewOMPImage:
         self.draw_data()
 
 
-class ViewOMPPixelCoefficients:
-    def __init__(self, nb: Notebook, spot_no: int, method: str, tile: int = None, local_yxz: np.ndarray = None) -> None:
-        """
-        Show the OMP coefficients for one pixel position over each OMP iteration.
-
-        Args:
-            nb (Notebook): the notebook.
-            spot_no (int): the spot index.
-            method (str): the method that the spot was found on. Can be 'anchor', 'prob' or 'omp'.
-            tile (int): tile of the pixel.
-            local_yxz (`(3) ndarray[int]`): position relative to tile to view. If tile and local_yxz are both given,
-                then spot_no and method are ignored.
-        """
-        assert type(nb) is Notebook
-        assert type(spot_no) is int
-        assert type(method) is str
-        assert method in ("anchor", "prob", "omp")
-        assert tile is None or type(tile) is int
-        assert local_yxz is None or type(local_yxz) is np.ndarray
-
-        config = nb.init_config["omp"]
-        if tile is None or local_yxz is None:
-            local_yxz, tile = get_spot_position_and_tile(nb, spot_no, method)
-
-        n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
-        image_colours = np.zeros((1, n_rounds_use, n_channels_use), dtype=np.float32)
-        for i, r in enumerate(nb.basic_info.use_rounds):
-            image_colours[:, i] = spot_colors.base.get_spot_colours_new(
-                nb.basic_info,
-                nb.file_names,
-                nb.extract,
-                nb.register,
-                nb.register_debug,
-                int(tile),
-                r,
-                yxz=local_yxz[np.newaxis],
-                registration_type="flow_and_icp",
-            ).T[np.newaxis]
-        image_colours = torch.asarray(image_colours, dtype=torch.float32)
-        colour_norm_factor = np.array(nb.call_spots.colour_norm_factor, dtype=np.float32)
-        colour_norm_factor = torch.asarray(colour_norm_factor).float()
-        bled_codes = nb.call_spots.bled_codes
-        n_genes = bled_codes.shape[0]
-        bled_codes = torch.asarray(bled_codes).float()
-
-        image_colours = image_colours.reshape((1, n_rounds_use, n_channels_use))
-        bled_codes = bled_codes.reshape((n_genes, n_rounds_use * n_channels_use))
-
-        if config["colour_normalise"]:
-            image_colours *= colour_norm_factor[[tile]]
-        bg_coefficients = torch.zeros((1, n_channels_use), dtype=torch.float32)
-        bg_codes = torch.repeat_interleave(torch.eye(n_channels_use)[:, None, :], n_rounds_use, dim=1)
-        # give background_vectors an L2 norm of 1 so can compare coefficients with other genes.
-        bg_codes = bg_codes / torch.linalg.norm(bg_codes, axis=(1, 2), keepdims=True)
-        if config["fit_background"]:
-            subset_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(subset_colours)
-        bg_codes = bg_codes.float()
-        bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
-        image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
-
-        # Get the maximum number of OMP gene assignments made and what genes.
-        coefficients = coefs_torch.compute_omp_coefficients(
-            image_colours,
-            bled_codes,
-            maximum_iterations=config["max_genes"],
-            background_coefficients=bg_coefficients,
-            background_codes=bg_codes,
-            dot_product_threshold=config["dp_thresh"],
-            dot_product_norm_shift=0.0,
-            weight_coefficient_fit=config["weight_coef_fit"],
-            alpha=config["alpha"],
-            beta=config["beta"],
-            do_not_compute_on=None,
-            force_cpu=config["force_cpu"],
-        )[0].numpy()
-        self.maximum_iterations = (~np.isclose(coefficients, 0)).sum()
-        if self.maximum_iterations == 0:
-            raise ValueError(f"The selected pixel has no OMP gene assignments to display")
-        self.final_selected_genes = (~np.isclose(coefficients, 0)).nonzero()[0].tolist()
-        self.coefficients = np.zeros((self.maximum_iterations, len(self.final_selected_genes)), dtype=np.float32)
-        for i in range(self.maximum_iterations):
-            self.coefficients[i] = coefs_torch.compute_omp_coefficients(
-                image_colours,
-                bled_codes,
-                maximum_iterations=(i + 1),
-                background_coefficients=bg_coefficients,
-                background_codes=bg_codes,
-                dot_product_threshold=config["dp_thresh"],
-                dot_product_norm_shift=0.0,
-                weight_coefficient_fit=config["weight_coef_fit"],
-                alpha=config["alpha"],
-                beta=config["beta"],
-                do_not_compute_on=None,
-                force_cpu=config["force_cpu"],
-            )[0].numpy()[self.final_selected_genes]
-        self.local_yxz = local_yxz
-        self.gene_names = nb.call_spots.gene_names
-        self.show_iteration = self.maximum_iterations - 1
-        self.draw_canvas()
-        self.draw_data()
-        plt.show()
-
-    def draw_canvas(self) -> None:
-        plt.style.use("dark_background")
-        self.fig, self.axes = plt.subplots(2, 1, squeeze=False, gridspec_kw={"height_ratios": [7, 1]}, num="OMP Pixel")
-        self.fig.suptitle(f"OMP at pixel {tuple(self.local_yxz.tolist())}")
-        ax_slider: plt.Axes = self.axes[1, 0]
-        self.iteration_slider = Slider(
-            ax_slider,
-            label="Iteration",
-            valmin=1,
-            valmax=self.maximum_iterations,
-            valstep=1,
-            valinit=self.maximum_iterations,
-        )
-        self.iteration_slider.active = True
-        self.iteration_slider.on_changed(self.show_iteration_changed)
-
-    def draw_data(self) -> None:
-        ax_plot: plt.Axes = self.axes[0, 0]
-        ax_plot.clear()
-        x_min, x_max = -0.5, self.maximum_iterations - 0.5
-        ax_plot.set_xlim(x_min, x_max)
-        abs_max = np.abs(self.coefficients).max()
-        ax_plot.set_ylim(-abs_max - 0.5, abs_max + 0.5)
-        ax_plot.hlines(0, x_min, x_max, colors="white", linewidths=1.0)
-        ax_plot.set_xlabel(f"Gene")
-        ax_plot.set_ylabel(f"Coefficient")
-        ax_plot.bar(
-            np.linspace(0, self.maximum_iterations, num=self.maximum_iterations, endpoint=False),
-            self.coefficients[self.show_iteration],
-            width=0.3,
-            color="whitesmoke",
-            edgecolor="dimgrey",
-            linewidth=1.5,
-            tick_label=[self.gene_names[i] for i in self.final_selected_genes],
-        )
-        plt.draw()
-
-    def show_iteration_changed(self, _) -> None:
-        self.show_iteration = (self.iteration_slider.val) - 1
-        self.draw_data()
-
-
 class ViewOMPPixelColours:
     def __init__(self, nb: Notebook, spot_no: int, method: str) -> None:
         """
@@ -435,13 +293,15 @@ class ViewOMPPixelColours:
 
         n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
         image_colours = np.zeros((1, n_rounds_use, n_channels_use), dtype=np.float32)
+        all_images = utils.tiles_io.load_filter_images(nb.basic_info, nb.file_names)
         for i, r in enumerate(nb.basic_info.use_rounds):
             image_colours[:, i] = spot_colors.base.get_spot_colours_new(
-                nb.basic_info,
-                nb.file_names,
-                nb.extract,
-                nb.register,
-                nb.register_debug,
+                all_images,
+                nb.register.flow,
+                nb.register.icp_correction,
+                nb.register_debug.channel_correction,
+                nb.basic.use_channels,
+                nb.basic.dapi_channel,
                 int(tile),
                 r,
                 yxz=self.local_yxz[np.newaxis],

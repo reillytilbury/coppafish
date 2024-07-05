@@ -20,8 +20,7 @@ class KeyBinds:
     view_spot_colours_and_weights = "d"
     view_intensity_from_colour = "Shift-i"
     view_omp_coef_image = "o"
-    view_omp_pixel_coefficients = "p"
-    view_omp_pixel_colours = "["
+    view_omp_pixel_colours = "p"
 
 
 class ViewHotkeys:
@@ -46,7 +45,6 @@ class ViewHotkeys:
                 View spot colours and weights: {KeyBinds.key_to_str(KeyBinds.view_spot_colours_and_weights)}
                 View intensities calculation from colour: {KeyBinds.key_to_str(KeyBinds.view_intensity_from_colour)}
                 View OMP coefficient image: {KeyBinds.key_to_str(KeyBinds.view_omp_coef_image)}
-                View pixel's OMP coefficients: {KeyBinds.key_to_str(KeyBinds.view_omp_pixel_coefficients)}
                 View pixel's OMP colours: {KeyBinds.key_to_str(KeyBinds.view_omp_pixel_colours)}"""
         ax.text(
             0.1,

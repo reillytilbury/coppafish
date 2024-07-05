@@ -1,10 +1,11 @@
-import napari
 import itertools
-from typing import Optional, List
+from typing import List, Optional
+
+import napari
 
 from .. import log
-from ..utils import tiles_io
 from ..setup import Notebook
+from ..utils import tiles_io
 
 
 def view_filtered_images(
@@ -38,7 +39,7 @@ def view_filtered_images(
         if not tiles_io.image_exists(file_path):
             log.warn(f"Image at {file_path} not found, skipping")
             continue
-        image_trc = tiles_io.load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t, r, c)
+        image_trc = tiles_io.load_image(nb.file_names, nb.basic_info, t, r, c)
         viewer.add_image(image_trc, name=f"{t=}, {r=}, {c=}")
 
     napari.run()

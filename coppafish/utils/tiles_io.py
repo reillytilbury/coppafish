@@ -243,7 +243,12 @@ def load_filter_images(nbp_basic: NotebookPage, nbp_file: NotebookPage) -> Tuple
     result = utils.base.deep_convert((((((None,) * output_size[2]),) * output_size[1]),) * output_size[0], list)
     for t, r, c in indices:
         suffix = "_raw" if r == nbp_basic.pre_seq_round else ""
-        result[t][r][c] = load_image(nbp_file, nbp_basic, t, r, c, suffix)
+        file_path = nbp_file.tile[t][r][c]
+        file_path = add_suffix_to_path(file_path, suffix)
+        if image_exists(file_path):
+            result[t][r][c] = load_image(nbp_file, nbp_basic, t, r, c, suffix)
+        else:
+            log.warn(f"Failed to find filter image for tile {t}, round {r}, channel {c}")
     result = utils.base.deep_convert(result, tuple)
 
     return result
