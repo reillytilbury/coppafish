@@ -261,27 +261,29 @@ class ViewAllGeneHistograms:
         """
         Load in values to be plotted.
         Args:
-            mode: 'score', 'prob', 'score_diff' or 'intensity'
+            mode: 'score', 'prob', 'prob_diff' or 'intensity'
         """
         self.mode = mode
         if mode == "score":
             values = self.nb.ref_spots.dot_product_gene_score
         elif mode == "prob":
             values = np.max(self.nb.ref_spots.gene_probabilities, axis=1)
-        elif mode == "score_diff":
-            values = self.nb.ref_spots.score_diff
+        elif mode == "prob_diff":
+            probs_sorted = np.sort(self.nb.ref_spots.gene_probabilities, axis=1)
+            values = probs_sorted[:, -1] - probs_sorted[:, -2]
         elif mode == "intensity":
             values = self.nb.ref_spots.intensity
         else:
-            raise ValueError("mode must be 'score', 'prob', 'score_diff' or 'intensity'")
+            raise ValueError("mode must be 'score', 'prob', 'prob_diff' or 'intensity'")
 
         gene_values = np.zeros((self.nb.call_spots.gene_names.shape[0], 0)).tolist()
-        gene_prob_assignments = self.nb.probability_gene_no
-        for i in range(len(gene_values)):
+        prob_assignments = np.argmax(self.nb.ref_spots.gene_probabilities, axis=1)
+        dot_product_assignments = self.nb.ref_spots.dot_product_gene_no
+        for g in range(len(gene_values)):
             if mode != "prob":
-                gene_values[i] = values[self.nb.ref_spots.dot_product_gene_no == i]
+                gene_values[g] = values[dot_product_assignments == g]
             else:
-                gene_values[i] = values[gene_prob_assignments == i]
+                gene_values[g] = values[prob_assignments == g]
 
         self.gene_values = gene_values
         self.n_spots = np.array([len(gene_values[i]) for i in range(len(gene_values))])
@@ -344,26 +346,26 @@ class ViewAllGeneHistograms:
         Add buttons to the plot. Buttons are:
             - 'score': plot the distribution of scores
             - 'prob': plot the distribution of probabilities
-            - 'score_diff': plot the distribution of score differences
+            - 'prob_diff': plot the distribution of score differences
             - 'intensity': plot the distribution of intensities
         """
         # coords for colourbar are [0.95, 0.1, 0.03, 0.6], we want to put the buttons just above the colourbar
 
         # create axes for the buttons
         ax_intensity = self.fig.add_axes([0.95, 0.75, 0.03, 0.03])
-        ax_score_diff = self.fig.add_axes([0.95, 0.8, 0.03, 0.03])
+        ax_prob_diff = self.fig.add_axes([0.95, 0.8, 0.03, 0.03])
         ax_prob = self.fig.add_axes([0.95, 0.85, 0.03, 0.03])
         ax_score = self.fig.add_axes([0.95, 0.9, 0.03, 0.03])
 
         # create the buttons, make them black. Hovering over will make them white
         self.button_intensity = Button(ax_intensity, "intensity", color="black", hovercolor="white")
-        self.button_score_diff = Button(ax_score_diff, "score_diff", color="black", hovercolor="white")
+        self.button_prob_diff = Button(ax_prob_diff, "prob_diff", color="black", hovercolor="white")
         self.button_prob = Button(ax_prob, "prob", color="black", hovercolor="white")
         self.button_score = Button(ax_score, "score", color="black", hovercolor="white")
 
         # connect the buttons to the update function. We need to ensure the event passed to update is a string
         self.button_intensity.on_clicked(lambda event: self.update("intensity"))
-        self.button_score_diff.on_clicked(lambda event: self.update("score_diff"))
+        self.button_prob_diff.on_clicked(lambda event: self.update("prob_diff"))
         self.button_prob.on_clicked(lambda event: self.update("prob"))
         self.button_score.on_clicked(lambda event: self.update("score"))
 

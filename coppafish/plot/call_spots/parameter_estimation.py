@@ -124,7 +124,7 @@ def view_rc_scale_regression(
     """
     rc_scale = nb.call_spots.rc_scale
     gene_codes = nb.call_spots.gene_codes
-    d_max = np.argmax(nb.call_spots.bleed_matrix, axis=1)
+    d_max = nb.call_spots.associated_configs["call_spots"]["d_max"]
     target_values = nb.call_spots.associated_configs["call_spots"]["target_values"]
     free_bled_codes_tile_indep = nb.call_spots.free_bled_codes_tile_independent
     gene_no = np.argmax(nb.ref_spots.gene_probabilities, axis=1)
@@ -152,13 +152,13 @@ def view_rc_scale_regression(
         ax[c].scatter(x + jitter, y, s=s, c="cyan", alpha=0.5)
         ax[c].scatter(x + 1 + jitter, y_scaled, s=s, c="red", alpha=0.5)
         # add a horizontal line for the target value
-        ax[c].axhline(target_values[d_max[c]], color="white", linestyle="--")
+        ax[c].axhline(target_values[c], color="white", linestyle="--")
         ax[c].set_xticks([])
         max_val = max(np.max(free_bled_codes_tile_indep), np.max(free_bled_codes_tile_indep * rc_scale))
-        ax[c].set_yticks(np.round([0, target_values[d_max[c]], max_val], 2))
+        ax[c].set_yticks(np.round([0, target_values[c], max_val], 2))
         ax[c].set_xlim(-1, 2 * n_rounds)
         ax[c].set_ylim(0, max_val)
-        ax[c].set_ylabel(f"Channel {use_channels[c]}")
+        ax[c].set_ylabel(f"C {use_channels[c]}")
         # add text to the right hand side of each row
         ax[c].text(2 * n_rounds + 0.25, 1, f"mean scale = {np.mean(rc_scale[:, c]) :.2f}")
         if c == n_channels_use - 1:
@@ -205,7 +205,7 @@ def view_tile_scale_regression(
     """
     tile_scale = nb.call_spots.tile_scale
     gene_codes = nb.call_spots.gene_codes
-    d_max = np.argmax(nb.call_spots.bleed_matrix, axis=1)
+    d_max = nb.call_spots.associated_configs["call_spots"]["d_max"]
     target_bled_codes = nb.call_spots.bled_codes
     free_bled_codes = nb.call_spots.free_bled_codes
     gene_no = np.argmax(nb.ref_spots.gene_probabilities, axis=1)

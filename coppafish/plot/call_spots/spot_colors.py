@@ -165,13 +165,15 @@ class ColorPlotBase:
             self.norm_button_colour = "red"
             self.norm_button_colour_press = "white"
             if self.method == "raw":
-                current_colour = self.norm_button_colour_press
-            else:
                 current_colour = self.norm_button_colour
+            else:
+                current_colour = self.norm_button_colour_press
             self.norm_button_ax = self.fig.add_axes(button_pos)
             self.norm_button = Button(self.norm_button_ax, "Norm", hovercolor="0.275")
             self.norm_button.label.set_color(current_colour)
             self.norm_button.on_clicked(self.change_norm)
+        # set default to show normalised images
+        self.change_norm()  # initialise with method = 'norm'
 
     def change_clim(self, val: List):
         """
@@ -278,8 +280,10 @@ class view_codes(ColorPlotBase):
             colour = self.spot_colour_pb
         else:
             colour = self.spot_colour
-        gene_colour = (nb.call_spots.bled_codes[gene_no].transpose() * np.linalg.norm(colour)
-                       / np.linalg.norm(nb.call_spots.bled_codes[gene_no])) / 2
+        gene_colour_float_norm = nb.call_spots.bled_codes[gene_no].transpose()
+        gene_colour_float_raw = gene_colour_float_norm / colour_norm
+        float_to_int_scale = np.linalg.norm(colour) / (2 * np.linalg.norm(gene_colour_float_raw))
+        gene_colour = gene_colour_float_raw * float_to_int_scale
         super().__init__(
             [colour, gene_colour], colour_norm, slider_pos=[0.85, 0.2, 0.01, 0.75], cbar_pos=[0.9, 0.2, 0.03, 0.75]
         )
@@ -289,6 +293,7 @@ class view_codes(ColorPlotBase):
         self.ax[1].set_xticks(ticks=np.arange(self.im_data[0].shape[1]))
         self.ax[1].set_xlabel("Round")
         self.fig.supylabel("colour Channel")
+
         # for each round, plot a green circle in the channel which is highest for that round
         n_channels, n_rounds = gene_colour.shape
         max_channels = np.zeros((n_rounds, n_channels), dtype=bool)
@@ -296,11 +301,11 @@ class view_codes(ColorPlotBase):
         total_intensity = 0
         for r in range(n_rounds):
             # we will add all channels with intensity > 0.25 * sum of all channels
-            round_colour = gene_colour[:, r] / np.sum(gene_colour[:, r])
-            good_channels = np.where(round_colour > 0.25)[0]
+            round_colour_norm = gene_colour_float_norm[:, r] / np.sum(gene_colour_float_norm[:, r])
+            good_channels = np.where(round_colour_norm > 0.25)[0]
             max_channels[r, good_channels] = True
-            max_channel_share[r, good_channels] = gene_colour[good_channels, r]
-            total_intensity += np.sum(gene_colour[good_channels, r])
+            max_channel_share[r, good_channels] = gene_colour_float_norm[good_channels, r]
+            total_intensity += np.sum(gene_colour_float_norm[good_channels, r])
         n_circles = np.sum(max_channels)
         max_channel_share *= n_circles / total_intensity
         for j in range(2):
@@ -330,6 +335,7 @@ class view_codes(ColorPlotBase):
         self.background_button.on_clicked(self.change_background)
 
         self.change_norm()  # initialise with method = 'norm'
+        self.change_background() # initialise with background removed
         if save_loc:
             plt.savefig(save_loc, dpi=300)
             plt.close()
