@@ -162,15 +162,13 @@ def call_reference_spots(
     good = prob_score > prob_threshold
     bleed_matrix = compute_bleed_matrix(spot_colours[good], prob_mode[good], gene_codes, n_dyes)
 
-    # add all information to the reference spots notebook page
-    nbp_ref_spots.intensity = np.median(np.max(spot_colours, axis=-1), axis=-1)
-    nbp_ref_spots.dot_product_gene_no, nbp_ref_spots.dot_product_gene_score = dp_mode.astype(np.int16), dp_score
-    nbp_ref_spots.gene_probabilities_initial = gene_prob_initial
-    nbp_ref_spots.gene_probabilities = gene_prob
-
-    # add all information to the call spots notebook page
+    # 8. save the results
+    nbp.intensity = np.median(np.max(spot_colours, axis=-1), axis=-1)
+    nbp.dot_product_gene_no, nbp.dot_product_gene_score = dp_mode.astype(np.int16), dp_score
+    nbp.gene_probabilities_initial = gene_prob_initial
+    nbp.gene_probabilities = gene_prob
     nbp.gene_names, nbp.gene_codes = gene_names, gene_codes
-    nbp.rc_scale, nbp.tile_scale = rc_scale, tile_scale
+    nbp.initial_scale, nbp.rc_scale, nbp.tile_scale = colour_norm_factor_initial, rc_scale, tile_scale
     nbp.colour_norm_factor = colour_norm_factor_initial * tile_scale
     nbp.free_bled_codes, nbp.free_bled_codes_tile_independent = free_bled_codes, free_bled_codes_tile_indep
     nbp.bled_codes = bled_codes
@@ -180,4 +178,4 @@ def call_reference_spots(
         bleed_matrix,
     )
 
-    return nbp, nbp_ref_spots
+    return nbp

@@ -565,9 +565,9 @@ class Viewer:
         global_loc = [loc // downsample_factor for loc in global_loc]
         colours = [nb.__getattribute__(self.method["pages"][i]).colours for i in range(2)]
         colours = [colours[i] * colour_norm_factor[tile[i]] for i in range(2)]
-        score = [nb.ref_spots.dot_product_gene_score, np.max(nb.ref_spots.gene_probabilities, axis=1)]
-        gene_no = [nb.ref_spots.dot_product_gene_no, np.argmax(nb.ref_spots.gene_probabilities, axis=1)]
-        intensity = [nb.ref_spots.intensity, nb.ref_spots.intensity]
+        score = [nb.call_spots.dot_product_gene_score, np.max(nb.call_spots.gene_probabilities, axis=1)]
+        gene_no = [nb.call_spots.dot_product_gene_no, np.argmax(nb.call_spots.gene_probabilities, axis=1)]
+        intensity = [nb.call_spots.intensity, nb.call_spots.intensity]
         indices = [np.arange(len(nb.ref_spots.tile)), np.arange(len(nb.ref_spots.tile))]
 
         # add omp results to the lists

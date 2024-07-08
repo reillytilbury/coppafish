@@ -505,31 +505,7 @@ class NotebookPage:
                 "Numpy array [n_spots x n_rounds x n_channels]. "
                 + "`[s, r, c]` is the intensity of spot $s$ on round $r$, channel $c$."
                 + "`-tile_pixel_value_shift` if that round/channel not used otherwise integer.",
-            ],
-            "intensity": [
-                "ndarray[float]",
-                "Numpy float32 array [n_spots]. "
-                + "$\\chi_s = \\underset{r}{\\mathrm{median}}(\\max_c\\zeta_{s_{rc}})$"
-                + "where $\\pmb{\\zeta}_s=$ `colors[s, r]*colour_norm_factor[r]`.",
-            ],
-            "dot_product_gene_no": [
-                "ndarray[int16]",
-                "Numpy array [n_spots]. Gene number assigned to each spot. `None` if not assigned.",
-            ],
-            "dot_product_gene_score": [
-                "ndarray[float]",
-                "Numpy float array [n_spots]. `score[s]' is the highest gene coef of spot s.",
-            ],
-            "gene_probabilities": [
-                "ndarray[float]",
-                "Numpy float array [n_spots x n_genes]. `gene_probabilities[s, g]` is the probability that spot $s$ "
-                + "belongs to gene $g$.",
-            ],
-            "gene_probabilities_initial": [
-                "ndarray[float]",
-                "Numpy float array [n_spots x n_genes]. `gene_probabilities_initial[s, g]` is the probability that spot"
-                + " $s$ belongs to gene $g$ after only initial scaling compared against the raw bleed matrix.",
-            ],
+            ]
         },
         "call_spots": {
             "gene_names": [
@@ -547,6 +523,12 @@ class NotebookPage:
                 + "Normalisation factor for each tile, round, channel. This is multiplied by colours to equalise "
                 "intensities across tiles, rounds and channels and to make the intensities of each dye as close as "
                 "possible to pre-specified target values.",
+            ],
+            "initial_scale": [
+                "ndarray[float]",
+                "Numpy float array [n_tiles x n_rounds x n_channels_use]"
+                + "Initial scaling factor for each tile, round, channel. This is multiplied by colours to equalise "
+                "intensities across tiles, rounds and channels.",
             ],
             "rc_scale": [
                 "ndarray[float]",
@@ -605,6 +587,30 @@ class NotebookPage:
                 "each channel. This is the final bleed matrix and is obtained by computing the probabilities of "
                 " scaled spots against the target bled codes.",
             ],
+            "dot_product_gene_no": [
+                "ndarray[int16]",
+                "Numpy array [n_spots]. Gene number assigned to each spot. `None` if not assigned.",
+            ],
+            "dot_product_gene_score": [
+                "ndarray[float]",
+                "Numpy float array [n_spots]. `score[s]' is the highest gene coef of spot s.",
+            ],
+            "gene_probabilities": [
+                "ndarray[float]",
+                "Numpy float array [n_spots x n_genes]. `gene_probabilities[s, g]` is the probability that spot $s$ "
+                + "belongs to gene $g$.",
+            ],
+            "gene_probabilities_initial": [
+                "ndarray[float]",
+                "Numpy float array [n_spots x n_genes]. `gene_probabilities_initial[s, g]` is the probability that spot"
+                + " $s$ belongs to gene $g$ after only initial scaling compared against the raw bleed matrix.",
+            ],
+            "intensity": [
+                "ndarray[float]",
+                "Numpy float32 array [n_spots]. "
+                + "$\\chi_s = \\underset{r}{\\mathrm{median}}(\\max_c\\zeta_{s_{rc}})$"
+                + "where $\\pmb{\\zeta}_s=$ `colors[s, r]*colour_norm_factor[r]`.",
+            ]
         },
         "omp": {
             "spot_tile": [
