@@ -252,7 +252,7 @@ class view_codes(ColorPlotBase):
             gene_no = nb.call_spots.dot_product_gene_no[spot_no]
         else:
             spot_score = np.max(nb.call_spots.gene_probabilities[spot_no])
-            self.spot_colour = nb.call_spots.colours[spot_no]
+            self.spot_colour = nb.ref_spots.colours[spot_no]
             gene_no = np.argmax(nb.call_spots.gene_probabilities[spot_no])
 
         colour_norm = nb.call_spots.colour_norm_factor[tile]

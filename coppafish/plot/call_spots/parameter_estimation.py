@@ -255,8 +255,9 @@ def view_scale_factors(
         show: bool (default=True)
             Whether to show the plot. If False, the plot is not shown. False only for testing purposes.
     """
-    tile_scale = nb.call_spots.tile_scale
-    rc_scale = nb.call_spots.rc_scale
+    initial_scale = nb.call_spots.initial_scale
+    tile_scale = nb.call_spots.tile_scale * initial_scale
+    rc_scale = nb.call_spots.rc_scale * np.mean(initial_scale, axis=0)
     use_tiles, use_rounds, use_channels = nb.basic_info.use_tiles, nb.basic_info.use_rounds, nb.basic_info.use_channels
     tile_scale = tile_scale[use_tiles]
     relative_scale = tile_scale / rc_scale[None, :, :]
