@@ -262,7 +262,7 @@ def run_reference_spots(nb: Notebook) -> None:
         config = setup.config.get_config(nb.config_path)
         nbp_call_spots = call_reference_spots.call_reference_spots(
             config=config["call_spots"],
-            nbp_ref_spots=nbp_ref_spots,
+            nbp_ref_spots=nb.ref_spots,
             nbp_file=nb.file_names,
             nbp_basic=nb.basic_info,
         )
