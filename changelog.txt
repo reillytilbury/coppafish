@@ -4,15 +4,17 @@
  * Viewer refactor: The viewer is more customisable, and users can now toggle whether they want each image shown to be
     a max intensity projection or not, which is achieved by setting the max_intensity_projection variable in the viewer
     to True or False.
- * All output variables are now stored within the notebook except for extract and filter images.
+ * Presequence support is completely removed from the pipeline.
+ * All output variables are now stored within the notebook except for extract images.
  * Filter: Filtered images are now saved as float16 instead of uint16.
  * Filter: Filtered images are not scaled anymore.
+ * Filter: Images are now saved in the 'filter' notebook page.
  * Filter: The PSF used for image filtering is not computed anymore. It is given as an input. There is a default PSF 
     located at coppafish/setup/default_psf.npz.
  * Extract: Images are now rotated during extract instead of filter. Hence, the config parameter `num_rotations` has 
     been moved from the `filter` section to the `extract` section.
- * OMP: Pixel colours are not background fitted before being run through OMP. OMP stop iterating on a pixel if the 
-    background gets fitted anyway and the background fitting may be removing important colour information.
+ * OMP: Pixel colours are not background fitted before being run through OMP. OMP stops iterating on a pixel if a 
+    background gene is assigned.
  * The notebook has been refactored. It is now faster at saving, can save zarr arrays/groups, and has write protections.
  * OMP: Less memory intensive by saving each tile's results separately. Also, the results are compressed.
  * Extract: Default z_plane_mean_warning 200 -> 125.
