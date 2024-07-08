@@ -247,13 +247,13 @@ class view_codes(ColorPlotBase):
             self.spot_colour = nb.omp.results[f'tile_{tile}'].colours[spot_no]
             gene_no = nb.omp.results[f'tile_{tile}'].gene_no[spot_no]
         elif method.lower() == "anchor":
-            spot_score = nb.ref_spots.dot_product_gene_score[spot_no]
-            self.spot_colour = nb.ref_spots.colours[spot_no]
-            gene_no = nb.ref_spots.dot_product_gene_no[spot_no]
+            spot_score = nb.call_spots.dot_product_gene_score[spot_no]
+            self.spot_colour = nb.call_spots.colours[spot_no]
+            gene_no = nb.call_spots.dot_product_gene_no[spot_no]
         else:
-            spot_score = np.max(nb.ref_spots.gene_probabilities[spot_no])
-            self.spot_colour = nb.ref_spots.colours[spot_no]
-            gene_no = np.argmax(nb.ref_spots.gene_probabilities[spot_no])
+            spot_score = np.max(nb.call_spots.gene_probabilities[spot_no])
+            self.spot_colour = nb.call_spots.colours[spot_no]
+            gene_no = np.argmax(nb.call_spots.gene_probabilities[spot_no])
 
         colour_norm = nb.call_spots.colour_norm_factor[tile]
         gene_name = nb.call_spots.gene_names[gene_no]
@@ -374,9 +374,9 @@ class view_spot(ColorPlotBase):
             spot_yxz = nb.omp.local_yxz[spot_no]
         else:
             t = int(nb.ref_spots.tile[spot_no])
-            spot_score = nb.ref_spots.dot_product_gene_score[spot_no]
-            gene_no = nb.ref_spots.dot_product_gene_no[spot_no] if method.lower() == "anchor" else np.argmax(
-                nb.ref_spots.gene_probabilities[spot_no]
+            spot_score = nb.call_spots.dot_product_gene_score[spot_no]
+            gene_no = nb.call_spots.dot_product_gene_no[spot_no] if method.lower() == "anchor" else np.argmax(
+                nb.call_spots.gene_probabilities[spot_no]
             )
             spot_yxz = nb.ref_spots.local_yxz[spot_no]
 
@@ -588,11 +588,11 @@ class GESpotViewer:
         nb = self.nb
         n_channels = len(nb.basic_info.use_channels)
         # First we need to find the spots used to calculate the gene efficiency for the given gene.
-        initial_assignment = np.argmax(nb.ref_spots.gene_probabilities, axis=1)
+        initial_assignment = np.argmax(nb.call_spots.gene_probabilities, axis=1)
         if use_ge:
             self.gene_g_mask = nb.call_spots.use_ge * (initial_assignment == gene_index)
         else:
-            self.gene_g_mask = nb.ref_spots.gene_no == gene_index
+            self.gene_g_mask = nb.call_spots.dot_product_gene_no == gene_index
         # self.gene_g_mask = nb.ref_spots.gene_no == gene_index
         spots = nb.ref_spots.colours[self.gene_g_mask][:, :, nb.basic_info.use_channels]
         # remove background codes. To do this, repeat background_strenth along a new axis for rounds

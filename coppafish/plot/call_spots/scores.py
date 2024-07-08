@@ -21,7 +21,7 @@ class HistogramScore:
         show_plot: bool = True,
     ):
         """
-        If method is anchor, this will show the histogram of `nb.ref_spots.scores` with the option to
+        If method is anchor, this will show the histogram of `nb.call_spots.scores` with the option to
         view the histogram of the score computed using various other configurations of `background` fitting
         and `gene_efficiency`. This allows one to see how the these affect the score.
 
@@ -61,7 +61,7 @@ class HistogramScore:
 
         # Save score_dp for original score, without background removal, without gene efficiency, and without both
         self.n_plots = 4
-        self.gene_no = nb.ref_spots.dot_product_gene_no
+        self.gene_no = nb.call_spots.dot_product_gene_no
         self.score = np.zeros((self.gene_no.size, self.n_plots), dtype=np.float32)
         self.method = "Anchor"
 
@@ -265,20 +265,20 @@ class ViewAllGeneHistograms:
         """
         self.mode = mode
         if mode == "score":
-            values = self.nb.ref_spots.dot_product_gene_score
+            values = self.nb.call_spots.dot_product_gene_score
         elif mode == "prob":
-            values = np.max(self.nb.ref_spots.gene_probabilities, axis=1)
+            values = np.max(self.nb.call_spots.gene_probabilities, axis=1)
         elif mode == "prob_diff":
-            probs_sorted = np.sort(self.nb.ref_spots.gene_probabilities, axis=1)
+            probs_sorted = np.sort(self.nb.call_spots.gene_probabilities, axis=1)
             values = probs_sorted[:, -1] - probs_sorted[:, -2]
         elif mode == "intensity":
-            values = self.nb.ref_spots.intensity
+            values = self.nb.call_spots.intensity
         else:
             raise ValueError("mode must be 'score', 'prob', 'prob_diff' or 'intensity'")
 
         gene_values = np.zeros((self.nb.call_spots.gene_names.shape[0], 0)).tolist()
-        prob_assignments = np.argmax(self.nb.ref_spots.gene_probabilities, axis=1)
-        dot_product_assignments = self.nb.ref_spots.dot_product_gene_no
+        prob_assignments = np.argmax(self.nb.call_spots.gene_probabilities, axis=1)
+        dot_product_assignments = self.nb.call_spots.dot_product_gene_no
         for g in range(len(gene_values)):
             if mode != "prob":
                 gene_values[g] = values[dot_product_assignments == g]

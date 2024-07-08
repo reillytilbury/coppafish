@@ -247,7 +247,7 @@ class BuildPDF:
                 for t in nb.basic_info.use_tiles:
                     keep = nb.ref_spots.tile == t
                     fig = self.create_positions_histograms(
-                        nb.ref_spots.dot_product_gene_score[keep],
+                        nb.call_spots.dot_product_gene_score[keep],
                         nb.ref_spots.local_yxz[keep],
                         DEFAULT_REF_SCORE_THRESHOLD,
                         title=f"Spot position histograms for {t=}, scores "
@@ -257,7 +257,7 @@ class BuildPDF:
                     )
                     pdf.savefig(fig)
                 # Create a page for every gene
-                gene_probabilities = nb.ref_spots.gene_probabilities
+                gene_probabilities = nb.call_spots.gene_probabilities
                 # bg colour was subtracted if use_preseq
                 scores = nb.ref_spots.colours * nb.call_spots.colour_norm_factor[nb.ref_spots.tile]
                 n_genes = len(nb.call_spots.gene_names)
@@ -344,7 +344,7 @@ class BuildPDF:
 
                 for i in range(10):
                     fig = self.create_omp_gene_counts_fig(
-                        nb.basic_info, nb.file_names, nb.ref_spots, nb.omp, score_threshold=i * 0.1
+                        nb.basic_info, nb.file_names, nb.call_spots, nb.omp, score_threshold=i * 0.1
                     )
                     pdf.savefig(fig)
                     plt.close(fig)
@@ -753,7 +753,7 @@ class BuildPDF:
         self,
         basic_info_page: NotebookPage,
         file_page: NotebookPage,
-        ref_spots_page: NotebookPage,
+        call_spots_page: NotebookPage,
         omp_page: NotebookPage,
         score_threshold: float = 0,
     ) -> mpl.figure.Figure:
@@ -763,7 +763,7 @@ class BuildPDF:
         labels = []
         gene_counts = []
         median_scores = []
-        n_genes = ref_spots_page.gene_probabilities.shape[1]
+        n_genes = call_spots_page.gene_probabilities.shape[1]
         if os.path.isfile(file_page.code_book):
             gene_names, _ = np.genfromtxt(file_page.code_book, dtype=(str, str)).transpose()
         else:

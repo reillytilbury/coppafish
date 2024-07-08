@@ -260,7 +260,7 @@ def run_reference_spots(nb: Notebook) -> None:
         log.warn(utils.warnings.NotebookPageWarning("ref_spots"))
     if not nb.has_page("call_spots"):
         config = setup.config.get_config(nb.config_path)
-        nbp_call_spots, nbp_ref_spots = call_reference_spots.call_reference_spots(
+        nbp_call_spots = call_reference_spots.call_reference_spots(
             config=config["call_spots"],
             nbp_ref_spots=nbp_ref_spots,
             nbp_file=nb.file_names,

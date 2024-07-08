@@ -20,7 +20,7 @@ def view_free_and_constrained_bled_codes(
     bled_codes = nb.call_spots.bled_codes
     rc_scale = nb.call_spots.rc_scale
     gene_names = nb.call_spots.gene_names
-    gene_no = np.argmax(nb.ref_spots.gene_probabilities, axis=1)
+    gene_no = np.argmax(nb.call_spots.gene_probabilities, axis=1)
     n_spots = np.array([np.sum(gene_no == i) for i in range(len(gene_names))])
 
     n_columns = 9
@@ -127,7 +127,7 @@ def view_rc_scale_regression(
     d_max = nb.call_spots.associated_configs["call_spots"]["d_max"]
     target_values = nb.call_spots.associated_configs["call_spots"]["target_values"]
     free_bled_codes_tile_indep = nb.call_spots.free_bled_codes_tile_independent
-    gene_no = np.argmax(nb.ref_spots.gene_probabilities, axis=1)
+    gene_no = np.argmax(nb.call_spots.gene_probabilities, axis=1)
     n_spots = np.array([np.sum(gene_no == i) for i in range(len(gene_no))])
     use_channels = nb.basic_info.use_channels
 
@@ -208,7 +208,7 @@ def view_tile_scale_regression(
     d_max = nb.call_spots.associated_configs["call_spots"]["d_max"]
     target_bled_codes = nb.call_spots.bled_codes
     free_bled_codes = nb.call_spots.free_bled_codes
-    gene_no = np.argmax(nb.ref_spots.gene_probabilities, axis=1)
+    gene_no = np.argmax(nb.call_spots.gene_probabilities, axis=1)
     n_spots = np.array([np.sum(gene_no == i) for i in range(len(gene_no))])
     use_channels = nb.basic_info.use_channels
     n_tiles, n_rounds, n_channels_use = tile_scale.shape
