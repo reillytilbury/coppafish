@@ -229,7 +229,8 @@ class ColorPlotBase:
 
 
 class view_codes(ColorPlotBase):
-    def __init__(self, nb: Notebook, spot_no: int, method: str = "anchor", bg_removed=False, save_loc: str = None):
+    def __init__(self, nb: Notebook, spot_no: int, tile: int, method: str = "anchor", bg_removed=True,
+                 save_loc: str = None):
         """
         Diagnostic to compare `spot_colour` to `bled_code` of predicted gene.
 
@@ -242,40 +243,27 @@ class view_codes(ColorPlotBase):
         """
         assert method.lower() in ["anchor", "omp", "prob"], "method must be 'anchor', 'omp' or 'prob'"
         if method.lower() == "omp":
-            t = nb.omp.tile[spot_no]
-            spot_score = omp_spot_score(nb.omp, spot_no)
-            self.spot_colour = nb.omp.colours[spot_no]
+            spot_score = nb.omp.results[f'tile_{tile}'].scores[spot_no]
+            self.spot_colour = nb.omp.results[f'tile_{tile}'].colours[spot_no]
+            gene_no = nb.omp.results[f'tile_{tile}'].gene_no[spot_no]
         elif method.lower() == "anchor":
             spot_score = nb.ref_spots.dot_product_gene_score[spot_no]
-            t = nb.ref_spots.tile[spot_no]
             self.spot_colour = nb.ref_spots.colours[spot_no]
+            gene_no = nb.ref_spots.dot_product_gene_no[spot_no]
         else:
             spot_score = np.max(nb.ref_spots.gene_probabilities[spot_no])
-            t = nb.ref_spots.tile[spot_no]
             self.spot_colour = nb.ref_spots.colours[spot_no]
+            gene_no = np.argmax(nb.ref_spots.gene_probabilities[spot_no])
 
-        colour_norm = nb.call_spots.colour_norm_factor[t]
+        colour_norm = nb.call_spots.colour_norm_factor[tile]
+        gene_name = nb.call_spots.gene_names[gene_no]
         # Get spot colour after background fitting
-        if method.lower() == "omp":
-            self.spot_colour_pb = base.remove_background(self.spot_colour[None].astype(float))[0][0] * colour_norm
-            self.spot_colour = self.spot_colour
-        else:
-            # remove background codes. To do this, repeat background_strentgh along a new axis for rounds
-            self.spot_colour = self.spot_colour
-            background_strength = np.percentile(self.spot_colour, 25, axis=0)
-            background_strength = np.repeat(background_strength[None, :], self.spot_colour.shape[0], axis=0)
-            self.spot_colour_pb = self.spot_colour - background_strength
+        self.spot_colour_pb = base.remove_background(self.spot_colour[None].astype(float))[0][0]
+        self.spot_colour = self.spot_colour
         self.background_removed = bg_removed
         self.spot_colour, self.spot_colour_pb = self.spot_colour.transpose(), self.spot_colour_pb.transpose()
         colour_norm = colour_norm.transpose()
 
-        if method.lower() == "omp":
-            gene_no = nb.omp.gene_no[spot_no]
-        elif method.lower() == "anchor":
-            gene_no = nb.ref_spots.dot_product_gene_no[spot_no]
-        elif method.lower() == "prob":
-            gene_no = np.argmax(nb.ref_spots.gene_probabilities[spot_no])
-        gene_name = nb.call_spots.gene_names[gene_no]
         if bg_removed:
             colour = self.spot_colour_pb
         else:
@@ -331,11 +319,10 @@ class view_codes(ColorPlotBase):
 
         self.background_button_ax = self.fig.add_axes([0.85, 0.1, 0.1, 0.05])
         self.background_button = Button(self.background_button_ax, "Background", hovercolor="0.275")
-        self.background_button.label.set_color(self.norm_button_colour_press)
+        self.background_button.label.set_color(self.norm_button_colour if bg_removed else self.norm_button_colour_press)
         self.background_button.on_clicked(self.change_background)
 
         self.change_norm()  # initialise with method = 'norm'
-        self.change_background() # initialise with background removed
         if save_loc:
             plt.savefig(save_loc, dpi=300)
             plt.close()
@@ -822,7 +809,8 @@ class GESpotViewer:
         # Initialise buttons and cursors
         # 1. We would like each row of the plot to be clickable, so that we can view the observed spot.
         mplcursors.cursor(self.ax[0], hover=False).connect(
-            "add", lambda sel: view_codes(self.nb, self.spot_id[sel.index[0]])
+            "add", lambda sel: view_codes(self.nb, self.spot_id[sel.index[0]],
+                                          tile=self.nb.ref_spots.tile[self.spot_id[sel.index[0]]])
         )
         # 2. We would like to add a white rectangle around the observed spot when we hover over it
         mplcursors.cursor(self.ax[0], hover=2).connect("add", lambda sel: self.add_rectangle(sel.index[0]))
