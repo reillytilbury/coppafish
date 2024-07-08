@@ -6,13 +6,13 @@ from .. import find_spots as fs
 from ..find_spots import detect_torch
 from .. import log
 from ..setup import NotebookPage
-from ..utils import tiles_io, indexing
+from ..utils import indexing
 
 
 def find_spots(
     config: dict,
-    nbp_file: NotebookPage,
     nbp_basic: NotebookPage,
+    nbp_filter: NotebookPage,
     auto_thresh: np.ndarray,
 ) -> NotebookPage:
     """
@@ -68,12 +68,10 @@ def find_spots(
     # Define use_indices as a [n_tiles x n_rounds x n_channels] boolean array where use_indices[t, r, c] is True if
     # we want to use tile `t`, round `r`, channel `c` to find spots.
     use_indices = np.zeros(
-        (nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.use_anchor + nbp_basic.use_preseq, nbp_basic.n_channels),
-        dtype=bool,
+        (nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.use_anchor, nbp_basic.n_channels), dtype=bool
     )
     for t, r, c in indexing.create(
         nbp_basic,
-        include_preseq_round=True,
         include_anchor_round=True,
         include_anchor_channel=True,
         include_bad_trc=False,
@@ -92,14 +90,7 @@ def find_spots(
         for t, r, c in np.argwhere(uncompleted):
             pbar.set_postfix({"tile": t, "round": r, "channel": c})
             # Then need to shift the detect_spots and check_neighb_intensity thresh correspondingly.
-            image_trc = tiles_io.load_image(
-                nbp_file,
-                nbp_basic,
-                int(t),
-                int(r),
-                int(c),
-                suffix="_raw" if r == nbp_basic.pre_seq_round else "",
-            )[:]
+            image_trc = nbp_filter.images[t][r][c]
             local_yxz, spot_intensity = detect_torch.detect_spots(
                 torch.asarray(image_trc.astype(np.float32)),
                 auto_thresh[t, r, c],

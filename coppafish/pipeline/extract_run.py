@@ -39,11 +39,6 @@ def run_extract(
 
     log.debug("Extraction started")
 
-    if nbp_basic.use_preseq:
-        pre_seq_round = nbp_basic.pre_seq_round
-    else:
-        pre_seq_round = None
-
     if not os.path.isdir(nbp_file.tile_unfiltered_dir):
         os.mkdir(nbp_file.tile_unfiltered_dir)
 
@@ -51,10 +46,8 @@ def run_extract(
         nbp_basic,
         include_anchor_round=True,
         include_anchor_channel=True,
-        include_preseq_round=True,
         include_dapi_seq=True,
         include_dapi_anchor=True,
-        include_dapi_preseq=True,
     )
     indices_t = indexing.unique(indices, axis=0)
     indices_r = indexing.unique(indices, axis=1)
@@ -65,14 +58,11 @@ def run_extract(
         for t, _, _ in indices_t:
             for _, r, _ in indices_r:
                 pbar.set_postfix({"tile": t, "round": r})
+
                 channels = list(indexing.find_channels_for(indices, tile=t, round=r))
-
                 file_paths = [nbp_file.tile_unfiltered[t][r][c] for c in channels]
-                if r == pre_seq_round:
-                    for i, file_path in enumerate(file_paths):
-                        file_paths[i] = tiles_io.add_suffix_to_path(file_path, "_raw")
-
                 files_exist = [tiles_io.image_exists(file_path) for file_path in file_paths]
+
                 if all(files_exist):
                     pbar.update()
                     continue

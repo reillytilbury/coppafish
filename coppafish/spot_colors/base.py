@@ -1,4 +1,3 @@
-import itertools
 from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
@@ -8,7 +7,6 @@ from tqdm import tqdm
 import zarr
 
 from ..setup import NotebookPage
-from ..utils import tiles_io
 
 
 def apply_transform(
@@ -53,7 +51,7 @@ def apply_transform(
 
 
 def get_spot_colours_new(
-    all_images: Tuple[Tuple[Tuple[Union[zarr.Array, np.ndarray]]]],
+    all_images: Union[zarr.Array, np.ndarray],
     flow: zarr.Array,
     icp_correction: np.ndarray,
     channel_correction: np.ndarray,
@@ -72,9 +70,8 @@ def get_spot_colours_new(
     when the position is out of bounds.
 
     Args:
-        all_images (tuple of tuple of tuple of zarrays or ndarrays with shape `(im_y x im_x x im_z)`): all images.
-            all_images[t][r][c] is for tile t, round r, channel c. None is placed for round/channel combinations that
-            are not possible.
+        all_images (`(n_tiles x n_rounds x n_channels x im_y x im_x x im_z) zarray or ndarray`): all filtered images.
+            all_images[t][r][c] is for tile t, round r, channel c.
         flow (`(n_tiles x n_rounds x 3 x im_y x im_x x im_z) zarray or ndarray`): optical flow shifts that take the
             anchor image to the tile/round.
         icp_correction (`(n_tiles x n_rounds x n_channels x 4 x 3) ndarray[float]`): affine correction applied to
@@ -103,18 +100,14 @@ def get_spot_colours_new(
         - float32 precision is used throughout intermediate steps. If you do not have sufficient memory, then yxz can
             be used to run on fewer points at once.
     """
-    assert type(all_images) is tuple
-    assert type(all_images[0]) is tuple
-    assert type(all_images[0][0]) is tuple
-    for i, j, k in itertools.product(range(len(all_images)), range(len(all_images[0])), range(len(all_images[0][0]))):
-        image = all_images[i][j][k]
-        assert image is None or type(image) is zarr.Array or type(image) is np.ndarray, f"Bad type: {type(image)}"
-        if image is not None:
-            image_shape = image.shape
+    assert type(all_images) is np.ndarray or type(all_images) is zarr.Array
+    assert all_images.ndim == 6
+    image_shape = all_images.shape[3:]
     assert type(flow) is zarr.Array or type(flow) is np.ndarray
-    assert flow.shape[2:] == (3,) + image_shape
+    assert flow.shape[0] == all_images.shape[0]
+    assert flow.shape[2:] == (3,) + image_shape, f"{flow.shape=} and {all_images.shape=}"
     assert type(icp_correction) is np.ndarray
-    assert icp_correction.shape[:2] == flow.shape[:2]
+    assert icp_correction.shape[0] == flow.shape[0]
     assert icp_correction.shape[3:] == (4, 3)
     assert type(channel_correction) is np.ndarray
     assert channel_correction.shape[0] == flow.shape[0]
@@ -264,9 +257,8 @@ def get_spot_colours_new(
 def get_spot_colors(
     yxz_base: np.ndarray,
     t: np.ndarray,
-    bg_scale: Optional[Tuple[Tuple[Tuple[float]]]],
-    nbp_file: NotebookPage,
     nbp_basic: NotebookPage,
+    nbp_filter: NotebookPage,
     nbp_register: NotebookPage,
     use_rounds: Optional[List[int]] = None,
     use_channels: Optional[List[int]] = None,
@@ -283,8 +275,6 @@ def get_spot_colors(
             Local yxz coordinates of spots found in the reference round/reference channel of tile `t`
             yx coordinates are in units of `yx_pixels`. z coordinates are in units of `z_pixels`.
         t: `int`. Tile number.
-        bg_scale: `float [n_tiles x n_rounds x n_channels]` scale factors to apply to background images before
-            subtraction. If 'None', no background subtraction will be performed.
         nbp_file: `file_names` notebook page.
         nbp_basic: `basic_info` notebook page.
         nbp_register: `register` notebook page.
@@ -310,11 +300,9 @@ def get_spot_colors(
         channel `c`. (only returned if `return_in_bounds` is `True`).
     """
     if use_rounds is None:
-        use_rounds = list(nbp_basic.use_rounds) + [nbp_basic.pre_seq_round] * nbp_basic.use_preseq
+        use_rounds = nbp_basic.use_rounds
     if use_channels is None:
-        use_channels = list(nbp_basic.use_channels)
-    if bg_scale is not None:
-        bg_scale = np.array(bg_scale, dtype=np.float32)
+        use_channels = nbp_basic.use_channels
 
     n_spots = yxz_base.shape[0]
     no_verbose = n_spots < 10_000
@@ -348,7 +336,7 @@ def get_spot_colors(
                     continue
 
                 # Read in the shifted float16 colours here, and remove shift later.
-                spot_colors[in_range, i, j] = tiles_io.load_image(nbp_file, nbp_basic, t, r, c)[tuple(yxz_transform.T)]
+                spot_colors[in_range, i, j] = nbp_filter.images[t, r, c][tuple(yxz_transform.T)]
                 spot_colors[in_range, i, j] += nbp_basic.tile_pixel_value_shift
                 pbar.update(1)
             del flow_tr
@@ -362,23 +350,7 @@ def get_spot_colors(
         spot_colors = spot_colors[colours_valid]
         yxz_base = yxz_base[colours_valid]
 
-    # if we are using bg colours, address that here
-    bad_rc = [(trc[1], trc[2]) for trc in nbp_basic.bad_trc if trc[0] == t]
-    if bg_scale is not None:
-        bg_colours = np.repeat(spot_colors[:, -1, :][:, None, :], n_use_rounds - 1, axis=1).astype(np.float32)
-        bg_colours = np.maximum(bg_colours, 0)
-        bg_colours *= bg_scale[t][np.ix_(use_rounds[:-1], use_channels)][None, :, :]
-        bg_colours = bg_colours.astype(output_dtype)
-        # set bg colours to 0 if spot is in bad rc
-        for rc in bad_rc:
-            r, c = use_rounds.index(rc[0]), use_channels.index(rc[1])
-            bg_colours[:, r, c] = 0
-        spot_colors = spot_colors[:, :-1, :]
-        spot_colors = spot_colors - bg_colours
-
     output_tuple = (spot_colors.astype(output_dtype), yxz_base)
-    if bg_scale is not None:
-        output_tuple += (bg_colours.astype(output_dtype),)
     if not return_in_bounds:
         output_tuple += (colours_valid,)
 
@@ -424,7 +396,7 @@ def normalise_rc(
     # 1. Normalise by round. Do this by performing a linear regression on low brightness pixels that will not be spots.
     # First, for each channel, find a good round to use for normalisation. We will take this round to be the one with
     # the median of the means of all rounds.
-    n_spots, n_rounds, n_channels = pixel_colours.shape
+    _, n_rounds, n_channels = pixel_colours.shape
     round_slopes = np.zeros((n_rounds, n_channels))
     for c in range(n_channels):
         brightness = np.mean(np.abs(pixel_colours)[:, :, c], axis=0)

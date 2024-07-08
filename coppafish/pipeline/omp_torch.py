@@ -72,7 +72,6 @@ def run_omp(
     colour_norm_factor = np.array(nbp_call_spots.colour_norm_factor, dtype=np.float32)
     colour_norm_factor = torch.asarray(colour_norm_factor).float()
     first_tile: int = nbp_basic.use_tiles[0]
-    all_images = utils.tiles_io.load_filter_images(nbp_basic, nbp_file)
 
     # Each tile's results are appended to the zarr.Group.
     group_path = os.path.join(nbp_file.output_dir, "results.zgroup")
@@ -97,7 +96,7 @@ def run_omp(
                 index_max = (j + 1) * batch_size
                 index_max = min(index_max, np.prod(tile_shape))
                 batch_spot_colours = spot_colors.base.get_spot_colours_new(
-                    all_images,
+                    nbp_filter.images,
                     nbp_register.flow,
                     nbp_register.icp_correction,
                     nbp_register_debug.channel_correction,
@@ -289,7 +288,7 @@ def run_omp(
         )
         for i, r in enumerate(nbp_basic.use_rounds):
             t_spots_colours[:, i] = spot_colors.base.get_spot_colours_new(
-                all_images,
+                nbp_filter.images,
                 nbp_register.flow,
                 nbp_register.icp_correction,
                 nbp_register_debug.channel_correction,

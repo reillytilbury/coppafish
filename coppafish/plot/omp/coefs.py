@@ -79,10 +79,9 @@ class ViewOMPImage:
         central_yxz = tuple(torch.asarray(spot_shape_yxz)[np.newaxis].T.int() // 2)
         n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
         image_colours = np.zeros(spot_shape_yxz + (n_rounds_use, n_channels_use), dtype=np.float32)
-        all_images = utils.tiles_io.load_filter_images(nb.basic_info, nb.file_names)
         for i, r in enumerate(nb.basic_info.use_rounds):
             image_colours[:, :, :, i] = spot_colors.base.get_spot_colours_new(
-                all_images,
+                nb.filter.images,
                 nb.register.flow,
                 nb.register.icp_correction,
                 nb.register_debug.channel_correction,
@@ -293,10 +292,9 @@ class ViewOMPPixelColours:
 
         n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
         image_colours = np.zeros((1, n_rounds_use, n_channels_use), dtype=np.float32)
-        all_images = utils.tiles_io.load_filter_images(nb.basic_info, nb.file_names)
         for i, r in enumerate(nb.basic_info.use_rounds):
             image_colours[:, i] = spot_colors.base.get_spot_colours_new(
-                all_images,
+                nb.filter.images,
                 nb.register.flow,
                 nb.register.icp_correction,
                 nb.register_debug.channel_correction,

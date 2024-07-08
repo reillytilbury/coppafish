@@ -3,7 +3,6 @@ import napari
 import numpy as np
 
 from ...setup import Notebook
-from ...utils import tiles_io
 from tqdm import tqdm
 
 
@@ -33,13 +32,7 @@ def view_stitch_checkerboard(nb: Notebook, downsample_factor_yx: int = 4):
 
     # Load in the tiles
     for t in tqdm(use_tiles, total=len(use_tiles), desc="Loading tiles"):
-        tile = tiles_io.load_image(
-            nbp_file=nb.file_names,
-            nbp_basic=nb.basic_info,
-            t=t,
-            r=nb.basic_info.anchor_round,
-            c=nb.basic_info.dapi_channel,
-        )
+        tile = nb.filter.images[t, nb.basic_info.anchor_round, nb.basic_info.dapi_channel]
         tile = tile[yxz_ind]
         # convert tile from yxz to zyx
         tile = np.moveaxis(tile, 0, -1)

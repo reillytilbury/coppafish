@@ -9,7 +9,7 @@ from ..setup import NotebookPage
 from ..utils import tiles_io
 
 
-def stitch(config: dict, nbp_basic: NotebookPage, nbp_file: NotebookPage) -> NotebookPage:
+def stitch(config: dict, nbp_basic: NotebookPage, nbp_file: NotebookPage, nbp_filter: NotebookPage) -> NotebookPage:
     """
     Run tile stitching. Tiles are shifted to better align using the DAPI images.
 
@@ -17,7 +17,7 @@ def stitch(config: dict, nbp_basic: NotebookPage, nbp_file: NotebookPage) -> Not
         config: stitch config.
         nbp_basic: `basic_info` notebook page.
         nbp_file: `file_names` notebook page.
-        nbp_extract: `extract` notebook page.
+        nbp_filter: `filter` notebook page.
 
     Returns:
         new `stitch` notebook page.
@@ -38,7 +38,7 @@ def stitch(config: dict, nbp_basic: NotebookPage, nbp_file: NotebookPage) -> Not
     # load the tiles
     tiles = []
     for t in tqdm(use_tiles, total=n_tiles_use, desc="Loading tiles"):
-        tile = tiles_io.load_image(nbp_file=nbp_file, nbp_basic=nbp_basic, t=t, r=anchor_round, c=dapi_channel)[:]
+        tile = nbp_filter.images[t, anchor_round, dapi_channel]
         tiles.append(tile)
     tiles = np.array(tiles)
 

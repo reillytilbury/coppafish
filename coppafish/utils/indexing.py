@@ -12,10 +12,8 @@ def create(
     include_seq_channels: bool = True,
     include_anchor_round: bool = False,
     include_anchor_channel: bool = False,
-    include_preseq_round: bool = False,
     include_dapi_seq: bool = False,
     include_dapi_anchor: bool = False,
-    include_dapi_preseq: bool = False,
     include_bad_trc: bool = True,
 ) -> Union[List[Tuple[int, int, int]], List[Tuple[int, int]], List[Tuple[int]]]:
     """
@@ -28,14 +26,12 @@ def create(
         include_rounds (bool, optional): include round indices. Default: True.
         include_channels (bool, optional): include channel indices. Default: True.
         include_seq_rounds (bool, optional): include sequencing rounds. Default: True.
-        include_seq_channels (bool, optional): include sequencing channels (gathered for the sequencing rounds and
-            presequence round, if chosen). Default: True.
+        include_seq_channels (bool, optional): include sequencing channels, gathered for every sequencing round.
+            Default: True.
         include_anchor_round (bool, optional): include anchor round. Default: False.
         include_anchor_channel (bool, optional): include the anchor channel, only for the anchor round. Default: False.
-        include_preseq_round (bool, optional): include presequencing round. Default: False.
         include_dapi_seq (bool, optional): include dapi channel in sequencing rounds. Default: False.
         include_dapi_anchor (bool, optional): include dapi channel in anchor round. Default: False.
-        include_dapi_preseq (bool, optional): include dapi channel in presequencing round. Default: False.
         include_bad_trc (bool, optional): include bad tile, round, channel combinations. Default: False.
 
     Returns:
@@ -52,16 +48,14 @@ def create(
     seq_rounds = list(nbp_basic.use_rounds)
     seq_channels = list(nbp_basic.use_channels)
     all_tiles = sorted([t for t in nbp_basic.use_tiles])
-    all_rounds = sorted(
-        [
-            r
-            for r in include_seq_rounds * seq_rounds
-            + nbp_basic.use_anchor * include_anchor_round * [nbp_basic.anchor_round]
-            + nbp_basic.use_preseq * include_preseq_round * [nbp_basic.pre_seq_round]
-        ]
-    )
+    all_rounds = [
+        r
+        for r in include_seq_rounds * seq_rounds
+        + nbp_basic.use_anchor * include_anchor_round * [nbp_basic.anchor_round]
+    ]
+    all_rounds = sorted(all_rounds)
     all_channels = [c for c in seq_channels]
-    if (include_dapi_anchor or include_dapi_preseq or include_dapi_seq) and nbp_basic.dapi_channel is not None:
+    if (include_dapi_anchor or include_dapi_seq) and nbp_basic.dapi_channel is not None:
         all_channels += [nbp_basic.dapi_channel]
     all_indices = []
     # The indexed channels will change depending on the round and the parameters
@@ -77,11 +71,6 @@ def create(
                 if c == nbp_basic.dapi_channel and include_dapi_anchor:
                     including = True
                 if c == nbp_basic.anchor_channel and include_anchor_channel:
-                    including = True
-            elif r == nbp_basic.pre_seq_round:
-                if c in seq_channels and include_seq_channels:
-                    including = True
-                if c == nbp_basic.dapi_channel and include_dapi_preseq:
                     including = True
             if including:
                 all_indices.append((t, r, c))

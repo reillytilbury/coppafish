@@ -3,9 +3,7 @@ from typing import List, Optional
 
 import napari
 
-from .. import log
 from ..setup import Notebook
-from ..utils import tiles_io
 
 
 def view_filtered_images(
@@ -35,11 +33,7 @@ def view_filtered_images(
     viewer = napari.Viewer(title="Coppafish filtered images")
 
     for t, r, c in itertools.product(tiles, rounds, channels):
-        file_path = nb.file_names.tile_unfiltered[t][r][c]
-        if not tiles_io.image_exists(file_path):
-            log.warn(f"Image at {file_path} not found, skipping")
-            continue
-        image_trc = tiles_io.load_image(nb.file_names, nb.basic_info, t, r, c)
+        image_trc = nb.filter.images[t, r, c]
         viewer.add_image(image_trc, name=f"{t=}, {r=}, {c=}")
 
     napari.run()

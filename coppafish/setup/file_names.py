@@ -36,32 +36,15 @@ def get_file_names(nb: Notebook):
 
     # remove file extension from round and anchor file names if it is present
     if config["raw_extension"] == "jobs":
-
-        if bool(config["pre_seq"]):
-            all_files = os.listdir(config["input_dir"])
-            all_files.sort()  # Sort files by ascending number
-            n_tiles = int(len(all_files) / 7 / 9)
-            config["pre_seq"] = [r.replace(".nd2", "") for r in all_files[: n_tiles * 7]]
-            config["round"] = tuple(
-                [
-                    [f.replace(".nd2", "") for f in all_files[n_tiles * r * 7 : n_tiles * (r + 1) * 7]]
-                    for r in range(1, 8)
-                ]
-            )
-            # TODO replace range(7) by the by the number of rounds?
-            config["anchor"] = tuple([r.replace(".nd2", "") for r in all_files[n_tiles * 8 * 7 :]])
-
-        else:
-            all_files = os.listdir(config["input_dir"])
-            all_files.sort()  # Sort files by ascending number
-            n_tiles = int(len(all_files) / 7 / 8)
-            # FIXME: r is not defined within the scope of the square brackets, this will probably cause a runtime error
-            config["round"] = tuple(
-                [f.replace(".nd2", "") for f in all_files[n_tiles * r * 7 : n_tiles * (r + 1) * 7] for r in range(7)]
-            )
-            # TODO replace range(7) by the by the number of rounds?
-            config["anchor"] = tuple([r.replace(".nd2", "") for r in all_files[n_tiles * 7 * 7 :]])
-
+        all_files = os.listdir(config["input_dir"])
+        all_files.sort()  # Sort files by ascending number
+        n_tiles = int(len(all_files) / 7 / 8)
+        # FIXME: r is not defined within the scope of the square brackets, this will probably cause a runtime error
+        config["round"] = tuple(
+            [f.replace(".nd2", "") for f in all_files[n_tiles * r * 7 : n_tiles * (r + 1) * 7] for r in range(7)]
+        )
+        # TODO replace range(7) by the by the number of rounds?
+        config["anchor"] = tuple([r.replace(".nd2", "") for r in all_files[n_tiles * 7 * 7 :]])
     else:
         if config["round"] is None:
             if config["anchor"] is None:
@@ -74,7 +57,6 @@ def get_file_names(nb: Notebook):
 
     nbp.round = config["round"]
     nbp.anchor = config["anchor"]
-    nbp.pre_seq = config["pre_seq"]
     nbp.raw_extension = config["raw_extension"]
     nbp.raw_metadata = config["raw_metadata"]
     nbp.initial_bleed_matrix = config["initial_bleed_matrix"]
@@ -115,12 +97,9 @@ def get_file_names(nb: Notebook):
     else:
         round_files = config["round"]
 
-    if config["pre_seq"] is not None:
-        round_files = round_files + (config["pre_seq"],)
-
     if config["raw_extension"] == "jobs":
         if nb.basic_info.is_3d:
-            round_files = config["round"] + [config["anchor"]] + [config["pre_seq"]]
+            round_files = config["round"] + [config["anchor"]]
             tile_names, tile_names_unfiltered = get_tile_file_names(
                 nbp.tile_dir,
                 nbp.tile_unfiltered_dir,

@@ -7,10 +7,9 @@ from ..setup import NotebookPage
 
 
 def get_reference_spots(
-    nbp_file: NotebookPage,
     nbp_basic: NotebookPage,
+    nbp_filter: NotebookPage,
     nbp_find_spots: NotebookPage,
-    nbp_extract: NotebookPage,
     nbp_register: NotebookPage,
     nbp_stitch: NotebookPage,
 ) -> NotebookPage:
@@ -74,7 +73,6 @@ def get_reference_spots(
     n_use_rounds, n_use_channels, n_use_tiles = len(use_rounds), len(use_channels), len(use_tiles)
     spot_colours = np.zeros((0, n_use_rounds, n_use_channels), dtype=np.float32)
     local_yxz = np.zeros((0, 3), dtype=np.int16)
-    bg_colours = np.zeros_like(spot_colours)
     isolated = np.zeros(0, dtype=bool)
     tile = np.zeros(0, dtype=np.int16)
     log.info("Reading in spot_colors for ref_round spots")
@@ -86,9 +84,8 @@ def get_reference_spots(
         colour_tuple = spot_colors_base.get_spot_colors(
             yxz_base=nd_local_yxz[in_tile],
             t=t,
-            bg_scale=nbp_register.bg_scale,
-            nbp_file=nbp_file,
             nbp_basic=nbp_basic,
+            nbp_filter=nbp_filter,
             nbp_register=nbp_register,
         )
         valid = colour_tuple[-1]
@@ -96,8 +93,6 @@ def get_reference_spots(
         local_yxz = np.append(local_yxz, colour_tuple[1][valid], axis=0)
         isolated = np.append(isolated, nd_isolated[in_tile][valid], axis=0)
         tile = np.append(tile, np.ones(np.sum(valid), dtype=np.int16) * t)
-        if nbp_basic.use_preseq:
-            bg_colours = np.append(bg_colours, colour_tuple[2][valid], axis=0)
 
     # save spot info to notebook
     nbp.local_yxz = local_yxz

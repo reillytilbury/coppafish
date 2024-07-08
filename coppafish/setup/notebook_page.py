@@ -173,14 +173,6 @@ class NotebookPage:
                 "bool",
                 "whether or not to use anchor",
             ],
-            "use_preseq": [
-                "bool",
-                "whether or not to use pre-seq round",
-            ],
-            "pre_seq_round": [
-                "int or none",
-                "round number of pre-seq round",
-            ],
             "bad_trc": [
                 "tuple[tuple[int]] or none",
                 "Tuple of bad tile, round, channel combinations. If a tile, round, channel combination is in this,"
@@ -269,10 +261,6 @@ class NotebookPage:
                 "str or none",
                 "Path to *nd2* file containing fluorescent beads. `none` if not used.",
             ],
-            "pre_seq": [
-                "str or none",
-                "Name of *nd2* file for the pre-sequencing round. `none` if not used",
-            ],
             "initial_bleed_matrix": [
                 "dir or none",
                 "Location of initial bleed matrix file. If `none`, then use the default bleed matrix",
@@ -290,6 +278,11 @@ class NotebookPage:
                 "Numpy int array `[n_tiles x (n_rounds + n_extra_rounds) x n_channels]`"
                 + "`auto_thresh[t, r, c]` is the threshold spot intensity for tile $t$, round $r$, channel $c$"
                 + "used for spot detection in the `find_spots` step of the pipeline.",
+            ],
+            "images": [
+                "zarray",
+                "`(n_tiles x (n_rounds + n_extra_rounds) x n_channels)` zarray float16. "
+                + "All raw images after filtering (deblurring) is applied.",
             ],
         },
         "filter_debug": {
@@ -398,14 +391,6 @@ class NotebookPage:
                 "ndarray[float]",
                 "Numpy float array [n_tiles x n_rounds x n_channels x 4 x 3]"
                 + "yxz affine corrections to be applied after the warp.",
-            ],
-            "bg_scale": [
-                "tuple[tuple[tuple[float]]] or none",
-                "tuple of `[n_tiles][n_rounds][n_channels]`"
-                + "`bg_scale[t, r, c]` is the scale factor applied to the preseq round of tile $t$, channel $c$"
-                + "to match the colour profile of the sequencing image in tile t, round r, channel c. "
-                + "This is computed in register because the images must be well-alligned to compute. "
-                + "Zeros if not using the preseq round.",
             ],
             "anchor_images": [
                 "zarray",

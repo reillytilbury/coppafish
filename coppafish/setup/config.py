@@ -77,7 +77,6 @@ _options = {
         "psf": "maybe_str",
         "pciseq": "tuple_str",
         "fluorescent_bead_path": "maybe_str",
-        "pre_seq": "maybe_str",
         "initial_bleed_matrix": "maybe_str",
         "log_name": "str",
     },

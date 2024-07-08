@@ -7,7 +7,7 @@ def test_get_spot_colours_new() -> None:
     rng = np.random.RandomState(0)
     tile_shape = 2, 3, 4
     image = rng.rand(*tile_shape).astype(np.float64)
-    all_images = (((image,),),)
+    all_images = image[None, None, None]
     use_channels = [0]
     dapi_channel = 2
     tile = 0
@@ -69,7 +69,7 @@ def test_get_spot_colours_new() -> None:
     # Test the affine transform with a y and x transpose.
     tile_shape = 3, 3, 4
     image = rng.rand(*tile_shape).astype(np.float64)
-    all_images = (((image,),),)
+    all_images = image[None, None, None]
     yxz = None
     flow = np.zeros((1, 1, 3) + tile_shape, np.float16)
     icp_correction = np.zeros((4, 3))

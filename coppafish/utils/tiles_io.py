@@ -95,11 +95,11 @@ def _save_image(
     optimised_for: OptimisedFor = None,
 ) -> None:
     """
-    Save image in `file_path` location. No manipulation or logic is applied here, just purely saving the image as it
-    was given.
+    Save extract image in `file_path` location. No manipulation or logic is applied here, just purely saving the image
+    as it was given.
 
     Args:
-        image ((nz x ny x nx) ndarray[uint16]): image to save.
+        image (`(nz x ny x nx) ndarray[uint16]`): extract image to save.
         file_path (str): file path.
         optimised_for (literal[int]): what speed to optimise compression for. Affects the blosc compressor. Default:
             optimised for full image reading + writing time.
@@ -126,132 +126,14 @@ def _save_image(
 
 def _load_image(file_path: str) -> zarr.Array:
     """
-    Read in zarr array from file_path location.
+    Read in extract zarr array from file_path location.
 
     Args:
         file_path (str): image location.
 
-    Returns `(im_y x im_x x im_z) zarray[float16` for filter image, `uint16` for extract image`]`: loaded image.
+    Returns `(im_y x im_x x im_z) zarray[uint16]`: loaded extract image.
     """
     return zarr.open(file_path, mode="r")
-
-
-def save_image(
-    nbp_file: NotebookPage,
-    nbp_basic: NotebookPage,
-    image: npt.NDArray[np.float16],
-    t: int,
-    r: int,
-    c: int,
-    suffix: str = "",
-) -> None:
-    """
-    Save the filtered tile/round/channel image as float16.
-
-    Args:
-        nbp_file (NotebookPage): `file_names` notebook page.
-        nbp_basic (NotebookPage): `basic_info` notebook page.
-        image (`(im_y x im_x x im_z) ndarray[float16 or float32]`): image to save.
-        t (int): npy tile index considering.
-        r (int): round considering.
-        c (int): channel considering.
-        suffix (str, optional): suffix to add to file name before the file extension. Default: no suffix.
-    """
-    assert type(image) is np.ndarray
-    assert image.ndim == 3, "`image` must be 3 dimensional"
-    assert image.dtype == np.float16 or image.dtype == np.float32 or image.dtype == np.float64
-    if not nbp_basic.is_3d:
-        log.error(NotImplementedError("2D image saving is currently not supported"))
-    expected_shape = (nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
-    if not utils.errors.check_shape(image, expected_shape):
-        log.error(utils.errors.ShapeError("tile to be saved", image.shape, expected_shape))
-
-    image = image.astype(np.float16, casting="same_kind")
-    file_path: str = nbp_file.tile[t][r][c]
-    file_path = add_suffix_to_path(file_path, suffix)
-    _save_image(image, file_path, optimised_for=OptimisedFor.Z_PLANE_READ)
-
-
-def load_image(
-    nbp_file: NotebookPage,
-    nbp_basic: NotebookPage,
-    t: int,
-    r: int,
-    c: int,
-    suffix: str = "",
-) -> zarr.Array:
-    """
-    Loads in filtered image corresponding to desired tile, round and channel.
-
-    Args:
-        nbp_file (NotebookPage): `file_names` notebook page.
-        nbp_basic (NotebookPage): `basic_info` notebook page.
-        t (int): npy tile index considering.
-        r (int): round considering.
-        c (int): channel considering.
-        suffix (str, optional): suffix to add to file name to load from. Default: no suffix.
-
-    Returns:
-        (`(im_y x im_x x im_z) zarray[float32]`): loaded image. It is a zarr view of the array which will do
-            on-the-fly datatype conversion to float32 when data is gathered.
-    """
-    assert type(nbp_basic) is NotebookPage
-    assert type(nbp_file) is NotebookPage
-    assert type(t) is int, f"Got type {type(t)} instead"
-    assert type(r) is int
-    assert type(c) is int
-
-    file_path = nbp_file.tile[t][r][c]
-    file_path = add_suffix_to_path(file_path, suffix)
-
-    if not image_exists(file_path):
-        raise FileNotFoundError(f"Could not find image at {file_path} to load from")
-
-    # Image is in shape yxz.
-    image = _load_image(file_path)
-    image = image.astype(np.float32)
-    return image
-
-
-def load_filter_images(nbp_basic: NotebookPage, nbp_file: NotebookPage) -> Tuple[Tuple[Tuple[zarr.Array]]]:
-    """
-    Gives the zarray for every tile, round, and channel filter image that is possible. This is lazy loading, so none
-    of the images are in memory until they are indexed/sliced.
-
-    Args:
-        nbp_basic (notebook page): `basic_info` notebook page.
-        nbp_file (notebook page): `file_names` notebook page.
-
-    Returns:
-        (tuple of tuple of tuple of zarrays with shape `(im_y x im_x im_z)`) images: lazy-loaded images. None is
-            placed when the image does not exist. images[t][r][c] gives the zarray for tile t, round r, channel c.
-    """
-    assert type(nbp_basic) is NotebookPage
-    assert type(nbp_file) is NotebookPage
-
-    indices = utils.indexing.create(
-        nbp_basic,
-        include_anchor_round=True,
-        include_anchor_channel=True,
-        include_preseq_round=True,
-        include_dapi_preseq=True,
-        include_dapi_seq=True,
-        include_dapi_anchor=True,
-    )
-    output_size = np.array(utils.base.deep_convert(indices, list)).max(0) + 1
-    output_size = output_size.tolist()
-    result = utils.base.deep_convert((((((None,) * output_size[2]),) * output_size[1]),) * output_size[0], list)
-    for t, r, c in indices:
-        suffix = "_raw" if r == nbp_basic.pre_seq_round else ""
-        file_path = nbp_file.tile[t][r][c]
-        file_path = add_suffix_to_path(file_path, suffix)
-        if image_exists(file_path):
-            result[t][r][c] = load_image(nbp_file, nbp_basic, t, r, c, suffix)
-        else:
-            log.warn(f"Failed to find filter image for tile {t}, round {r}, channel {c}")
-    result = utils.base.deep_convert(result, tuple)
-
-    return result
 
 
 def get_npy_tile_ind(

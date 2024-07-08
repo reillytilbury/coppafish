@@ -18,7 +18,6 @@ from coppafish.find_spots import spot_yxz
 from coppafish.register import preprocessing
 from coppafish.setup import Notebook
 from coppafish.spot_colors import apply_transform
-from coppafish.utils.tiles_io import load_image
 
 
 class RegistrationViewer:
@@ -54,7 +53,7 @@ class RegistrationViewer:
         self.reg_data_dir = os.path.join(self.nb.file_names.output_dir, "reg_images", f"t{self.t}")
         # load round images
         round_im, channel_im = {}, {}
-        for r in self.nb.basic_info.use_rounds + [self.nb.basic_info.pre_seq_round] * self.nb.basic_info.use_preseq:
+        for r in self.nb.basic_info.use_rounds:
             round_im[f"r{r}"] = zarr.load(os.path.join(self.reg_data_dir, "round", f"r{r}.npy"))[:]
         # repeat anchor image 3 times along new 0 axis
         im_anchor = zarr.load(os.path.join(self.reg_data_dir, "round", "anchor.npy"))[:]
@@ -197,7 +196,7 @@ class RegistrationViewer:
 
     def add_optical_flow_buttons(self):
         # add buttons to select round to view (for optical flow overlay and optical flow vector field)
-        use_rounds = self.nb.basic_info.use_rounds + [self.nb.basic_info.pre_seq_round] * self.nb.basic_info.use_preseq
+        use_rounds = self.nb.basic_info.use_rounds
         n_rounds_use = len(use_rounds)
         button_loc = generate_button_positions(n_buttons=n_rounds_use, n_cols=4)
         button_name = [f"r{r}" for r in use_rounds]
@@ -584,14 +583,13 @@ def view_optical_flow(nb: Notebook, t: int, r: int):
         r: round number
     """
     # Load the data
-    base = load_image(nb.file_names, nb.basic_info, t=t, r=7, c=0)
-    target = load_image(nb.file_names, nb.basic_info, t=t, r=r, c=0)
+    base = nb.filter.images[t, 7, 0]
+    target = nb.filter.images[t, r, 0]
     ny, nx, nz = base.shape
     coord_order = ["y", "x", "z"]
     coords = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing="ij"))
     print("Base and Target images loaded.")
     # load the warps
-    output_dir = nb.file_names.output_dir + "/flow"
     names = ["raw", "smooth"]
     flows = [nb.register.flow_raw[t, r], nb.register.flow[t, r]]
     # warp the base image using the flows
@@ -746,10 +744,7 @@ def view_icp_iters(nb: Notebook, t: int):
         frac_matches[0][i] = n_matches[0][i] / spot_no[r, anchor_channel]
     for i, c in enumerate(use_channels):
         # calculate the fraction of matches
-        if nb.basic_info.use_preseq:
-            total_spots = np.sum(spot_no[use_rounds[:-1], c])
-        else:
-            total_spots = np.sum(spot_no[use_rounds, c])
+        total_spots = np.sum(spot_no[use_rounds, c])
         frac_matches[1][i] = n_matches[1][i] / total_spots
     # create plots
     n_cols = max(n_rounds, n_channels)
@@ -903,95 +898,6 @@ def view_camera_correction(nb: Notebook):
     napari.run()
 
 
-def view_bg_scale(nb: Notebook, t: int, r: int, c: int):
-    """
-    Visualize the background scaling for the selected tile, round, and channel.
-    Args:
-        nb: Notebook object (must have register and register_debug pages)
-        t: tile to view
-        r: round to view
-        c: channel to view
-    """
-    assert nb.basic_info.use_preseq, "Background scaling is only available for pre-seq data."
-    # get the data
-    mid_z = len(nb.basic_info.use_z) // 2
-    z_rad = 4
-    tile_sz = nb.basic_info.tile_sz
-    tile_center = tile_sz // 2
-    yx_rad = 250
-    yxz = [
-        np.arange(tile_center - yx_rad, tile_center + yx_rad),
-        np.arange(tile_center - yx_rad, tile_center + yx_rad),
-        np.arange(mid_z - z_rad, mid_z + z_rad),
-    ]
-    r_pre = nb.basic_info.pre_seq_round
-    # get the images
-    base = preprocessing.load_transformed_image(
-        nb.basic_info,
-        nb.file_names,
-        nb.extract,
-        nb.register,
-        nb.register_debug,
-        t=t,
-        r=r,
-        c=c,
-        yxz=yxz,
-        reg_type="flow_icp",
-    ).astype(np.float32)
-    pre = preprocessing.load_transformed_image(
-        nb.basic_info,
-        nb.file_names,
-        nb.extract,
-        nb.register,
-        nb.register_debug,
-        t=t,
-        r=r_pre,
-        c=c,
-        yxz=yxz,
-        reg_type="flow_icp",
-    ).astype(np.float32)
-    base = base[:, :, z_rad - 1 : z_rad + 1]
-    pre = pre[:, :, z_rad - 1 : z_rad + 1]
-    # get the bright mask
-    bright = pre > np.percentile(pre, 99)
-    base_values = base[bright]
-    pre_values = pre[bright]
-    ratio_vals = base_values / pre_values
-    bg_scale = np.percentile(ratio_vals, [25, 50, 75])
-
-    # create plots
-    viewer = napari.Viewer()
-    viewer.add_image(base, name=f"t{t}_r{r}_c{c}", colormap="red", blending="additive")
-    viewer.add_image(pre, name=f"t{t}_r{r_pre}_c{c}", colormap="green", blending="additive")
-    viewer.add_image(bright, name="bright", colormap="blue", blending="additive")
-    viewer.dims.axis_labels = ["y", "x", "z"]
-    viewer.dims.order = (2, 0, 1)
-
-    plt.subplot(1, 2, 1)
-    plt.scatter(x=pre_values, y=base_values, s=1, alpha=0.25)
-    col = ["red", "green", "blue"]
-    title = [
-        f"25th percentile: {bg_scale[0]:.2f}",
-        f"50th percentile: {bg_scale[1]:.2f}",
-        f"75th percentile: {bg_scale[2]:.2f}",
-    ]
-    for i in range(3):
-        plt.plot(pre_values, bg_scale[i] * pre_values, color=col[i], label=title[i])
-    plt.legend()
-    plt.xlabel("pre values")
-    plt.ylabel("base values")
-    plt.title(f"Background scaling for t{t}, r{r}, c{c}")
-    plt.subplot(1, 2, 2)
-    plt.hist(ratio_vals, bins=np.linspace(np.percentile(ratio_vals, 1), np.percentile(ratio_vals, 99), 100))
-    for i in range(3):
-        plt.axvline(bg_scale[i], color=col[i], label=title[i])
-    plt.legend()
-    plt.xlabel("base/pre values")
-    plt.ylabel("count")
-    plt.title(f"Background scaling for t{t}, r{r}, c{c}")
-    plt.show()
-
-
 def view_overlay(nb: Notebook, t: int = None, rc: list = None, use_z: np.ndarray = None):
     """
     Visualize the overlay of two images, both in the anchor frame of reference.
@@ -1015,8 +921,6 @@ def view_overlay(nb: Notebook, t: int = None, rc: list = None, use_z: np.ndarray
         r, c = rc_pair
         im_none[i] = preprocessing.load_transformed_image(
             nb.basic_info,
-            nb.file_names,
-            nb.extract,
             nb.register,
             nb.register_debug,
             t=t,
@@ -1027,8 +931,6 @@ def view_overlay(nb: Notebook, t: int = None, rc: list = None, use_z: np.ndarray
         )
         im[i] = preprocessing.load_transformed_image(
             nb.basic_info,
-            nb.file_names,
-            nb.extract,
             nb.register,
             nb.register_debug,
             t=t,
