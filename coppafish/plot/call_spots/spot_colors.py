@@ -165,13 +165,15 @@ class ColorPlotBase:
             self.norm_button_colour = "red"
             self.norm_button_colour_press = "white"
             if self.method == "raw":
-                current_colour = self.norm_button_colour_press
-            else:
                 current_colour = self.norm_button_colour
+            else:
+                current_colour = self.norm_button_colour_press
             self.norm_button_ax = self.fig.add_axes(button_pos)
             self.norm_button = Button(self.norm_button_ax, "Norm", hovercolor="0.275")
             self.norm_button.label.set_color(current_colour)
             self.norm_button.on_clicked(self.change_norm)
+        # set default to show normalised images
+        self.change_norm()  # initialise with method = 'norm'
 
     def change_clim(self, val: List):
         """
@@ -227,7 +229,8 @@ class ColorPlotBase:
 
 
 class view_codes(ColorPlotBase):
-    def __init__(self, nb: Notebook, spot_no: int, method: str = "anchor", bg_removed=False, save_loc: str = None):
+    def __init__(self, nb: Notebook, spot_no: int, tile: int, method: str = "anchor", bg_removed=True,
+                 save_loc: str = None):
         """
         Diagnostic to compare `spot_colour` to `bled_code` of predicted gene.
 
@@ -240,46 +243,35 @@ class view_codes(ColorPlotBase):
         """
         assert method.lower() in ["anchor", "omp", "prob"], "method must be 'anchor', 'omp' or 'prob'"
         if method.lower() == "omp":
-            t = nb.omp.tile[spot_no]
-            spot_score = omp_spot_score(nb.omp, spot_no)
-            self.spot_colour = nb.omp.colours[spot_no]
+            spot_score = nb.omp.results[f'tile_{tile}'].scores[spot_no]
+            self.spot_colour = nb.omp.results[f'tile_{tile}'].colours[spot_no]
+            gene_no = nb.omp.results[f'tile_{tile}'].gene_no[spot_no]
         elif method.lower() == "anchor":
-            spot_score = nb.ref_spots.dot_product_gene_score[spot_no]
-            t = nb.ref_spots.tile[spot_no]
-            self.spot_colour = nb.ref_spots.colours[spot_no]
+            spot_score = nb.call_spots.dot_product_gene_score[spot_no]
+            self.spot_colour = nb.call_spots.colours[spot_no]
+            gene_no = nb.call_spots.dot_product_gene_no[spot_no]
         else:
-            spot_score = np.max(nb.ref_spots.gene_probabilities[spot_no])
-            t = nb.ref_spots.tile[spot_no]
+            spot_score = np.max(nb.call_spots.gene_probabilities[spot_no])
             self.spot_colour = nb.ref_spots.colours[spot_no]
+            gene_no = np.argmax(nb.call_spots.gene_probabilities[spot_no])
 
-        colour_norm = nb.call_spots.colour_norm_factor[t]
+        colour_norm = nb.call_spots.colour_norm_factor[tile]
+        gene_name = nb.call_spots.gene_names[gene_no]
         # Get spot colour after background fitting
-        if method.lower() == "omp":
-            self.spot_colour_pb = base.remove_background(self.spot_colour[None].astype(float))[0][0] * colour_norm
-            self.spot_colour = self.spot_colour
-        else:
-            # remove background codes. To do this, repeat background_strentgh along a new axis for rounds
-            self.spot_colour = self.spot_colour
-            background_strength = np.percentile(self.spot_colour, 25, axis=0)
-            background_strength = np.repeat(background_strength[None, :], self.spot_colour.shape[0], axis=0)
-            self.spot_colour_pb = self.spot_colour - background_strength
+        self.spot_colour_pb = base.remove_background(self.spot_colour[None].astype(float))[0][0]
+        self.spot_colour = self.spot_colour
         self.background_removed = bg_removed
         self.spot_colour, self.spot_colour_pb = self.spot_colour.transpose(), self.spot_colour_pb.transpose()
         colour_norm = colour_norm.transpose()
 
-        if method.lower() == "omp":
-            gene_no = nb.omp.gene_no[spot_no]
-        elif method.lower() == "anchor":
-            gene_no = nb.ref_spots.dot_product_gene_no[spot_no]
-        elif method.lower() == "prob":
-            gene_no = np.argmax(nb.ref_spots.gene_probabilities[spot_no])
-        gene_name = nb.call_spots.gene_names[gene_no]
         if bg_removed:
             colour = self.spot_colour_pb
         else:
             colour = self.spot_colour
-        gene_colour = (nb.call_spots.bled_codes[gene_no].transpose() * np.linalg.norm(colour)
-                       / np.linalg.norm(nb.call_spots.bled_codes[gene_no])) / 2
+        gene_colour_float_norm = nb.call_spots.bled_codes[gene_no].transpose()
+        gene_colour_float_raw = gene_colour_float_norm / colour_norm
+        float_to_int_scale = np.linalg.norm(colour) / (2 * np.linalg.norm(gene_colour_float_raw))
+        gene_colour = gene_colour_float_raw * float_to_int_scale
         super().__init__(
             [colour, gene_colour], colour_norm, slider_pos=[0.85, 0.2, 0.01, 0.75], cbar_pos=[0.9, 0.2, 0.03, 0.75]
         )
@@ -289,6 +281,7 @@ class view_codes(ColorPlotBase):
         self.ax[1].set_xticks(ticks=np.arange(self.im_data[0].shape[1]))
         self.ax[1].set_xlabel("Round")
         self.fig.supylabel("colour Channel")
+
         # for each round, plot a green circle in the channel which is highest for that round
         n_channels, n_rounds = gene_colour.shape
         max_channels = np.zeros((n_rounds, n_channels), dtype=bool)
@@ -296,11 +289,11 @@ class view_codes(ColorPlotBase):
         total_intensity = 0
         for r in range(n_rounds):
             # we will add all channels with intensity > 0.25 * sum of all channels
-            round_colour = gene_colour[:, r] / np.sum(gene_colour[:, r])
-            good_channels = np.where(round_colour > 0.25)[0]
+            round_colour_norm = gene_colour_float_norm[:, r] / np.sum(gene_colour_float_norm[:, r])
+            good_channels = np.where(round_colour_norm > 0.25)[0]
             max_channels[r, good_channels] = True
-            max_channel_share[r, good_channels] = gene_colour[good_channels, r]
-            total_intensity += np.sum(gene_colour[good_channels, r])
+            max_channel_share[r, good_channels] = gene_colour_float_norm[good_channels, r]
+            total_intensity += np.sum(gene_colour_float_norm[good_channels, r])
         n_circles = np.sum(max_channels)
         max_channel_share *= n_circles / total_intensity
         for j in range(2):
@@ -326,7 +319,7 @@ class view_codes(ColorPlotBase):
 
         self.background_button_ax = self.fig.add_axes([0.85, 0.1, 0.1, 0.05])
         self.background_button = Button(self.background_button_ax, "Background", hovercolor="0.275")
-        self.background_button.label.set_color(self.norm_button_colour_press)
+        self.background_button.label.set_color(self.norm_button_colour if bg_removed else self.norm_button_colour_press)
         self.background_button.on_clicked(self.change_background)
 
         self.change_norm()  # initialise with method = 'norm'
@@ -381,9 +374,9 @@ class view_spot(ColorPlotBase):
             spot_yxz = nb.omp.local_yxz[spot_no]
         else:
             t = int(nb.ref_spots.tile[spot_no])
-            spot_score = nb.ref_spots.dot_product_gene_score[spot_no]
-            gene_no = nb.ref_spots.dot_product_gene_no[spot_no] if method.lower() == "anchor" else np.argmax(
-                nb.ref_spots.gene_probabilities[spot_no]
+            spot_score = nb.call_spots.dot_product_gene_score[spot_no]
+            gene_no = nb.call_spots.dot_product_gene_no[spot_no] if method.lower() == "anchor" else np.argmax(
+                nb.call_spots.gene_probabilities[spot_no]
             )
             spot_yxz = nb.ref_spots.local_yxz[spot_no]
 
@@ -595,11 +588,11 @@ class GESpotViewer:
         nb = self.nb
         n_channels = len(nb.basic_info.use_channels)
         # First we need to find the spots used to calculate the gene efficiency for the given gene.
-        initial_assignment = np.argmax(nb.ref_spots.gene_probabilities, axis=1)
+        initial_assignment = np.argmax(nb.call_spots.gene_probabilities, axis=1)
         if use_ge:
             self.gene_g_mask = nb.call_spots.use_ge * (initial_assignment == gene_index)
         else:
-            self.gene_g_mask = nb.ref_spots.gene_no == gene_index
+            self.gene_g_mask = nb.call_spots.dot_product_gene_no == gene_index
         # self.gene_g_mask = nb.ref_spots.gene_no == gene_index
         spots = nb.ref_spots.colours[self.gene_g_mask][:, :, nb.basic_info.use_channels]
         # remove background codes. To do this, repeat background_strenth along a new axis for rounds
@@ -816,7 +809,8 @@ class GESpotViewer:
         # Initialise buttons and cursors
         # 1. We would like each row of the plot to be clickable, so that we can view the observed spot.
         mplcursors.cursor(self.ax[0], hover=False).connect(
-            "add", lambda sel: view_codes(self.nb, self.spot_id[sel.index[0]])
+            "add", lambda sel: view_codes(self.nb, self.spot_id[sel.index[0]],
+                                          tile=self.nb.ref_spots.tile[self.spot_id[sel.index[0]]])
         )
         # 2. We would like to add a white rectangle around the observed spot when we hover over it
         mplcursors.cursor(self.ax[0], hover=2).connect("add", lambda sel: self.add_rectangle(sel.index[0]))

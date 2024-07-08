@@ -17,11 +17,11 @@ def view_bleed_matrix(nb: Notebook):
 
     # create figure
     fig, ax = plt.subplots(1, 3, figsize=(15, 5))
-    ax[0].imshow(bleed_matrix_raw, cmap='viridis')
+    ax[0].imshow(bleed_matrix_raw.T, cmap='viridis')
     ax[0].set_title('Raw Bleed Matrix')
-    ax[1].imshow(bleed_matrix_initial, cmap='viridis')
+    ax[1].imshow(bleed_matrix_initial.T, cmap='viridis')
     ax[1].set_title('Initial Bleed Matrix')
-    ax[2].imshow(bleed_matrix, cmap='viridis')
+    ax[2].imshow(bleed_matrix.T, cmap='viridis')
     ax[2].set_title('Final Bleed Matrix')
 
     # add x and y labels and ticks

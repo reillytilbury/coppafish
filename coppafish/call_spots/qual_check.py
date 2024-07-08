@@ -103,12 +103,12 @@ def quality_threshold(
         if nb.has_page("thresholds"):
             score_thresh = nb.thresholds.score_omp if method_omp else nb.thresholds.score_ref
 
-    intensity = np.ones_like(nb.omp.gene_no, dtype=np.float32) if method_omp else nb.ref_spots.intensity
+    intensity = np.ones_like(nb.omp.gene_no, dtype=np.float32) if method_omp else nb.call_spots.intensity
     if method_omp:
         score = omp_spot_score(nb.omp)
     elif method_anchor:
-        score = nb.ref_spots.dot_product_gene_score
+        score = nb.call_spots.dot_product_gene_score
     elif method_prob:
-        score = np.max(nb.ref_spots.gene_probabilities, axis=1)
+        score = np.max(nb.call_spots.gene_probabilities, axis=1)
     qual_ok = np.array([score > score_thresh, intensity > intensity_thresh]).all(axis=0)
     return qual_ok

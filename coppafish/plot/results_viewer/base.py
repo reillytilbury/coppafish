@@ -155,9 +155,9 @@ class Viewer:
         for i, b in enumerate(self.background_images["images"]):
             if b.ndim == 3:
                 mid_z = int(b.shape[0] / 2)
-                start_contrast = np.percentile(b[mid_z], [95, 99]).astype(int).tolist()
+                start_contrast = np.percentile(b[mid_z], [50, 100]).astype(int).tolist()
             else:
-                start_contrast = np.percentile(b, [95, 99]).astype(int).tolist()
+                start_contrast = np.percentile(b, [50, 100]).astype(int).tolist()
             self.add_slider(
                 name=self.background_images["names"][i],
                 value=start_contrast,
@@ -454,13 +454,15 @@ class Viewer:
         self.legend["fig"].draw()
         self.update_genes_and_thresholds()
 
-    def get_selected_spot_index(self) -> int:
+    def get_selected_spot_index(self, return_napari_index: bool = False) -> int:
         """
         Get the index of the selected spot.
         """
         n_selected = len(self.viewer.layers[self.viewer.layers.selection.active.name].selected_data)
         if n_selected == 1:
             napari_layer_index = list(self.viewer.layers[self.viewer.layers.selection.active.name].selected_data)[0]
+            if return_napari_index:
+                return napari_layer_index
             spot_index = int(self.spots[self.method["names"][self.method["active"]]].notebook_index[napari_layer_index])
         elif n_selected > 1:
             self.viewer.status = f"{n_selected} spots selected - need 1 to run diagnostic"
@@ -468,6 +470,7 @@ class Viewer:
         else:
             self.viewer.status = "No spot selected :("
             spot_index = None
+
         return spot_index
 
     def create_gene_list(self, gene_marker_file: str, nb_gene_names: list) -> None:
@@ -550,35 +553,54 @@ class Viewer:
         """
         # define frequently used variables
         downsample_factor = np.array([1, downsample_factor, downsample_factor])
-        n_methods = len(self.method["names"])
+        use_tiles = nb.basic_info.use_tiles
         tile_origin = nb.stitch.tile_origin
         colour_norm_factor = nb.call_spots.colour_norm_factor
 
-        # initialise relevant information
-        tile = [nb.__getattribute__(self.method["pages"][i]).tile for i in range(n_methods)]
-        local_loc = [nb.__getattribute__(self.method["pages"][i]).local_yxz for i in range(n_methods)]
-        global_loc = [(local_loc[i] + tile_origin[tile[i]])[:, [2, 0, 1]] for i in range(n_methods)]
+        # initialise relevant information for anchor and prob methods
+        tile = [nb.ref_spots.tile, nb.ref_spots.tile]
+        local_loc = [nb.ref_spots.local_yxz, nb.ref_spots.local_yxz]
+        global_loc = [(local_loc[i] + tile_origin[tile[i]])[:, [2, 0, 1]] for i in range(2)] # convert to zyx
         # apply downsample factor
         global_loc = [loc // downsample_factor for loc in global_loc]
         colours = [nb.__getattribute__(self.method["pages"][i]).colours for i in range(2)]
         colours = [colours[i] * colour_norm_factor[tile[i]] for i in range(2)]
-        score = [nb.ref_spots.dot_product_gene_score, np.max(nb.ref_spots.gene_probabilities, axis=1)]
-        gene_no = [nb.ref_spots.dot_product_gene_no, np.argmax(nb.ref_spots.gene_probabilities, axis=1)]
-        intensity = [nb.ref_spots.intensity, nb.ref_spots.intensity]
-        if nb.has_page("omp"):
-            score.append(omp_base.get_all_scores(nb.basic_info, nb.omp)[0])
-            gene_no.append(omp_base.get_all_gene_no(nb.basic_info, nb.omp)[0])
-            omp_colours, omp_tiles = omp_base.get_all_colours(nb.basic_info, nb.omp)
-            omp_colours_float = omp_colours * colour_norm_factor[omp_tiles]
-            intensity_omp = np.median(np.max(omp_colours_float, axis=-1), axis=-1)
-            intensity.append(intensity_omp)
-            colours.append(omp_colours)
+        score = [nb.call_spots.dot_product_gene_score, np.max(nb.call_spots.gene_probabilities, axis=1)]
+        gene_no = [nb.call_spots.dot_product_gene_no, np.argmax(nb.call_spots.gene_probabilities, axis=1)]
+        intensity = [nb.call_spots.intensity, nb.call_spots.intensity]
+        indices = [np.arange(len(nb.ref_spots.tile)), np.arange(len(nb.ref_spots.tile))]
 
-        # add all spots of shown genes to the napari viewer. If a gene is not shown, the spots will be disregarded.
-        visible_genes = np.where([g.active for g in self.genes])[0]
+        # add omp results to the lists
+        if nb.has_page("omp"):
+            results = [nb.omp.results[f'tile_{t}'] for t in nb.basic_info.use_tiles]
+            tile_omp = np.concatenate([use_tiles[i] * np.ones(len(r.gene_no), dtype=int) for i, r in enumerate(results)])
+            colours_omp = np.concatenate([r.colours * colour_norm_factor[use_tiles[i]] for i, r in enumerate(results)])
+            indices_omp = np.concatenate([np.arange(len(r.gene_no)) for r in results])
+            local_loc_omp = np.concatenate([r.local_yxz for r in results])
+            score_omp = np.concatenate([r.scores for r in results])
+            gene_no_omp = np.concatenate([r.gene_no for r in results])
+            # TODO: intensity is not currently saved in the omp results. This will need to be added. Until then we will
+            #  set intensity = 1
+            intensity_omp = np.concatenate([np.ones(len(r.gene_no)) for r in results])
+            # convert local_loc_omp to global_loc_omp
+            global_loc_omp = local_loc_omp + tile_origin[tile_omp]
+            global_loc_omp = global_loc_omp[:, [2, 0, 1]] // downsample_factor
+            # append omp results to the lists
+            tile.append(tile_omp)
+            local_loc.append(local_loc_omp)
+            global_loc.append(global_loc_omp)
+            colours.append(colours_omp)
+            score.append(score_omp)
+            gene_no.append(gene_no_omp)
+            intensity.append(intensity_omp)
+            indices.append(indices_omp)
+
+        # add all spots of active genes to the napari viewer. If a gene is not in the legend, the spots assigned to this
+        # gene will be disregarded.
+        active_genes = np.where([g.active for g in self.genes])[0]
         for i, m in enumerate(self.method["names"]):
-            mask = np.isin(gene_no[i], visible_genes)
-            spot_indices = np.where(mask)[0]
+            mask = np.isin(gene_no[i], active_genes)
+            spot_indices = indices[i][mask]
             self.spots[m] = Spots(
                 location=global_loc[i][mask],
                 score=score[i][mask],
@@ -705,6 +727,7 @@ class Viewer:
                 blending="additive",
                 colormap=self.background_images["colours"][i],
                 name=self.background_images["names"][i],
+                contrast_limits=[np.percentile(b, 50), np.percentile(b, 100)]
             )
             self.viewer.layers[i].contrast_limits_range = [b.min(), b.max()]
 
@@ -770,7 +793,7 @@ class Viewer:
             BGNormViewer(self.nb)
 
         @self.viewer.bind_key(KeyBinds.view_bled_codes)
-        def call_to_view_bm(viewer):
+        def call_to_view_bled(viewer):
             view_bled_codes(self.nb)
 
         @self.viewer.bind_key(KeyBinds.view_all_gene_scores)
@@ -791,9 +814,11 @@ class Viewer:
 
         @self.viewer.bind_key(KeyBinds.view_colour_and_codes)
         def call_to_view_codes(viewer):
-            spot_index = self.get_selected_spot_index()
-            if spot_index is not None:
-                view_codes(self.nb, spot_index, self.method["names"][self.method["active"]])
+            notebook_index = self.get_selected_spot_index()
+            napari_index = self.get_selected_spot_index(return_napari_index=True)
+            spot_tile = self.spots[self.method["names"][self.method["active"]]].tile[napari_index]
+            if notebook_index is not None:
+                view_codes(self.nb, notebook_index, spot_tile, self.method["names"][self.method["active"]])
 
         @self.viewer.bind_key(KeyBinds.view_spot_intensities)
         def call_to_view_spot(viewer):
