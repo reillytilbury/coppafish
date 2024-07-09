@@ -100,9 +100,6 @@ def find_spots(
             )
             local_yxz = local_yxz.numpy().astype(np.int16)
             spot_intensity = spot_intensity.numpy()
-            no_negative_neighbour = fs.check_neighbour_intensity(image_trc, local_yxz, thresh=0)
-            local_yxz = local_yxz[no_negative_neighbour]
-            spot_intensity = spot_intensity[no_negative_neighbour]
             # If r is a reference round, we also get info about whether the spots are isolated
             if r == nbp_basic.anchor_round:
                 isolated_spots = fs.get_isolated(
