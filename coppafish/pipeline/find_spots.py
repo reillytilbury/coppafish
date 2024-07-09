@@ -90,7 +90,7 @@ def find_spots(
         for t, r, c in np.argwhere(uncompleted):
             pbar.set_postfix({"tile": t, "round": r, "channel": c})
             # Then need to shift the detect_spots and check_neighb_intensity thresh correspondingly.
-            image_trc = nbp_filter.images[t][r][c]
+            image_trc = nbp_filter.images[t, r, c]
             local_yxz, spot_intensity = detect_torch.detect_spots(
                 torch.asarray(image_trc.astype(np.float32)),
                 auto_thresh[t, r, c],
