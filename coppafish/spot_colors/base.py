@@ -104,14 +104,10 @@ def get_spot_colours_new(
     assert all_images.ndim == 6
     image_shape = all_images.shape[3:]
     assert type(flow) is zarr.Array or type(flow) is np.ndarray
-    assert flow.shape[0] == all_images.shape[0]
     assert flow.shape[2:] == (3,) + image_shape, f"{flow.shape=} and {all_images.shape=}"
     assert type(icp_correction) is np.ndarray
-    assert icp_correction.shape[0] == flow.shape[0]
     assert icp_correction.shape[3:] == (4, 3)
     assert type(channel_correction) is np.ndarray
-    assert channel_correction.shape[0] == flow.shape[0]
-    assert channel_correction.shape[1] == icp_correction.shape[2]
     assert channel_correction.shape[2:] == (4, 3)
     assert type(use_channels) is list
     assert type(dapi_channel) is int
