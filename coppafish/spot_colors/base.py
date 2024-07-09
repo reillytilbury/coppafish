@@ -223,7 +223,10 @@ def get_spot_colours_new(
         image_c = torch.zeros(image_shape).float()
         yxz_minimums, yxz_maximums = get_yxz_bounds(yxz_registered)
         yxz_subset = tuple([(yxz_minimums[i].item(), yxz_maximums[i].item()) for i in range(3)])
-        image_c_subset = all_images[tile][round][c][
+        image_c_subset = all_images[
+            tile,
+            round,
+            c,
             yxz_subset[0][0] : yxz_subset[0][1],
             yxz_subset[1][0] : yxz_subset[1][1],
             yxz_subset[2][0] : yxz_subset[2][1],
