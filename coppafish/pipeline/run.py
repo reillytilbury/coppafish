@@ -242,7 +242,7 @@ def run_reference_spots(nb: Notebook) -> None:
     Args:
         nb: `Notebook` containing `stitch` and `register` pages.
     """
-    if not nb.has_page("ref_spots") or not nb.has_page("call_spots"):
+    if not nb.has_page("ref_spots"):
         nbp_ref_spots = get_reference_spots.get_reference_spots(
             nbp_basic=nb.basic_info,
             nbp_filter=nb.filter,
@@ -250,17 +250,19 @@ def run_reference_spots(nb: Notebook) -> None:
             nbp_register=nb.register,
             nbp_stitch=nb.stitch,
         )
+        nb += nbp_ref_spots
+    else:
+        log.warn(utils.warnings.NotebookPageWarning("ref_spots"))
+    if not nb.has_page("call_spots"):
         config = setup.config.get_config(nb.config_path)
-        nbp_call_spots, nbp_ref_spots = call_reference_spots.call_reference_spots(
+        nbp_call_spots = call_reference_spots.call_reference_spots(
             config=config["call_spots"],
-            nbp_ref_spots=nbp_ref_spots,
+            nbp_ref_spots=nb.ref_spots,
             nbp_file=nb.file_names,
             nbp_basic=nb.basic_info,
         )
-        nb += nbp_ref_spots
         nb += nbp_call_spots
     else:
-        log.warn(utils.warnings.NotebookPageWarning("ref_spots"))
         log.warn(utils.warnings.NotebookPageWarning("call_spots"))
 
 

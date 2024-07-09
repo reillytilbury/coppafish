@@ -241,7 +241,7 @@ class BuildPDF:
                 for t in nb.basic_info.use_tiles:
                     keep = nb.ref_spots.tile == t
                     fig = self.create_positions_histograms(
-                        nb.ref_spots.dot_product_gene_score[keep],
+                        nb.call_spots.dot_product_gene_score[keep],
                         nb.ref_spots.local_yxz[keep],
                         DEFAULT_REF_SCORE_THRESHOLD,
                         title=f"Spot position histograms for {t=}, scores "
@@ -337,7 +337,7 @@ class BuildPDF:
 
                 for i in range(10):
                     fig = self.create_omp_gene_counts_fig(
-                        nb.basic_info, nb.file_names, nb.ref_spots, nb.omp, score_threshold=i * 0.1
+                        nb.basic_info, nb.file_names, nb.call_spots, nb.omp, score_threshold=i * 0.1
                     )
                     pdf.savefig(fig)
                     plt.close(fig)
@@ -739,7 +739,7 @@ class BuildPDF:
         self,
         basic_info_page: NotebookPage,
         file_page: NotebookPage,
-        ref_spots_page: NotebookPage,
+        call_spots_page: NotebookPage,
         omp_page: NotebookPage,
         score_threshold: float = 0,
     ) -> mpl.figure.Figure:
@@ -749,7 +749,7 @@ class BuildPDF:
         labels = []
         gene_counts = []
         median_scores = []
-        n_genes = ref_spots_page.gene_probabilities.shape[1]
+        n_genes = call_spots_page.gene_probabilities.shape[1]
         if os.path.isfile(file_page.code_book):
             gene_names, _ = np.genfromtxt(file_page.code_book, dtype=(str, str)).transpose()
         else:

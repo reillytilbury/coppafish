@@ -12,7 +12,7 @@ class KeyBinds:
     view_bled_codes = "g"
     view_all_gene_scores = "Shift-h"
     view_gene_efficiency = "e"
-    view_gene_counts = "Shift-g"
+    # view_gene_counts = "Shift-g"
     view_histogram_scores = "h"
     view_scaled_k_means = "k"
     view_colour_and_codes = "c"

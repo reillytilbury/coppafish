@@ -1,5 +1,3 @@
-import os
-
 from PyQt5.QtWidgets import QLabel, QLineEdit, QMainWindow, QPushButton, QSlider
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -39,7 +37,6 @@ class RegistrationViewer:
         if t is None:
             t = nb.basic_info.use_tiles[0]
         self.t = t
-        self.reg_data_dir = os.path.join(self.nb.file_names.output_dir, "reg_images", f"t{self.t}")
         self.viewer = napari.Viewer()
         self.add_images()
         self.format_viewer()
@@ -49,20 +46,18 @@ class RegistrationViewer:
         """
         Load images for the selected tile and add them to the viewer.
         """
-        # get directory for the selected tile
-        self.reg_data_dir = os.path.join(self.nb.file_names.output_dir, "reg_images", f"t{self.t}")
         # load round images
         round_im, channel_im = {}, {}
-        for r in self.nb.basic_info.use_rounds:
-            round_im[f"r{r}"] = zarr.load(os.path.join(self.reg_data_dir, "round", f"r{r}.npy"))[:]
+        for r in list(self.nb.basic_info.use_rounds):
+            round_im[f"r{r}"] = self.nb.register.round_images[self.t, r]
         # repeat anchor image 3 times along new 0 axis
-        im_anchor = zarr.load(os.path.join(self.reg_data_dir, "round", "anchor.npy"))[:]
+        im_anchor = self.nb.register.anchor_images[self.t, 0]
         round_im["anchor"] = np.repeat(im_anchor[None], 3, axis=0)
         # load channel images
-        for c in self.nb.basic_info.use_channels:
-            channel_im[f"c{c}"] = zarr.load(os.path.join(self.reg_data_dir, "channel", f"c{c}.npy"))[:]
+        for c in list(self.nb.basic_info.use_channels):
+            channel_im[f"c{c}"] = self.nb.register.channel_images[self.t, c]
         # repeat anchor image 3 times along new 0 axis
-        im_anchor = zarr.load(os.path.join(self.reg_data_dir, "channel", "anchor.npy"))[:]
+        im_anchor = self.nb.register.anchor_images[self.t, 1]
         channel_im["anchor"] = np.repeat(im_anchor[None], 3, axis=0)
 
         # clear previous images
@@ -155,8 +150,6 @@ class RegistrationViewer:
         self.add_tile_buttons()
         # add buttons to view optical flow results
         self.add_optical_flow_buttons()
-        # add buttons to view background scale
-        self.add_bg_scale_buttons()
         # add buttons to view overlay
         self.add_overlay_buttons()
         # add buttons to view ICP correction and ICP iterations
@@ -204,19 +197,6 @@ class RegistrationViewer:
         for i, b in enumerate(button.buttons):
             b.clicked.connect(lambda _, r=use_rounds[i]: view_optical_flow(self.nb, self.t, r))
         self.viewer.window.add_dock_widget(button, area="left", name="optical flow viewer")
-
-    def add_bg_scale_buttons(self):
-        # add button to view background scale
-        button_loc = generate_button_positions(n_buttons=3, n_cols=2, x_offset=50, x_spacing=100)
-        button_name = ["r", "c"]
-        text_buttons = TextButtonCreator(button_name, button_loc, size=(50, 28))
-        # connect the view button to the appropriate function
-        text_buttons.button.clicked.connect(
-            lambda _: view_bg_scale(
-                self.nb, self.t, r=int(text_buttons.text_box[0].text()), c=int(text_buttons.text_box[1].text())
-            )
-        )
-        self.viewer.window.add_dock_widget(text_buttons, area="left", name="bg scale")
 
     def add_overlay_buttons(self):
         # add button to view background scale
@@ -427,6 +407,7 @@ class ICPPointCloudViewer:
             yxz=base_1, flow=None, icp_correction=icp_correction, tile_sz=self.nb.basic_info.tile_sz
         )
         base_2 = base_2[in_bounds]
+        base_1 = base_1[in_bounds]
         base = base[in_bounds]
 
         # get target points
@@ -495,9 +476,10 @@ class ICPPointCloudViewer:
         self.viewer.window.add_dock_widget(button, area="left", name="toggle base")
 
     def adjust_z_thickness(self, val: int):
+        # TODO: adjust the z thickness in the same way that we do the results viewer
         self.z_thick = val
         for layer in self.viewer.layers:
-            layer.size = [val, 0.5, 0.5]
+            layer.refresh()
 
     def view_data(self):
         # turn off default napari widgets
@@ -511,7 +493,7 @@ class ICPPointCloudViewer:
         for i in range(3):
             self.viewer.add_points(
                 self.points[i + 1],
-                size=[self.z_thick, 0.5, 0.5],
+                size=0.5,
                 face_color=colours[i],
                 symbol=symbols[i],
                 visible=visible[i],
@@ -638,39 +620,40 @@ def view_optical_flow(nb: Notebook, t: int, r: int):
     napari.run()
 
 
-# def view_flow_vector_field(nb: Notebook, t: int, r: int):
-#     """
-#     Visualize the optical flow results using napari.
-#     Args:
-#         nb: Notebook (containing register and register_debug pages)
-#         t: tile number
-#         r: round number
-#     """
-#     # load the flow
-#     output_dir = nb.file_names.output_dir + '/flow'
-#     flow = zarr.load(os.path.join(output_dir, 'smooth', f't{t}_r{r}.npy'))[:, ::100, ::100, ::5]
-#     flow = flow.astype(np.float32)
-#     ny, nx, nz = flow.shape[1:]
-#     start_points = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing='ij'))
-#     flow = np.moveaxis(flow, 0, -1)
-#     flow = flow.reshape(ny * nx * nz, 3)
-#     start_points = np.moveaxis(start_points, 0, -1)
-#     start_points = start_points.reshape(ny * nx * nz, 3)
-#     vectors = np.array([start_points, flow])
-#     vectors = np.moveaxis(vectors, 0, 1)
-#     print('Flow loaded.')
-#     # create colourmap for the flow
-#     cmap = napari.utils.Colormap([[0, 0, 1, 0], [1, 0, 0, 1]], name='blue_red', interpolation='linear')
-#     flow_max = np.max(np.linalg.norm(flow, axis=-1))
-#
-#     # create viewer
-#     viewer = napari.Viewer()
-#     viewer.add_vectors(vectors, name='flow', edge_width=0.4, length=0.6,
-#                        properties={'magnitude': np.linalg.norm(flow, axis=-1)},
-#                        edge_colormap=cmap, edge_contrast_limits=[0, flow_max])
-#     viewer.dims.axis_labels = ['y', 'x', 'z']
-#     viewer.dims.order = (2, 0, 1)
-#     napari.run()
+def view_flow_vector_field(nb: Notebook, t: int, r: int):
+    """
+    Visualize the optical flow results using napari.
+    Args:
+        nb: Notebook (containing register and register_debug pages)
+        t: tile number
+        r: round number
+    """
+    # load the flow
+    flow = nb.register.flow[t, r][:, ::50, ::50, ::2]
+    flow = flow.astype(np.float32)
+    im = load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=0)[::5, ::5, ::2]
+    ny, nx, nz = flow.shape[1:]
+    start_points = np.array(np.meshgrid(range(0, 10 * ny, 10), range(0, 10 * nx, 10), range(nz), indexing='ij'))
+    flow = np.moveaxis(flow, 0, -1)
+    flow = flow.reshape(ny * nx * nz, 3)
+    start_points = np.moveaxis(start_points, 0, -1)
+    start_points = start_points.reshape(ny * nx * nz, 3)
+    vectors = np.array([start_points, flow])
+    vectors = np.moveaxis(vectors, 0, 1)
+    print('Flow loaded.')
+    # create colourmap for the flow
+    cmap = napari.utils.Colormap([[0, 0, 1, 0], [1, 0, 0, 1]], name='blue_red', interpolation='linear')
+    flow_max = np.max(np.linalg.norm(flow, axis=-1))
+
+    # create viewer
+    viewer = napari.Viewer()
+    viewer.add_vectors(vectors, name='flow', edge_width=2, length=2,
+                       properties={'magnitude': np.linalg.norm(flow, axis=-1)},
+                       edge_colormap=cmap, edge_contrast_limits=[0, flow_max])
+    viewer.add_image(im, name='image', blending='additive')
+    viewer.dims.axis_labels = ['y', 'x', 'z']
+    viewer.dims.order = (2, 0, 1)
+    napari.run()
 
 
 def view_icp_correction(nb: Notebook, t: int):
@@ -952,8 +935,3 @@ def view_overlay(nb: Notebook, t: int = None, rc: list = None, use_z: np.ndarray
     viewer.dims.axis_labels = ["y", "x", "z"]
     viewer.dims.order = (2, 0, 1)
     napari.run()
-
-
-# nb_file = '/home/reilly/local_datasets/dante_bad_trc_test/notebook.npz'
-# nb = Notebook(nb_file)
-# view_overlay(nb, t=4, rc=[(7, 27), (3, 18)], use_z=np.arange(19, 29))

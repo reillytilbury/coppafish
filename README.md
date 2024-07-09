@@ -26,6 +26,7 @@
     * [Stitch](https://reillytilbury.github.io/coppafish/method/#stitch)
     * [Call spots](https://reillytilbury.github.io/coppafish/method/#call-spots)
     * [OMP](https://reillytilbury.github.io/coppafish/method/#orthogonal-matching-pursuit)
+    * [Runtime](https://reillytilbury.github.io/coppafish/method/#runtime)
 * [Diagnostics](https://reillytilbury.github.io/coppafish/diagnostics/)
     * [Viewer](https://reillytilbury.github.io/coppafish/diagnostics/#viewer)
     * [Registration viewer](https://reillytilbury.github.io/coppafish/diagnostics/#registrationviewer)

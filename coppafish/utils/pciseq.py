@@ -71,9 +71,9 @@ def export_to_pciseq(nb: Notebook, method="omp", intensity_thresh: float = 0, sc
     if method.lower() == "omp":
         spot_gene = nb.call_spots.gene_names[nb.omp.gene_no]
     elif method.lower() == "ref" or method.lower() == "anchor":
-        spot_gene = nb.call_spots.gene_names[nb.ref_spots.gene_no]
+        spot_gene = nb.call_spots.gene_names[nb.call_spots.dot_product_gene_no]
     elif method.lower() == "prob":
-        spot_gene = nb.call_spots.gene_names[np.argmax(nb.ref_spots.gene_probabilities, axis=1)]
+        spot_gene = nb.call_spots.gene_names[np.argmax(nb.call_spots.gene_probabilities, axis=1)]
     spot_gene = spot_gene[qual_ok]
     global_spot_yxz = global_spot_yxz[qual_ok]
     df_to_export = pd.DataFrame(data=global_spot_yxz, index=spot_gene, columns=["y", "x", "z_stack"])

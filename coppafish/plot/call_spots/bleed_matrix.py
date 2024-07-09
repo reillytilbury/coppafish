@@ -1,5 +1,3 @@
-import os
-
 import numpy as np
 from matplotlib import pyplot as plt
 from ...setup import Notebook
@@ -7,45 +5,38 @@ from .spot_colors import ColorPlotBase
 plt.style.use('dark_background')
 
 
-class view_bleed_matrix(ColorPlotBase):
-    def __init__(self, nb: Notebook):
-        """
-        Diagnostic to plot `bleed_matrix`. If `config['call_spots']['bleed_matrix_method']` is `'single'`,
-        a single `bleed_matrix` will be plotted. If it is `'separate'`, one will be shown for each round.
+def view_bleed_matrix(nb: Notebook):
+    """
+    Diagnostic to plot `bleed_matrix`.
+    Args:
+        nb: Notebook containing experiment details. Must have run at least as far as `call_reference_spots`.
+    """
+    bleed_matrix_raw = nb.call_spots.bleed_matrix_raw
+    bleed_matrix_initial = nb.call_spots.bleed_matrix_initial
+    bleed_matrix = nb.call_spots.bleed_matrix
 
-        Args:
-            nb: Notebook containing experiment details. Must have run at least as far as `call_reference_spots`.
-        """
-        # TODO: Plot bleed matrix for each tile
-        t = nb.basic_info.use_tiles[0]
-        color_norm = nb.call_spots.color_norm_factor[t][
-            np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
-        ]
-        n_use_rounds, n_use_channels = color_norm.shape
-        bleed_matrix = [nb.call_spots.bleed_matrix[
-            np.ix_(nb.basic_info.use_channels, nb.basic_info.use_dyes)
-        ].copy()]
-        subplot_row_columns = [1, 1]
-        subplot_adjust = [0.07, 0.775, 0.095, 0.94]
-        fig_size = (9, 5)
-        n_use_dyes = bleed_matrix[0].shape[1]
-        # different norm for each round, each has dims n_use_channels x 1 whereas BM dims is n_use_channels x n_dyes
-        # i.e. normalisation just affected by channel not by dye.
-        color_norm = [np.expand_dims(color_norm[r], 1) for r in range(n_use_rounds)]
-        super().__init__(bleed_matrix, color_norm, subplot_row_columns, subplot_adjust=subplot_adjust,
-                         fig_size=fig_size)
-        self.ax[0].set_yticks(ticks=np.arange(n_use_channels), labels=nb.basic_info.use_channels)
-        if nb.basic_info.dye_names is None:
-            self.ax[-1].set_xticks(ticks=np.arange(n_use_dyes), labels=nb.basic_info.use_dyes)
-        else:
-            self.fig.subplots_adjust(bottom=0.15)
-            self.ax[-1].set_xticks(ticks=np.arange(n_use_dyes),
-                                   labels=np.asarray(nb.basic_info.dye_names)[nb.basic_info.use_dyes], rotation=45)
-        self.ax[0].set_title(f'Bleed Matrix, {t=}')
-        self.ax[0].set_ylabel('Color Channel')
-        self.ax[0].set_xlabel('Dyes')
-        self.change_norm()  # initialise with method = 'norm'
-        plt.show()
+    # create figure
+    fig, ax = plt.subplots(1, 3, figsize=(15, 5))
+    ax[0].imshow(bleed_matrix_raw.T, cmap='viridis')
+    ax[0].set_title('Raw Bleed Matrix')
+    ax[1].imshow(bleed_matrix_initial.T, cmap='viridis')
+    ax[1].set_title('Initial Bleed Matrix')
+    ax[2].imshow(bleed_matrix.T, cmap='viridis')
+    ax[2].set_title('Final Bleed Matrix')
+
+    # add x and y labels and ticks
+    dye_names = nb.basic_info.dye_names
+    use_channels = nb.basic_info.use_channels
+    for i in range(3):
+        ax[i].set_xticks(ticks=np.arange(len(dye_names)), labels=dye_names, rotation=45)
+        ax[i].set_yticks(ticks=np.arange(len(use_channels)), labels=use_channels)
+        ax[i].set_xlabel('Dye')
+        ax[i].set_ylabel('Channel')
+
+    # add super title
+    fig.suptitle('Bleed Matrix')
+
+    plt.show()
 
 
 class view_bled_codes(ColorPlotBase):
@@ -57,40 +48,34 @@ class view_bled_codes(ColorPlotBase):
         Args:
             nb: Notebook containing experiment details. Must have run at least as far as `call_reference_spots`.
         """
-        # TODO: Display bled codes for all tiles
-        t = nb.basic_info.use_tiles[0]
-        color_norm = nb.call_spots.color_norm_factor[t][
-            np.ix_(nb.basic_info.use_rounds, nb.basic_info.use_channels)
-        ].T[:, :, np.newaxis]
-        self.n_genes = nb.call_spots.bled_codes_ge.shape[0]
+        self.n_genes = nb.call_spots.bled_codes.shape[0]
         self.gene_names = nb.call_spots.gene_names
-        self.gene_efficiency = nb.call_spots.gene_efficiency
         self.use_rounds = nb.basic_info.use_rounds
-        bled_codes_ge = nb.call_spots.bled_codes_ge[np.ix_(np.arange(self.n_genes), nb.basic_info.use_rounds,
-                                                           nb.basic_info.use_channels)]
-        bled_codes = nb.call_spots.bled_codes[np.ix_(np.arange(self.n_genes), nb.basic_info.use_rounds,
-                                                          nb.basic_info.use_channels)]
+        bled_codes = nb.call_spots.bled_codes
+        bled_codes_initial = nb.call_spots.bleed_matrix[nb.call_spots.gene_codes]
+        bled_codes_initial /= np.linalg.norm(bled_codes_initial, axis=(1, 2), keepdims=True)
         # move gene index to last so scroll over genes. After this shape is n_rounds x n_channels x n_genes
-        bled_codes_ge = np.moveaxis(bled_codes_ge, 0, -1)
         bled_codes = np.moveaxis(bled_codes, 0, -1)
+        bled_codes_initial = np.moveaxis(bled_codes_initial, 0, -1)
         # move channel index to first for plotting
-        bled_codes_ge = np.moveaxis(bled_codes_ge, 0, 1)
         bled_codes = np.moveaxis(bled_codes, 0, 1)
+        bled_codes_initial = np.moveaxis(bled_codes_initial, 0, 1)
         subplot_adjust = [0.07, 0.775, 0.095, 0.9]  # larger top adjust for super title
-        super().__init__([bled_codes_ge, bled_codes], color_norm, subplot_adjust=subplot_adjust)
-        n_channels = bled_codes_ge.shape[1]
+        super().__init__([bled_codes_initial, bled_codes], np.ones_like(bled_codes),
+                         subplot_adjust=subplot_adjust)
+        n_channels = bled_codes.shape[1]
         for j in range(self.n_images):
             # plot a black horizontal line above every third channel
             for c in range(n_channels):
                 if c % 3 == 0:
                     self.ax[j].axhline(c - 0.5, color='black', lw=2)
         self.gene_no = 0
-        self.ax[0].set_title('With Gene Efficiency', size=10)
-        self.ax[1].set_title('Without Gene Efficiency', size=10)
+        self.ax[0].set_title('Initial Bled Code', size=10)
+        self.ax[1].set_title('Bayes Parallel Biased Bled Code', size=10)
         self.ax[0].set_yticks(ticks=np.arange(self.im_data[0].shape[0]), labels=nb.basic_info.use_channels)
         self.ax[1].set_xticks(ticks=np.arange(self.im_data[0].shape[1]))
-        self.ax[1].set_xlabel('Round (Gene Efficiency)')
-        self.fig.supylabel('Color Channel')
+        self.ax[1].set_xlabel('Round')
+        self.fig.supylabel('Colour Channel')
         self.main_title = plt.suptitle('', x=(subplot_adjust[0] + subplot_adjust[1]) / 2)
         self.update_title()
         self.fig.canvas.mpl_connect('scroll_event', self.change_gene)
@@ -107,11 +92,10 @@ class view_bled_codes(ColorPlotBase):
         self.im_data = [val[:, :, self.gene_no] for val in self.im_data_3d]
         for i in range(self.n_images):
             # change image to different normalisation and change clim
-            self.im[i].set_data(self.im_data[i] * self.color_norm[i] if self.method == 'raw' else self.im_data[i])
+            self.im[i].set_data(self.im_data[i] * self.colour_norm[i] if self.method == 'raw' else self.im_data[i])
         self.update_title()
         self.im[-1].axes.figure.canvas.draw()
 
     def update_title(self):
         self.main_title.set_text(f'Gene {self.gene_no}, {self.gene_names[self.gene_no]} Bled Code')
-        self.ax[1].set_xticklabels(['{:.0f} ({:.2f})'.format(r, self.gene_efficiency[self.gene_no, r])
-                                    for r in self.use_rounds])
+        self.ax[1].set_xticklabels(self.use_rounds)
