@@ -11,6 +11,7 @@ def get_reference_spots(
     nbp_filter: NotebookPage,
     nbp_find_spots: NotebookPage,
     nbp_register: NotebookPage,
+    nbp_register_debug: NotebookPage,
     nbp_stitch: NotebookPage,
 ) -> NotebookPage:
     """
@@ -81,18 +82,28 @@ def get_reference_spots(
         if np.sum(in_tile) == 0:
             continue
         log.info(f"Tile {np.where(use_tiles==t)[0][0]+1}/{n_use_tiles}")
-        colour_tuple = spot_colors_base.get_spot_colors(
-            yxz_base=nd_local_yxz[in_tile],
-            t=t,
-            nbp_basic=nbp_basic,
-            nbp_filter=nbp_filter,
-            nbp_register=nbp_register,
-        )
-        valid = colour_tuple[-1]
-        spot_colours = np.append(spot_colours, colour_tuple[0][valid], axis=0)
-        local_yxz = np.append(local_yxz, colour_tuple[1][valid], axis=0)
+        colours = []
+        for r in nbp_basic.use_rounds:
+            r_colours = spot_colors_base.get_spot_colours_new(
+                nbp_filter.images,
+                nbp_register.flow,
+                nbp_register.icp_correction,
+                nbp_register_debug.channel_correction,
+                nbp_basic.use_channels,
+                nbp_basic.dapi_channel,
+                tile=t,
+                round=r,
+                yxz=nd_local_yxz[in_tile],
+            )
+            colours.append(r_colours)
+        # Colours becomes shape (n_spots, n_rounds_use, n_channels_use).
+        colours = np.array(colours, dtype=np.float32).transpose((2, 0, 1))
+        valid = ~(np.isclose(colours, 0).any(1).any(1))
+        log.debug(f"Valid ref pixel colours: {valid.sum()} out of {valid.size} for tile {t}")
+        spot_colours = np.append(spot_colours, colours[valid], axis=0)
+        local_yxz = np.append(local_yxz, nd_local_yxz[in_tile][valid], axis=0)
         isolated = np.append(isolated, nd_isolated[in_tile][valid], axis=0)
-        tile = np.append(tile, np.ones(np.sum(valid), dtype=np.int16) * t)
+        tile = np.append(tile, np.ones(valid.sum(), dtype=np.int16) * t)
 
     # save spot info to notebook
     nbp.local_yxz = local_yxz

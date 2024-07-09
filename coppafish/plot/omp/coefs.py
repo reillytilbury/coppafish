@@ -7,7 +7,7 @@ from matplotlib.widgets import CheckButtons, Slider
 import numpy as np
 import torch
 
-from ... import spot_colors, utils
+from ... import spot_colors
 from ...call_spots import background_pytorch
 from ...omp import coefs_torch, scores_torch
 from ...omp import base as omp_base

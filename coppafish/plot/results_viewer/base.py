@@ -292,7 +292,7 @@ class Viewer:
         """
         score_range = self.sliders["score_range"].value()
         intensity_thresh = self.sliders["intensity_thresh"].value()
-        for i, m in enumerate(self.method["names"]):
+        for _, m in enumerate(self.method["names"]):
             # 1. score range
             good_score = (self.spots[m].score >= score_range[0]) & (self.spots[m].score <= score_range[1])
             # 2. intensity threshold
@@ -441,7 +441,7 @@ class Viewer:
         active_gene_legend_indices = np.where(np.isin(self.legend["gene_names"], active_gene_names))[0]
 
         # Update the legend formatting to reflect the changes
-        for i, gene_name in enumerate(self.legend["gene_names"]):
+        for i, _ in enumerate(self.legend["gene_names"]):
             alpha_value = 1 if np.isin(i, active_gene_legend_indices) else 0.5
             self.legend["ax"].collections[i].set_alpha(alpha_value)
             self.legend["ax"].texts[i].set_alpha(alpha_value)
@@ -556,7 +556,7 @@ class Viewer:
         # initialise relevant information for anchor and prob methods
         tile = [nb.ref_spots.tile, nb.ref_spots.tile]
         local_loc = [nb.ref_spots.local_yxz, nb.ref_spots.local_yxz]
-        global_loc = [(local_loc[i] + tile_origin[tile[i]])[:, [2, 0, 1]] for i in range(2)] # convert to zyx
+        global_loc = [(local_loc[i] + tile_origin[tile[i]])[:, [2, 0, 1]] for i in range(2)]  # convert to zyx
         # apply downsample factor
         global_loc = [loc // downsample_factor for loc in global_loc]
         colours = [nb.__getattribute__(self.method["pages"][i]).colours for i in range(2)]
@@ -568,8 +568,10 @@ class Viewer:
 
         # add omp results to the lists
         if nb.has_page("omp"):
-            results = [nb.omp.results[f'tile_{t}'] for t in nb.basic_info.use_tiles]
-            tile_omp = np.concatenate([use_tiles[i] * np.ones(len(r.gene_no), dtype=int) for i, r in enumerate(results)])
+            results = [nb.omp.results[f"tile_{t}"] for t in nb.basic_info.use_tiles]
+            tile_omp = np.concatenate(
+                [use_tiles[i] * np.ones(len(r.gene_no), dtype=int) for i, r in enumerate(results)]
+            )
             colours_omp = np.concatenate([r.colours * colour_norm_factor[use_tiles[i]] for i, r in enumerate(results)])
             indices_omp = np.concatenate([np.arange(len(r.gene_no)) for r in results])
             local_loc_omp = np.concatenate([r.local_yxz for r in results])
@@ -723,7 +725,7 @@ class Viewer:
                 blending="additive",
                 colormap=self.background_images["colours"][i],
                 name=self.background_images["names"][i],
-                contrast_limits=[np.percentile(b, 50), np.percentile(b, 100)]
+                contrast_limits=[np.percentile(b, 50), np.percentile(b, 100)],
             )
             self.viewer.layers[i].contrast_limits_range = [b.min(), b.max()]
 

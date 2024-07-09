@@ -248,6 +248,7 @@ def run_reference_spots(nb: Notebook) -> None:
             nbp_filter=nb.filter,
             nbp_find_spots=nb.find_spots,
             nbp_register=nb.register,
+            nbp_register_debug=nb.register_debug,
             nbp_stitch=nb.stitch,
         )
         nb += nbp_ref_spots
