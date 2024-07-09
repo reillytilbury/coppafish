@@ -113,11 +113,7 @@ def find_spots(
                 spot_info["isolated"] = np.append(spot_info["isolated"], isolated_spots)
             else:
                 # if imaging round, only keep the highest intensity spots on each z plane
-                n_previous = local_yxz.shape[0]
                 local_yxz = fs.filter_intense_spots(local_yxz, spot_intensity, n_z, max_spots)
-                n_new = local_yxz.shape[0]
-                if n_new != n_previous:
-                    log.warn(f"For {t=}, {r=}, {c=} filter image, cutting max spot count from {n_previous} to {n_new}")
 
             # Save results to spot_info
             spot_info["spot_yxz"] = np.vstack((spot_info["spot_yxz"], local_yxz))
