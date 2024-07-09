@@ -4,57 +4,239 @@ from typing import Tuple
 from ...setup import Notebook
 
 
-def view_free_and_constrained_bled_codes(
-    nb: Notebook,
-    show: bool = True,
-) -> None:
-    """
-    Function to plot the free and constrained bleed codes for each gene.
-    Args:
-        nb: Notebook
-            The notebook object. Should contain ref spots and call spots pages.
-        show: bool (default=True)
-            Whether to show the plot. If False, the plot is not shown. False only for testing purposes.
-    """
-    free_bled_codes_tile_indep = nb.call_spots.free_bled_codes_tile_independent
-    bled_codes = nb.call_spots.bled_codes
-    rc_scale = nb.call_spots.rc_scale
-    gene_names = nb.call_spots.gene_names
-    gene_no = np.argmax(nb.call_spots.gene_probabilities, axis=1)
-    n_spots = np.array([np.sum(gene_no == i) for i in range(len(gene_names))])
+class ViewFreeAndConstrainedBledCodes:
+    def __init__(self, nb: Notebook, r: int = None, c: int = None, show: bool = True):
+        """
+        Function to plot the free and constrained bled codes for each spot for a given round and channel.
 
-    n_columns = 9
-    n_genes, n_rounds, n_channels_use = free_bled_codes_tile_indep.shape
-    n_rows = n_genes // n_columns + 1
+        This will show a grid of images of the free and constrained bled codes which have the target dye in the given
+        round and channel.
 
-    fig, ax = plt.subplots(n_rows, n_columns)
-    codes = np.zeros((n_genes, n_channels_use, 2 * n_rounds + 1)) * np.nan
-    # fill in the codes
-    for g in range(n_genes):
-        codes[g, :, :n_rounds] = free_bled_codes_tile_indep[g].T
-        codes[g, :, -n_rounds:] = bled_codes[g].T
-    # fill in the image grid
-    for g in range(n_genes):
-        row, col = g // n_columns, g % n_columns
-        ax[row, col].imshow(codes[g], cmap="viridis")
-        ax[row, col].set_title(f"{gene_names[g]} ({n_spots[g]})", fontsize=8)
-        ax[row, col].axis("off")
-    for g in range(n_genes, n_rows * n_columns - 1):
-        row, col = g // n_columns, g % n_columns
-        ax[row, col].axis("off")
+        Scroll up and down to navigate through the rounds and channels.
 
-    # add the round_channel scale
-    ax[-1, -1].imshow(rc_scale.T, cmap="viridis")
-    ax[-1, -1].set_title("round_channel scale", fontsize=8)
-    ax[-1, -1].set_xlabel("Round", fontsize=8)
-    ax[-1, -1].set_ylabel("Channel", fontsize=8)
-    ax[-1, -1].set_xticks([])
-    ax[-1, -1].set_yticks([])
+        Args:
+            nb: Notebook
+                The notebook object. Should contain call_spots page.
+            r: Round
+                The relevant round.
+            c: Channel
+                The relevant channel.
+            show: Bool (default=True)
+                Whether to show the plot. If False, the plot is not shown. False only for testing purposes.
+        """
+        if r is None:
+            r = 0
+        if c is None:
+            c = 0
 
-    # add title
-    plt.suptitle("Free (left) and round_channel (right) bleed codes")
-    if show:
-        plt.show()
+        # get the data
+        n_genes, n_rounds, n_channels_use = (len(nb.call_spots.gene_names), len(nb.basic_info.use_rounds),
+                                             len(nb.basic_info.use_channels))
+        d_max = nb.call_spots.associated_configs["call_spots"]["d_max"]
+        target_values = nb.call_spots.associated_configs["call_spots"]["target_values"]
+        gene_codes = nb.call_spots.gene_codes
+
+        initial_scale = nb.call_spots.initial_scale[nb.basic_info.use_tiles].mean(axis=0).T
+        rc_scale = nb.call_spots.rc_scale.T * initial_scale
+        free_bled_codes = nb.call_spots.free_bled_codes_tile_independent.transpose(0, 2, 1) / initial_scale
+        free_bled_codes /= np.linalg.norm(free_bled_codes, axis=(1, 2))[:, None, None]
+        constrained_bled_codes = nb.call_spots.bled_codes.transpose(0, 2, 1)
+        code_image = np.zeros((n_genes, n_channels_use, 2 * n_rounds + 1)) * np.nan
+        n_spots = np.zeros(n_genes, dtype=int)
+
+        # populate code image and n_spots
+        for g in range(n_genes):
+            code_image[g, :, :n_rounds] = free_bled_codes[g]
+            code_image[g, :, -n_rounds:] = constrained_bled_codes[g]
+            n_spots[g] = np.sum(np.argmax(nb.call_spots.gene_probabilities, axis=1) == g)
+
+        # add the attributes
+        self.code_image = code_image
+        self.r, self.c = r, c
+        self.n_genes, self.n_rounds, self.n_channels_use = n_genes, n_rounds, n_channels_use
+        self.use_channels = nb.basic_info.use_channels
+        self.d_max, self.target_values = d_max, target_values
+        self.rc_scale = rc_scale
+        self.gene_codes = gene_codes
+        self.gene_names = nb.call_spots.gene_names
+        self.n_spots = n_spots
+
+        # set up the plot
+        self.n_row_cols = 4
+        self.fig, self.ax = plt.subplots(self.n_row_cols, self.n_row_cols)
+        for i, j in np.ndindex(self.n_row_cols, self.n_row_cols):
+            self.ax[i, j].imshow(np.zeros((n_genes, 2 * n_rounds + 1)) * np.nan, cmap="viridis")
+            self.ax[i, j].axis("off")
+
+        # add cbar ax
+        self.cbar_ax = self.fig.add_axes([0.92, 0.15, 0.02, 0.7])
+
+        # connect the scroll event
+        self.fig.canvas.mpl_connect("scroll_event", self.on_scroll)
+
+        # update the plot
+        self.update_plot()
+
+    def update_plot(self):
+        """
+        Function to plot the free and constrained bled codes for each spot for a given round and channel.
+        """
+        relevant_genes = np.where(self.gene_codes[:, self.r] == self.d_max[self.c])[0]
+        n_spots_rc = self.n_spots[relevant_genes]
+
+        # sort the genes by number of spots, and only keep the top n_row_cols ** 2 - 1
+        relevant_genes = relevant_genes[np.argsort(n_spots_rc)[::-1][:self.n_row_cols ** 2 - 1]]
+        fig, ax = self.fig, self.ax
+
+        # clear the axes
+        for i, j in np.ndindex(self.n_row_cols, self.n_row_cols):
+            ax[i, j].clear()
+            ax[i, j].axis("off")
+
+        # plot the data
+        for i, g in enumerate(relevant_genes):
+            row, col = i // self.n_row_cols, i % self.n_row_cols
+            ax[row, col].imshow(self.code_image[g], cmap="viridis", vmin=0, vmax=np.nanmax(self.code_image))
+            ax[row, col].set_title(f"{self.gene_names[g]}, n={self.n_spots[g]}", fontsize=8)
+            ax[row, col].set_xticks([])
+            ax[row, col].set_yticks([])
+            # add a white box around round r channel c
+            ax[row, col].add_patch(plt.Rectangle((self.r - 0.5, self.c - 0.5), 1, 1,
+                                                 edgecolor="white", facecolor="none"))
+            # add a white box around round r + n_rounds + 1, channel c
+            ax[row, col].add_patch(plt.Rectangle((self.r + self.n_rounds + 0.5, self.c - 0.5), 1, 1,
+                                                 edgecolor="white", facecolor="none"))
+
+        # add the round/channel scale
+        rc_scale_centred = (self.rc_scale - np.mean(self.rc_scale)) / np.std(self.rc_scale)
+        ax[-1, -1].imshow(rc_scale_centred, cmap="viridis", vmin=np.min(rc_scale_centred),
+                          vmax=np.max(rc_scale_centred))
+        ax[-1, -1].set_title("round/channel scale (centred)")
+        ax[-1, -1].set_xlabel("Round")
+        ax[-1, -1].set_ylabel("Channel")
+        ax[-1, -1].set_xticks([])
+        ax[-1, -1].set_yticks([])
+        ax[-1, -1].add_patch(plt.Rectangle((self.r - 0.5, self.c - 0.5), 1, 1,
+                                             edgecolor="white", facecolor="none"))
+
+        # clear the colorbar
+        self.cbar_ax.clear()
+        plt.colorbar(ax[0, 0].imshow(self.code_image[relevant_genes[0]], cmap="viridis", vmin=0,
+                                     vmax=np.nanmax(self.code_image)), cax=self.cbar_ax)
+
+        # add the title
+        plt.suptitle(f"Free and constrained bled codes for round {self.r}, channel {self.use_channels[self.c]}. \n"
+                     f" Boost = {rc_scale_centred[self.c, self.r]:.2f}")
+        fig.canvas.draw()
+
+    def on_scroll(self, event):
+        """
+        Function to navigate through the rounds and channels.
+        """
+        increment = 1 if event.button == "up" else -1
+        round_channel_list = [(r, c) for r in range(self.n_rounds) for c in range(self.n_channels_use)]
+        index = round_channel_list.index((self.r, self.c))
+        index_new = (index + increment) % len(round_channel_list)
+        self.r, self.c = round_channel_list[index_new]
+        self.update_plot()
+
+
+class ViewTargetRegression:
+    def __init__(self, nb: Notebook, r: int = None, c: int = None):
+        if r is None:
+            r = 0
+        if c is None:
+            c = 0
+
+        # get the data
+        n_genes, n_rounds, n_channels_use = nb.call_spots.bled_codes.shape
+        d_max = nb.call_spots.associated_configs["call_spots"]["d_max"]
+        target_values = nb.call_spots.associated_configs["call_spots"]["target_values"]
+        gene_codes = nb.call_spots.gene_codes
+        # get the free and constrained bled codes
+        initial_scale = nb.call_spots.initial_scale[nb.basic_info.use_tiles].mean(axis=0)
+        rc_scale = nb.call_spots.rc_scale * initial_scale
+        free_bled_codes = nb.call_spots.free_bled_codes_tile_independent / initial_scale
+        constrained_bled_codes = free_bled_codes * rc_scale[None, :, :]
+
+        # get the number of spots per gene
+        n_spots = np.zeros(n_genes, dtype=int)
+        for g in range(n_genes):
+            n_spots[g] = np.sum(np.argmax(nb.call_spots.gene_probabilities, axis=1) == g)
+
+        # add the attributes
+        self.r, self.c = r, c
+        self.n_genes, self.n_rounds, self.n_channels_use = n_genes, n_rounds, n_channels_use
+        self.use_channels = nb.basic_info.use_channels
+        self.d_max, self.target_values = d_max, target_values
+        self.free_bled_codes, self.constrained_bled_codes = free_bled_codes, constrained_bled_codes
+        self.rc_scale = rc_scale
+        self.gene_codes, self.gene_names = gene_codes, nb.call_spots.gene_names
+        self.n_spots = n_spots
+
+        # set up the plot
+        self.fig, self.ax = plt.subplots(1, 3)
+        self.fig.canvas.mpl_connect("scroll_event", self.on_scroll)
+        self.update_plot()
+
+    def update_plot(self):
+        """
+        Function to plot the free and constrained bled codes for each spot for a given round and channel.
+        """
+        relevant_genes = np.where(self.gene_codes[:, self.r] == self.d_max[self.c])[0]
+        n_relevant_genes = len(relevant_genes)
+        fig, ax = self.fig, self.ax
+
+        # clear the axes
+        for a in ax:
+            a.clear()
+
+        # set up the data
+        x_coords = [np.random.rand(n_relevant_genes)] * 2
+        y_coords = [self.free_bled_codes[relevant_genes, self.r, self.c],
+                    self.constrained_bled_codes[relevant_genes, self.r, self.c]]
+        titles = ["Free bled codes", "Constrained bled codes"]
+        colours = ["cyan", "red"]
+
+        # plot the data
+        for i, a in enumerate(ax[:2]):
+            a.scatter(x_coords[i], y_coords[i], c=colours[i], s=np.sqrt(self.n_spots[relevant_genes]), alpha=0.5)
+            a.set_title(titles[i])
+            a.set_xticks([])
+            a.set_xlabel("Random x values")
+            a.set_ylabel("Bled code value")
+            if i == 0:
+                a.set_ylim(0, 1.5 * np.max(self.free_bled_codes))
+                a.set_yticks(np.round([0, 1.5 * np.max(self.free_bled_codes)], 2))
+            else:
+                # add a horizontal line for the target value
+                a.axhline(self.target_values[self.c], color="white", linestyle="--")
+                a.set_ylim(0, 1.5 * np.max(self.constrained_bled_codes))
+                a.set_yticks(np.round([0, self.target_values[self.c], 1.5 * np.max(self.constrained_bled_codes)], 2))
+
+        # add the round/channel scale
+        ax[-1].imshow(self.rc_scale.T, cmap="viridis")
+        ax[-1].set_title("round/channel scale")
+        ax[-1].set_ylabel("Channel")
+        ax[-1].set_xlabel("Round")
+        ax[-1].set_xticks([])
+        ax[-1].set_yticks([])
+        ax[-1].add_patch(plt.Rectangle((self.r - 0.5, self.c - 0.5), 1, 1,
+                                       edgecolor="white", facecolor="none"))
+
+        plt.suptitle(f"Target regression for round {self.r}, channel {self.use_channels[self.c]}")
+        fig.canvas.draw()
+
+    def on_scroll(self, event):
+        """
+        Function to navigate through the rounds and channels.
+        """
+        increment = 1 if event.button == "up" else -1
+        round_channel_list = [(r, c) for r in range(self.n_rounds) for c in range(self.n_channels_use)]
+        index = round_channel_list.index((self.r, self.c))
+        index_new = (index + increment) % len(round_channel_list)
+        self.r, self.c = round_channel_list[index_new]
+        self.update_plot()
 
 
 def view_tile_bled_codes(
