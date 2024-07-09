@@ -73,7 +73,6 @@ _options = {
         "raw_metadata": "maybe_str",
         "dye_camera_laser": "maybe_file",
         "code_book": "str",
-        "scale": "str",
         "psf": "maybe_str",
         "pciseq": "tuple_str",
         "fluorescent_bead_path": "maybe_str",

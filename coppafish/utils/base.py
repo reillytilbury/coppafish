@@ -90,28 +90,19 @@ def set_notebook_tile_dir(notebook_path: str, new_tile_dir: str) -> None:
 
     nb = Notebook(notebook_path)
 
-    del nb.file_names.tile_dir
-    nb.file_names.tile_dir = os.path.join(new_tile_dir, "filter")
     del nb.file_names.tile_unfiltered_dir
     nb.file_names.tile_unfiltered_dir = os.path.join(new_tile_dir, "extract")
-    old_name = PurePath(nb.file_names.scale).name
-    del nb.file_names.scale
-    nb.file_names.scale = os.path.join(new_tile_dir, old_name)
-    old_tile: tuple = nb.file_names.tile
     old_tile_unfiltered = nb.file_names.tile_unfiltered
-    new_tile = deep_convert(old_tile, list)
     new_tile_unfiltered = deep_convert(old_tile_unfiltered, list)
-    for i, j, k in itertools.product(range(len(old_tile)), range(len(old_tile[0])), range(len(old_tile[0][0]))):
-        old_tile_ijk = os.path.normpath(old_tile[i][j][k])
-        new_tile[i][j][k] = os.path.join(nb.file_names.tile_dir, PurePath(old_tile_ijk).name)
+    for i, j, k in itertools.product(
+        range(len(old_tile_unfiltered)), range(len(old_tile_unfiltered[0])), range(len(old_tile_unfiltered[0][0]))
+    ):
         old_tile_unfiltered_ijk = os.path.normpath(old_tile_unfiltered[i][j][k])
         new_tile_unfiltered[i][j][k] = os.path.join(
             nb.file_names.tile_unfiltered_dir, PurePath(old_tile_unfiltered_ijk).name
         )
-    del nb.file_names.tile
-    nb.file_names.tile = deep_convert(new_tile)
     del nb.file_names.tile_unfiltered
-    nb.file_names.tile_unfiltered = deep_convert(new_tile_unfiltered)
+    nb.file_names.tile_unfiltered = deep_convert(new_tile_unfiltered, tuple)
 
     nb.resave()
 

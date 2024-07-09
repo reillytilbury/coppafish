@@ -30,8 +30,7 @@ def get_file_names(nb: Notebook):
     # Copy some variables that are in config to page.
     nbp.input_dir = config["input_dir"]
     nbp.output_dir = config["output_dir"]
-    nbp.tile_dir = os.path.join(config["tile_dir"], "filter")
-    nbp.tile_unfiltered_dir = os.path.join(config["tile_dir"], "extract")
+    nbp.extract_dir = os.path.join(config["tile_dir"], "extract")
     nbp.fluorescent_bead_path = config["fluorescent_bead_path"]
 
     # remove file extension from round and anchor file names if it is present
@@ -80,10 +79,6 @@ def get_file_names(nb: Notebook):
         # If the user has not put their code_book in, default to the one included in this project
         config["code_book"] = os.path.join(os.getcwd(), "coppafish/setup/code_book_73g.txt")
 
-    # where to save scale and scale_anchor values used in extract step.
-    config["scale"] = config["scale"].replace(".txt", "")
-    nbp.scale = os.path.join(config["tile_dir"], config["scale"] + ".txt")
-
     if config["psf"] is None:
         config["psf"] = str(importlib_resources.files("coppafish.setup").joinpath("default_psf.npz"))
     nbp.psf = config["psf"]
@@ -98,38 +93,25 @@ def get_file_names(nb: Notebook):
         round_files = config["round"]
 
     if config["raw_extension"] == "jobs":
-        if nb.basic_info.is_3d:
-            round_files = config["round"] + [config["anchor"]]
-            tile_names, tile_names_unfiltered = get_tile_file_names(
-                nbp.tile_dir,
-                nbp.tile_unfiltered_dir,
-                round_files,
-                nb.basic_info.n_tiles,
-                ".zarr",
-                nb.basic_info.n_channels,
-                jobs=True,
-            )
-        else:
-            log.error(ValueError("JOBs file format is only compatible with 3D"))
+        round_files = config["round"] + [config["anchor"]]
+        _, tile_names_unfiltered = get_tile_file_names(
+            "",
+            nbp.extract_dir,
+            round_files,
+            nb.basic_info.n_tiles,
+            ".zarr",
+            nb.basic_info.n_channels,
+            jobs=True,
+        )
     else:
-        if nb.basic_info.is_3d:
-            tile_names, tile_names_unfiltered = get_tile_file_names(
-                nbp.tile_dir,
-                nbp.tile_unfiltered_dir,
-                round_files,
-                nb.basic_info.n_tiles,
-                ".zarr",
-                nb.basic_info.n_channels,
-            )
-        else:
-            tile_names, tile_names_unfiltered = get_tile_file_names(
-                nbp.tile_dir,
-                nbp.tile_unfiltered_dir,
-                round_files,
-                nb.basic_info.n_tiles,
-                ".zarr",
-            )
-
-    nbp.tile = utils.base.deep_convert(tile_names.tolist())
+        _, tile_names_unfiltered = get_tile_file_names(
+            "",
+            nbp.extract_dir,
+            round_files,
+            nb.basic_info.n_tiles,
+            ".zarr",
+            nb.basic_info.n_channels,
+        )
     nbp.tile_unfiltered = utils.base.deep_convert(tile_names_unfiltered.tolist())
+
     return nbp

@@ -188,11 +188,7 @@ class NotebookPage:
                 "dir",
                 "Where notebook is saved",
             ],
-            "tile_dir": [
-                "dir",
-                "Where filtered image files are saved, from both extract and filter sections of the pipeline",
-            ],
-            "tile_unfiltered_dir": [
+            "extract_dir": [
                 "dir",
                 "Where extract, unfiltered image files are saved",
             ],
@@ -222,15 +218,6 @@ class NotebookPage:
                 "file",
                 "Text file which contains the codes indicating which dye to expect on each round for each gene",
             ],
-            "scale": [
-                "file",
-                "Text file saved containing the `extract['scale']` and `extract['scale_anchor']` values used to create "
-                + "the tile *npy* files in the *tile_dir*. If the second value is 0, it means `extract['scale_anchor']` "
-                + "has not been calculated yet."
-                + ""
-                + "If the extract step of the pipeline is re-run with `extract['scale']` or "
-                + "`extract['scale_anchor']` different to values saved here, an error will be raised.",
-            ],
             "psf": [
                 "file",
                 "*npy* file location indicating the average spot shape" + "This will have the shape `n_z x n_y x n_x`.",
@@ -244,12 +231,6 @@ class NotebookPage:
                 + "`pciseq[1]` is the path where the *ref_spots* method output will be saved."
                 + "\n"
                 + "If files don't exist, they will be created when the function *coppafish/export_to_pciseq* is run.",
-            ],
-            "tile": [
-                "tuple[tuple[tuple[file]]]",
-                "List of string arrays `n_tiles x (n_rounds + n_extra_rounds) x n_channels` if 3d}]"
-                + "`tile[t][r][c]` is the [extract][file_type] filtered file containing all z planes for tile $t$, "
-                + "round $r$, channel $c$",
             ],
             "tile_unfiltered": [
                 "tuple[tuple[tuple[file]]]",
@@ -480,7 +461,7 @@ class NotebookPage:
                 "Numpy array [n_spots x n_rounds x n_channels]. "
                 + "`[s, r, c]` is the intensity of spot $s$ on round $r$, channel $c$."
                 + "`-tile_pixel_value_shift` if that round/channel not used otherwise integer.",
-            ]
+            ],
         },
         "call_spots": {
             "gene_names": [
@@ -585,7 +566,7 @@ class NotebookPage:
                 "Numpy float32 array [n_spots]. "
                 + "$\\chi_s = \\underset{r}{\\mathrm{median}}(\\max_c\\zeta_{s_{rc}})$"
                 + "where $\\pmb{\\zeta}_s=$ `colors[s, r]*colour_norm_factor[r]`.",
-            ]
+            ],
         },
         "omp": {
             "spot_tile": [

@@ -102,7 +102,7 @@ class BuildPDF:
                     pdf.savefig(fig)
                     plt.close(fig)
                     del fig, axes
-                    file_path = os.path.join(nb.file_names.tile_unfiltered_dir, "hist_counts_values.npz")
+                    file_path = os.path.join(nb.file_names.extract_dir, "hist_counts_values.npz")
                     extract_pixel_unique_values, extract_pixel_unique_counts = None, None
                     if os.path.isfile(file_path):
                         results = np.load(file_path)
@@ -142,31 +142,6 @@ class BuildPDF:
                     self.empty_plot_ticks(axes[0, 0])
                     pdf.savefig(fig)
                     plt.close(fig)
-
-                    filter_image_dtype = tiles_io.FILTER_IMAGE_DTYPE
-                    file_path = os.path.join(nb.file_names.tile_dir, "hist_counts_values.npz")
-                    filter_pixel_unique_counts, filter_pixel_unique_values = None, None
-                    if os.path.isfile(file_path):
-                        results = np.load(file_path)
-                        filter_pixel_unique_counts, filter_pixel_unique_values = results["arr_0"], results["arr_1"]
-                    if filter_pixel_unique_values is not None:
-                        pixel_min, pixel_max = np.iinfo(filter_image_dtype).min, np.iinfo(filter_image_dtype).max
-                        # Histograms of pixel value histograms
-                        figs = self.create_pixel_value_hists(
-                            nb,
-                            "Filter",
-                            filter_pixel_unique_values,
-                            filter_pixel_unique_counts,
-                            pixel_min,
-                            pixel_max,
-                            bin_size=2**10,
-                            auto_thresh_values=nb.filter.auto_thresh,
-                        )
-                        for fig in figs:
-                            pdf.savefig(fig)
-                            plt.close(fig)
-                        del figs
-                    del filter_pixel_unique_values, filter_pixel_unique_counts
         pbar.update()
 
         if not os.path.isfile(os.path.join(output_dir, "_find_spots.pdf")) and nb.has_page("find_spots"):

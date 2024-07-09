@@ -39,8 +39,8 @@ def run_extract(
 
     log.debug("Extraction started")
 
-    if not os.path.isdir(nbp_file.tile_unfiltered_dir):
-        os.mkdir(nbp_file.tile_unfiltered_dir)
+    if not os.path.isdir(nbp_file.extract_dir):
+        os.mkdir(nbp_file.extract_dir)
 
     indices = indexing.create(
         nbp_basic,
