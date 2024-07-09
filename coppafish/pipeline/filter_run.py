@@ -47,17 +47,16 @@ def run_filter(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage) ->
         include_bad_trc=False,
     )
 
-    shape = (
-        np.array(indices).max(0)[0].item() + 1,
-        np.array(indices).max(0)[1].item() + 1,
-        np.array(indices).max(0)[2].item() + 1,
-        nbp_basic.tile_sz,
-        nbp_basic.tile_sz,
-        len(nbp_basic.use_z),
-    )
+    max_ind = np.array(indices).max(0).tolist()
+    shape = (max_ind[0] + 1, max_ind[1] + 1, max_ind[2] + 1, nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
     chunks = (1, 1, 1, 800, 800, 1)
     images = zarr.open_array(
-        os.path.join(nbp_file.output_dir, "filter_images.zarr"), "w", shape=shape, chunks=chunks, zarr_version=2
+        os.path.join(nbp_file.output_dir, "filter_images.zarr"),
+        "w",
+        shape=shape,
+        chunks=chunks,
+        zarr_version=2,
+        dtype=np.float16,
     )
 
     INVALID_AUTO_THRESH = -1
