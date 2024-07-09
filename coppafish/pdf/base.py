@@ -251,7 +251,7 @@ class BuildPDF:
                     )
                     pdf.savefig(fig)
                 # Create a page for every gene
-                gene_probabilities = nb.ref_spots.gene_probabilities
+                gene_probabilities = nb.call_spots.gene_probabilities
                 scores = nb.ref_spots.colours * nb.call_spots.colour_norm_factor[nb.ref_spots.tile]
                 n_genes = len(nb.call_spots.gene_names)
                 gene_names = nb.call_spots.gene_names
