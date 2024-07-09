@@ -107,7 +107,7 @@ def run_filter(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage) ->
             pbar.set_postfix({"round": r, "tile": t, "channel": c})
             assert raw_image_exists, f"Raw, extracted file at\n\t{file_path_raw}\nnot found"
             # Get t, r, c image from raw files
-            im_raw = tiles_io._load_image(file_path_raw)
+            im_raw = tiles_io._load_image(file_path_raw)[:]
             im_filtered, bad_columns = extract.strip_hack(im_raw)  # check for faulty columns
             assert bad_columns.size == 0, f"Bad y column(s) were found during {t=}, {r=}, {c=} image filtering"
             del im_raw
