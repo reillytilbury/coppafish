@@ -1,11 +1,8 @@
-import math as maths
 from typing import Optional, Tuple
 
 import numpy as np
-import scipy
 import torch
 
-from .. import utils
 from ..call_spots import dot_product_pytorch
 
 
