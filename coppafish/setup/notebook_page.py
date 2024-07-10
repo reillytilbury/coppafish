@@ -173,14 +173,6 @@ class NotebookPage:
                 "bool",
                 "whether or not to use anchor",
             ],
-            "use_preseq": [
-                "bool",
-                "whether or not to use pre-seq round",
-            ],
-            "pre_seq_round": [
-                "int or none",
-                "round number of pre-seq round",
-            ],
             "bad_trc": [
                 "tuple[tuple[int]] or none",
                 "Tuple of bad tile, round, channel combinations. If a tile, round, channel combination is in this,"
@@ -196,11 +188,7 @@ class NotebookPage:
                 "dir",
                 "Where notebook is saved",
             ],
-            "tile_dir": [
-                "dir",
-                "Where filtered image files are saved, from both extract and filter sections of the pipeline",
-            ],
-            "tile_unfiltered_dir": [
+            "extract_dir": [
                 "dir",
                 "Where extract, unfiltered image files are saved",
             ],
@@ -230,15 +218,6 @@ class NotebookPage:
                 "file",
                 "Text file which contains the codes indicating which dye to expect on each round for each gene",
             ],
-            "scale": [
-                "file",
-                "Text file saved containing the `extract['scale']` and `extract['scale_anchor']` values used to create "
-                + "the tile *npy* files in the *tile_dir*. If the second value is 0, it means `extract['scale_anchor']` "
-                + "has not been calculated yet."
-                + ""
-                + "If the extract step of the pipeline is re-run with `extract['scale']` or "
-                + "`extract['scale_anchor']` different to values saved here, an error will be raised.",
-            ],
             "psf": [
                 "file",
                 "*npy* file location indicating the average spot shape" + "This will have the shape `n_z x n_y x n_x`.",
@@ -253,12 +232,6 @@ class NotebookPage:
                 + "\n"
                 + "If files don't exist, they will be created when the function *coppafish/export_to_pciseq* is run.",
             ],
-            "tile": [
-                "tuple[tuple[tuple[file]]]",
-                "List of string arrays `n_tiles x (n_rounds + n_extra_rounds) x n_channels` if 3d}]"
-                + "`tile[t][r][c]` is the [extract][file_type] filtered file containing all z planes for tile $t$, "
-                + "round $r$, channel $c$",
-            ],
             "tile_unfiltered": [
                 "tuple[tuple[tuple[file]]]",
                 "List of string arrays [n_tiles][(n_rounds + n_extra_rounds) {x n_channels if 3d}]"
@@ -269,20 +242,12 @@ class NotebookPage:
                 "str or none",
                 "Path to *nd2* file containing fluorescent beads. `none` if not used.",
             ],
-            "pre_seq": [
-                "str or none",
-                "Name of *nd2* file for the pre-sequencing round. `none` if not used",
-            ],
             "initial_bleed_matrix": [
                 "dir or none",
                 "Location of initial bleed matrix file. If `none`, then use the default bleed matrix",
             ],
         },
         "extract": {
-            "file_type": [
-                "str",
-                "File type used to save tiles after extraction.",
-            ],
             "num_rotations": [
                 "int",
                 "The number of 90 degree anti-clockwise rotations applied to every image.",
@@ -295,11 +260,10 @@ class NotebookPage:
                 + "`auto_thresh[t, r, c]` is the threshold spot intensity for tile $t$, round $r$, channel $c$"
                 + "used for spot detection in the `find_spots` step of the pipeline.",
             ],
-            "image_scale": [
-                "float",
-                "Every non-DAPI image is scaled by this number after filtering. It is computed using the first non-DAPI "
-                + "image in filter. The scaling helps to use more of the uint16 integer range when saving the images for "
-                + "improved pixel value precision.",
+            "images": [
+                "zarray",
+                "`(n_tiles x (n_rounds + n_extra_rounds) x n_channels)` zarray float16. "
+                + "All raw images after filtering (deblurring) is applied.",
             ],
         },
         "filter_debug": {
@@ -409,14 +373,6 @@ class NotebookPage:
                 "Numpy float array [n_tiles x n_rounds x n_channels x 4 x 3]"
                 + "yxz affine corrections to be applied after the warp.",
             ],
-            "bg_scale": [
-                "tuple[tuple[tuple[float]]] or none",
-                "tuple of `[n_tiles][n_rounds][n_channels]`"
-                + "`bg_scale[t, r, c]` is the scale factor applied to the preseq round of tile $t$, channel $c$"
-                + "to match the colour profile of the sequencing image in tile t, round r, channel c. "
-                + "This is computed in register because the images must be well-alligned to compute. "
-                + "Zeros if not using the preseq round.",
-            ],
             "anchor_images": [
                 "zarray",
                 "Numpy uint8 array `(n_tiles x 2 x im_y x im_x x im_z)`"
@@ -501,11 +457,11 @@ class NotebookPage:
                 "Numpy array [n_spots]. Tile each spot was found on.",
             ],
             "colours": [
-                "ndarray[int32]",
+                "ndarray[float32]",
                 "Numpy array [n_spots x n_rounds x n_channels]. "
                 + "`[s, r, c]` is the intensity of spot $s$ on round $r$, channel $c$."
                 + "`-tile_pixel_value_shift` if that round/channel not used otherwise integer.",
-            ]
+            ],
         },
         "call_spots": {
             "gene_names": [
@@ -610,7 +566,7 @@ class NotebookPage:
                 "Numpy float32 array [n_spots]. "
                 + "$\\chi_s = \\underset{r}{\\mathrm{median}}(\\max_c\\zeta_{s_{rc}})$"
                 + "where $\\pmb{\\zeta}_s=$ `colors[s, r]*colour_norm_factor[r]`.",
-            ]
+            ],
         },
         "omp": {
             "spot_tile": [
@@ -968,6 +924,8 @@ class NotebookPage:
         types_as_str = self._get_variables()[name][0].split(self._datatype_separator)
         file_suffix = self._type_str_to_suffix(types_as_str[0])
         file_path = self._get_variable_path(page_directory, name, file_suffix)
+        if not os.path.exists(file_path):
+            raise SystemError(f"Failed to find variable path: {file_path}")
 
         if file_suffix == ".json":
             with open(file_path, "r") as file:
@@ -1061,6 +1019,8 @@ class NotebookPage:
             return self._is_ndarray_of_dtype(value, (np.float16, np.float32, np.float64))
         elif type_as_str == "ndarray[float16]":
             return self._is_ndarray_of_dtype(value, (np.float16,))
+        elif type_as_str == "ndarray[float32]":
+            return self._is_ndarray_of_dtype(value, (np.float32,))
         elif type_as_str == "ndarray[str]":
             return self._is_ndarray_of_dtype(value, (str, np.str_))
         elif type_as_str == "ndarray[bool]":

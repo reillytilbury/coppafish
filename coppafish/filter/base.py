@@ -1,6 +1,6 @@
-import os
+from typing import List
+
 import numpy as np
-from typing import Tuple, List
 
 
 def central_tile(tilepos_yx: np.ndarray, use_tiles: List[int]) -> int:
@@ -38,42 +38,3 @@ def compute_auto_thresh(image: np.ndarray, auto_thresh_multiplier: float, z_plan
 
     auto_thresh = np.median(np.abs(image[:, :, z_plane])) * auto_thresh_multiplier
     return float(auto_thresh)
-
-
-def get_scale_from_txt(txt_file: str) -> Tuple[float, float]:
-    """
-    This checks whether `scale` and `scale_anchor` values used for producing npy files in *tile_dir* match
-    values used and saved to `txt_file` on previous run.
-
-    Will raise error if they are different.
-
-    Args:
-        txt_file: `nb.file_names.scale`, path to text file where scale values are saved.
-            File contains two values, `scale` first and `scale_anchor` second.
-            Values will be 0 if not used or not yet computed.
-        scale: Value of `scale` used for current run of extract method i.e. `config['extract']['scale']`.
-        scale_anchor: Value of `scale_anchor` used for current run of extract method
-            i.e. `config['extract']['scale_anchor']`.
-        tol: Two scale values will be considered the same if they are closer than this.
-
-    Returns:
-        scale - scale found in text file, None otherwise.
-        scale_anchor - anchor scale found in text file, None otherwise.
-    """
-    scale_saved = None
-    scale_anchor_saved = None
-    if os.path.isfile(txt_file):
-        scale_saved, scale_anchor_saved = np.genfromtxt(txt_file)
-    return scale_saved, scale_anchor_saved
-
-
-def save_scale(txt_file: str, scale: float, scale_anchor: float):
-    """
-    This saves `scale` and `scale_anchor` to `txt_file`. If text file already exists, it is overwritten.
-
-    Args:
-        txt_file: `nb.file_names.scale`, path to text file where scale values are to be saved.
-        scale: Value of `scale`.
-        scale_anchor: Value of `scale_anchor`.
-    """
-    np.savetxt(txt_file, [scale, scale_anchor], header="scale followed by scale_anchor")

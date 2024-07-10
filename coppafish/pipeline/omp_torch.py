@@ -96,11 +96,12 @@ def run_omp(
                 index_max = (j + 1) * batch_size
                 index_max = min(index_max, np.prod(tile_shape))
                 batch_spot_colours = spot_colors.base.get_spot_colours_new(
-                    nbp_basic,
-                    nbp_file,
-                    nbp_extract,
-                    nbp_register,
-                    nbp_register_debug,
+                    nbp_filter.images,
+                    nbp_register.flow,
+                    nbp_register.icp_correction,
+                    nbp_register_debug.channel_correction,
+                    nbp_basic.use_channels,
+                    nbp_basic.dapi_channel,
                     t,
                     r,
                     yxz=yxz_all[index_min:index_max],
@@ -190,6 +191,8 @@ def run_omp(
                     force_cpu=config["force_cpu"],
                 )
                 g_n_isolated_count = g_isolated_yxz.shape[0]
+                if g_n_isolated_count == 0:
+                    continue
                 n_isolated_count += g_n_isolated_count
                 g_mean_spot = spots_torch.compute_mean_spot_from(
                     g_coef_image, g_isolated_yxz, config["spot_shape"], config["force_cpu"]
@@ -199,6 +202,8 @@ def run_omp(
                 del g_coef_image, g_isolated_yxz, g_n_isolated_count, g_mean_spot
             mean_spot = (mean_spots * len(genes_used) / n_isolated_count).mean(dim=0).float()
             log.debug(f"OMP mean spot computed with {n_isolated_count} isolated spots from genes {genes_used}")
+            if n_isolated_count == 0:
+                raise ValueError(f"OMP found no isolated spots")
             if n_isolated_count < 10:
                 log.warn(f"OMP mean spot computed with only {n_isolated_count} isolated spots")
             del shape_isolation_distance_z, n_isolated_count, genes_used, mean_spots
@@ -283,11 +288,12 @@ def run_omp(
         )
         for i, r in enumerate(nbp_basic.use_rounds):
             t_spots_colours[:, i] = spot_colors.base.get_spot_colours_new(
-                nbp_basic,
-                nbp_file,
-                nbp_extract,
-                nbp_register,
-                nbp_register_debug,
+                nbp_filter.images,
+                nbp_register.flow,
+                nbp_register.icp_correction,
+                nbp_register_debug.channel_correction,
+                nbp_basic.use_channels,
+                nbp_basic.dapi_channel,
                 t,
                 r,
                 yxz=t_local_yxzs,

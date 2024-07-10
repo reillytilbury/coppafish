@@ -4,7 +4,6 @@ import pickle
 from typing import Optional, Union
 
 import numpy as np
-import numpy.typing as npt
 from scipy import signal
 from scipy.ndimage import affine_transform
 import skimage
@@ -14,22 +13,6 @@ import zarr
 
 from .. import spot_colors
 from ..setup import NotebookPage
-from ..utils import tiles_io
-
-
-def offset_pixels_by(image: npt.NDArray[np.uint16], tile_pixel_value_shift: int) -> npt.NDArray[np.int32]:
-    """
-    Apply an integer, negative shift to every image pixel and convert datatype from uint16 to int32.
-
-    Args:
-        image (`ndarray[uint16]`): image to shift.
-        tile_pixel_value_shift (int): shift.
-
-    Returns:
-        `ndarray[int32]`: shifted image.
-    """
-    assert tile_pixel_value_shift <= 0, "Cannot shift by a positive number"
-    return image.astype(np.int32) + tile_pixel_value_shift
 
 
 def load_reg_data(nbp_file: NotebookPage, nbp_basic: NotebookPage):
@@ -61,7 +44,6 @@ def load_reg_data(nbp_file: NotebookPage, nbp_basic: NotebookPage):
         registration_data = {
             "round_registration": round_registration,
             "channel_registration": channel_registration,
-            "blur": False,
         }
     return registration_data
 
@@ -415,7 +397,7 @@ def merge_subvols(position, subvol):
 def generate_reg_images(
     nbp_basic: NotebookPage,
     nbp_file: NotebookPage,
-    nbp_extract: NotebookPage,
+    nbp_filter: NotebookPage,
     nbp_register: NotebookPage,
     nbp_register_debug: NotebookPage,
 ):
@@ -436,8 +418,6 @@ def generate_reg_images(
         list(nbp_basic.use_rounds),
         list(nbp_basic.use_channels),
     )
-    if nbp_basic.pre_seq_round is not None:
-        use_rounds += [nbp_basic.pre_seq_round]
     anchor_round, anchor_channel, dapi_channel = (
         nbp_basic.anchor_round,
         nbp_basic.anchor_channel,
@@ -452,19 +432,16 @@ def generate_reg_images(
         z_planes = np.arange(z_central_index - 5, z_central_index + 5)
 
     tile_centre = (int(yx_centre[0]), int(yx_centre[1]))
-    yxz = (
-        (tile_centre[0] - yx_radius, tile_centre[0] + yx_radius),
-        (tile_centre[1] - yx_radius, tile_centre[1] + yx_radius),
-        (int(z_planes[0]), int(z_planes[-1])),
-    )
+    yxz_min = (tile_centre[0] - yx_radius, tile_centre[1] - yx_radius, int(z_planes[0]))
+    yxz_max = (tile_centre[0] + yx_radius, tile_centre[1] + yx_radius, int(z_planes[-1]))
     yxz_coords = np.meshgrid(
-        np.arange(yxz[0][0], yxz[0][1]),
-        np.arange(yxz[1][0], yxz[1][1]),
-        np.arange(yxz[2][0], yxz[2][1]),
+        np.arange(yxz_min[0], yxz_max[0]),
+        np.arange(yxz_min[1], yxz_max[1]),
+        np.arange(yxz_min[2], yxz_max[2]),
         indexing="ij",
     )
     yxz_coords = np.array(yxz_coords).reshape((3, -1)).T
-    image_shape = tuple([yxz[i][1] - yxz[i][0] for i in range(3)])
+    image_shape = tuple([yxz_max[i] - yxz_min[i] for i in range(3)])
 
     anchor_images = zarr.open_array(
         os.path.join(nbp_file.output_dir, "anchor_reg_images.zarr"),
@@ -487,7 +464,9 @@ def generate_reg_images(
 
     anchor_round_active_channels = [dapi_channel, anchor_channel]
     for t, c in tqdm(product(use_tiles, anchor_round_active_channels), desc="Anchor Images", total=len(use_tiles) * 2):
-        im = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t, anchor_round, c, yxz=yxz)
+        im = nbp_filter.images[
+            t, anchor_round, c, yxz_min[0] : yxz_max[0], yxz_min[1] : yxz_max[1], yxz_min[2] : yxz_max[2]
+        ]
         im = fill_to_uint8(im)
         sub_index = 0 if c == dapi_channel else 1
         anchor_images[t, sub_index] = im
@@ -495,13 +474,16 @@ def generate_reg_images(
 
     # get the round images, apply optical flow, apply icp + optical flow, concatenate and save
     for t, r in tqdm(product(use_tiles, use_rounds), desc="Round Images", total=len(use_tiles) * len(use_rounds)):
-        im = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t, r, dapi_channel, yxz=yxz)
+        im = nbp_filter.images[
+            t, r, dapi_channel, yxz_min[0] : yxz_max[0], yxz_min[1] : yxz_max[1], yxz_min[2] : yxz_max[2]
+        ]
         im_flow = spot_colors.base.get_spot_colours_new(
-            nbp_basic,
-            nbp_file,
-            nbp_extract,
-            nbp_register,
-            nbp_register_debug,
+            nbp_filter.images,
+            nbp_register.flow,
+            nbp_register.icp_correction,
+            nbp_register_debug.channel_correction,
+            nbp_basic.use_channels,
+            nbp_basic.dapi_channel,
             t,
             r,
             dapi_channel,
@@ -509,11 +491,12 @@ def generate_reg_images(
             registration_type="flow",
         ).reshape((1,) + image_shape)
         im_flow_icp = spot_colors.base.get_spot_colours_new(
-            nbp_basic,
-            nbp_file,
-            nbp_extract,
-            nbp_register,
-            nbp_register_debug,
+            nbp_filter.images,
+            nbp_register.flow,
+            nbp_register.icp_correction,
+            nbp_register_debug.channel_correction,
+            nbp_basic.use_channels,
+            nbp_basic.dapi_channel,
             t,
             r,
             dapi_channel,
@@ -528,13 +511,14 @@ def generate_reg_images(
     # get the channel images, save, apply optical flow, save, apply icp, save
     r_mid = 3
     for t, c in tqdm(product(use_tiles, use_channels), desc="Channel Images", total=len(use_tiles) * len(use_channels)):
-        im = tiles_io.load_image(nbp_file, nbp_basic, nbp_extract.file_type, t, r_mid, c, yxz=yxz)
+        im = nbp_filter.images[t, r_mid, c, yxz_min[0] : yxz_max[0], yxz_min[1] : yxz_max[1], yxz_min[2] : yxz_max[2]]
         im_flow = spot_colors.base.get_spot_colours_new(
-            nbp_basic,
-            nbp_file,
-            nbp_extract,
-            nbp_register,
-            nbp_register_debug,
+            nbp_filter.images,
+            nbp_register.flow,
+            nbp_register.icp_correction,
+            nbp_register_debug.channel_correction,
+            nbp_basic.use_channels,
+            nbp_basic.dapi_channel,
             t,
             r_mid,
             c,
@@ -542,11 +526,12 @@ def generate_reg_images(
             registration_type="flow",
         ).reshape((1,) + image_shape)
         im_flow_icp = spot_colors.base.get_spot_colours_new(
-            nbp_basic,
-            nbp_file,
-            nbp_extract,
-            nbp_register,
-            nbp_register_debug,
+            nbp_filter.images,
+            nbp_register.flow,
+            nbp_register.icp_correction,
+            nbp_register_debug.channel_correction,
+            nbp_basic.use_channels,
+            nbp_basic.dapi_channel,
             t,
             r_mid,
             c,
@@ -561,8 +546,6 @@ def generate_reg_images(
 
 def load_transformed_image(
     nbp_basic_info: NotebookPage,
-    nbp_file: NotebookPage,
-    nbp_extract: NotebookPage,
     nbp_register: NotebookPage,
     nbp_register_debug: NotebookPage,
     t: int,
@@ -593,10 +576,8 @@ def load_transformed_image(
         im: np.ndarray, image
     """
     assert reg_type in ["none", "flow", "flow_icp"], "reg_type must be 'none', 'flow' or 'flow_icp'"
-    suffix = "_raw" if r == nbp_basic_info.pre_seq_round else ""
-    im = tiles_io.load_image(nbp_file, nbp_basic_info, nbp_extract.file_type, t, r, c, yxz=yxz, suffix=suffix).astype(
-        np.float32
-    )
+    raise NotImplementedError(f"This function is broken")
+    # im = tiles_io.load_image(nbp_file, nbp_basic_info, nbp_extract.file_type, t, r, c, yxz=yxz).astype(np.float32)
     # anchor round has no flow or affine correction so can return early
     if reg_type == "none" or r == nbp_basic_info.anchor_round:
         return im

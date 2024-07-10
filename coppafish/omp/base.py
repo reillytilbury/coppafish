@@ -79,7 +79,7 @@ def get_all_local_yxz(
     for t in nbp_basic.use_tiles:
         t_local_yxz: np.ndarray = nbp_omp.results[f"tile_{t}/local_yxz"][:]
         all_local_yxz = np.append(all_local_yxz, t_local_yxz, 0)
-        all_tiles = np.append(all_tiles, np.full(t_local_yxz.size, t, np.int16))
+        all_tiles = np.append(all_tiles, np.full(t_local_yxz.shape[0], t, np.int16))
     return all_local_yxz, all_tiles
 
 
@@ -100,7 +100,7 @@ def get_all_colours(
     assert type(nbp_basic) is NotebookPage
     assert type(nbp_omp) is NotebookPage
 
-    all_colours = np.zeros((0, 3), np.float16)
+    all_colours = np.zeros((0, len(nbp_basic.use_rounds), len(nbp_basic.use_channels)), np.float16)
     all_tiles = np.zeros(0, np.int16)
     for t in nbp_basic.use_tiles:
         t_colours: np.ndarray = nbp_omp.results[f"tile_{t}/colours"][:]

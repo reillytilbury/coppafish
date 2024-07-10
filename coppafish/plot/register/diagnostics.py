@@ -10,12 +10,12 @@ from scipy.spatial import KDTree
 import skimage
 from superqt import QRangeSlider
 from tqdm import tqdm
+import zarr
 
 from coppafish.find_spots import spot_yxz
 from coppafish.register import preprocessing
 from coppafish.setup import Notebook
 from coppafish.spot_colors import apply_transform
-from coppafish.utils.tiles_io import load_image
 
 
 class RegistrationViewer:
@@ -189,7 +189,7 @@ class RegistrationViewer:
 
     def add_optical_flow_buttons(self):
         # add buttons to select round to view (for optical flow overlay and optical flow vector field)
-        use_rounds = list(self.nb.basic_info.use_rounds)
+        use_rounds = self.nb.basic_info.use_rounds
         n_rounds_use = len(use_rounds)
         button_loc = generate_button_positions(n_buttons=n_rounds_use, n_cols=4)
         button_name = [f"r{r}" for r in use_rounds]
@@ -565,8 +565,8 @@ def view_optical_flow(nb: Notebook, t: int, r: int):
         r: round number
     """
     # Load the data
-    base = load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=7, c=0)
-    target = load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=0)
+    base = nb.filter.images[t, 7, 0]
+    target = nb.filter.images[t, r, 0]
     ny, nx, nz = base.shape
     coord_order = ["y", "x", "z"]
     coords = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing="ij"))
@@ -727,10 +727,7 @@ def view_icp_iters(nb: Notebook, t: int):
         frac_matches[0][i] = n_matches[0][i] / spot_no[r, anchor_channel]
     for i, c in enumerate(use_channels):
         # calculate the fraction of matches
-        if nb.basic_info.use_preseq:
-            total_spots = np.sum(spot_no[use_rounds[:-1], c])
-        else:
-            total_spots = np.sum(spot_no[use_rounds, c])
+        total_spots = np.sum(spot_no[use_rounds, c])
         frac_matches[1][i] = n_matches[1][i] / total_spots
     # create plots
     n_cols = max(n_rounds, n_channels)
@@ -775,7 +772,7 @@ def view_camera_correction(nb: Notebook):
         mid_z = fluorescent_beads.shape[0] // 2
         fluorescent_beads = fluorescent_beads[mid_z, :, :, :]
     # if fluorescent bead images are for all channels, just take one from each camera
-    cam_channels =[0, 9, 18, 23]
+    cam_channels = [0, 9, 18, 23]
     if len(fluorescent_beads) == 28:
         fluorescent_beads = fluorescent_beads[cam_channels]
 
@@ -793,7 +790,7 @@ def view_camera_correction(nb: Notebook):
 
     # get the spots from the circle detection
     bead_point_clouds = []
-    bead_radii = nb.get_config()['register']['bead_radii']
+    bead_radii = nb.get_config()["register"]["bead_radii"]
     for i in range(4):
         edges = skimage.feature.canny(fluorescent_beads[i], sigma=3, low_threshold=10, high_threshold=50)
         hough_res = skimage.transform.hough_circle(edges, bead_radii)
@@ -802,8 +799,10 @@ def view_camera_correction(nb: Notebook):
         )
         cy, cx = cy.astype(int), cx.astype(int)
         values = fluorescent_beads[i][cy, cx]
-        cy_rand, cx_rand = (np.random.randint(0, fluorescent_beads[i].shape[0] - 1, 100),
-                            np.random.randint(0, fluorescent_beads[i].shape[1] - 1, 100))
+        cy_rand, cx_rand = (
+            np.random.randint(0, fluorescent_beads[i].shape[0] - 1, 100),
+            np.random.randint(0, fluorescent_beads[i].shape[1] - 1, 100),
+        )
         noise = np.mean(fluorescent_beads[i][cy_rand, cx_rand])
         keep = values > noise
         cy, cx = cy[keep], cx[keep]
@@ -830,16 +829,16 @@ def view_camera_correction(nb: Notebook):
         # add unregistered points and images
         viewer.add_image(
             fluorescent_beads[c],
-            name=f'Camera {cam_channels[c]} image',
+            name=f"Camera {cam_channels[c]} image",
             colormap=colours[c],
             blending="additive",
             visible=False,
         )
         viewer.add_points(
             bead_point_clouds[c],
-            name=f'Camera {cam_channels[c]} points',
+            name=f"Camera {cam_channels[c]} points",
             face_color=colours[c],
-            symbol='o',
+            symbol="o",
             size=5,
             blending="additive",
             visible=False,
@@ -847,16 +846,16 @@ def view_camera_correction(nb: Notebook):
         # add registered points and images
         viewer.add_image(
             fluorescent_beads_transformed[c],
-            name=f'Camera {cam_channels[c]} transformed image',
+            name=f"Camera {cam_channels[c]} transformed image",
             colormap=colours[c],
             blending="additive",
             visible=True,
         )
         viewer.add_points(
             bead_point_clouds_transformed[c],
-            name=f'Camera {cam_channels[c]} transformed points',
+            name=f"Camera {cam_channels[c]} transformed points",
             face_color=colours[c],
-            symbol='x',
+            symbol="x",
             size=5,
             blending="additive",
             visible=True,
@@ -864,16 +863,16 @@ def view_camera_correction(nb: Notebook):
     # Add the anchor channel image and points
     viewer.add_image(
         fluorescent_beads[-1],
-        name=f'Camera {cam_channels[-1]} image',
+        name=f"Camera {cam_channels[-1]} image",
         colormap=colours[-1],
         blending="additive",
         visible=False,
     )
     viewer.add_points(
         bead_point_clouds[-1],
-        name=f'Camera {cam_channels[-1]} points',
-        face_color='white',
-        symbol='o',
+        name=f"Camera {cam_channels[-1]} points",
+        face_color="white",
+        symbol="o",
         size=5,
         blending="additive",
         visible=False,
@@ -905,8 +904,6 @@ def view_overlay(nb: Notebook, t: int = None, rc: list = None, use_z: np.ndarray
         r, c = rc_pair
         im_none[i] = preprocessing.load_transformed_image(
             nb.basic_info,
-            nb.file_names,
-            nb.extract,
             nb.register,
             nb.register_debug,
             t=t,
@@ -917,8 +914,6 @@ def view_overlay(nb: Notebook, t: int = None, rc: list = None, use_z: np.ndarray
         )
         im[i] = preprocessing.load_transformed_image(
             nb.basic_info,
-            nb.file_names,
-            nb.extract,
             nb.register,
             nb.register_debug,
             t=t,

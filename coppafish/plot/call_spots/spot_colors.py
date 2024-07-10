@@ -248,7 +248,7 @@ class view_codes(ColorPlotBase):
             gene_no = nb.omp.results[f'tile_{tile}'].gene_no[spot_no]
         elif method.lower() == "anchor":
             spot_score = nb.call_spots.dot_product_gene_score[spot_no]
-            self.spot_colour = nb.call_spots.colours[spot_no]
+            self.spot_colour = nb.ref_spots.colours[spot_no]
             gene_no = nb.call_spots.dot_product_gene_no[spot_no]
         else:
             spot_score = np.max(nb.call_spots.gene_probabilities[spot_no])
@@ -400,16 +400,17 @@ class view_spot(ColorPlotBase):
         spot_colours = np.zeros((n_use_rounds, n_use_channels, im_diameter[0] * im_diameter[1]))
 
         # get spot colours for each round and channel
-        for r in range(n_use_rounds):
-            spot_colours[r] = base.get_spot_colours_new(nbp_basic=nb.basic_info,
-                                                        nbp_file=nb.file_names,
-                                                        nbp_extract=nb.extract,
-                                                        nbp_register=nb.register,
-                                                        nbp_register_debug=nb.register_debug,
-                                                        tile=t,
-                                                        round=r,
-                                                        channels=nb.basic_info.use_channels,
-                                                        yxz=im_yxz)
+        for r in nb.basic_info.use_rounds:
+            spot_colours[r] = base.get_spot_colours_new(
+                nb.filter.images,
+                nb.register.flow,
+                nb.register.icp_correction,
+                nb.register_debug.channel_correction,
+                tile=t,
+                round=r,
+                channels=nb.basic_info.use_channels,
+                yxz=im_yxz
+            )
         # put round as the last axis to match colour_norm
         spot_colours = spot_colours.transpose(2, 1, 0)
         spot_colours = spot_colours.reshape(im_diameter[0] * im_diameter[1], n_use_channels * n_use_rounds)
