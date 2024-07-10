@@ -24,5 +24,5 @@ def test_score_coefficient_image() -> None:
     scores = scores_torch.score_coefficient_image(coefficient_image, spot, mean_spot)
 
     assert scores.shape == coefficient_image.shape
-    assert torch.isclose(scores[0, 1, 3, 2], 5 * 0.5 / mean_spot.sum())
+    assert torch.isclose(scores[0, 1, 3, 2], 5 * 0.5 / mean_spot[spot == 1].sum())
     assert torch.isclose(scores[0, 0, 0, 0], torch.asarray([0], dtype=torch.float32))
