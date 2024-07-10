@@ -6,14 +6,12 @@ from .. import find_spots as fs
 from ..find_spots import detect_torch
 from .. import log
 from ..setup import NotebookPage
-from ..utils import tiles_io, indexing
+from ..utils import indexing
 
 
 def find_spots(
     config: dict,
-    nbp_file: NotebookPage,
     nbp_basic: NotebookPage,
-    nbp_extract: NotebookPage,
     nbp_filter: NotebookPage,
     auto_thresh: np.ndarray,
 ) -> NotebookPage:
@@ -28,19 +26,14 @@ def find_spots(
         nbp_file (NotebookPage): `file_names` notebook page.
         nbp_basic (NotebookPage): `basic_info` notebook page.
         nbp_extract (NotebookPage): `extract` notebook page.
-        nbp_filter (NotebookPage): `filter` notebook page.
         auto_thresh (`[n_tiles x n_rounds x n_channels] ndarray[float]`): `auto_thresh[t, r, c]` is the threshold for
             the tile `t`, round `r`, channel `c` image such that all local maxima with pixel values greater than this
             are considered spots.
-        image_t (`(n_rounds x n_channels x nz x ny x nx) ndarray[uint16]`, optional): extracted and filtered image
-            for a single tile. If given, find_spots runs on the single tile and returns its NotebookPage. Default: not
-            given.
 
     Returns:
-        `NotebookPage[find_spots]` - Page containing point cloud of all tiles, rounds and channels.
+        `NotebookPage` - `find_spots` notebook page.
     """
     n_z = np.max([1, nbp_basic.is_3d * nbp_basic.nz])
-    use_tiles, use_rounds, use_channels = nbp_basic.use_tiles, nbp_basic.use_rounds, nbp_basic.use_channels
 
     # Phase 0: Initialisation
     nbp = NotebookPage("find_spots", {"find_spots": config})
@@ -75,12 +68,10 @@ def find_spots(
     # Define use_indices as a [n_tiles x n_rounds x n_channels] boolean array where use_indices[t, r, c] is True if
     # we want to use tile `t`, round `r`, channel `c` to find spots.
     use_indices = np.zeros(
-        (nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.use_anchor + nbp_basic.use_preseq, nbp_basic.n_channels),
-        dtype=bool,
+        (nbp_basic.n_tiles, nbp_basic.n_rounds + nbp_basic.use_anchor, nbp_basic.n_channels), dtype=bool
     )
     for t, r, c in indexing.create(
         nbp_basic,
-        include_preseq_round=True,
         include_anchor_round=True,
         include_anchor_channel=True,
         include_bad_trc=False,
@@ -99,34 +90,20 @@ def find_spots(
         for t, r, c in np.argwhere(uncompleted):
             pbar.set_postfix({"tile": t, "round": r, "channel": c})
             # Then need to shift the detect_spots and check_neighb_intensity thresh correspondingly.
-            image_trc = tiles_io.load_image(
-                nbp_file,
-                nbp_basic,
-                nbp_extract.file_type,
-                int(t),
-                int(r),
-                int(c),
-                apply_shift=False,
-                suffix="_raw" if r == nbp_basic.pre_seq_round else "",
-            )
+            image_trc = nbp_filter.images[t, r, c]
             local_yxz, spot_intensity = detect_torch.detect_spots(
                 torch.asarray(image_trc.astype(np.float32)),
-                auto_thresh[t, r, c] + nbp_basic.tile_pixel_value_shift,
+                auto_thresh[t, r, c],
                 config["radius_xy"],
                 config["radius_z"],
                 True,
             )
             local_yxz = local_yxz.numpy().astype(np.int16)
             spot_intensity = spot_intensity.numpy()
-            no_negative_neighbour = fs.check_neighbour_intensity(
-                image_trc, local_yxz, thresh=nbp_basic.tile_pixel_value_shift
-            )
-            local_yxz = local_yxz[no_negative_neighbour]
-            spot_intensity = spot_intensity[no_negative_neighbour]
             # If r is a reference round, we also get info about whether the spots are isolated
             if r == nbp_basic.anchor_round:
                 isolated_spots = fs.get_isolated(
-                    image_trc.astype(np.int32) - nbp_basic.tile_pixel_value_shift,
+                    image_trc.astype(np.int32),
                     local_yxz,
                     nbp.isolation_thresh[t],
                     config["isolation_radius_inner"],

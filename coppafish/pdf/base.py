@@ -72,11 +72,7 @@ class BuildPDF:
             self.use_channels_all += [nb.basic_info.anchor_channel]
         self.use_channels_all = list(set(self.use_channels_all))
         self.use_channels_all.sort()
-        self.use_rounds_all = (
-            list(nb.basic_info.use_rounds)
-            + nb.basic_info.use_anchor * [nb.basic_info.anchor_round]
-            + nb.basic_info.use_preseq * [nb.basic_info.pre_seq_round]
-        )
+        self.use_rounds_all = list(nb.basic_info.use_rounds) + nb.basic_info.use_anchor * [nb.basic_info.anchor_round]
         self.use_rounds_all.sort()
 
         if not os.path.isfile(os.path.join(output_dir, "_basic_info.pdf") and nb.has_page("basic_info")):
@@ -101,12 +97,12 @@ class BuildPDF:
                     text_extract_info = ""
                     text_extract_info += self.get_extract_text_info(nb.extract)
                     axes[0, 0].set_title(text_extract_info, fontdict=INFO_FONTDICT, y=0.5)
-                    extract_image_dtype = tiles_io.IMAGE_SAVE_DTYPE
+                    extract_image_dtype = np.uint16
                     self.empty_plot_ticks(axes[0, 0])
                     pdf.savefig(fig)
                     plt.close(fig)
                     del fig, axes
-                    file_path = os.path.join(nb.file_names.tile_unfiltered_dir, "hist_counts_values.npz")
+                    file_path = os.path.join(nb.file_names.extract_dir, "hist_counts_values.npz")
                     extract_pixel_unique_values, extract_pixel_unique_counts = None, None
                     if os.path.isfile(file_path):
                         results = np.load(file_path)
@@ -146,31 +142,6 @@ class BuildPDF:
                     self.empty_plot_ticks(axes[0, 0])
                     pdf.savefig(fig)
                     plt.close(fig)
-
-                    filter_image_dtype = tiles_io.IMAGE_SAVE_DTYPE
-                    file_path = os.path.join(nb.file_names.tile_dir, "hist_counts_values.npz")
-                    filter_pixel_unique_counts, filter_pixel_unique_values = None, None
-                    if os.path.isfile(file_path):
-                        results = np.load(file_path)
-                        filter_pixel_unique_counts, filter_pixel_unique_values = results["arr_0"], results["arr_1"]
-                    if filter_pixel_unique_values is not None:
-                        pixel_min, pixel_max = np.iinfo(filter_image_dtype).min, np.iinfo(filter_image_dtype).max
-                        # Histograms of pixel value histograms
-                        figs = self.create_pixel_value_hists(
-                            nb,
-                            "Filter",
-                            filter_pixel_unique_values,
-                            filter_pixel_unique_counts,
-                            pixel_min,
-                            pixel_max,
-                            bin_size=2**10,
-                            auto_thresh_values=nb.filter.auto_thresh,
-                        )
-                        for fig in figs:
-                            pdf.savefig(fig)
-                            plt.close(fig)
-                        del figs
-                    del filter_pixel_unique_values, filter_pixel_unique_counts
         pbar.update()
 
         if not os.path.isfile(os.path.join(output_dir, "_find_spots.pdf")) and nb.has_page("find_spots"):
@@ -217,8 +188,6 @@ class BuildPDF:
                                 if nb.basic_info.anchor_channel is not None and c == nb.basic_info.anchor_channel:
                                     ticks_channels_labels[channels_to_index[c]] = f"anchor"
                                 ticks_rounds_labels[r] = f"{r if r != nb.basic_info.anchor_round else 'anchor'}"
-                                if r == nb.basic_info.pre_seq_round:
-                                    ticks_rounds_labels[r] = f"preseq"
                         im = ax.imshow(X, cmap="viridis", norm="log", vmin=minimum_spot_count, vmax=maximum_spot_count)
                         ax.set_xlabel("Channels")
                         ax.set_xticks(ticks_channels)
@@ -258,7 +227,6 @@ class BuildPDF:
                     pdf.savefig(fig)
                 # Create a page for every gene
                 gene_probabilities = nb.call_spots.gene_probabilities
-                # bg colour was subtracted if use_preseq
                 scores = nb.ref_spots.colours * nb.call_spots.colour_norm_factor[nb.ref_spots.tile]
                 n_genes = len(nb.call_spots.gene_names)
                 gene_names = nb.call_spots.gene_names
@@ -453,8 +421,6 @@ class BuildPDF:
             output += (
                 f"anchor round: {basic_info_page.anchor_round}\nanchor channel: {basic_info_page.anchor_channel}\n"
             )
-        if basic_info_page.use_preseq:
-            output += f"presequence round: {basic_info_page.pre_seq_round}\n"
         output += f"channels used: {basic_info_page.use_channels}\n"
         if basic_info_page.dapi_channel is not None:
             output += f"dapi channel: {basic_info_page.dapi_channel}\n"
@@ -483,10 +449,9 @@ class BuildPDF:
             output += time_taken
         if filter_debug_page.r_dapi is not None:
             # Filtering DAPI is true
-            output += f"dapi filtering with r_dapi: {filter_debug_page.r_dapi}\n"
+            output += f"dapi filtering with r_dapi: {filter_debug_page.r_dapi}"
         else:
-            output += f"no dapi filtering\n"
-        output += f"computed image scale: {filter_page.image_scale}"
+            output += f"no dapi filtering"
         return output
 
     def create_pixel_value_hists(
@@ -515,8 +480,6 @@ class BuildPDF:
         use_rounds_all = list(nb.basic_info.use_rounds)
         if nb.basic_info.use_anchor:
             use_rounds_all += [nb.basic_info.anchor_round]
-        if nb.basic_info.use_preseq:
-            use_rounds_all += [nb.basic_info.pre_seq_round]
         use_rounds_all = list(set(use_rounds_all))
         use_rounds_all.sort()
         final_round = use_rounds_all[-1]
@@ -597,8 +560,6 @@ class BuildPDF:
                         round_label = str(r)
                         if nb.basic_info.use_anchor and r == nb.basic_info.anchor_round:
                             round_label = "anchor"
-                        elif nb.basic_info.use_preseq and r == nb.basic_info.pre_seq_round:
-                            round_label = "preseq"
                         round_label += "\n" + r"$\log_2$ count" if log_count else "count"
                         ax.set_ylabel(
                             f"round {round_label}",

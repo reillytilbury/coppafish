@@ -233,12 +233,7 @@ def get_jobs_metadata(files: list, input_dir: str, config: dict) -> dict:
     n_files = len(os.listdir(input_dir))
     n_lasers = len(set(laser))
 
-    if config["file_names"]["raw_extension"] != "jobs":
-        preseq_exists = os.path.isfile(os.path.join(input_dir, config["file_names"]["pre_seq"]))
-    elif config["file_names"]["raw_extension"] == "jobs":
-        preseq_exists = bool(config["file_names"]["pre_seq"])
     metadata["n_rounds"] = n_files // (n_lasers * metadata["n_tiles"])
-    metadata["n_rounds"] -= preseq_exists
     # TODO find a better solution to fix the number of rounds
     metadata["n_rounds"] -= 1
     metadata["nz"] = nz

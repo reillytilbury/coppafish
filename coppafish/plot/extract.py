@@ -35,10 +35,10 @@ def view_extracted_images(
 
     for t, r, c in itertools.product(tiles, rounds, channels):
         file_path = nb.file_names.tile_unfiltered[t][r][c]
-        if not tiles_io.image_exists(file_path, nb.extract.file_type):
+        if not tiles_io.image_exists(file_path):
             log.warn(f"Image at {file_path} not found, skipping")
             continue
-        image_trc = tiles_io._load_image(file_path, nb.extract.file_type)
+        image_trc = tiles_io._load_image(file_path)
         viewer.add_image(image_trc, name=f"{t=}, {r=}, {c=}")
 
     napari.run()

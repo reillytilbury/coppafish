@@ -19,13 +19,9 @@ from . import legend
 from .. import call_spots as call_spots_plot
 from ...omp import base as omp_base
 from ...setup import Notebook
-from ..call_spots import (view_bled_codes, view_bleed_matrix, view_codes, view_spot, BGNormViewer, GEViewer,
-                          ViewAllGeneHistograms, HistogramScore)
-from ..omp import (
-    ViewOMPImage,
-    ViewOMPPixelCoefficients,
-    ViewOMPPixelColours,
-)
+from ..call_spots import view_bled_codes, view_bleed_matrix, view_codes, view_spot, BGNormViewer, GEViewer
+from ..call_spots import ViewAllGeneHistograms, HistogramScore
+from ..omp import ViewOMPImage, ViewOMPPixelColours
 from .hotkeys import KeyBinds, ViewHotkeys
 
 try:
@@ -296,7 +292,7 @@ class Viewer:
         """
         score_range = self.sliders["score_range"].value()
         intensity_thresh = self.sliders["intensity_thresh"].value()
-        for i, m in enumerate(self.method["names"]):
+        for _, m in enumerate(self.method["names"]):
             # 1. score range
             good_score = (self.spots[m].score >= score_range[0]) & (self.spots[m].score <= score_range[1])
             # 2. intensity threshold
@@ -445,7 +441,7 @@ class Viewer:
         active_gene_legend_indices = np.where(np.isin(self.legend["gene_names"], active_gene_names))[0]
 
         # Update the legend formatting to reflect the changes
-        for i, gene_name in enumerate(self.legend["gene_names"]):
+        for i, _ in enumerate(self.legend["gene_names"]):
             alpha_value = 1 if np.isin(i, active_gene_legend_indices) else 0.5
             self.legend["ax"].collections[i].set_alpha(alpha_value)
             self.legend["ax"].texts[i].set_alpha(alpha_value)
@@ -560,7 +556,7 @@ class Viewer:
         # initialise relevant information for anchor and prob methods
         tile = [nb.ref_spots.tile, nb.ref_spots.tile]
         local_loc = [nb.ref_spots.local_yxz, nb.ref_spots.local_yxz]
-        global_loc = [(local_loc[i] + tile_origin[tile[i]])[:, [2, 0, 1]] for i in range(2)] # convert to zyx
+        global_loc = [(local_loc[i] + tile_origin[tile[i]])[:, [2, 0, 1]] for i in range(2)]  # convert to zyx
         # apply downsample factor
         global_loc = [loc // downsample_factor for loc in global_loc]
         colours = [nb.__getattribute__(self.method["pages"][i]).colours for i in range(2)]
@@ -572,19 +568,24 @@ class Viewer:
 
         # add omp results to the lists
         if nb.has_page("omp"):
-            results = [nb.omp.results[f'tile_{t}'] for t in nb.basic_info.use_tiles]
-            tile_omp = np.concatenate([use_tiles[i] * np.ones(len(r.gene_no), dtype=int) for i, r in enumerate(results)])
-            colours_omp = np.concatenate([r.colours * colour_norm_factor[use_tiles[i]] for i, r in enumerate(results)])
-            indices_omp = np.concatenate([np.arange(len(r.gene_no)) for r in results])
-            local_loc_omp = np.concatenate([r.local_yxz for r in results])
-            score_omp = np.concatenate([r.scores for r in results])
-            gene_no_omp = np.concatenate([r.gene_no for r in results])
+            local_loc_omp, tile_omp = omp_base.get_all_local_yxz(nb.basic_info, nb.omp)
+            colours_omp = omp_base.get_all_colours(nb.basic_info, nb.omp)[0]
+            gene_no_omp = omp_base.get_all_gene_no(nb.basic_info, nb.omp)[0]
+            colours_omp = omp_base.get_all_colours(nb.basic_info, nb.omp)[0]
+            score_omp = omp_base.get_all_scores(nb.basic_info, nb.omp)[0]
             # TODO: intensity is not currently saved in the omp results. This will need to be added. Until then we will
             #  set intensity = 1
-            intensity_omp = np.concatenate([np.ones(len(r.gene_no)) for r in results])
+            intensity_omp = np.ones_like(score_omp)
+            indices_omp = np.arange(score_omp.size)
+
+            # indices_omp = np.concatenate([np.arange(len(r.gene_no)) for r in results])
+            # local_loc_omp = np.concatenate([r.local_yxz for r in results])
+            # intensity_omp = np.concatenate([np.ones(len(r.gene_no)) for r in results])
+
             # convert local_loc_omp to global_loc_omp
             global_loc_omp = local_loc_omp + tile_origin[tile_omp]
             global_loc_omp = global_loc_omp[:, [2, 0, 1]] // downsample_factor
+
             # append omp results to the lists
             tile.append(tile_omp)
             local_loc.append(local_loc_omp)
@@ -727,7 +728,7 @@ class Viewer:
                 blending="additive",
                 colormap=self.background_images["colours"][i],
                 name=self.background_images["names"][i],
-                contrast_limits=[np.percentile(b, 50), np.percentile(b, 100)]
+                contrast_limits=[np.percentile(b, 50), np.percentile(b, 100)],
             )
             self.viewer.layers[i].contrast_limits_range = [b.min(), b.max()]
 
@@ -838,14 +839,6 @@ class Viewer:
             spot_index = self.get_selected_spot_index()
             if spot_index is not None:
                 self.open_plot = ViewOMPImage(self.nb, spot_index, self.method["names"][self.method["active"]])
-
-        @self.viewer.bind_key(KeyBinds.view_omp_pixel_coefficients)
-        def call_to_view_omp_weights(viewer):
-            spot_index = self.get_selected_spot_index()
-            if spot_index is not None:
-                self.open_plot = ViewOMPPixelCoefficients(
-                    self.nb, spot_index, self.method["names"][self.method["active"]]
-                )
 
         @self.viewer.bind_key(KeyBinds.view_omp_pixel_colours)
         def call_to_view_omp_colours(viewer):

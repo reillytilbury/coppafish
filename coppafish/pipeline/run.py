@@ -142,7 +142,7 @@ def run_filter(nb: Notebook) -> None:
     """
     if not nb.has_page("filter"):
         config = setup.config.get_config(nb.config_path)
-        nbp, nbp_debug = filter_run.run_filter(config["filter"], nb.file_names, nb.basic_info, nb.extract)
+        nbp, nbp_debug = filter_run.run_filter(config["filter"], nb.file_names, nb.basic_info)
         nb += nbp
         nb += nbp_debug
     else:
@@ -167,9 +167,7 @@ def run_find_spots(nb: Notebook) -> Notebook:
         config = setup.config.get_config(nb.config_path)
         nbp = find_spots.find_spots(
             config["find_spots"],
-            nb.file_names,
             nb.basic_info,
-            nb.extract,
             nb.filter,
             nb.filter.auto_thresh,
         )
@@ -194,7 +192,7 @@ def run_stitch(nb: Notebook) -> None:
     """
     config = setup.config.get_config(nb.config_path)
     if not nb.has_page("stitch"):
-        nbp = stitch.stitch(config["stitch"], nb.basic_info, nb.file_names, nb.extract)
+        nbp = stitch.stitch(config["stitch"], nb.basic_info, nb.file_names, nb.filter)
         nb += nbp
     else:
         log.warn(utils.warnings.NotebookPageWarning("stitch"))
@@ -219,11 +217,9 @@ def run_register(nb: Notebook) -> None:
         nbp, nbp_debug = register.register(
             nb.basic_info,
             nb.file_names,
-            nb.extract,
             nb.filter,
             nb.find_spots,
             config["register"],
-            pre_seq_blur_radius=None,
         )
         # register.preprocessing.generate_reg_images(nb, nbp, nbp_debug)
         nb += nbp
@@ -248,11 +244,11 @@ def run_reference_spots(nb: Notebook) -> None:
     """
     if not nb.has_page("ref_spots"):
         nbp_ref_spots = get_reference_spots.get_reference_spots(
-            nbp_file=nb.file_names,
             nbp_basic=nb.basic_info,
+            nbp_filter=nb.filter,
             nbp_find_spots=nb.find_spots,
-            nbp_extract=nb.extract,
             nbp_register=nb.register,
+            nbp_register_debug=nb.register_debug,
             nbp_stitch=nb.stitch,
         )
         nb += nbp_ref_spots

@@ -49,8 +49,9 @@ def call_reference_spots(
 
     # assert shape constraints
     target_values, d_max = config["target_values"], config["d_max"]
-    assert len(config["target_values"]) == len(config["d_max"]) == len(nbp_basic.use_channels), (
-        "The target values, d_max and use_channels should have the same length.")
+    assert (
+        len(config["target_values"]) == len(config["d_max"]) == len(nbp_basic.use_channels)
+    ), "The target values, d_max and use_channels should have the same length."
 
     # load in frequently used variables
     spot_colours = nbp_ref_spots.colours.astype(float)
@@ -60,11 +61,7 @@ def call_reference_spots(
     gene_codes = np.array([[int(i) for i in gene_codes[j]] for j in range(len(gene_codes))])
     n_tiles, n_rounds, n_channels_use = nbp_basic.n_tiles, nbp_basic.n_rounds, len(nbp_basic.use_channels)
     n_dyes, n_spots, n_genes = len(nbp_basic.dye_names), len(spot_colours), len(gene_names)
-    use_tiles, use_rounds, use_channels = (
-        list(nbp_basic.use_tiles),
-        list(nbp_basic.use_rounds),
-        list(nbp_basic.use_channels),
-    )
+    use_tiles, use_channels = (nbp_basic.use_tiles, nbp_basic.use_channels)
 
     if nbp_file.initial_bleed_matrix is not None:
         raw_bleed_matrix = np.load(nbp_file.initial_bleed_matrix)
@@ -151,7 +148,7 @@ def call_reference_spots(
     # 7. update the normalised spots and the bleed matrix, then do a second round of gene assignments with the free
     # bled codes
     spot_colours = spot_colours * tile_scale[spot_tile, :, :]  # update the spot colours
-    gene_prob = gene_prob_score(spot_colours=spot_colours, bled_codes=bled_codes, kappa=config["kappa"]) # update probs
+    gene_prob = gene_prob_score(spot_colours=spot_colours, bled_codes=bled_codes, kappa=config["kappa"])  # update probs
     prob_mode, prob_score = np.argmax(gene_prob, axis=1), np.max(gene_prob, axis=1)
     gene_dot_products = dot_product_score(
         spot_colours=spot_colours.reshape((n_spots, n_rounds * n_channels_use)),

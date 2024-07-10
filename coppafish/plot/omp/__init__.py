@@ -1,1 +1,1 @@
-from .coefs import ViewOMPImage, ViewOMPPixelCoefficients, ViewOMPPixelColours
+from .coefs import ViewOMPImage, ViewOMPPixelColours

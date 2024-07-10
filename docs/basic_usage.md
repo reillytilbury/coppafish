@@ -35,17 +35,12 @@ for r in range(n_seq_rounds):
 save_path = os.path.join(raw_path, "anchor")
 image_dask = dask.array.from_array(anchor_image, chunks=dask_chunks)
 dask.array.to_npy_stack(save_path, image_dask)
-
-# Presequence round (optional)
-save_path = os.path.join(raw_path, "presequence")
-image_dask = dask.array.from_array(preseq_image, chunks=dask_chunks)
-dask.array.to_npy_stack(save_path, image_dask)
 ```
 
 where `n_...` variables represent counts (integers), `n_total_channels` can include other channels other than the 
 sequencing channel (e.g. a DAPI channel and anchor channel). `seq_image_tiles` is a numpy array of shape 
-`(n_seq_rounds, n_tiles, n_total_channels, n_y, n_x, n_z)`, while `anchor_image` and `preseq_image` are numpy arrays of 
-shape `(n_tiles, n_total_channels, n_y, n_x, n_z)`. Note that `n_y` must equal `n_x`.
+`(n_seq_rounds, n_tiles, n_total_channels, n_y, n_x, n_z)`, while `anchor_image` is a numpy array of shape 
+`(n_tiles, n_total_channels, n_y, n_x, n_z)`. Note that `n_y` must equal `n_x`.
 
 
 ### Metadata
@@ -104,7 +99,6 @@ output_dir = path/to/output/directory
 tile_dir = path/to/tile/output
 round = 0, 1, 2, 3, 4, 5, 6 ; Go up to the number of sequencing rounds used
 anchor = anchor
-pre_seq = presequence
 raw_extension = .npy
 raw_metadata = path/to/metadata.json
 
