@@ -924,6 +924,8 @@ class NotebookPage:
         types_as_str = self._get_variables()[name][0].split(self._datatype_separator)
         file_suffix = self._type_str_to_suffix(types_as_str[0])
         file_path = self._get_variable_path(page_directory, name, file_suffix)
+        if not os.path.exists(file_path):
+            raise SystemError(f"Failed to find variable path: {file_path}")
 
         if file_suffix == ".json":
             with open(file_path, "r") as file:
