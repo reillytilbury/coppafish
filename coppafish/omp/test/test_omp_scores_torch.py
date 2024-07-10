@@ -8,7 +8,7 @@ def test_score_coefficient_image() -> None:
     spot_shape = 1, 3, 5
 
     coefficient_image = torch.zeros((1, im_y, im_x, im_z), dtype=torch.float32)
-    coefficient_image[0, 1, 3, 2] = 5
+    coefficient_image[0, 1, 3, 2] = 0.8
     points = torch.zeros((2, 3), dtype=int)
     points[0, 0] = 1
     points[0, 1] = 3
@@ -24,5 +24,5 @@ def test_score_coefficient_image() -> None:
     scores = scores_torch.score_coefficient_image(coefficient_image, spot, mean_spot)
 
     assert scores.shape == coefficient_image.shape
-    assert torch.isclose(scores[0, 1, 3, 2], 5 * 0.5 / mean_spot[spot == 1].sum())
+    assert torch.isclose(scores[0, 1, 3, 2], 0.8 * 0.5 / mean_spot[spot == 1].sum())
     assert torch.isclose(scores[0, 0, 0, 0], torch.asarray([0], dtype=torch.float32))
