@@ -156,7 +156,7 @@ def run_omp(
                 force_cpu=config["force_cpu"],
             )
             colour_rms = subset_colours.square().sum(dim=1).sqrt()
-            subset_coefficients = subset_coefficients / (colour_rms + config["high_coef_bias"])
+            subset_coefficients = subset_coefficients / (colour_rms + config["high_coef_bias"])[:, np.newaxis]
             del subset_colours, bg_coefficients, bg_codes, bled_codes
             subset_coefficients = subset_coefficients.numpy()
             tile_computed_on[index_min:index_max] += 1
