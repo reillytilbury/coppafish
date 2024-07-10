@@ -126,6 +126,11 @@ class ViewOMPImage:
             do_not_compute_on=None,
             force_cpu=config["force_cpu"],
         )
+        self.coefficient_image_non_functioned = coefficient_image.T.reshape(
+            ((len(nb.call_spots.gene_names),) + spot_shape_yxz)
+        ).numpy()
+        colour_rms = image_colours.square().sum(dim=1).sqrt()
+        coefficient_image = coefficient_image / (colour_rms + config["high_coef_bias"])
         coefficient_image = torch.asarray(coefficient_image).T.reshape(
             (len(nb.call_spots.gene_names),) + spot_shape_yxz
         )
@@ -134,10 +139,7 @@ class ViewOMPImage:
         for g in range(coefficient_image.shape[0]):
             self.scores.append(
                 scores_torch.score_coefficient_image(
-                    coefficient_image[[g]],
-                    torch.asarray(nb.omp.spot),
-                    torch.asarray(nb.omp.mean_spot),
-                    config["high_coef_bias"],
+                    coefficient_image[[g]], torch.asarray(nb.omp.spot), torch.asarray(nb.omp.mean_spot)
                 )[0][central_yxz].item()
             )
         self.scores = np.array(self.scores, np.float32)
@@ -215,17 +217,13 @@ class ViewOMPImage:
             title = "OMP Iteration Count"
         else:
             image_data = self.coefficient_image[self.selected_gene]
+            if not self.function_coefficients:
+                image_data = self.coefficient_image_non_functioned[self.selected_gene]
             title = "OMP Coefficients\n"
             title += f"Gene {self.selected_gene} {self.gene_names[self.selected_gene]}\n"
             title += f" Score: {str(self.scores[self.selected_gene])[:4]}"
-            if self.function_coefficients:
-                norm = mpl.colors.Normalize(vmin=0, vmax=1)
-                image_data = coefs_torch.non_linear_function_coefficients(
-                    torch.asarray(image_data), self.high_coef_bias
-                ).numpy()
-            else:
-                abs_max = np.abs(self.coefficient_image).max()
-                norm = mpl.colors.Normalize(vmin=min(0, self.coefficient_image.min()), vmax=abs_max)
+            abs_max = np.abs(image_data).max()
+            norm = mpl.colors.Normalize(vmin=-abs_max, vmax=abs_max)
 
         for ax in self.axes[0]:
             ax.clear()

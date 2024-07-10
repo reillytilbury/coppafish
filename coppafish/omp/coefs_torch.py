@@ -9,30 +9,6 @@ from ..call_spots import dot_product_pytorch
 NO_GENE_SELECTION = -32768
 
 
-def non_linear_function_coefficients(coefficients: torch.Tensor, a: float) -> torch.Tensor:
-    """
-    Non-linear function element-wise coefficients using the following function:
-
-    x / (x + a) for x > 0.
-    0 for x <= 0.
-
-    Args:
-        - coefficients (`tensor`): OMP coefficient image. Can be any shape.
-        - a (float): a constant.
-
-    Returns:
-        (`(im_y x im_x x im_z) tensor`) function_coefficients: functioned coefficients.
-    """
-    assert type(coefficients) is torch.Tensor
-    assert type(a) is float
-
-    result = coefficients.detach().clone()
-    positives = coefficients > 0
-    result[~positives] = 0
-    result[positives] /= result[positives] + a
-    return result
-
-
 def compute_omp_coefficients(
     pixel_colours: torch.Tensor,
     bled_codes: torch.Tensor,
