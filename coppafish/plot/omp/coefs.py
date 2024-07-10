@@ -1,5 +1,4 @@
-import os
-from typing import Tuple
+from typing import Tuple, Union
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -31,11 +30,11 @@ class ViewOMPImage:
     def __init__(
         self,
         nb: Notebook,
-        spot_no: int,
+        spot_no: Union[int, None],
         method: str,
         im_size: int = 8,
         z_planes: Tuple[int] = (-2, -1, 0, 1, 2),
-        init_select_gene: int = None,
+        init_select_gene: Union[int, None] = None,
     ) -> None:
         """
         Display omp coefficients of all genes around the local neighbourhood of a spot.
@@ -56,9 +55,6 @@ class ViewOMPImage:
         assert type(im_size) is int
         assert im_size >= 0
         assert type(z_planes) is tuple
-        assert len(z_planes) > 2
-        tile_dir = nb.file_names.tile_dir
-        assert os.path.isdir(tile_dir), f"Viewing coefficients requires access to images expected at {tile_dir}"
         assert init_select_gene is None or type(init_select_gene) is int
 
         plt.style.use("dark_background")
@@ -66,7 +62,7 @@ class ViewOMPImage:
         local_yxz, tile = get_spot_position_and_tile(nb, spot_no, method)
         assert local_yxz.shape == (3,)
 
-        config = nb.init_config["omp"]
+        config = nb.omp.associated_configs["omp"]
 
         coord_min = (local_yxz - im_size).tolist()
         coord_min[2] = local_yxz[2].item() + min(z_planes)
@@ -85,13 +81,14 @@ class ViewOMPImage:
                 nb.register.flow,
                 nb.register.icp_correction,
                 nb.register_debug.channel_correction,
-                nb.basic.use_channels,
-                nb.basic.dapi_channel,
+                nb.basic_info.use_channels,
+                nb.basic_info.dapi_channel,
                 int(tile),
                 r,
                 yxz=yxz,
                 registration_type="flow_and_icp",
             ).T.reshape((spot_shape_yxz + (n_channels_use,)))
+        assert not np.allclose(image_colours, 0)
         image_colours = torch.asarray(image_colours, dtype=torch.float32)
         colour_norm_factor = np.array(nb.call_spots.colour_norm_factor, dtype=np.float32)
         colour_norm_factor = torch.asarray(colour_norm_factor).float()
@@ -113,6 +110,7 @@ class ViewOMPImage:
         bg_codes = bg_codes.float()
         bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
         image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
+        assert not torch.allclose(image_colours, torch.asarray([0]).float())
 
         coefficient_image = coefs_torch.compute_omp_coefficients(
             image_colours,
@@ -287,7 +285,7 @@ class ViewOMPPixelColours:
         assert type(method) is str
         assert method in ("omp", "prob", "anchor")
 
-        config = nb.init_config["omp"]
+        config = nb.omp.associated_configs["omp"]
         self.local_yxz, tile = get_spot_position_and_tile(nb, spot_no, method)
 
         n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
@@ -298,14 +296,15 @@ class ViewOMPPixelColours:
                 nb.register.flow,
                 nb.register.icp_correction,
                 nb.register_debug.channel_correction,
-                nb.basic.use_channels,
-                nb.basic.dapi_channel,
+                nb.basic_info.use_channels,
+                nb.basic_info.dapi_channel,
                 int(tile),
                 r,
                 yxz=self.local_yxz[np.newaxis],
                 registration_type="flow_and_icp",
             ).T[np.newaxis]
         image_colours = torch.asarray(image_colours, dtype=torch.float32)
+        assert not torch.allclose(image_colours, 0)
         colour_norm_factor = np.array(nb.call_spots.colour_norm_factor, dtype=np.float32)
         colour_norm_factor = torch.asarray(colour_norm_factor).float()
         bled_codes = nb.call_spots.bled_codes

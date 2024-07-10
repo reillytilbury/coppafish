@@ -568,21 +568,24 @@ class Viewer:
 
         # add omp results to the lists
         if nb.has_page("omp"):
-            results = [nb.omp.results[f"tile_{t}"] for t in nb.basic_info.use_tiles]
-            tile_omp = np.concatenate(
-                [use_tiles[i] * np.ones(len(r.gene_no), dtype=int) for i, r in enumerate(results)]
-            )
-            colours_omp = np.concatenate([r.colours * colour_norm_factor[use_tiles[i]] for i, r in enumerate(results)])
-            indices_omp = np.concatenate([np.arange(len(r.gene_no)) for r in results])
-            local_loc_omp = np.concatenate([r.local_yxz for r in results])
-            score_omp = np.concatenate([r.scores for r in results])
-            gene_no_omp = np.concatenate([r.gene_no for r in results])
+            local_loc_omp, tile_omp = omp_base.get_all_local_yxz(nb.basic_info, nb.omp)
+            colours_omp = omp_base.get_all_colours(nb.basic_info, nb.omp)[0]
+            gene_no_omp = omp_base.get_all_gene_no(nb.basic_info, nb.omp)[0]
+            colours_omp = omp_base.get_all_colours(nb.basic_info, nb.omp)[0]
+            score_omp = omp_base.get_all_scores(nb.basic_info, nb.omp)[0]
             # TODO: intensity is not currently saved in the omp results. This will need to be added. Until then we will
             #  set intensity = 1
-            intensity_omp = np.concatenate([np.ones(len(r.gene_no)) for r in results])
+            intensity_omp = np.ones_like(score_omp)
+            indices_omp = np.arange(score_omp.size)
+
+            # indices_omp = np.concatenate([np.arange(len(r.gene_no)) for r in results])
+            # local_loc_omp = np.concatenate([r.local_yxz for r in results])
+            # intensity_omp = np.concatenate([np.ones(len(r.gene_no)) for r in results])
+
             # convert local_loc_omp to global_loc_omp
             global_loc_omp = local_loc_omp + tile_origin[tile_omp]
             global_loc_omp = global_loc_omp[:, [2, 0, 1]] // downsample_factor
+
             # append omp results to the lists
             tile.append(tile_omp)
             local_loc.append(local_loc_omp)
