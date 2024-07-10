@@ -803,7 +803,8 @@ class Viewer:
 
         @self.viewer.bind_key(KeyBinds.view_gene_efficiency)
         def call_to_view_gene_efficiency(viewer):
-            self.open_plot = GEViewer(self.nb)
+            self.open_plot = GEViewer(self.nb, mode=self.method["names"][self.method["active"]],
+                                      score_threshold=self.sliders["score_range"].value()[0])
 
         @self.viewer.bind_key(KeyBinds.view_histogram_scores)
         def call_to_view_omp_score(viewer):
