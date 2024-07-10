@@ -155,6 +155,8 @@ def run_omp(
                 beta=config["beta"],
                 force_cpu=config["force_cpu"],
             )
+            colour_rms = subset_colours.square().sum(dim=1).sqrt()
+            subset_coefficients = subset_coefficients / (colour_rms + config["high_coef_bias"])[:, np.newaxis]
             del subset_colours, bg_coefficients, bg_codes, bled_codes
             subset_coefficients = subset_coefficients.numpy()
             tile_computed_on[index_min:index_max] += 1
@@ -235,9 +237,7 @@ def run_omp(
             # STEP 3: Score every gene's coefficient image.
             g_coef_image = torch.asarray(coefficients[:, [g]].toarray()).float().reshape(tile_shape)
             g_coef_image = g_coef_image[np.newaxis]
-            g_scores = scores_torch.score_coefficient_image(
-                g_coef_image, spot, mean_spot, config["high_coef_bias"], config["force_cpu"]
-            )
+            g_scores = scores_torch.score_coefficient_image(g_coef_image, spot, mean_spot, config["force_cpu"])
             g_scores = g_scores[0].to(torch.float16)
             del g_coef_image
 
