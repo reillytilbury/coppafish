@@ -98,7 +98,7 @@ def get_reference_spots(
             colours.append(r_colours)
         # Colours becomes shape (n_spots, n_rounds_use, n_channels_use).
         colours = np.array(colours, dtype=np.float32).transpose((2, 0, 1))
-        valid = ~(np.isclose(colours, 0).all(1).all(1))
+        valid = ~(np.isnan(colours).any(1).any(1))
         log.debug(f"Valid ref pixel colours: {valid.sum()} out of {valid.size} for tile {t}")
         spot_colours = np.append(spot_colours, colours[valid], axis=0)
         local_yxz = np.append(local_yxz, nd_local_yxz[in_tile][valid], axis=0)

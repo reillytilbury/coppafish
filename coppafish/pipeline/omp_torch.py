@@ -110,6 +110,7 @@ def run_omp(
                 )
                 batch_spot_colours = batch_spot_colours.T
                 batch_spot_colours = torch.asarray(batch_spot_colours)
+                batch_spot_colours[torch.isnan(batch_spot_colours)] = 0.0
                 colour_image[index_min:index_max, i] = batch_spot_colours
                 del batch_spot_colours
         log.debug(f"Loading tile {t} colours complete")

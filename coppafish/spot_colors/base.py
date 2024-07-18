@@ -64,8 +64,7 @@ def get_spot_colours_new(
     force_cpu: bool = True,
 ) -> npt.NDArray[Any]:
     """
-    Load and return registered sequence image(s) colours. Image(s) are correctly centred around zero. Zeros are placed
-    when the position is out of bounds.
+    Load and return registered sequence image(s) colours. Image(s) are correctly centred around zero.
 
     Args:
         all_images (`(n_tiles x n_rounds x n_channels x im_y x im_x x im_z) zarray or ndarray`): all filtered images.
@@ -91,7 +90,8 @@ def get_spot_colours_new(
         force_cpu (bool): only use a CPU to run computations on. Default: true.
 
     Returns:
-        `(len(channels) x n_points) ndarray[dtype]`) image: registered image intensities.
+        `(len(channels) x n_points) ndarray[dtype]`) image: registered image intensities. Any out of bounds values are
+            set to nan.
 
     Notes:
         - If you are planning to load in multiple channels, this function is faster if called once.
@@ -129,9 +129,13 @@ def get_spot_colours_new(
     if not force_cpu and torch.cuda.is_available():
         run_on = torch.device("cuda")
     n_points = yxz.shape[0]
+    # Half a pixel in the pytorch grid_sample world is represented by this small distance. This is used to convert
+    # yxz positions into the pytorch positions later on.
     half_pixels = [1 / image_shape[i] for i in range(3)]
 
     def get_yxz_bounds(from_yxz: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # Get the minimum and maximum yxz positions from pytorch world coordinates. This is used to help gather only
+        # a subset of the images when disk loading.
         assert from_yxz.ndim == 3
         assert from_yxz.shape[-1] == 3
         yxz_mins = from_yxz.min(dim=0)[0].min(dim=0)[0] + 1
@@ -243,9 +247,12 @@ def get_spot_colours_new(
     images = images[:, np.newaxis]
     # (len(channels), 1, 1, n_points, 3)
     yxz_registered = yxz_registered[:, np.newaxis, np.newaxis, :, [2, 1, 0]]
+    out_of_bounds = torch.logical_or(yxz_registered < -1, yxz_registered > 1).any(dim=4)
     pixel_intensities = torch.nn.functional.grid_sample(images, yxz_registered, mode="bilinear", align_corners=False)
+    pixel_intensities[out_of_bounds[:, np.newaxis]] = torch.nan
     # (len(channels), n_points)
     pixel_intensities = pixel_intensities[:, 0, 0, 0].numpy().astype(dtype)
+
     assert pixel_intensities.shape == (len(channels), n_points)
     return pixel_intensities
 
