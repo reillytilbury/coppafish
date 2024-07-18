@@ -24,7 +24,7 @@ def compute_omp_coefficients(
     force_cpu: bool = True,
 ) -> torch.Tensor:
     """
-    Find OMP coefficients on all pixels.
+    Compute OMP coefficients on all pixels.
 
     Args:
         pixel_colours (`(n_pixels x (n_rounds_use * n_channels_use)) tensor`): pixel colours with all
