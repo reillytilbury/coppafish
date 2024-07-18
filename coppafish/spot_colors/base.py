@@ -6,8 +6,6 @@ import torch
 from tqdm import tqdm
 import zarr
 
-from ..setup import NotebookPage
-
 
 def apply_transform(
     yxz: np.ndarray, flow: np.ndarray, icp_correction: np.ndarray, tile_sz: np.ndarray
@@ -66,8 +64,7 @@ def get_spot_colours_new(
     force_cpu: bool = True,
 ) -> npt.NDArray[Any]:
     """
-    Load and return registered sequence image(s) colours. Image(s) are correctly centred around zero. Zeros are placed
-    when the position is out of bounds.
+    Load and return registered sequence image(s) colours. Image(s) are correctly centred around zero.
 
     Args:
         all_images (`(n_tiles x n_rounds x n_channels x im_y x im_x x im_z) zarray or ndarray`): all filtered images.
@@ -93,7 +90,8 @@ def get_spot_colours_new(
         force_cpu (bool): only use a CPU to run computations on. Default: true.
 
     Returns:
-        `(len(channels) x n_points) ndarray[dtype]`) image: registered image intensities.
+        `(len(channels) x n_points) ndarray[dtype]`) image: registered image intensities. Any out of bounds values are
+            set to nan.
 
     Notes:
         - If you are planning to load in multiple channels, this function is faster if called once.
@@ -131,9 +129,13 @@ def get_spot_colours_new(
     if not force_cpu and torch.cuda.is_available():
         run_on = torch.device("cuda")
     n_points = yxz.shape[0]
+    # Half a pixel in the pytorch grid_sample world is represented by this small distance. This is used to convert
+    # yxz positions into the pytorch positions later on.
     half_pixels = [1 / image_shape[i] for i in range(3)]
 
     def get_yxz_bounds(from_yxz: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # Get the minimum and maximum yxz positions from pytorch world coordinates. This is used to help gather only
+        # a subset of the images when disk loading.
         assert from_yxz.ndim == 3
         assert from_yxz.shape[-1] == 3
         yxz_mins = from_yxz.min(dim=0)[0].min(dim=0)[0] + 1
@@ -245,187 +247,14 @@ def get_spot_colours_new(
     images = images[:, np.newaxis]
     # (len(channels), 1, 1, n_points, 3)
     yxz_registered = yxz_registered[:, np.newaxis, np.newaxis, :, [2, 1, 0]]
+    out_of_bounds = torch.logical_or(yxz_registered < -1, yxz_registered > 1).any(dim=4)
     pixel_intensities = torch.nn.functional.grid_sample(images, yxz_registered, mode="bilinear", align_corners=False)
+    pixel_intensities[out_of_bounds[:, np.newaxis]] = torch.nan
     # (len(channels), n_points)
     pixel_intensities = pixel_intensities[:, 0, 0, 0].numpy().astype(dtype)
+
     assert pixel_intensities.shape == (len(channels), n_points)
     return pixel_intensities
-
-
-# TODO: Remove the use of the old, slower, less precise, and untested get_spot_colors function.
-def get_spot_colors(
-    yxz_base: np.ndarray,
-    t: np.ndarray,
-    nbp_basic: NotebookPage,
-    nbp_filter: NotebookPage,
-    nbp_register: NotebookPage,
-    use_rounds: Optional[List[int]] = None,
-    use_channels: Optional[List[int]] = None,
-    return_in_bounds: bool = False,
-    output_dtype: np.dtype = np.float32,
-) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
-    """
-    Takes some spots found on the reference round, and computes the corresponding spot intensity
-    in specified imaging rounds/channels.
-    By default, will run on `nbp_basic.use_rounds` and `nbp_basic.use_channels`.
-
-    Args:
-        yxz_base: `int16 [n_spots x 3]`.
-            Local yxz coordinates of spots found in the reference round/reference channel of tile `t`
-            yx coordinates are in units of `yx_pixels`. z coordinates are in units of `z_pixels`.
-        t: `int`. Tile number.
-        nbp_file: `file_names` notebook page.
-        nbp_basic: `basic_info` notebook page.
-        nbp_register: `register` notebook page.
-        use_rounds: `int [n_use_rounds]`.
-            Rounds you would like to find the `spot_color` for.
-            Error will raise if transform is zero for particular round.
-            If `None`, all rounds in `nbp_basic.use_rounds` are used.
-        use_channels: `int [n_use_channels]`.
-            Channels you would like to find the `spot_color` for.
-            Error will raise if transform is zero for particular channel.
-            If `None`, all channels in `nbp_basic.use_channels` used.
-        return_in_bounds: `bool`. If 'True' will only return spots that are in the bounds of the tile.
-        output_dtype (`np.dtype`): return the resulting colours in this data type.
-
-    Returns:
-        - `spot_colors` - `int32 [n_spots x n_rounds_use x n_channels_use]` or
-            `int32 [n_spots_in_bounds x n_rounds_use x n_channels_use]`.
-            `spot_colors[s, r, c]` is the spot color for spot `s` in round `use_rounds[r]`, channel `use_channels[c]`.
-        - `yxz_base` - `int16 [n_spots_in_bounds x 3]` or `int16 [n_spots x 3]`.
-        - `bg_colours` - `int32 [n_spots_in_bounds x n_rounds_use x n_channels_use]` or
-        `int32 [n_spots x n_rounds_use x n_channels_use]`. (only returned if `bg_scale` is not `None`).
-        - in_bounds - `bool [n_spots]`. Whether spot s was in the bounds of the tile when transformed to round `r`,
-        channel `c`. (only returned if `return_in_bounds` is `True`).
-    """
-    if use_rounds is None:
-        use_rounds = nbp_basic.use_rounds
-    if use_channels is None:
-        use_channels = nbp_basic.use_channels
-
-    n_spots = yxz_base.shape[0]
-    no_verbose = n_spots < 10_000
-    # note using nan means can't use integer even though data is integer
-    n_use_rounds = len(use_rounds)
-    n_use_channels = len(use_channels)
-    # spots outside tile bounds on particular r/c will initially be set to 0.
-    spot_colors = np.zeros((n_spots, n_use_rounds, n_use_channels), dtype=np.int32)
-    if not nbp_basic.is_3d:
-        # use numpy not jax.numpy as reading images outputs to numpy.
-        tile_sz = np.asarray([nbp_basic.tile_sz, nbp_basic.tile_sz, 1], dtype=np.int16)
-    else:
-        tile_sz = np.asarray([nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)], dtype=np.int16)
-
-    with tqdm(total=n_use_rounds * n_use_channels, disable=no_verbose) as pbar:
-        pbar.set_description(f"Reading {n_spots} spot_colors")
-        for i, r in enumerate(use_rounds):
-            flow_tr = nbp_register.flow[t, r]
-            for j, c in enumerate(use_channels):
-                transform_rc = nbp_register.icp_correction[t, r, c]
-                pbar.set_postfix({"round": r, "channel": c})
-                if transform_rc[0, 0] == 0:
-                    raise ValueError(f"Transform for tile {t}, round {r}, channel {c} is zero:" f"\n{transform_rc}")
-
-                yxz_transform, in_range = apply_transform(yxz_base, flow_tr, transform_rc, tile_sz)
-                yxz_transform, in_range = np.asarray(yxz_transform), np.asarray(in_range)
-                yxz_transform = yxz_transform[in_range]
-                # if no spots in range, then continue
-                if yxz_transform.shape[0] == 0:
-                    pbar.update(1)
-                    continue
-
-                # Read in the shifted float16 colours here, and remove shift later.
-                spot_colors[in_range, i, j] = nbp_filter.images[t, r, c][tuple(yxz_transform.T)]
-                spot_colors[in_range, i, j] += nbp_basic.tile_pixel_value_shift
-                pbar.update(1)
-            del flow_tr
-
-    # Remove shift so now spots outside bounds have color equal to - nbp_basic.tile_pixel_shift_value.
-    # It is impossible for any actual spot color to be this due to clipping at the extract stage.
-    spot_colors = spot_colors - nbp_basic.tile_pixel_value_shift
-    colours_valid = (spot_colors > -nbp_basic.tile_pixel_value_shift).all(axis=(1, 2))
-
-    if return_in_bounds:
-        spot_colors = spot_colors[colours_valid]
-        yxz_base = yxz_base[colours_valid]
-
-    output_tuple = (spot_colors.astype(output_dtype), yxz_base)
-    if not return_in_bounds:
-        output_tuple += (colours_valid,)
-
-    return output_tuple
-
-
-def all_pixel_yxz(y_size: int, x_size: int, z_planes: Union[List, int, np.ndarray]) -> np.ndarray:
-    """
-    Returns the yxz coordinates of all pixels on the indicated z-planes of an image.
-
-    Args:
-        y_size: number of pixels in y direction of image.
-        x_size: number of pixels in x direction of image.
-        z_planes: `int [n_z_planes]` z_planes, coordinates are desired for.
-
-    Returns:
-        `int16 [y_size * x_size * n_z_planes, 3]`
-            yxz coordinates of all pixels on `z_planes`.
-    """
-    if isinstance(z_planes, int):
-        z_planes = np.array([z_planes])
-    elif isinstance(z_planes, list):
-        z_planes = np.array(z_planes)
-    return np.array(np.meshgrid(np.arange(y_size), np.arange(x_size), z_planes), dtype=np.int16).T.reshape(-1, 3)
-
-
-def normalise_rc(
-    pixel_colours: np.ndarray, spot_colours: np.ndarray, cutoff_intensity_percentile: float = 75, num_spots: int = 100
-) -> np.ndarray:
-    """
-    Takes in the pixel colours for a single z-plane of a tile, for all rounds and channels. Then performs 2
-    normalisations. The first of these is normalising by round and the second is normalising by channel.
-    Args:
-        pixel_colours: 'int [n_pixels x n_rounds x n_channels_use]' pixel colours for a single z-plane of a tile.
-        # NOTE: It is assumed these images are all aligned and have the same dimensions.
-        spot_colours: 'int [n_spots x n_rounds x n_channels_use]' spot colours for whole dataset.
-        cutoff_intensity_percentile: 'float' upper percentile of pixel intensities to use for regression in
-        round normalisation.
-        num_spots: 'int' number of spots to use for each round/channel in channel normalisation.
-    Returns:
-        norm_factor: [n_rounds x n_channels_use]` normalisation factor for each of the rounds/channels.
-    """
-    # 1. Normalise by round. Do this by performing a linear regression on low brightness pixels that will not be spots.
-    # First, for each channel, find a good round to use for normalisation. We will take this round to be the one with
-    # the median of the means of all rounds.
-    _, n_rounds, n_channels = pixel_colours.shape
-    round_slopes = np.zeros((n_rounds, n_channels))
-    for c in range(n_channels):
-        brightness = np.mean(np.abs(pixel_colours)[:, :, c], axis=0)
-        median_brightness = np.median(brightness)
-        # Find the round with the median brightness
-        median_round = np.where(brightness == median_brightness)[0][0]
-        # Now perform the regression of each round against the median round
-        cutoff_intensity = np.percentile(pixel_colours[:, median_round, c], cutoff_intensity_percentile)
-        image_mask = pixel_colours[:, median_round, c] < cutoff_intensity
-        base_image = pixel_colours[:, median_round, c][image_mask]
-        for r in range(n_rounds):
-            target_image = pixel_colours[:, r, c][image_mask]
-            round_slopes[r, c] = np.linalg.lstsq(base_image[:, None], target_image, rcond=None)[0]
-            pixel_colours[:, r, c] = pixel_colours[:, r, c] / round_slopes[r, c]
-    # 2. Normalise by channel. For this we want to use spots. As spots are not aligned between rounds, we will
-    # concatenate all rounds of a given channel and match the intensities across channels.
-    bright_spots = np.zeros((n_rounds, n_channels, num_spots))
-    max_channel = np.argmax(spot_colours, axis=2)
-    # channel_strength is the median of the mean spot intensities for each channel
-    rc_spot_strength = np.zeros((n_rounds, n_channels))
-    for r in range(n_rounds):
-        for c in range(n_channels):
-            possible_spots = np.where(max_channel[:, r] == c)[0]
-            possible_colours = spot_colours[possible_spots, r, c]
-            # take the brightest spots
-            bright_spots[r][c] = possible_colours[np.argsort(possible_colours)[-num_spots:]]
-            rc_spot_strength[r, c] = np.median(bright_spots[r][c])
-
-    norm_factor = rc_spot_strength * round_slopes
-    return norm_factor
 
 
 def remove_background(spot_colours: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
