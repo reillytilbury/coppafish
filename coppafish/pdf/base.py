@@ -642,7 +642,12 @@ class BuildPDF:
         axes[1, 0].set_title(f"Score distribution")
         axes[1, 0].hist(all_scores, bins=200, color="red", edgecolor="black", linewidth=0.25)
         axes[1, 0].set_xlabel("Spot score")
-        axes[1, 0].set_xlim([0, 1])
+        axes[1, 0].set_xlim(
+            [
+                omp_base.get_all_scores(basic_info_page, omp_page)[0].min(),
+                omp_base.get_all_scores(basic_info_page, omp_page)[0].max(),
+            ]
+        )
         axes[1, 0].set_ylabel("Spot count")
         axes[1, 0].spines["left"].set_visible(True)
         axes[1, 0].spines["bottom"].set_visible(True)
