@@ -40,7 +40,7 @@ def test_get_spot_colours_new() -> None:
     assert result.dtype == dtype
     result = result.reshape(tile_shape)
     assert np.allclose(result[:, :-1], image[:, 1:])
-    assert np.allclose(result[:, -1], 0)
+    assert np.isnan(result[:, -1]).all()
 
     # Test the gathering of a subset of pixels.
     yxz = np.zeros((4, 3), np.int32)
@@ -62,9 +62,9 @@ def test_get_spot_colours_new() -> None:
         dtype=dtype,
     )[0]
     assert np.allclose(result[0], image[0, 1, 0])
-    assert np.allclose(result[1], 0)
+    assert np.isnan(result[1]).all()
     assert np.allclose(result[2], image[1, 2, 2])
-    assert np.allclose(result[3], 0)
+    assert np.isnan(result[3]).all()
 
     # Test the affine transform with a y and x transpose.
     tile_shape = 3, 3, 4
@@ -116,4 +116,4 @@ def test_get_spot_colours_new() -> None:
     assert result.dtype == dtype
     result = result.reshape(tile_shape)
     assert np.allclose(result[:, :-1], image.swapaxes(0, 1)[:, 1:])
-    assert np.allclose(result[:, -1], 0)
+    assert np.isnan(result[:, -1]).all()
