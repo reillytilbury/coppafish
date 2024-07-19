@@ -145,7 +145,7 @@ _options = {
         "radius_xy": "int",
         "radius_z": "int",
         "spot_shape": "tuple_int",
-        "spot_shape_max_spots": "int",
+        "spot_shape_max_spots_considered": "int",
         "shape_isolation_distance_yx": "int",
         "shape_isolation_distance_z": "maybe_int",
         "shape_coefficient_threshold": "number",
