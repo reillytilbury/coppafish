@@ -130,9 +130,13 @@ def run_omp(
             subset_colours = torch.asarray(subset_colours)
             if config["colour_normalise"]:
                 subset_colours *= colour_norm_factor[[t]]
+            # Divide each spot colour c by rms(c) + lambda_d.
+            colour_rms = subset_colours.square().sum(dim=1).sum(dim=1).sqrt()
+            subset_colours = subset_colours / (colour_rms + config["lambda_d"])[:, np.newaxis, np.newaxis]
+            del colour_rms
             bg_coefficients = torch.zeros((subset_colours.shape[0], n_channels_use), dtype=torch.float32)
             bg_codes = torch.repeat_interleave(torch.eye(n_channels_use)[:, None, :], n_rounds_use, dim=1)
-            # give background_vectors an L2 norm of 1 so can compare coefficients with other genes.
+            # Give background_vectors an L2 norm of 1 so can compare coefficients with other genes.
             bg_codes = bg_codes / torch.linalg.norm(bg_codes, axis=(1, 2), keepdims=True)
             if config["fit_background"]:
                 subset_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(subset_colours)
@@ -157,8 +161,6 @@ def run_omp(
                 beta=config["beta"],
                 force_cpu=config["force_cpu"],
             )
-            colour_rms = subset_colours.square().sum(dim=1).sqrt()
-            subset_coefficients = subset_coefficients / (colour_rms + config["high_coef_bias"])[:, np.newaxis]
             del subset_colours, bg_coefficients, bg_codes, bled_codes
             subset_coefficients = subset_coefficients.numpy()
             tile_computed_on[index_min:index_max] += 1

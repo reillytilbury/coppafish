@@ -134,6 +134,7 @@ _options = {
     "omp": {
         "colour_normalise": "bool",
         "fit_background": "bool",
+        "lambda_d": "number",
         "weight_coef_fit": "bool",
         "max_genes": "int",
         "dp_thresh": "number",
@@ -150,7 +151,6 @@ _options = {
         "shape_coefficient_threshold": "number",
         "shape_sign_thresh": "number",
         "pixel_max_percentile": "number",
-        "high_coef_bias": "number",
         "score_threshold": "number",
     },
     "thresholds": {

@@ -64,8 +64,8 @@ After a pixel map of gene coefficients is found through OMP on many image pixels
 coefficient maxima (similar to [find spots](#find-spots)). Spots are scored by a weighted average around a small local
 region of the spot where the spot is expressed most strongly. The coefficients are weighted with the mean spot
 intensity normalised to have a maximum of 1. The mean spot is computed on tile `nb.basic_info.use_tiles[0]` by taking
-the average of many well-isolated spots. The scoring is controlled by config parameters `shape_sign_thresh` and
-`high_coef_bias`. Low scores are deleted by OMP when they are below the `score_threshold`.
+the average of many well-isolated spots. The scoring is controlled by config parameters `shape_sign_thresh`. Low scores 
+are deleted by OMP when they are below the `score_threshold`.
 
 Since OMP is sensitive to the many steps before, it can be difficult to optimise. This is why [call spots](#call-spots)
 is part of the gene calling pipeline, known for its simpler and more intuitive method. A good sanity check is to see if

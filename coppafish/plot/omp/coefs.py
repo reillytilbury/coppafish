@@ -99,19 +99,22 @@ class ViewOMPImage:
         image_colours = image_colours.reshape((-1, n_rounds_use, n_channels_use))
         bled_codes = bled_codes.reshape((n_genes, n_rounds_use * n_channels_use))
 
+        image_colours[torch.isnan(image_colours)] = 0
         if config["colour_normalise"]:
             image_colours *= colour_norm_factor[[tile]]
+        # Divide each spot colour c by rms(c) + lambda_d.
+        colour_rms = image_colours.square().sum(dim=1).sum(dim=1).sqrt()
+        image_colours = image_colours / (colour_rms + config["lambda_d"])[:, np.newaxis, np.newaxis]
+        image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
+        assert not torch.allclose(image_colours, torch.asarray([0]).float())
         bg_coefficients = torch.zeros((image_colours.shape[0], n_channels_use), dtype=torch.float32)
         bg_codes = torch.repeat_interleave(torch.eye(n_channels_use)[:, None, :], n_rounds_use, dim=1)
         # give background_vectors an L2 norm of 1 so can compare coefficients with other genes.
         bg_codes = bg_codes / torch.linalg.norm(bg_codes, axis=(1, 2), keepdims=True)
         if config["fit_background"]:
-            subset_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(subset_colours)
+            image_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(image_colours)
         bg_codes = bg_codes.float()
         bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
-        image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
-        image_colours[torch.isnan(image_colours)] = 0
-        assert not torch.allclose(image_colours, torch.asarray([0]).float())
 
         coefficient_image = coefs_torch.compute_omp_coefficients(
             image_colours,
@@ -130,8 +133,6 @@ class ViewOMPImage:
         self.coefficient_image_non_functioned = coefficient_image.T.reshape(
             ((len(nb.call_spots.gene_names),) + spot_shape_yxz)
         ).numpy()
-        colour_rms = image_colours.square().sum(dim=1).sqrt()
-        coefficient_image = coefficient_image / (colour_rms + config["high_coef_bias"])[:, np.newaxis]
         coefficient_image = torch.asarray(coefficient_image).T.reshape(
             (len(nb.call_spots.gene_names),) + spot_shape_yxz
         )
@@ -165,7 +166,6 @@ class ViewOMPImage:
         self.mid_z = -min(self.z_planes)
         self.function_coefficients = False
         self.show_iteration_counts = False
-        self.high_coef_bias = config["high_coef_bias"]
         self.draw_canvas()
         plt.show()
 
@@ -316,16 +316,19 @@ class ViewOMPPixelColours:
 
         if config["colour_normalise"]:
             image_colours *= colour_norm_factor[[tile]]
+        # Divide each spot colour c by rms(c) + lambda_d.
+        colour_rms = image_colours.square().sum(dim=1).sum(dim=1).sqrt()
+        image_colours = image_colours / (colour_rms + config["lambda_d"])[:, np.newaxis, np.newaxis]
+        image_colours = image_colours.reshape((1, n_rounds_use * n_channels_use))
         bg_coefficients = torch.zeros((1, n_channels_use), dtype=torch.float32)
         bg_codes = torch.repeat_interleave(torch.eye(n_channels_use)[:, None, :], n_rounds_use, dim=1)
         # give background_vectors an L2 norm of 1 so can compare coefficients with other genes.
         bg_codes = bg_codes / torch.linalg.norm(bg_codes, axis=(1, 2), keepdims=True)
         if config["fit_background"]:
-            subset_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(subset_colours)
+            image_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(image_colours)
         bg_codes = bg_codes.float()
         self.true_pixel_colour: np.ndarray = image_colours.numpy().reshape((n_rounds_use, n_channels_use))
         bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
-        image_colours = image_colours.reshape((1, n_rounds_use * n_channels_use))
 
         # Get the maximum number of OMP gene assignments made and what genes.
         coefficients = coefs_torch.compute_omp_coefficients(

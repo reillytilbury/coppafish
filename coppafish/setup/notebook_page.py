@@ -595,7 +595,7 @@ class NotebookPage:
                 + "float16, int16, and float16 respectively. Each has shape (n_spots, 3), (n_spots), (n_spots), "
                 + "(n_spots) respectively. "
                 + "To gather tile 0's spot's local_yxz's into memory, do `nb.omp.results['tile_0/local_yxz'][:]`. "
-                + "The local_yxz positions are relative to the tile. To convert these to global spot positions "
+                + "The local_yxz positions are relative to the tile. Converting these to global spot positions "
                 + "requires adding the tile_origin from the 'stitch' page.",
             ],
         },
