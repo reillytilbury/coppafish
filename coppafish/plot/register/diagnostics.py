@@ -565,23 +565,23 @@ def view_optical_flow(nb: Notebook, t: int, r: int):
         r: round number
     """
     # Load the data
-    base = nb.filter.images[t, 7, 0]
-    target = nb.filter.images[t, r, 0]
+    base = nb.filter.images[t, 7, 0].astype(np.float32)
+    target = nb.filter.images[t, r, 0].astype(np.float32)
     ny, nx, nz = base.shape
     coord_order = ["y", "x", "z"]
-    coords = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing="ij"))
+    coords = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing="ij"), dtype=np.float32)
     print("Base and Target images loaded.")
     # load the warps
     names = ["raw", "smooth"]
     flows = [nb.register.flow_raw[t, r], nb.register.flow[t, r]]
     # warp the base image using the flows
-    base_warped = [skimage.transform.warp(base, f + coords, order=0) for f in flows]
+    base_warped = [skimage.transform.warp(base, f.astype(np.float32) + coords, order=0, preserve_range=True)
+                   for f in flows]
     print("Base image warped.")
     del coords
     # load the correlation
     corr = nb.register.correlation[t, r]
     print("Correlation loaded.")
-    mask = corr > np.percentile(corr, 97.5)
 
     # create viewer
     viewer = napari.Viewer()
@@ -596,8 +596,7 @@ def view_optical_flow(nb: Notebook, t: int, r: int):
             name=names[i],
             colormap="red",
             blending="additive",
-            translate=translation,
-            contrast_limits=(0, 5_000),
+            translate=translation
         )
     # add flows as images
     for i, j in np.ndindex(len(flows), len(coord_order)):
@@ -605,8 +604,6 @@ def view_optical_flow(nb: Notebook, t: int, r: int):
         viewer.add_image(
             flows[i][j], name=names[i] + " : " + coord_order[j], translate=translation, contrast_limits=[-10, 10]
         )
-        if i == 0:
-            viewer.add_image(mask, name="mask", colormap="red", translate=translation, opacity=0.2, blending="additive")
     # add correlation
     for i in range(1):
         translation = [1.1 * ny * (len(coord_order) + 1), 1.1 * nx * (i + 1), 0]
@@ -631,7 +628,7 @@ def view_flow_vector_field(nb: Notebook, t: int, r: int):
     # load the flow
     flow = nb.register.flow[t, r][:, ::50, ::50, ::2]
     flow = flow.astype(np.float32)
-    im = load_image(nb.file_names, nb.basic_info, nb.extract.file_type, t=t, r=r, c=0)[::5, ::5, ::2]
+    im = nb.filter.images[t, r, nb.basic_info.dapi_channel, ::5, ::5, ::2]
     ny, nx, nz = flow.shape[1:]
     start_points = np.array(np.meshgrid(range(0, 10 * ny, 10), range(0, 10 * nx, 10), range(nz), indexing='ij'))
     flow = np.moveaxis(flow, 0, -1)

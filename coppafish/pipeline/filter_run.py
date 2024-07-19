@@ -123,11 +123,7 @@ def run_filter(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage) ->
             elif c != nbp_basic.dapi_channel:
                 if (im_filtered > np.iinfo(np.int32).max).sum() > 0:
                     log.warn(f"Converting to int32 has cut off pixels for {t=}, {r=}, {c=} filtered image")
-                im_filtered = im_filtered.astype(np.float64)
-                im_filtered = np.rint(im_filtered, np.zeros_like(im_filtered, dtype=np.int32), casting="unsafe")
-                auto_thresh[t, r, c] = filter_base.compute_auto_thresh(
-                    im_filtered, config["auto_thresh_multiplier"], nbp_debug.z_info
-                )
+                auto_thresh[t, r, c] = int(config["auto_thresh_multiplier"] * np.median(np.abs(im_filtered)))
             im_filtered = im_filtered.astype(np.float16)
             images[t, r, c] = im_filtered
             del im_filtered
