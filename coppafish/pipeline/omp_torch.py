@@ -130,8 +130,10 @@ def run_omp(
             subset_colours = torch.asarray(subset_colours)
             if config["colour_normalise"]:
                 subset_colours *= colour_norm_factor[[t]]
-            # Divide each spot colour c by rms(c) + lambda_d.
-            colour_rms = subset_colours.square().reshape((-1, n_rounds_use * n_channels_use)).mean(dim=1).sqrt()
+            # Divide each spot colour c by sum(square(c)) + lambda_d.
+            colour_rms = subset_colours.detach().clone()
+            colour_rms = colour_rms.square().reshape((index_max - index_min, n_rounds_use * n_channels_use))
+            colour_rms = colour_rms.sum(dim=1).sqrt()
             subset_colours = subset_colours / (colour_rms + config["lambda_d"])[:, np.newaxis, np.newaxis]
             del colour_rms
             bg_coefficients = torch.zeros((subset_colours.shape[0], n_channels_use), dtype=torch.float32)

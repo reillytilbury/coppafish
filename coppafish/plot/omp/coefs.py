@@ -102,8 +102,10 @@ class ViewOMPImage:
         image_colours[torch.isnan(image_colours)] = 0
         if config["colour_normalise"]:
             image_colours *= colour_norm_factor[[tile]]
-        # Divide each spot colour c by rms(c) + lambda_d.
-        colour_rms = image_colours.square().reshape((-1, n_rounds_use * n_channels_use)).mean(dim=1).sqrt()
+        # Divide each spot colour c by sum(square(c)) + lambda_d.
+        colour_rms = image_colours.detach().clone()
+        colour_rms = colour_rms.square().reshape((-1, n_rounds_use * n_channels_use))
+        colour_rms = colour_rms.sum(dim=1).sqrt()
         image_colours = image_colours / (colour_rms + config["lambda_d"])[:, np.newaxis, np.newaxis]
         image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
         assert not torch.allclose(image_colours, torch.asarray([0]).float())
@@ -316,8 +318,10 @@ class ViewOMPPixelColours:
 
         if config["colour_normalise"]:
             image_colours *= colour_norm_factor[[tile]]
-        # Divide each spot colour c by rms(c) + lambda_d.
-        colour_rms = image_colours.square().reshape((-1, n_rounds_use * n_channels_use)).mean(dim=1).sqrt()
+        # Divide each spot colour c by sum(square(c)) + lambda_d.
+        colour_rms = image_colours.detach().clone()
+        colour_rms = colour_rms.square().reshape((-1, n_rounds_use * n_channels_use))
+        colour_rms = colour_rms.sum(dim=1).sqrt()
         image_colours = image_colours / (colour_rms + config["lambda_d"])[:, np.newaxis, np.newaxis]
         image_colours = image_colours.reshape((1, n_rounds_use * n_channels_use))
         bg_coefficients = torch.zeros((1, n_channels_use), dtype=torch.float32)
