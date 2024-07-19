@@ -50,6 +50,7 @@ def score_coefficient_image(
     spot_shape_kernel = spot_shape_kernel[np.newaxis, np.newaxis]
     coef_image = coef_image[:, np.newaxis]
     scores = torch.nn.functional.conv3d(coef_image, spot_shape_kernel, padding="same", bias=None)[:, 0]
+    scores = scores.clamp(0, 1)
     scores = scores.cpu().to(dtype=coefficient_image.dtype)
 
     return scores

@@ -130,8 +130,10 @@ def run_omp(
             subset_colours = torch.asarray(subset_colours)
             if config["colour_normalise"]:
                 subset_colours *= colour_norm_factor[[t]]
-            # Divide each spot colour c by rms(c) + lambda_d.
-            colour_rms = subset_colours.square().reshape((-1, n_rounds_use * n_channels_use)).mean(dim=1).sqrt()
+            # Divide each spot colour c by sum(square(c)) + lambda_d.
+            colour_rms = subset_colours.detach().clone()
+            colour_rms = colour_rms.square().reshape((index_max - index_min, n_rounds_use * n_channels_use))
+            colour_rms = colour_rms.sum(dim=1).sqrt()
             subset_colours = subset_colours / (colour_rms + config["lambda_d"])[:, np.newaxis, np.newaxis]
             del colour_rms
             bg_coefficients = torch.zeros((subset_colours.shape[0], n_channels_use), dtype=torch.float32)
@@ -193,6 +195,8 @@ def run_omp(
                 g_gene_no = torch.full((g_isolated_yxz.shape[0],), g).int()
                 isolated_yxz = torch.cat((isolated_yxz, g_isolated_yxz), dim=0).int()
                 isolated_gene_no = torch.cat((isolated_gene_no, g_gene_no), dim=0)
+                if isolated_gene_no.size(0) > config["spot_shape_max_spots_considered"]:
+                    break
                 del g_coef_image, g_isolated_yxz, g_gene_no
             true_isolated = spots_torch.is_true_isolated(
                 isolated_yxz, config["shape_isolation_distance_yx"], shape_isolation_distance_z

@@ -987,7 +987,7 @@ class RoboMinnie:
         shape_isolation_distance_yx = 4
         pixel_max_percentile = 1
         shape_sign_thresh = 0.33
-        score_threshold = 1
+        score_threshold = 0.01
         subset_size_xy = 50
         """
         # Remove any large spaces in the config contents
