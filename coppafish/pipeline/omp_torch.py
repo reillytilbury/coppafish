@@ -131,7 +131,7 @@ def run_omp(
             if config["colour_normalise"]:
                 subset_colours *= colour_norm_factor[[t]]
             # Divide each spot colour c by rms(c) + lambda_d.
-            colour_rms = subset_colours.square().sum(dim=1).sum(dim=1).sqrt()
+            colour_rms = subset_colours.square().reshape((-1, n_rounds_use * n_channels_use)).mean(dim=1).sqrt()
             subset_colours = subset_colours / (colour_rms + config["lambda_d"])[:, np.newaxis, np.newaxis]
             del colour_rms
             bg_coefficients = torch.zeros((subset_colours.shape[0], n_channels_use), dtype=torch.float32)
@@ -248,19 +248,19 @@ def run_omp(
             # STEP 3: Score every gene's coefficient image.
             g_coef_image = torch.asarray(coefficients[:, [g]].toarray()).float().reshape(tile_shape)
             g_coef_image = g_coef_image[np.newaxis]
-            g_scores = scores_torch.score_coefficient_image(g_coef_image, spot, mean_spot, config["force_cpu"])
-            g_scores = g_scores[0].to(torch.float16)
+            g_score_image = scores_torch.score_coefficient_image(g_coef_image, spot, mean_spot, config["force_cpu"])
+            g_score_image = g_score_image[0].to(torch.float16)
             del g_coef_image
 
             # STEP 4: Detect genes as score local maxima.
             g_spots_local_yxz, g_spot_scores = detect_torch.detect_spots(
-                g_scores,
+                g_score_image,
                 config["score_threshold"],
                 config["radius_xy"],
                 config["radius_z"],
                 force_cpu=config["force_cpu"],
             )
-            del g_scores
+            del g_score_image
             g_spots_local_yxz = g_spots_local_yxz.to(torch.int16)
             g_spot_scores = g_spot_scores.to(torch.float16)
             n_g_spots = g_spot_scores.size(0)

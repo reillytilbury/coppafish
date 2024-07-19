@@ -10,7 +10,8 @@ def score_coefficient_image(
 ) -> torch.Tensor:
     """
     Computes OMP score(s) for the coefficient image. This is a weighted average of spot_shape_mean at spot_shape's == 1
-    in a local area with their corresponding coefficients. This is a convolution over the entire image.
+    in a local area with their corresponding coefficients. This is a convolution over the entire image. Scores can
+    range anywhere from 0 to infinity.
 
     Args:
         - coefficient_image (`(n_batches x im_y x im_x x im_z) tensor[float32]`): OMP coefficients in 3D shape. Any
@@ -49,7 +50,6 @@ def score_coefficient_image(
     spot_shape_kernel = spot_shape_kernel[np.newaxis, np.newaxis]
     coef_image = coef_image[:, np.newaxis]
     scores = torch.nn.functional.conv3d(coef_image, spot_shape_kernel, padding="same", bias=None)[:, 0]
-    scores = scores.clamp(0, 1)
     scores = scores.cpu().to(dtype=coefficient_image.dtype)
 
     return scores
