@@ -39,9 +39,9 @@ def run_omp(
         - nbp_basic: `basic_info` notebook page.
         - nbp_extract: `extract` notebook page.
         - nbp_filter: `filter` notebook page.
-        - nbp_call_spots: `call_spots` notebook page.
         - nbp_register: `register` notebook page.
         - nbp_register_debug: `register_debug` notebook page.
+        - nbp_call_spots: `call_spots` notebook page.
 
     Returns:
         `NotebookPage[omp]` nbp_omp: page containing gene assignments and info for OMP spots.

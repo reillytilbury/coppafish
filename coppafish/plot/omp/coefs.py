@@ -110,6 +110,7 @@ class ViewOMPImage:
         bg_codes = bg_codes.float()
         bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
         image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
+        image_colours[torch.isnan(image_colours)] = 0
         assert not torch.allclose(image_colours, torch.asarray([0]).float())
 
         coefficient_image = coefs_torch.compute_omp_coefficients(
@@ -130,7 +131,7 @@ class ViewOMPImage:
             ((len(nb.call_spots.gene_names),) + spot_shape_yxz)
         ).numpy()
         colour_rms = image_colours.square().sum(dim=1).sqrt()
-        coefficient_image = coefficient_image / (colour_rms + config["high_coef_bias"])
+        coefficient_image = coefficient_image / (colour_rms + config["high_coef_bias"])[:, np.newaxis]
         coefficient_image = torch.asarray(coefficient_image).T.reshape(
             (len(nb.call_spots.gene_names),) + spot_shape_yxz
         )
@@ -302,7 +303,8 @@ class ViewOMPPixelColours:
                 registration_type="flow_and_icp",
             ).T[np.newaxis]
         image_colours = torch.asarray(image_colours, dtype=torch.float32)
-        assert not torch.allclose(image_colours, 0)
+        image_colours[torch.isnan(image_colours)] = 0
+        assert not torch.allclose(image_colours, torch.zeros(1).float())
         colour_norm_factor = np.array(nb.call_spots.colour_norm_factor, dtype=np.float32)
         colour_norm_factor = torch.asarray(colour_norm_factor).float()
         bled_codes = nb.call_spots.bled_codes
