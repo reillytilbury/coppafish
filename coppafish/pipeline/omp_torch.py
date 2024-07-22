@@ -63,7 +63,8 @@ def run_omp(
 
     # We want exact, reproducible results.
     torch.backends.cudnn.deterministic = True
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+    if os.system() != "Windows":
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
     n_genes = nbp_call_spots.bled_codes.shape[0]
     n_rounds_use = len(nbp_basic.use_rounds)
@@ -76,8 +77,13 @@ def run_omp(
     # Each tile's results are appended to the zarr.Group.
     group_path = os.path.join(nbp_file.output_dir, "results.zgroup")
     results = zarr.group(store=group_path, zarr_version=2)
+    saved_tiles = [f"tile_{t}" in results and "colours" in results[f"tile_{t}"] for t in nbp_basic.use_tiles]
 
-    for t in nbp_basic.use_tiles:
+    for t_ind, t in enumerate(nbp_basic.use_tiles):
+        if saved_tiles[t_ind] and t != first_tile:
+            log.warn(f"OMP is skipping tile {t}, results already found at {nbp_file.output_dir}")
+            continue
+
         # STEP 1: Load every registered sequencing round/channel image into memory
         log.debug(f"Loading tile {t} colours")
         tile_computed_on = np.zeros(np.prod(tile_shape), dtype=np.int8)
@@ -240,12 +246,14 @@ def run_omp(
             nbp.spot = np.array(spot)
             log.info("Computing OMP spot and mean spot complete")
 
-        tile_results = results.create_group(f"tile_{t}")
+        tile_results = results.create_group(f"tile_{t}", overwrite=True)
         n_chunk_max = 600_000
-        t_spots_local_yxz = tile_results.zeros("local_yxz", shape=(0, 3), chunks=(n_chunk_max, 3), dtype=np.int16)
-        t_spots_tile = tile_results.zeros("tile", shape=0, chunks=(n_chunk_max,), dtype=np.int16)
-        t_spots_gene_no = tile_results.zeros("gene_no", shape=0, chunks=(n_chunk_max,), dtype=np.int16)
-        t_spots_score = tile_results.zeros("scores", shape=0, chunks=(n_chunk_max,), dtype=np.float16)
+        t_spots_local_yxz = tile_results.zeros(
+            "local_yxz", overwrite=True, shape=(0, 3), chunks=(n_chunk_max, 3), dtype=np.int16
+        )
+        t_spots_tile = tile_results.zeros("tile", overwrite=True, shape=0, chunks=(n_chunk_max,), dtype=np.int16)
+        t_spots_gene_no = tile_results.zeros("gene_no", overwrite=True, shape=0, chunks=(n_chunk_max,), dtype=np.int16)
+        t_spots_score = tile_results.zeros("scores", overwrite=True, shape=0, chunks=(n_chunk_max,), dtype=np.float16)
 
         # TODO: This can be sped up when there is sufficient RAM by running on multiple genes at once.
         for g in tqdm.trange(n_genes, desc=f"Scoring/detecting spots", unit="gene", postfix=postfix):
