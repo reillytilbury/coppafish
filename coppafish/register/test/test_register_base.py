@@ -111,6 +111,7 @@ def test_flow_correlation():
     assert np.all(flow_corr[indices] >= 1)
 
 
+# TODO: This unit test is very slow (~1.7s). The data should be shrunk to speed it up.
 def test_optical_flow_single():
     # set up data
     rng = np.random.RandomState(0)
