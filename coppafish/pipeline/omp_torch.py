@@ -1,5 +1,6 @@
 import math as maths
 import os
+import platform
 from typing import Tuple
 
 import numpy as np
@@ -63,7 +64,7 @@ def run_omp(
 
     # We want exact, reproducible results.
     torch.backends.cudnn.deterministic = True
-    if os.system() != "Windows":
+    if platform.system() != "Windows":
         os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
     n_genes = nbp_call_spots.bled_codes.shape[0]
