@@ -4,6 +4,7 @@ name: CI
 on:
   push:
   pull_request:
+  pull_request_target:
 
 jobs:
   run-tests:
