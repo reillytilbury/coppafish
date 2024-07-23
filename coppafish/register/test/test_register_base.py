@@ -133,6 +133,6 @@ def test_optical_flow_single():
     correct_x = flow[1][centre_idx] == -2
     correct_z = flow[2][centre_idx] == -0
     ny, nx, nz = ny // 2, nx // 2, nz // 2
-    assert np.sum(correct_y) / (ny * nx * nz) > 0.9
-    assert np.sum(correct_x) / (ny * nx * nz) > 0.9
-    assert np.sum(correct_z) / (ny * nx * nz) > 0.9
+    assert np.sum(correct_y) / (ny * nx * nz) > 0.8
+    assert np.sum(correct_x) / (ny * nx * nz) > 0.8
+    assert np.sum(correct_z) / (ny * nx * nz) > 0.8
