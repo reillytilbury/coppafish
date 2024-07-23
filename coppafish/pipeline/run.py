@@ -290,6 +290,7 @@ def run_omp(nb: Notebook) -> None:
             nb.filter,
             nb.register,
             nb.register_debug,
+            nb.stitch,
             nb.call_spots,
         )
         nb += nbp
