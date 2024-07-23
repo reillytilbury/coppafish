@@ -1,7 +1,8 @@
 import math as maths
 import os
+import pickle
 import platform
-from typing import Tuple
+from typing import Any, Dict, Tuple
 
 import numpy as np
 import scipy
@@ -17,13 +18,14 @@ from ..setup import NotebookPage
 
 
 def run_omp(
-    config: dict,
+    config: Dict[str, Any],
     nbp_file: NotebookPage,
     nbp_basic: NotebookPage,
     nbp_extract: NotebookPage,
     nbp_filter: NotebookPage,
     nbp_register: NotebookPage,
     nbp_register_debug: NotebookPage,
+    nbp_stitch: NotebookPage,
     nbp_call_spots: NotebookPage,
 ) -> NotebookPage:
     """
@@ -35,14 +37,15 @@ def run_omp(
     See `'omp'` section of `notebook_comments.json` file for description of the variables in the omp page.
 
     Args:
-        - config: Dictionary obtained from `'omp'` section of config file.
-        - nbp_file: `file_names` notebook page.
-        - nbp_basic: `basic_info` notebook page.
-        - nbp_extract: `extract` notebook page.
-        - nbp_filter: `filter` notebook page.
-        - nbp_register: `register` notebook page.
-        - nbp_register_debug: `register_debug` notebook page.
-        - nbp_call_spots: `call_spots` notebook page.
+        - config (dict): Dictionary obtained from `'omp'` section of config file.
+        - nbp_file (NotebookPage): `file_names` notebook page.
+        - nbp_basic (NotebookPage): `basic_info` notebook page.
+        - nbp_extract (NotebookPage): `extract` notebook page.
+        - nbp_filter (NotebookPage): `filter` notebook page.
+        - nbp_register (NotebookPage): `register` notebook page.
+        - nbp_register_debug (NotebookPage): `register_debug` notebook page.
+        - nbp_stitch (NotebookPage): `stitch` notebook page.
+        - nbp_call_spots (NotebookPage): `call_spots` notebook page.
 
     Returns:
         `NotebookPage[omp]` nbp_omp: page containing gene assignments and info for OMP spots.
@@ -54,13 +57,15 @@ def run_omp(
     assert type(nbp_filter) is NotebookPage
     assert type(nbp_register) is NotebookPage
     assert type(nbp_register_debug) is NotebookPage
+    assert type(nbp_stitch) is NotebookPage
     assert type(nbp_call_spots) is NotebookPage
 
     log.info("OMP started")
     log.debug(f"{torch.cuda.is_available()=}")
     log.debug(f"{config['force_cpu']=}")
 
-    nbp = NotebookPage("omp", {"omp": config})
+    omp_config = {"omp": config}
+    nbp = NotebookPage("omp", omp_config)
 
     # We want exact, reproducible results.
     torch.backends.cudnn.deterministic = True
@@ -73,16 +78,33 @@ def run_omp(
     tile_shape: Tuple[int] = nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)
     colour_norm_factor = np.array(nbp_call_spots.colour_norm_factor, dtype=np.float32)
     colour_norm_factor = torch.asarray(colour_norm_factor).float()
+    tile_centres = nbp_stitch.tile_origin.astype(np.float32)
+    # Invalid tiles are sent far away to avoid mistaken duplicate spot detection.
+    tile_centres[np.isnan(tile_centres)] = 1e20
+    tile_centres = torch.asarray(tile_centres)
+    tile_origins = tile_centres.detach().clone()
+    tile_centres += torch.asarray(tile_shape).float() / 2
     first_tile: int = nbp_basic.use_tiles[0]
+
+    last_omp_config = omp_config.copy()
+    config_path = os.path.join(nbp_file.output_dir, "omp_last_config.pkl")
+    if os.path.isfile(config_path):
+        with open(config_path, "rb") as config_file:
+            last_omp_config = pickle.load(config_file)
+    assert type(last_omp_config) is dict
+    config_unchanged = omp_config == last_omp_config
+    with open(config_path, "wb") as config_file:
+        pickle.dump(omp_config, config_file)
+    del omp_config, last_omp_config
 
     # Each tile's results are appended to the zarr.Group.
     group_path = os.path.join(nbp_file.output_dir, "results.zgroup")
     results = zarr.group(store=group_path, zarr_version=2)
     saved_tiles = [f"tile_{t}" in results and "colours" in results[f"tile_{t}"] for t in nbp_basic.use_tiles]
 
-    for t_ind, t in enumerate(nbp_basic.use_tiles):
-        if saved_tiles[t_ind] and t != first_tile:
-            log.warn(f"OMP is skipping tile {t}, results already found at {nbp_file.output_dir}")
+    for t_index, t in enumerate(nbp_basic.use_tiles):
+        if saved_tiles[t_index] and t != first_tile and config_unchanged:
+            log.info(f"OMP is skipping tile {t}, results already found at {nbp_file.output_dir}")
             continue
 
         # STEP 1: Load every registered sequencing round/channel image into memory
@@ -266,7 +288,7 @@ def run_omp(
             del g_coef_image
 
             # STEP 4: Detect genes as score local maxima.
-            g_spots_local_yxz, g_spot_scores = detect_torch.detect_spots(
+            g_spot_local_positions, g_spot_scores = detect_torch.detect_spots(
                 g_score_image,
                 config["score_threshold"],
                 config["radius_xy"],
@@ -274,7 +296,16 @@ def run_omp(
                 force_cpu=config["force_cpu"],
             )
             del g_score_image
-            g_spots_local_yxz = g_spots_local_yxz.to(torch.int16)
+
+            # Delete any spot positions that are duplicates.
+            g_spot_global_positions = g_spot_local_positions.detach().clone().float()
+            g_spot_global_positions += tile_origins[[t]]
+            duplicates = spots_torch.is_duplicate_spot(g_spot_global_positions, t, tile_centres)
+            g_spot_local_positions = g_spot_local_positions[~duplicates]
+            g_spot_scores = g_spot_scores[~duplicates]
+            del g_spot_global_positions, duplicates
+
+            g_spot_local_positions = g_spot_local_positions.to(torch.int16)
             g_spot_scores = g_spot_scores.to(torch.float16)
             n_g_spots = g_spot_scores.size(0)
             if n_g_spots == 0:
@@ -283,11 +314,11 @@ def run_omp(
             g_spots_gene_no = torch.full((n_g_spots,), g).to(torch.int16)
 
             # Append new results.
-            t_spots_local_yxz.append(g_spots_local_yxz.numpy(), axis=0)
+            t_spots_local_yxz.append(g_spot_local_positions.numpy(), axis=0)
             t_spots_score.append(g_spot_scores.numpy(), axis=0)
             t_spots_tile.append(g_spots_tile.numpy(), axis=0)
             t_spots_gene_no.append(g_spots_gene_no.numpy(), axis=0)
-            del g_spots_local_yxz, g_spot_scores, g_spots_tile, g_spots_gene_no
+            del g_spot_local_positions, g_spot_scores, g_spots_tile, g_spots_gene_no
 
         del coefficients
         if t_spots_tile.size == 0:
@@ -321,6 +352,8 @@ def run_omp(
         del t_spots_local_yxz, t_spots_tile, t_spots_gene_no, t_spots_score, t_spots_colours
         del t_local_yxzs, tile_results
         log.debug(f"Gathering spot colours complete")
+
+    os.remove(config_path)
 
     nbp.results = results
     log.info("OMP complete")

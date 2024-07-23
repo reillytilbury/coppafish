@@ -842,6 +842,8 @@ class NotebookPage:
         result = object.__getattribute__(self, name)
         if type(result) is tuple:
             result = utils.base.deep_convert(result, list)
+        elif type(result) is np.ndarray:
+            result = result.copy()
         return result
 
     def get_variable_count(self) -> int:
