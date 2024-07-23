@@ -255,7 +255,7 @@ class NotebookPage:
         },
         "filter": {
             "auto_thresh": [
-                "ndarray[int]",
+                "ndarray[float]",
                 "Numpy int array `[n_tiles x (n_rounds + n_extra_rounds) x n_channels]`"
                 + "`auto_thresh[t, r, c]` is the threshold spot intensity for tile $t$, round $r$, channel $c$"
                 + "used for spot detection in the `find_spots` step of the pipeline.",

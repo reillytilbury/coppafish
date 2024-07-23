@@ -261,7 +261,6 @@ def optical_flow_register(
     smooth_loc: str,
     sample_factor_yx: int = 4,
     window_radius: int = 5,
-    smooth_threshold: float = 0.9,
     smooth_sigma: list = [20, 20, 2],
     clip_val: np.ndarray = np.array([40, 40, 15]),
     n_cores: Optional[int] = None,
@@ -336,7 +335,6 @@ def optical_flow_register(
         correlation,
         tile=tile,
         round=round,
-        threshold=smooth_threshold,
         sigma=smooth_sigma,
         loc=smooth_loc,
     )
@@ -374,12 +372,11 @@ def optical_flow_single(
     base = base.astype(np.float32)
     target = target.astype(np.float32)
     # First, correct for a yx shift in the images
-    mid_z = int(target.shape[2] / 2)
-    window_yx = skimage.filters.window("hann", target.shape[:2])
+    # mid_z = int(target.shape[2] / 2)
+    window_yx = skimage.filters.window("hann", target.shape)
     shift = skimage.registration.phase_cross_correlation(
-        reference_image=target[:, :, mid_z] * window_yx, moving_image=base[:, :, mid_z] * window_yx, upsample_factor=10
+        reference_image=target * window_yx, moving_image=base * window_yx, upsample_factor=10
     )[0]
-    shift = np.array([shift[0], shift[1], 0])
     base = preprocessing.custom_shift(base, shift.astype(int))
     ny, _, nz = target.shape
     yx_sub = int((ny / chunks_yx) * 1.25)
@@ -402,6 +399,9 @@ def optical_flow_single(
     # flatten dims 0 and 1
     target_sub = target_sub.reshape((chunks_yx**2, nz, yx_sub, yx_sub))
     base_sub = base_sub.reshape((chunks_yx**2, nz, yx_sub, yx_sub))
+    # divide each subvolume by its mean
+    target_sub = target_sub / np.mean(target_sub, axis=(1, 2, 3))[:, None, None, None]
+    base_sub = base_sub / np.mean(base_sub, axis=(1, 2, 3))[:, None, None, None]
     # compute the optical flow (in parallel)
     if n_cores is None:
         n_cores = utils.system.get_core_count()
@@ -505,8 +505,6 @@ def flow_correlation(
     )
     # upsample
     correlation_up = upsample_yx(correlation, upsample_factor_yx, order=0).astype(np.float16)
-    # make sure every z-plane has the same mean correlation
-    correlation /= np.mean(correlation, axis=(0, 1))[None, None, :]
     # save the correlation
     if loc:
         # save in yxz format
@@ -522,7 +520,6 @@ def interpolate_flow(
     correlation: np.ndarray,
     tile: int,
     round: int,
-    threshold: float = 0.95,
     sigma: list = [20, 20, 2],
     upsample_factor_yx: int = 4,
     loc: str = "",
@@ -530,28 +527,30 @@ def interpolate_flow(
     """
     Interpolate the flow based on the correlation between the base and target images.
 
-    The interpolation is done between by smoothing the flow at the good locations and taking the ratio of this with
-    the smoothed indicator of the good locations.
+    The interpolation is done between by smoothing the correlation weighted flow and dividing by the smoothed
+    correlation. This replaces the flow in regions of low correlation with a smoothed version of the flow in regions of
+    high correlation.
 
     This smoothing is done in 3D with sigma much smaller in z than xy to avoid getting rid of variable shifts in z.
 
     Args:
         flow: 3 x n_y x n_x x n_z array of flow in y, x and z
         correlation: n_y x n_x x n_z array of correlation coefficients
-        threshold: threshold for correlation coefficient
+        tile: int specifying the tile index
+        round: int specifying the round index
         sigma: standard deviation of the Gaussian filter to be used for smoothing the flow
         upsample_factor_yx: int specifying the upsample factor in y and x
         loc: str specifying the location to save/ load the interpolated flow
     """
     time_start = time.time()
-    # threshold the correlation
-    mask = correlation >= np.quantile(correlation, threshold)
-    flow_indicator = mask.astype(np.float32)
-    flow_indicator_smooth = gaussian_filter(flow_indicator, sigma, truncate=6)
+    # normalise the correlation so that the mean of each z-plane is 1. This is done to use the best shifts on each z
+    # plane, otherwise the middle z-planes dominate the smoothed flow
+    correlation = correlation / np.mean(correlation, axis=(0, 1))[None, None, :]
+    correlation_smooth = gaussian_filter(correlation, sigma, truncate=6)
     for i in range(3):
-        flow[i] = gaussian_filter(flow[i] * flow_indicator, sigma, truncate=6)
+        flow[i] = gaussian_filter(flow[i] * correlation, sigma, truncate=6)
     # divide the flow by the smoothed indicator
-    flow = np.array([flow[i] / flow_indicator_smooth for i in range(3)])
+    flow = np.array([flow[i] / correlation_smooth for i in range(3)])
     # remove nan values
     flow = np.nan_to_num(flow)
     upsample_factor = (upsample_factor_yx, upsample_factor_yx, 1)
@@ -588,24 +587,6 @@ def upsample_yx(im: np.ndarray, factor: float = 4, order: int = 1) -> np.ndarray
     for z in range(im.shape[2]):
         im_up[:, :, z] = scipy.ndimage.zoom(im[:, :, z], factor, order=order)
     return im_up
-
-
-def gaussian_kernel(sigma: float, size: int) -> np.ndarray:
-    """
-    Function to create a 3D Gaussian kernel
-    Args:
-        sigma: float specifying the standard deviation of the Gaussian kernel
-        size: int specifying the size of the Gaussian kernel
-    """
-    coords = np.arange(size) - size // 2
-    kernel_1d = np.exp(-0.5 * (coords / sigma) ** 2)
-    kernel_1d /= np.sum(kernel_1d)
-    kernel_2d = np.outer(kernel_1d, kernel_1d)
-    kernel_3d = np.zeros((size, size, size))
-    for z in range(size):
-        kernel_3d[z] = kernel_2d * kernel_1d[z]
-
-    return kernel_3d / np.sum(kernel_3d)
 
 
 def channel_registration(
@@ -724,132 +705,6 @@ def channel_registration(
         transform_zyx[i] = preprocessing.yxz_to_zyx_affine(transform[i])
 
     return transform_zyx
-
-
-# Function to remove outlier shifts
-def regularise_shift(shift, tile_origin, residual_threshold) -> np.ndarray:
-    """
-    Function to remove outlier shifts from a collection of shifts whose start location can be determined by position.
-    Uses robust linear regression to compute a prediction of what the shifts should look like and if any shift differs
-    from this by more than some threshold it is declared to be an outlier.
-    Args:
-        shift: [n_tiles_use x n_rounds_use x 3]
-        tile_origin: yxz positions of the tiles [n_tiles_use x 3]
-        residual_threshold: This is a threshold above which we will consider a point to be an outlier
-
-    Returns:
-        shift_regularised: [n_tiles x n_rounds x 4 x 3]
-    """
-    # rearrange columns so that tile origins are in zyx like the shifts are, then initialise commonly used variables
-    tile_origin = np.roll(tile_origin, 1, axis=1)
-    tile_origin_padded = np.pad(tile_origin, ((0, 0), (0, 1)), mode="constant", constant_values=1)
-    n_tiles_use, n_rounds_use = shift.shape[0], shift.shape[1]
-    shift_regularised = np.zeros((n_tiles_use, n_rounds_use, 3))
-    shift_norm = np.linalg.norm(shift, axis=2)
-
-    # Loop through rounds and perform a linear regression on the shifts for each round
-    for r in range(n_rounds_use):
-        lb, ub = np.percentile(shift_norm[:, r], [10, 90])
-        valid = (shift_norm[:, r] > lb) * (shift_norm[:, r] < ub)
-        if np.sum(valid) < 3:
-            continue
-        # Carry out regression
-        big_transform = ols_regression(shift[valid, r], tile_origin[valid])
-        shift_regularised[:, r] = tile_origin_padded @ big_transform.T - tile_origin
-        # Compute residuals
-        residuals = np.linalg.norm(shift[:, r] - shift_regularised[:, r], axis=1)
-        # Identify outliers
-        outliers = residuals > residual_threshold
-        # Replace outliers with predicted shifts
-        shift[outliers, r] = shift_regularised[outliers, r]
-
-    return shift
-
-
-# Function to remove outlier round scales
-def regularise_round_scaling(scale: np.ndarray):
-    """
-    Function to remove outliers in the scale parameters for round transforms. Experience shows these should be close
-    to 1 for x and y regardless of round and should be increasing or decreasing for z dependent on whether anchor
-    round came before or after.
-
-    Args:
-        scale: 3 x n_tiles_use x n_rounds_use ndarray of z y x scales for each tile and round
-
-    Returns:
-        scale_regularised:  n_tiles_use x n_rounds_use x 3 ndarray of z y x regularised scales for each tile and round
-    """
-    # Define num tiles and separate the z scale and yx scales for different analysis
-    n_tiles = scale.shape[1]
-    z_scale = scale[0]
-    yx_scale = scale[1:]
-
-    # Regularise z_scale. Expect z_scale to vary by round but not by tile.
-    # We classify outliers in z as:
-    # a.) those that lie outside 1 iqr of the median for z_scales of that round
-    # b.) those that increase when the majority decrease or those that decrease when majority increase
-    # First carry out removal of outliers of type (a)
-    median_z_scale = np.repeat(np.median(z_scale, axis=0)[np.newaxis, :], n_tiles, axis=0)
-    iqr_z_scale = np.repeat(scipy.stats.iqr(z_scale, axis=0)[np.newaxis, :], n_tiles, axis=0)
-    outlier_z = np.abs(z_scale - median_z_scale) > iqr_z_scale
-    z_scale[outlier_z] = median_z_scale[outlier_z]
-
-    # Now carry out removal of outliers of type (b)
-    delta_z_scale = np.diff(z_scale, axis=1)
-    dominant_sign = np.sign(np.median(delta_z_scale))
-    outlier_z = np.hstack((np.sign(delta_z_scale) != dominant_sign, np.zeros((n_tiles, 1), dtype=bool)))
-    z_scale[outlier_z] = median_z_scale[outlier_z]
-
-    # Regularise yx_scale: No need to account for variation in tile or round
-    outlier_yx = np.abs(yx_scale - 1) > 0.01
-    yx_scale[outlier_yx] = 1
-
-    return scale
-
-
-# Bridge function for all regularisation
-def regularise_transforms(
-    registration_data: dict, tile_origin: np.ndarray, residual_threshold: float, use_tiles: list, use_rounds: list
-):
-    """
-    Function to regularise affine transforms by comparing them to affine transforms from other tiles.
-    As the channel transforms do not depend on tile, they do not need to be regularised.
-    Args:
-        registration_data: dictionary of registration data
-        tile_origin: n_tiles x 3 tile origin in zyx
-        residual_threshold: threshold for classifying outlier shifts
-        use_tiles: list of tiles in use
-        use_rounds: list of rounds in use
-
-    Returns:
-        registration_data: dictionary of registration data with regularised transforms
-    """
-    # Extract transforms
-    round_transform = np.copy(registration_data["round_registration"]["transform_raw"])
-
-    # Code becomes easier when we disregard tiles, rounds, channels not in use
-    n_tiles, n_rounds = round_transform.shape[0], round_transform.shape[1]
-    tile_origin = tile_origin[use_tiles]
-    round_transform = round_transform[use_tiles][:, use_rounds]
-
-    # Regularise round transforms
-    round_transform[:, :, :, 3] = regularise_shift(
-        shift=round_transform[:, :, :, 3], tile_origin=tile_origin, residual_threshold=residual_threshold
-    )
-    round_scale = np.array([round_transform[:, :, 0, 0], round_transform[:, :, 1, 1], round_transform[:, :, 2, 2]])
-    round_scale_regularised = regularise_round_scaling(round_scale)
-    round_transform = preprocessing.replace_scale(transform=round_transform, scale=round_scale_regularised)
-    round_transform = preprocessing.populate_full(
-        sublist_1=use_tiles,
-        list_1=np.arange(n_tiles),
-        sublist_2=use_rounds,
-        list_2=np.arange(n_rounds),
-        array=round_transform,
-    )
-
-    registration_data["round_registration"]["transform"] = round_transform
-
-    return registration_data
 
 
 # Function which runs a single iteration of the icp algorithm

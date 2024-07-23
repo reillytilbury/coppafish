@@ -125,8 +125,8 @@ _options = {
     },
     "call_spots": {
         "gene_prob_threshold": "number",
-        "target_values": "tuple_number",
-        "d_max": "tuple_int",
+        "target_values": "maybe_tuple_number",
+        "d_max": "maybe_tuple_int",
         "kappa": "maybe_number",
         "concentration_parameter_parallel": "number",
         "concentration_parameter_perpendicular": "number",

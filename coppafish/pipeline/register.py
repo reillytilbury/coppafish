@@ -146,7 +146,6 @@ def register(
                 sample_factor_yx=config["sample_factor_yx"],
                 window_radius=config["window_radius"],
                 smooth_sigma=config["smooth_sigma"],
-                smooth_threshold=config["smooth_thresh"],
                 clip_val=config["flow_clip"],
                 n_cores=config["flow_cores"],
             )
