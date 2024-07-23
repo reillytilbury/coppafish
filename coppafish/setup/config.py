@@ -130,7 +130,6 @@ _options = {
         "kappa": "maybe_number",
         "concentration_parameter_parallel": "number",
         "concentration_parameter_perpendicular": "number",
-        "bayes_mean_min_spots": "int",
     },
     "omp": {
         "colour_normalise": "bool",

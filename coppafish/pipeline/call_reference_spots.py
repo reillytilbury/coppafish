@@ -108,14 +108,11 @@ def call_reference_spots(
     bleed_matrix_initial = compute_bleed_matrix(spot_colours[good], prob_mode_initial[good], gene_codes, n_dyes)
 
     # 4. Compute the free_bled_codes
-    free_bled_codes_tile_indep = bleed_matrix_initial[gene_codes]
+    free_bled_codes_tile_indep = np.zeros((n_genes, n_rounds, n_channels_use))
     free_bled_codes = np.zeros((n_genes, n_tiles, n_rounds, n_channels_use))
-    free_bled_codes[:, use_tiles] = np.repeat(free_bled_codes_tile_indep[:, None], len(use_tiles), axis=1)
+
     for g in range(n_genes):
         good_g = (prob_mode_initial == g) & good
-        # skip genes with too few spots. These will just be assigned the initial bled codes
-        if np.sum(good_g) < config["bayes_mean_min_spots"]:
-            continue
         for r in range(n_rounds):
             free_bled_codes_tile_indep[g, r] = bayes_mean(
                 spot_colours=spot_colours[good_g, r],
