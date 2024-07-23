@@ -616,8 +616,9 @@ class GESpotViewer:
         self.spots, self.bled_code, self.tile, self.spot_index = None, None, None, None
         self.load_spots(gene_index)
         # Now initialise the plot, adding fig and ax attributes to the class
-        self.fig, self.ax = plt.subplots(1, 2)
+        self.fig, self.ax = plt.subplots(2,1)
         self.plot()
+        plt.show()
 
     def load_spots(self, gene_index: int):
         # initialise variables
@@ -646,8 +647,9 @@ class GESpotViewer:
             tile = nb.ref_spots.tile
             spot_index = np.arange(len(nb.ref_spots.colours))
 
-        # get spots for gene gene_index with score > score_threshold for current mode
-        mask = (gene_no == gene_index) & (score > self.score_threshold)
+        # get spots for gene gene_index with score > score_threshold for current mode and valid spots
+        invalid = np.any(np.isnan(spots), axis=(1, 2))
+        mask = (gene_no == gene_index) & (score > self.score_threshold) & (~invalid)
         spots = spots[mask] * colour_norm[tile[mask]]
         spots = spot_colours_base.remove_background(spots)[0]
         # order spots by scores
@@ -667,8 +669,18 @@ class GESpotViewer:
             a.clear()
         # Now we can plot the spots. We want to create 2 subplots. One with the spots observed and one with the expected
         # spots.
-        vmin, vmax = np.percentile(self.spots, [1, 99])
+        vmin, vmax = np.percentile(self.spots, [3, 97])
         gene_code = self.nb.call_spots.gene_codes[self.gene_index]
+        # we are going to find the mean cosine angle between observed and expected spots in each round
+        n_rounds, n_channels = len(self.nb.basic_info.use_rounds), len(self.nb.basic_info.use_channels)
+        mean_cosine = np.zeros(n_rounds)
+        for r in range(n_rounds):
+            colours_r = self.spots[:, r * n_channels:(r + 1) * n_channels].copy()
+            colours_r /= np.linalg.norm(colours_r, axis=1)[:, None]
+            bled_code_r = self.bled_code[0, r * n_channels:(r + 1) * n_channels].copy()
+            bled_code_r /= np.linalg.norm(bled_code_r)
+            mean_cosine[r] = np.mean(colours_r @ bled_code_r, axis=0)
+
         # We can then plot the spots observed and the spots expected.
         self.ax[0].imshow(self.spots, cmap="viridis", vmin=vmin, vmax=vmax, aspect="auto", interpolation="none")
         self.ax[1].imshow(self.bled_code, cmap="viridis", aspect="auto", interpolation="none")
@@ -676,12 +688,17 @@ class GESpotViewer:
         names = ['observed spots', 'bled code']
         for i, a in enumerate(self.ax):
             a.set_title(names[i])
-            a.set_xlabel("Spot Colour (flattened)")
+            if i == 1:
+                a.set_xlabel("Gene Colour")
             a.set_ylabel("Spot")
             # add x ticks of the round number
             n_rounds, n_channels = len(self.nb.basic_info.use_rounds), len(self.nb.basic_info.use_channels)
             x_tick_loc = np.arange(n_channels // 2, n_channels * n_rounds, n_channels)
-            x_tick_label = [f'R {r}' for r in self.nb.basic_info.use_rounds]
+            if i == 0:
+                x_tick_label = [f'R {r} \n {str(np.around(mean_cosine[r], 2))}'
+                                for r in self.nb.basic_info.use_rounds]
+            else:
+                x_tick_label = [f'R {r}' for r in self.nb.basic_info.use_rounds]
             a.set_xticks(x_tick_loc, x_tick_label)
             a.set_yticks([])
 
