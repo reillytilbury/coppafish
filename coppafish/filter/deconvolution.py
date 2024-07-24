@@ -38,11 +38,15 @@ def wiener_deconvolve(
         end_values=[(im_av, im_av)] * 3,
     )
     # Convert variables from numpy arrays to pytorch tensors
-    image = torch.asarray(image, dtype=torch.complex128)
-    filter = torch.asarray(filter, dtype=torch.complex128)
+    image = torch.asarray(image, dtype=torch.complex64)
+    filter = torch.asarray(filter, dtype=torch.complex64)
     image = image.to(run_device)
     filter = filter.to(run_device)
-    im_deconvolved = torch.real(torch.fft.ifftn(torch.fft.fftn(image) * filter)).type(dtype=torch.float64)
+    im_deconvolved = torch.fft.fftn(image)
+    im_deconvolved *= filter
+    im_deconvolved = torch.fft.ifftn(im_deconvolved)
+    im_deconvolved = torch.real(im_deconvolved)
+    im_deconvolved = im_deconvolved.double()
     im_deconvolved = im_deconvolved[
         im_pad_shape[0] : -im_pad_shape[0],
         im_pad_shape[1] : -im_pad_shape[1],
