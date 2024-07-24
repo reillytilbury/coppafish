@@ -6,9 +6,9 @@ import numpy as np
 from tqdm import tqdm
 import zarr
 
-from .. import extract, filter, log, utils
-from ..filter import deconvolution
+from .. import extract, log, utils
 from ..filter import base as filter_base
+from ..filter import deconvolution
 from ..setup import NotebookPage
 from ..utils import indexing, tiles_io
 
@@ -87,7 +87,7 @@ def run_filter(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage) ->
             np.array([nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)])
             + np.array(config["wiener_pad_shape"]) * 2
         )
-        wiener_filter = deconvolution.get_wiener_filter(psf, pad_im_shape, config["wiener_constant"])
+        wiener_filter = filter_base.get_wiener_filter(psf, pad_im_shape, config["wiener_constant"])
         nbp_debug.psf = psf
     else:
         nbp_debug.psf = None
@@ -108,21 +108,22 @@ def run_filter(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage) ->
             # Get t, r, c image from raw files
             im_raw = tiles_io._load_image(file_path_raw)[:]
             im_filtered, bad_columns = extract.strip_hack(im_raw)  # check for faulty columns
-            assert bad_columns.size == 0, f"Bad y column(s) were found during {t=}, {r=}, {c=} image filtering"
+            if bad_columns.size > 0:
+                raise ValueError(f"Bad y column(s) were found during {t=}, {r=}, {c=} image filtering")
             del im_raw
             # Move to floating point before doing any filtering
             im_filtered = im_filtered.astype(np.float64)
             if config["deconvolve"]:
                 # Deconvolves dapi images too
-                im_filtered = filter.wiener_deconvolve(im_filtered, config["wiener_pad_shape"], wiener_filter)
+                im_filtered = deconvolution.wiener_deconvolve(
+                    im_filtered, config["wiener_pad_shape"], wiener_filter, config["force_cpu"]
+                )
             if c == nbp_basic.dapi_channel:
                 if filter_kernel_dapi is not None:
                     im_filtered = utils.morphology.top_hat(im_filtered, filter_kernel_dapi)
                 # DAPI images are shifted so all negative pixels are now positive so they can be saved without clipping
                 im_filtered -= im_filtered.min()
             elif c != nbp_basic.dapi_channel:
-                if (im_filtered > np.iinfo(np.int32).max).sum() > 0:
-                    log.warn(f"Converting to int32 has cut off pixels for {t=}, {r=}, {c=} filtered image")
                 auto_thresh[t, r, c] = float(config["auto_thresh_multiplier"] * np.median(np.abs(im_filtered)))
             im_filtered = im_filtered.astype(np.float16)
             images[t, r, c] = im_filtered
@@ -134,4 +135,5 @@ def run_filter(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage) ->
     end_time = time.time()
     nbp_debug.time_taken = end_time - start_time
     log.debug("Filter complete")
+
     return nbp, nbp_debug
