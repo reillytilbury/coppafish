@@ -204,10 +204,10 @@ Fix a gene $g$ and round $r$ and let $\mathbf{F_{1,r}}, \ldots, \mathbf{F_{n,r}}
 
 We'd like to find a representative vector for this data which captures the mean length, but some genes have very few spots so an average is noisy. We therefore bias our mean towards a scaled version of $\mathbf{B}_{d(g,r)}$. 
 
-To begin, assume the mean vector $\overline{\mathbf{F}} = \frac{1}{n} \sum_{i} \mathbf{F}_{i,r}$ is normally distributed and impose a normal prior on the space of possible means:
+To begin, assume the vectors $\mathbf{F_{1,r}}, \ldots, \mathbf{F_{n,r}}$ are i.i.d normal random variables with mean $\boldsymbol{\mu}$ and covariance $I_{n_c}$. Impose a normal prior on the space of possible means:
 
 $$
-\overline{\mathbf{F}} \sim \mathcal{N}(\boldsymbol{\mu}, I_{n_c})
+\overline{\mathbf{F}} \sim \mathcal{N} \bigg( \boldsymbol{\mu}, \frac{\boldsymbol{I_{n_c}}}{n} \bigg)
 $$
 
 $$
@@ -220,32 +220,26 @@ $$
 \Sigma = \text{Diag}\left(\frac{1}{\alpha^2}, \frac{1}{\beta^2}, \ldots, \frac{1}{\beta^2}\right),
 $$
 
-in the orthonormal basis 
+in the orthonormal basis $\mathbf{v}_1 = \mathbf{B}_{d(g,r)}$, and everything else orthogonal to this.
 
-$$
-\mathbf{v}_1 = \mathbf{B}_{d(g,r)},
-$$
-  
-$$ 
-\mathbf{v}_2, \ldots, \mathbf{v}_n  \text{ orthogonal to } \mathbf{v}_1.
-$$
+The parameters $\alpha$ and $\beta$, being inverse variances, are concentration parameters. We'll let $\alpha << \beta$, so the set of probable means is very loosely concentrated along the line $\lambda \mathbf{B}_{d(g,r) }$, but very tightly concentrated perpendicular to this line!
 
-The parameters $\alpha$ and $\beta$, being inverse variances, are concentration parameters. We are going to let $\alpha << \beta$, which means the set of probable means is very unconcentrated along the line $\lambda \mathbf{B}_{d(g,r) }$, but very concentrated perpendicular to this. Another way of saying this is that our set of probable means under the prior distribution on $\mathbf{\mu}$ will be an elongated ellipsoid along the axis spanned by $\mathbf{B}_{d(g,r) }$.
+Set $\boldsymbol{\Lambda} =\boldsymbol{\Sigma}^{-1}$, $\mathbf{b} = \mathbf{B_{d(g,r)}}$, and recall that the normal is a conjugate prior, ie: the posterior $\boldsymbol{\mu} \mid \mathbf{\overline{F}}$ is normal, so its mean is its mode. 
 
-Define $\boldsymbol{\Lambda} =\boldsymbol{\Sigma}^{-1}$ and $\mathbf{b} = \mathbf{B_{d(g,r)}}$. Since the normal is a conjugate prior when the data is normal, we know that the posterior $\boldsymbol{\mu} \mid \mathbf{\overline{F}}$ is normal. Thus finding its mean is equivalent to finding its mode. To find its mode we will find the zero of the derivative of its log-density. The log-density of $\boldsymbol{\mu} \mid \mathbf{\overline{F}}$ is given by
+To find its mode we'll solve for the zeros of the derivative of its log-density. The log-density of $\boldsymbol{\mu} \mid \mathbf{\overline{F}}$ is given by
 
 $$
 \begin{aligned}
 l(\boldsymbol{\mu}) &= \log P(\boldsymbol{\mu}| \overline{\mathbf{F}} = \mathbf{f}) \\ \\
        &= \log P(\boldsymbol{\mu}) + \log P(\overline{\mathbf{F}} = \mathbf{f} | \boldsymbol{\mu}) + C \\ \\
-       &= -\frac{1}{2} (\boldsymbol{\mu} - \mathbf{b})^T \boldsymbol{\Lambda} (\boldsymbol{\mu} - \mathbf{b}) - \frac{1}{2} (\boldsymbol{\mu} - \mathbf{f})^T (\boldsymbol{\mu} - \mathbf{f}) + C
+       &= -\frac{1}{2} (\boldsymbol{\mu} - \mathbf{b})^T \boldsymbol{\Lambda} (\boldsymbol{\mu} - \mathbf{b}) - \frac{n}{2} (\boldsymbol{\mu} - \mathbf{f})^T (\boldsymbol{\mu} - \mathbf{f}) + C
 \end{aligned}
 $$
 
 This has derivative
 
 $$
-\frac{\partial l}{\partial \boldsymbol{\mu}} = - \boldsymbol{\lambda} (\boldsymbol{\mu} - \boldsymbol{b}) - (\boldsymbol{\mu} - \mathbf{f})
+\frac{\partial l}{\partial \boldsymbol{\mu}} = - \boldsymbol{\Lambda} (\boldsymbol{\mu} - \boldsymbol{b}) - n(\boldsymbol{\mu} - \mathbf{f})
 $$
 
 Setting this to $\mathbf{0}$, rearranging for $\boldsymbol{\mu}$ and using the fact that
@@ -262,12 +256,12 @@ we get
 
 $$
 \begin{aligned}
-\mathbf{\hat{\mu}} &= (\Lambda + I)^{-1}(\Lambda \mathbf{b} + \mathbf{f}) \\ \\ 
-    &= (\Lambda + I)^{-1}(\alpha^2 \mathbf{b} + \mathbf{f}) \\ \\
-    &= (\Lambda + I)^{-1}(\alpha^2 \mathbf{b} + (\mathbf{f} \cdot \mathbf{b})\mathbf{b} + \mathbf{f} - (\mathbf{f} \cdot \mathbf{b})\mathbf{b}) \\ \\
-    &= (\Lambda + I)^{-1}((\alpha^2 + \mathbf{f} \cdot \mathbf{b})\mathbf{b} + \mathbf{f} - (\mathbf{f} \cdot \mathbf{b})\mathbf{b}) \\ \\
-&= \dfrac{(\alpha^2 + \mathbf{f} \cdot \mathbf{b})}{1 + \alpha^2} \mathbf{b} +
- \dfrac{1}{1+\beta^2} \bigg( \mathbf{f} - (\mathbf{f} \cdot \mathbf{b})\mathbf{b} \bigg)
+\mathbf{\hat{\mu}} &= (\Lambda + nI)^{-1}(\Lambda \mathbf{b} + n\mathbf{f}) \\ \\ 
+    &= (\Lambda + nI)^{-1}(\alpha^2 \mathbf{b} + n\mathbf{f}) \\ \\
+    &= (\Lambda + nI)^{-1}(\alpha^2 \mathbf{b} + n(\mathbf{f} \cdot \mathbf{b})\mathbf{b} + n(\mathbf{f} - (\mathbf{f} \cdot \mathbf{b})\mathbf{b})) \\ \\
+    &= (\Lambda + nI)^{-1}((\alpha^2 + n \mathbf{f} \cdot \mathbf{b})\mathbf{b} + n(\mathbf{f} - (\mathbf{f} \cdot \mathbf{b})\mathbf{b}))\\ \\
+&= \dfrac{(\alpha^2 + n \mathbf{f} \cdot \mathbf{b})}{n + \alpha^2} \mathbf{b} +
+ \dfrac{n}{n+\beta^2} \bigg( \mathbf{f} - (\mathbf{f} \cdot \mathbf{b})\mathbf{b} \bigg)
 \end{aligned}
 $$
 

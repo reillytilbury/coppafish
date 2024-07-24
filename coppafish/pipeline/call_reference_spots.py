@@ -50,7 +50,7 @@ def call_reference_spots(
     # assign config values that have not been provided
     target_values, d_max, kappa = config["target_values"], config["d_max"], config["kappa"]
     if target_values is None:
-        if len(nbp_basic.usse_channels) == 7:
+        if len(nbp_basic.use_channels) == 7:
             target_values = [1, 1, 0.9, 0.7, 0.8, 1, 1]
         elif len(nbp_basic.use_channels) == 9:
             target_values = [1, 0.8, 0.2, 0.9, 0.6, 0.8, 0.3, 0.7, 1]
@@ -72,7 +72,7 @@ def call_reference_spots(
 
     # check shapes
     assert (
-        len(config["target_values"]) == len(config["d_max"]) == len(nbp_basic.use_channels)
+        len(target_values) == len(d_max) == len(nbp_basic.use_channels)
     ), "The target values, d_max and use_channels should have the same length."
 
     # load in frequently used variables
