@@ -104,7 +104,7 @@ class ViewOMPImage:
             image_colours *= colour_norm_factor[[tile]]
         # Divide each spot colour c by sum(square(c)) + lambda_d.
         colour_rms = image_colours.detach().clone()
-        colour_rms = colour_rms.square().reshape((-1, n_rounds_use * n_channels_use))
+        colour_rms = colour_rms.square().reshape((image_colours.shape[0], n_rounds_use * n_channels_use))
         colour_rms = colour_rms.sum(dim=1).sqrt()
         image_colours = image_colours / (colour_rms + config["lambda_d"])[:, np.newaxis, np.newaxis]
         image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))

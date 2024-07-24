@@ -1,12 +1,18 @@
-# Call Spots Documentation
+# Call Spots
 
-The Call Reference Spots section of the pipeline is a method of gene calling which runs quickly on a small set of spots  ($\approx$ 50, 000 per tile) of the anchor image. Initially, this was our final mode of gene calling, but has since been superseded by OMP, which differs from Call Spots in that it runs on several more spots. That being said, the call spots section is still a crucial part of the pipeline as it estimates several important parameters used in the OMP section.
+The Call Reference Spots section of the pipeline is a method of gene calling which runs quickly on a small set of 
+spots ($\approx$ 50, 000 per tile) of the anchor image. Initially, this was our final mode of gene calling, but has 
+since been superseded by OMP, which differs from Call Spots in that it runs on several more spots. That being said, 
+the call spots section is still a crucial part of the pipeline as it estimates several important parameters used in 
+the OMP section.
 
 Some of the most important exported parameters of this section are:
 
 - **Bleed Matrix** $\mathbf{B}$: $(n_{\text{d}} \times n_{\text{c}})$ array of the typical channel spectrum of each dye.
 
-- **Colour Normalisation Factor** $\mathbf{A}$:  $(n_{\text{t}} \times n_{\text{r}} \times n_{\text{c}})$ array which multiplies the colours to minimise any systematic brightness variability between different tiles, rounds and channels, and maximise spectral separation of dyes,
+- **Colour Normalisation Factor** $\mathbf{A}$:  $(n_{\text{t}} \times n_{\text{r}} \times n_{\text{c}})$ array which 
+multiplies the colours to minimise any systematic brightness variability between different tiles, rounds and channels, 
+and maximise spectral separation of dyes,
 
 - **Bled Codes** $\mathbf{K}$: $(n_{\text{g}} \times n_{\text{r}} \times n_{\text{c}})$ array of the expected colour spectrum for each gene.
 
@@ -34,10 +40,13 @@ C_{g, r, d }=
 \end{cases}
 $$
  
-- A raw bleed matrix $\mathbf{B_{raw}}$ of shape $(n_{\text{dyes}} \times n_{\text{c}})$ obtained from images of free-floating drops of each dye.
+- A raw bleed matrix $\mathbf{B_{raw}}$ of shape $(n_{\text{dyes}} \times n_{\text{c}})$ obtained from images of 
+free-floating drops of each dye.
 
 ### 0: Preprocessing
-The purpose of this step is to convert our raw pixels from integers between -15,000 and 50,000 to floating points numbers. We want to minimise the influence of variable brightness between different tiles, rounds and channels, and get rid of background fluorescence as much as possible. 
+The purpose of this step is to convert our raw pixels from integers between -15,000 and 50,000 to floating points 
+numbers. We want to minimise the influence of variable brightness between different tiles, rounds and channels, and 
+get rid of background fluorescence as much as possible. 
 
 We transform the raw spot colours via the following function:
 
@@ -47,11 +56,15 @@ In the formula above:
 
 - $F_{s,r,c}$ is the raw spot colour for spot $s$ in round $r$ and channel $c$, 
 
-- $P_{t,r,c} = 1/\text{Percentile}_s(F_{s, r, c}, 95)$ for all spots in tile $t$ is the initial normalisation factor. For 7 dyes, $\approx 1/ 7 \approx 15\%$ of spots in round $r$ are expected to be brightest in channel $c$. So this is normalising by the average intensity of a bright spot in this $(t, r, c)$, 
+- $P_{t,r,c} = 1/\text{Percentile}_s(F_{s, r, c}, 95)$ for all spots in tile $t$ is the initial normalisation factor. 
+For 7 dyes, $\approx 1/ 7 \approx 15\%$ of spots in round $r$ are expected to be brightest in channel $c$. So this is 
+normalising by the average intensity of a bright spot in this $(t, r, c)$, 
 
-- $\beta_{s,c} = \text{Percentile}_s(P_{t(s),r,c} F_{s, r, c}, 25)$, where the percentile is taken across rounds. For 7 rounds, this is the second brightest entry of channel $c$ across rounds. This is a rough estimate of the background brightness of spot $s$ in channel $c$ after scaling by $\mathbf{P}$.
+- $\beta_{s,c} = \text{Percentile}_s(P_{t(s),r,c} F_{s, r, c}, 25)$, where the percentile is taken across rounds. For 
+7 rounds, this is the second brightest entry of channel $c$ across rounds. This is a rough estimate of the background 
+brightness of spot $s$ in channel $c$ after scaling by $\mathbf{P}$.
 
-%TODO: Add an image of a spot before anything, after scaling, then after removing background
+<!-- TODO: Add an image of a spot before anything, after scaling, then after removing background -->
 
 ### 1: Initial Gene Assignment
 The purpose of this step is to provide some gene assignments that will facilitate further calculations. This is necessary as there are many important variables (eg: tile-independent free bled codes for each gene $E_{g,r,c}$ or the tile-dependent free bled codes $D_{g,t,r,c}$) which cannot be calculated without sample spots of these genes. 
@@ -386,3 +399,42 @@ With that in mind, we compute:
 2. Final Dot Products using the scaled spots $\mathbf{AF}$ and comparing against the constrained codes $\mathbf{K}$. These would not have been accurate in step 1 as we had no model of how each gene varied in brightness between rounds, but now this is something we have accounted for in $\mathbf{K}$.
 
 3. The Final Bleed Matrix using the same method as discussed in step 2, but with updated gene probabilities.
+
+
+# Orthogonal Matching Pursuit (OMP)
+
+OMP is coppafish's current best gene assignment algorithm. OMP runs independently, except requiring 
+[call spots](#call-spots) for more accurate representation of each gene's unique barcode: its bled code 
+($\mathbs{b}_{grc}$).
+
+## Maths Definitions
+
+- $r$ and $c$ represents sequencing rounds and channels respectively.
+- $\mathbf{b}_{grc}$ represents gene g's bled code in round $r$, channel $c$.
+- $\mathbf{S}_{prc}$ is pixel $p$'s colour in round $r$, channel $c$, after pre-processing is applied.
+- $\mathbf{c}_{pgi}$ is the OMP coefficient given to gene $g$ for image pixel $p$ on the $i$'th iteration. $i$ takes 
+values $1, 2, 3, ...$
+
+## 0: Pre-processing
+
+All pixel colours are normalised based on their intensities. If $\widetilde{\mathbf{S}}$ are the initial pixel colours, 
+the final pixel colours $\mathbf{S}$ become
+
+$$
+\mathbf{S}_{prc} = \frac{\widetilde{\mathbf{S}}_{prc}}{\sqrt{\sum_{rc} \widetilde{\mathbf{S}}_{prc}}}
+$$
+
+## 1: Assigning Next Gene
+
+A pixel can have more than one gene assigned to it. Let's say we are on iteration $i$ for pixel $p$. The pixel will 
+already have $i - 1$ genes assigned to it and their coefficients have already been computed ($\mathbf{c}_{pg(i - 1)}$). 
+We compute the latest residual pixel colour $\mathbf{R}_{prci}$ as 
+
+$$
+\mathbf{R}_{prci} = \mathbf{S}_{prc} - \sum_g \mathbf{c}_{pg(i - 1)}\mathbf{b}_{grc}
+$$
+
+If this is the first iteration, then $\mathbf{R}$ is the same as $\mathbf{S}$.
+
+## 2: Gene Coefficients
+
