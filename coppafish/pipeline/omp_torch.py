@@ -336,7 +336,7 @@ def run_omp(
             chunks=(n_chunk_max, 1, 1),
         )
         for i, r in enumerate(nbp_basic.use_rounds):
-            t_spots_colours[:, i] = spot_colors.base.get_spot_colours_new(
+            t_r_spot_colours = spot_colors.base.get_spot_colours_new(
                 nbp_filter.images,
                 nbp_register.flow,
                 nbp_register.icp_correction,
@@ -349,6 +349,8 @@ def run_omp(
                 dtype=np.float16,
                 force_cpu=config["force_cpu"],
             ).T
+            t_r_spot_colours[np.isnan(t_r_spot_colours)] = 0
+            t_spots_colours[:, i] = t_r_spot_colours
         del t_spots_local_yxz, t_spots_tile, t_spots_gene_no, t_spots_score, t_spots_colours
         del t_local_yxzs, tile_results
         log.debug(f"Gathering spot colours complete")

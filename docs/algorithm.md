@@ -417,8 +417,9 @@ values $1, 2, 3, ...$
 
 ## 0: Pre-processing
 
-All pixel colours are normalised based on their intensities. If $\widetilde{\mathbf{S}}$ are the initial pixel colours, 
-the final pixel colours $\mathbf{S}$ become
+All pixel colours are gathered using the results from register. Any out of bounds round/channel colour intensities are 
+set to zero. Pixel colours are normalised based on their intensities. If $\widetilde{\mathbf{S}}$ are the initial 
+pixel colours, the final pixel colours $\mathbf{S}$ become
 
 $$
 \mathbf{S}_{prc} = \frac{\widetilde{\mathbf{S}}_{prc}}{\sqrt{\sum_{rc} \widetilde{\mathbf{S}}_{prc}}}
