@@ -49,7 +49,7 @@ def run_filter(config: dict, nbp_file: NotebookPage, nbp_basic: NotebookPage) ->
 
     max_ind = np.array(indices).max(0).tolist()
     shape = (max_ind[0] + 1, max_ind[1] + 1, max_ind[2] + 1, nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z))
-    chunks = (1, 1, 1, 1_100, 1_100, 1)
+    chunks = (1, 1, 1, 1_000, 1_000, 4)
     images = zarr.open_array(
         os.path.join(nbp_file.output_dir, "filter_images.zarr"),
         "w",
