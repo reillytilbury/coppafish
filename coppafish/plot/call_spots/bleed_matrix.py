@@ -1,7 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from ...setup import Notebook
-from .spot_colors import ColorPlotBase
+from .spot_colours import ColorPlotBase
 plt.style.use('dark_background')
 
 

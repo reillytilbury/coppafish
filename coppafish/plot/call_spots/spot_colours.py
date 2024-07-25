@@ -1,15 +1,16 @@
 import matplotlib as mpl
 from typing import List, Optional, Tuple, Union
-import matplotlib.colors as colors
 from matplotlib.patches import Rectangle
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button, Slider, RangeSlider
+from matplotlib import cm
 import mplcursors
 import numpy as np
 
 from ...call_spots.qual_check import omp_spot_score
 from ...spot_colors import base as spot_colours_base
 from ...call_spots import base as call_spots_base
+from ...call_spots import gene_prob_score
 from ...setup import Notebook
 
 try:
@@ -402,7 +403,7 @@ class view_spot(ColorPlotBase):
 
         # get spot colours for each round and channel
         for r in nb.basic_info.use_rounds:
-            spot_colours[r] = base.get_spot_colours_new(
+            spot_colours[r] = spot_colours_base.get_spot_colours_new(
                 nb.filter.images,
                 nb.register.flow,
                 nb.register.icp_correction,
@@ -613,10 +614,12 @@ class GESpotViewer:
         self.gene_index = gene_index
         self.score_threshold = score_threshold
         # Load spots
-        self.spots, self.bled_code, self.tile, self.spot_index = None, None, None, None
+        self.spots, self.score, self.tile, self.spot_index, self.bled_code = None, None, None, None, None
+        self.scatter_button, self.view_scatter_codes_button = None, None
         self.load_spots(gene_index)
         # Now initialise the plot, adding fig and ax attributes to the class
-        self.fig, self.ax = plt.subplots(2,1)
+        self.fig, self.ax = plt.subplots(2, 1, figsize=(15, 10))
+        self.fig_scatter, self.ax_scatter = None, None
         self.plot()
         plt.show()
 
@@ -652,14 +655,17 @@ class GESpotViewer:
         mask = (gene_no == gene_index) & (score > self.score_threshold) & (~invalid)
         spots = spots[mask] * colour_norm[tile[mask]]
         spots = spot_colours_base.remove_background(spots)[0]
+        score = score[mask]
         # order spots by scores
-        permutation = np.argsort(score[mask])[::-1]
+        permutation = np.argsort(score)[::-1]
         spots = spots[permutation]
+        score = score[permutation]
         spot_index = spot_index[mask][permutation]
         tile = tile[mask][permutation]
 
         # add attributes
         self.spots = spots.reshape(spots.shape[0], -1)
+        self.score = score
         self.bled_code = nb.call_spots.bled_codes[gene_index].reshape(1, -1)
         self.spot_index = spot_index
         self.tile = tile
@@ -712,10 +718,30 @@ class GESpotViewer:
                           f"(Code: {gene_code}) \n Score Threshold: {self.score_threshold:.2f}, "
                           f"N: {self.spots.shape[0]}")
 
-        self.add_cmap_widgets()
-        self.fig.canvas.draw_idle()
+        self.add_main_widgets()
+        plt.show()
 
-    def add_cmap_widgets(self):
+    def secondary_plot(self, event=None):
+        # calculate probability of gene assignment and plot this against the score
+        bled_codes = self.nb.call_spots.bled_codes
+        n_genes, n_rounds, n_channels = bled_codes.shape
+        kappa = np.log(1 + n_genes // 75) + 2
+        gene_probs = gene_prob_score(spot_colours=self.spots.reshape(-1, n_rounds, n_channels),
+                                     bled_codes=bled_codes, kappa=kappa)[:, self.gene_index]
+        self.fig_scatter, self.ax_scatter = plt.subplots()
+        spot_brightness = np.linalg.norm(self.spots, axis=1)
+        self.ax_scatter.scatter(x=gene_probs, y=self.score, alpha=0.5, c=spot_brightness, cmap="viridis")
+        self.ax_scatter.set_xlabel("Gene Probability")
+        self.ax_scatter.set_ylabel("Gene Score")
+        self.ax_scatter.set_title(f"Gene Probability vs Gene Score ({self.mode}) for Gene "
+                                  f"{self.nb.call_spots.gene_names[self.gene_index]}")
+        # add colorbar
+        cbar = self.fig_scatter.colorbar(cm.ScalarMappable(norm=None, cmap="viridis"), ax=self.ax_scatter)
+        cbar.set_label("Spot Brightness")
+        self.add_secondary_widgets(gene_probs)
+        plt.show()
+
+    def add_main_widgets(self):
         # Initialise buttons and cursors
         # 1. We would like each row of the plot to be clickable, so that we can view the observed spot.
         mplcursors.cursor(self.ax[0], hover=False).connect(
@@ -725,6 +751,17 @@ class GESpotViewer:
         )
         # 2. We would like to add a white rectangle around the observed spot when we hover over it
         mplcursors.cursor(self.ax[0], hover=2).connect("add", lambda sel: self.add_rectangle(sel.index[0]))
+        # 3. add a button to view a scatter plot of score vs probability
+        scatter_button_ax = self.fig.add_axes([0.925, 0.1, 0.05, 0.05])
+        self.scatter_button = Button(scatter_button_ax, "S", hovercolor="0.275")
+        self.scatter_button.on_clicked(self.secondary_plot)
+
+    def add_secondary_widgets(self, gene_probs):
+        # this functions adds widgets to the scatter plot figure and axes
+        # 1. add a button to view the gene code
+        view_code_button_ax = self.fig_scatter.add_axes([0.925, 0.1, 0.05, 0.05])
+        self.view_scatter_codes_button = Button(view_code_button_ax, "C", hovercolor="0.275")
+        self.view_scatter_codes_button.on_clicked(lambda event: self.view_scatter_codes(gene_probs, event))
 
     def add_rectangle(self, index):
         # We need to remove any existing rectangles from the plot
@@ -742,6 +779,22 @@ class GESpotViewer:
                 edgecolor="white",
             )
         )
+
+    def view_scatter_codes(self, gene_probs: np.ndarray, event=None):
+        # this function will grab all visible spots and plot them in a new figure
+        # get visible spots by the visible bounding box of ax_scatter
+        bottom, top = self.ax_scatter.get_ylim()
+        left, right = self.ax_scatter.get_xlim()
+        visible_spots = np.where((self.score >= bottom) & (self.score <= top) & (gene_probs >= left) &
+                                 (gene_probs <= right))[0]
+        # plot these spots (if there are any, and not too many)
+        if len(visible_spots) == 0:
+            print("No spots in visible range")
+        elif len(visible_spots) > 10:
+            print("Too many spots to view")
+        else:
+            for s in visible_spots:
+                view_codes(self.nb, self.spot_index[s], tile=self.tile[s], method=self.mode)
 
 
 class BGNormViewer:
