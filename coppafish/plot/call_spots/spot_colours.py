@@ -9,7 +9,7 @@ import numpy as np
 
 from ...call_spots.qual_check import omp_spot_score
 from ...spot_colors import base as spot_colours_base
-from ...call_spots import base as call_spots_base
+from ...omp import base as omp_base
 from ...call_spots import gene_prob_score
 from ...setup import Notebook
 
@@ -246,10 +246,7 @@ class view_codes(ColorPlotBase):
         assert method.lower() in ["anchor", "omp", "prob"], "method must be 'anchor', 'omp' or 'prob'"
         if method.lower() == "omp":
             # convert spot_no to be relative to tile
-            n_spots_per_tile = [nb.omp.results[f'tile_{t}'].scores.shape[0] for t in nb.basic_info.use_tiles]
-            change_points = np.array([0] + list(np.cumsum(n_spots_per_tile)))
-            spot_tile_start_index = change_points[np.where(change_points <= spot_no)[0][-1]]
-            spot_no = spot_no - spot_tile_start_index
+            spot_no = omp_base.global_to_local_index(nb.basic_info, nb.omp, spot_no)
             # now that spot_no is relative to tile, get spot_score, spot_colour and gene_no
             spot_score = nb.omp.results[f'tile_{tile}'].scores[spot_no]
             self.spot_colour = nb.omp.results[f'tile_{tile}'].colours[spot_no]
