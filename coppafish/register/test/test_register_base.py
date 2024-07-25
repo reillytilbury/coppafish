@@ -1,6 +1,6 @@
 import numpy as np
-from skimage import data
 from skimage.filters import gaussian
+
 from coppafish.register import base as reg_base
 from coppafish.register import preprocessing as reg_pre
 
@@ -69,7 +69,7 @@ def test_upsample_yx():
 
 
 def test_interpolate_flow():
-    # set up data. we will have nz = ny = nx = 10
+    # set up data. We will have nz = ny = nx = 10
     flow = np.ones((3, 10, 10, 10))
     flow[0] = 1
     flow[1] = 2
@@ -111,9 +111,11 @@ def test_flow_correlation():
     assert np.all(flow_corr[indices] >= 1)
 
 
+# TODO: This unit test is very slow (~1.7s). The data should be shrunk to speed it up.
 def test_optical_flow_single():
     # set up data
-    base = np.sum(data.astronaut(), axis=2)[::2, ::2]
+    rng = np.random.RandomState(0)
+    base = np.sum(rng.randint(0, 255, size=(512, 512, 3)).astype(np.uint8), axis=2)[::2, ::2]
     base = gaussian(base, sigma=2, preserve_range=True)
     base = np.repeat(base[:, :, None], 10, axis=2)
     base = base.astype(np.float32)
