@@ -238,13 +238,19 @@ class view_codes(ColorPlotBase):
 
         Args:
             nb: Notebook containing experiment details. Must have run at least as far as `call_reference_spots`.
-            spot_no: Spot of interest to be plotted.
+            spot_no: Spot of interest to be plotted. (index of spot from 0 - n_spots)
             bg_removed: Whether to plot background removed data.
             method: `'anchor'` or `'omp'` or `'prob'`.
                 Which method of gene assignment used i.e. `spot_no` belongs to `ref_spots` or `omp` page of Notebook.
         """
         assert method.lower() in ["anchor", "omp", "prob"], "method must be 'anchor', 'omp' or 'prob'"
         if method.lower() == "omp":
+            # convert spot_no to be relative to tile
+            n_spots_per_tile = [nb.omp.results[f'tile_{t}'].scores.shape[0] for t in nb.basic_info.use_tiles]
+            change_points = np.array([0] + list(np.cumsum(n_spots_per_tile)))
+            spot_tile_start_index = change_points[np.where(change_points <= spot_no)[0][-1]]
+            spot_no = spot_no - spot_tile_start_index
+            # now that spot_no is relative to tile, get spot_score, spot_colour and gene_no
             spot_score = nb.omp.results[f'tile_{tile}'].scores[spot_no]
             self.spot_colour = nb.omp.results[f'tile_{tile}'].colours[spot_no]
             gene_no = nb.omp.results[f'tile_{tile}'].gene_no[spot_no]

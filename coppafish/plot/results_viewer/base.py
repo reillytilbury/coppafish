@@ -452,7 +452,10 @@ class Viewer:
 
     def get_selected_spot_index(self, return_napari_index: bool = False) -> int:
         """
-        Get the index of the selected spot.
+        Get the index of the selected spot. Because the only spots plotted in napari are those that are in the gene
+        legend, the index of the spot plotted in napari may differ from the index of the spot in the notebook. This
+        function will return the index of the spot in the notebook, unless return_napari_index is True, in which case
+        it will return the index of the spot in the napari viewer.
         """
         n_selected = len(self.viewer.layers[self.viewer.layers.selection.active.name].selected_data)
         if n_selected == 1:
@@ -567,27 +570,22 @@ class Viewer:
 
         # add omp results to the lists
         if nb.has_page("omp"):
-            results = [nb.omp.results[f'tile_{t}'] for t in nb.basic_info.use_tiles]
             local_loc_omp, tile_omp = omp_base.get_all_local_yxz(nb.basic_info, nb.omp)
             gene_no_omp = omp_base.get_all_gene_no(nb.basic_info, nb.omp)[0]
             colours_omp = omp_base.get_all_colours(nb.basic_info, nb.omp)[0]
             score_omp = omp_base.get_all_scores(nb.basic_info, nb.omp)[0]
-            # TODO: intensity is not currently saved in the omp results. Until added we will set intensity = 1
+            # TODO: add intensity to omp results
             intensity_omp = np.ones_like(score_omp)
-            indices_omp = np.concatenate([np.arange(len(r.gene_no)) for r in results])
+            indices_omp = np.arange(score_omp.shape[0])
+
             # convert local_loc_omp to global_loc_omp
             global_loc_omp = local_loc_omp + tile_origin[tile_omp]
             global_loc_omp = global_loc_omp[:, [2, 0, 1]] // downsample_factor
 
             # append omp results to the lists
-            tile.append(tile_omp)
-            local_loc.append(local_loc_omp)
-            global_loc.append(global_loc_omp)
-            colours.append(colours_omp)
-            score.append(score_omp)
-            gene_no.append(gene_no_omp)
-            intensity.append(intensity_omp)
-            indices.append(indices_omp)
+            tile.append(tile_omp), local_loc.append(local_loc_omp), global_loc.append(global_loc_omp)
+            colours.append(colours_omp), score.append(score_omp), gene_no.append(gene_no_omp)
+            intensity.append(intensity_omp), indices.append(indices_omp)
 
         # add all spots of active genes to the napari viewer. If a gene is not in the legend, the spots assigned to this
         # gene will be disregarded.
