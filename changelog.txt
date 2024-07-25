@@ -13,6 +13,7 @@
     located at coppafish/setup/default_psf.npz.
  * Extract: Images are now rotated during extract instead of filter. Hence, the config parameter `num_rotations` has 
     been moved from the `filter` section to the `extract` section.
+ * OMP: After each tile, OMP saves the progress and can continue where it left off if OMP is not completed fully.
  * OMP: Pixel colours are not background fitted before being run through OMP. OMP stops iterating on a pixel if a 
     background gene is assigned.
  * OMP: Better OMP mean spot computation.
