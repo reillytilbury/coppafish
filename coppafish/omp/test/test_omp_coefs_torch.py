@@ -46,6 +46,21 @@ def test_compute_omp_coefficients() -> None:
         )
         assert type(pixel_coefficients) is torch.Tensor
         assert pixel_coefficients.shape == (n_pixels, n_genes)
+        # Run with a super high iteration to check early stopping works.
+        pixel_coefficients = coefs_torch.compute_omp_coefficients(
+            pixel_colours,
+            bled_codes,
+            1_000,
+            background_coefficients,
+            background_codes,
+            dot_product_threshold,
+            dot_product_norm_shift,
+            weight,
+            alpha,
+            beta,
+        )
+        assert type(pixel_coefficients) is torch.Tensor
+        assert pixel_coefficients.shape == (n_pixels, n_genes)
 
 
 def test_get_next_best_gene() -> None:
