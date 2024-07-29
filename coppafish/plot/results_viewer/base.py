@@ -169,9 +169,9 @@ class Viewer:
         # Slider to change intensity_thresh
         self.add_slider(
             name="intensity_thresh",
-            value=abs_intensity_thresh,
-            slider_range=(0, 1),
-            slider_mode="single",
+            value=(abs_intensity_thresh, np.max(self.spots["omp"].intensity)),
+            slider_range=(0, np.nanmax(self.spots["omp"].intensity)),
+            slider_mode="range",
             slider_variable="spot",
         )
         # Buttons to change method
@@ -291,12 +291,13 @@ class Viewer:
         The z-thickness slider will be updated in the method `update_z_thick`.
         """
         score_range = self.sliders["score_range"].value()
-        intensity_thresh = self.sliders["intensity_thresh"].value()
+        intensity_range = self.sliders["intensity_thresh"].value()
         for _, m in enumerate(self.method["names"]):
             # 1. score range
             good_score = (self.spots[m].score >= score_range[0]) & (self.spots[m].score <= score_range[1])
             # 2. intensity threshold
-            good_intensity = self.spots[m].intensity >= intensity_thresh
+            good_intensity = ((self.spots[m].intensity >= intensity_range[0]) &
+                              (self.spots[m].intensity <= intensity_range[1]))
             # 3. gene active
             active_genes = np.array([g.notebook_index for g in self.genes if g.active])
             good_gene = np.isin(self.spots[m].gene, active_genes)
@@ -561,7 +562,7 @@ class Viewer:
         global_loc = [(local_loc[i] + tile_origin[tile[i]])[:, [2, 0, 1]] for i in range(2)]  # convert to zyx
         # apply downsample factor
         global_loc = [loc // downsample_factor for loc in global_loc]
-        colours = [nb.__getattribute__(self.method["pages"][i]).colours for i in range(2)]
+        colours = [nb.__getattribute__(self.method["pages"][i]).colours.copy() for i in range(2)]
         colours = [colours[i] * colour_norm_factor[tile[i]] for i in range(2)]
         score = [nb.call_spots.dot_product_gene_score, np.max(nb.call_spots.gene_probabilities, axis=1)]
         gene_no = [nb.call_spots.dot_product_gene_no, np.argmax(nb.call_spots.gene_probabilities, axis=1)]
@@ -572,10 +573,12 @@ class Viewer:
         if nb.has_page("omp"):
             local_loc_omp, tile_omp = omp_base.get_all_local_yxz(nb.basic_info, nb.omp)
             gene_no_omp = omp_base.get_all_gene_no(nb.basic_info, nb.omp)[0]
-            colours_omp = omp_base.get_all_colours(nb.basic_info, nb.omp)[0]
+            colours_omp = omp_base.get_all_colours(nb.basic_info, nb.omp)[0].copy()
+            colours_omp = colours_omp * colour_norm_factor[tile_omp]
+            valid_colours = ~np.any(np.isnan(colours_omp), axis=(1, 2))
             score_omp = omp_base.get_all_scores(nb.basic_info, nb.omp)[0]
-            # TODO: add intensity to omp results
-            intensity_omp = np.ones_like(score_omp)
+            intensity_omp = np.median(np.max(colours_omp, axis=-1), axis=-1)
+            intensity_omp = np.clip(intensity_omp, 0, np.percentile(intensity_omp[valid_colours], 99))
             indices_omp = np.arange(score_omp.shape[0])
 
             # convert local_loc_omp to global_loc_omp
@@ -816,8 +819,10 @@ class Viewer:
         @self.viewer.bind_key(KeyBinds.view_spot_intensities)
         def call_to_view_spot(viewer):
             spot_index = self.get_selected_spot_index()
+            napari_index = self.get_selected_spot_index(return_napari_index=True)
+            spot_tile = int(self.spots[self.method["names"][self.method["active"]]].tile[napari_index])
             if spot_index is not None:
-                view_spot(self.nb, spot_index, self.method["names"][self.method["active"]])
+                view_spot(self.nb, spot_index, spot_tile, self.method["names"][self.method["active"]])
 
         # @self.viewer.bind_key(KeyBinds.view_spot_colours_and_weights)
         # def call_to_view_omp_score(viewer):

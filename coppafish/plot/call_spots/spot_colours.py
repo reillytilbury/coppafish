@@ -356,7 +356,7 @@ class view_codes(ColorPlotBase):
 
 
 class view_spot(ColorPlotBase):
-    def __init__(self, nb: Notebook, spot_no: int, method: str = "anchor", im_size: int = 8):
+    def __init__(self, nb: Notebook, spot_no: int, tile: int, method: str = "anchor", im_size: int = 8):
         """
         Diagnostic to show intensity of each colour channel / round in neighbourhood of spot.
         Will show a grid of `n_use_channels x n_use_rounds` subplots.
@@ -364,6 +364,7 @@ class view_spot(ColorPlotBase):
         Args:
             nb: Notebook containing experiment details. Must have run at least as far as `call_reference_spots`.
             spot_no: Spot of interest to be plotted.
+            tile: (int) Tile number of spot.
             method: `'anchor'` or `'omp'` or `'prob'`.
                 Which method of gene assignment used i.e. `spot_no` belongs to `ref_spots` or `omp` page of Notebook.
             im_size: Radius of image to be plotted for each channel/round.
@@ -373,12 +374,13 @@ class view_spot(ColorPlotBase):
         """
         assert method.lower() in ["anchor", "omp", "prob"], "method must be 'anchor', 'omp' or 'prob'"
         if method.lower() == "omp":
-            t = int(nb.omp.tile[spot_no])
-            spot_score = omp_spot_score(nb.omp, spot_no)
-            gene_no = nb.omp.gene_no[spot_no]
-            spot_yxz = nb.omp.local_yxz[spot_no]
+            # convert spot_no to be relative to tile
+            spot_no = omp_base.global_to_local_index(nb.basic_info, nb.omp, spot_no)
+            # now that spot_no is relative to tile, get spot_score, spot_colour and gene_no
+            spot_score = nb.omp.results[f'tile_{tile}'].scores[spot_no]
+            gene_no = nb.omp.results[f'tile_{tile}'].gene_no[spot_no]
+            spot_yxz = nb.omp.results[f'tile_{tile}'].local_yxz[spot_no]
         else:
-            t = int(nb.ref_spots.tile[spot_no])
             spot_score = nb.call_spots.dot_product_gene_score[spot_no]
             gene_no = nb.call_spots.dot_product_gene_no[spot_no] if method.lower() == "anchor" else np.argmax(
                 nb.call_spots.gene_probabilities[spot_no]
@@ -386,13 +388,13 @@ class view_spot(ColorPlotBase):
             spot_yxz = nb.ref_spots.local_yxz[spot_no]
 
         # get gene name, code and colours
-        colour_norm = nb.call_spots.colour_norm_factor[t].T
+        colour_norm = nb.call_spots.colour_norm_factor[tile].T
         gene_name = nb.call_spots.gene_names[gene_no]
         gene_code = nb.call_spots.gene_codes[gene_no].copy()
         gene_colour = nb.call_spots.bled_codes[gene_no].transpose()
         n_use_channels, n_use_rounds = colour_norm.shape
         colour_norm = [val for val in colour_norm.flatten()]
-        spot_yxz_global = spot_yxz + nb.stitch.tile_origin[t]
+        spot_yxz_global = spot_yxz + nb.stitch.tile_origin[tile]
         im_yxz = np.array(
             np.meshgrid(
                 np.arange(spot_yxz[0] - im_size, spot_yxz[0] + im_size + 1)[::-1],
@@ -411,9 +413,10 @@ class view_spot(ColorPlotBase):
                 nb.register.flow,
                 nb.register.icp_correction,
                 nb.register_debug.channel_correction,
-                tile=t,
+                tile=tile,
                 round=r,
-                channels=nb.basic_info.use_channels,
+                use_channels=nb.basic_info.use_channels,
+                dapi_channel=nb.basic_info.dapi_channel,
                 yxz=im_yxz
             )
         # put round as the last axis to match colour_norm
@@ -434,10 +437,10 @@ class view_spot(ColorPlotBase):
         )
         # set x, y coordinates to be those of the global coordinate system
         plot_extent = [
-            im_yxz[:, 1].min() - 0.5 + nb.stitch.tile_origin[t, 1],
-            im_yxz[:, 1].max() + 0.5 + nb.stitch.tile_origin[t, 1],
-            im_yxz[:, 0].min() - 0.5 + nb.stitch.tile_origin[t, 0],
-            im_yxz[:, 0].max() + 0.5 + nb.stitch.tile_origin[t, 0],
+            im_yxz[:, 1].min() - 0.5 + nb.stitch.tile_origin[tile, 1],
+            im_yxz[:, 1].max() + 0.5 + nb.stitch.tile_origin[tile, 1],
+            im_yxz[:, 0].min() - 0.5 + nb.stitch.tile_origin[tile, 0],
+            im_yxz[:, 0].max() + 0.5 + nb.stitch.tile_origin[tile, 0],
         ]
         # for each round, plot a green circle in the channel which is highest for that round
         n_channels, n_rounds = gene_colour.shape

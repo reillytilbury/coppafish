@@ -128,7 +128,6 @@ def global_to_local_index(
     """
     assert type(nbp_basic) is NotebookPage
     assert type(nbp_omp) is NotebookPage
-    assert type(spot_global_index) is int
 
     # Get the number of spots in each tile
     n_spots_per_tile = [nbp_omp.results[f'tile_{t}'].scores.shape[0] for t in nbp_basic.use_tiles]
