@@ -40,12 +40,12 @@ class ViewOMPImage:
         Display omp coefficients of all genes around the local neighbourhood of a spot.
 
         Args:
-            nb (Notebook): Notebook containing experiment details.
-            spot_no (int-like or none): Spot index to be plotted.
-            method (str): gene calling method.
-            im_size (int): number of pixels out from the central pixel to plot to create the square images.
-            z_planes (tuple of int): z planes to show. 0 is the central z plane.
-            init_select_gene (int): gene number to display initially. Default: the highest scoring gene.
+            - nb (Notebook): Notebook containing experiment details.
+            - spot_no (int-like or none): Spot index to be plotted.
+            - method (str): gene calling method.
+            - im_size (int): number of pixels out from the central pixel to plot to create the square images.
+            - z_planes (tuple of int): z planes to show. 0 is the central z plane.
+            - init_select_gene (int): gene number to display initially. Default: the highest scoring gene.
         """
         assert type(nb) is Notebook
         if spot_no is None:
@@ -102,11 +102,6 @@ class ViewOMPImage:
         image_colours[torch.isnan(image_colours)] = 0
         if config["colour_normalise"]:
             image_colours *= colour_norm_factor[[tile]]
-        # Divide each spot colour c by sum(square(c)) + lambda_d.
-        colour_rms = image_colours.detach().clone()
-        colour_rms = colour_rms.square().reshape((image_colours.shape[0], n_rounds_use * n_channels_use))
-        colour_rms = colour_rms.sum(dim=1).sqrt()
-        image_colours = image_colours / (colour_rms + config["lambda_d"])[:, np.newaxis, np.newaxis]
         image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
         assert not torch.allclose(image_colours, torch.asarray([0]).float())
         bg_coefficients = torch.zeros((image_colours.shape[0], n_channels_use), dtype=torch.float32)
@@ -125,16 +120,13 @@ class ViewOMPImage:
             background_coefficients=bg_coefficients,
             background_codes=bg_codes,
             dot_product_threshold=config["dp_thresh"],
-            dot_product_norm_shift=0.0,
+            norm_shift=config["lambda_d"],
             weight_coefficient_fit=config["weight_coef_fit"],
             alpha=config["alpha"],
             beta=config["beta"],
             do_not_compute_on=None,
             force_cpu=config["force_cpu"],
         )
-        self.coefficient_image_non_functioned = coefficient_image.T.reshape(
-            ((len(nb.call_spots.gene_names),) + spot_shape_yxz)
-        ).numpy()
         coefficient_image = torch.asarray(coefficient_image).T.reshape(
             (len(nb.call_spots.gene_names),) + spot_shape_yxz
         )
@@ -180,16 +172,7 @@ class ViewOMPImage:
             layout="constrained",
             num="OMP Image",
         )
-        ax_function_coefs = self.axes[1, 1]
         # Keep widgets in self otherwise they will get garbage collected and not respond to clicks anymore.
-        self.function_coefs_button = CheckButtons(
-            ax_function_coefs,
-            ["Non-linear function"],
-            actives=[self.function_coefficients],
-            frame_props={"edgecolor": "white", "facecolor": "white"},
-            check_props={"facecolor": "black"},
-        )
-        self.function_coefs_button.on_clicked(self.function_gene_coefficients_updated)
         ax_slider: plt.Axes = self.axes[1, 0]
         self.gene_slider = Slider(
             ax_slider,
@@ -212,21 +195,20 @@ class ViewOMPImage:
         self.draw_data()
 
     def draw_data(self) -> None:
-        cmap = mpl.cm.viridis
 
         if self.show_iteration_counts:
-            norm = mpl.colors.Normalize(vmin=0, vmax=self.iteration_count_image.max())
+            cmap = mpl.cm.viridis
             image_data = self.iteration_count_image
+            norm = mpl.colors.Normalize(vmin=0, vmax=self.iteration_count_image.max())
             title = "OMP Iteration Count"
         else:
+            cmap = mpl.cm.PiYG
             image_data = self.coefficient_image[self.selected_gene]
-            if not self.function_coefficients:
-                image_data = self.coefficient_image_non_functioned[self.selected_gene]
+            abs_max = np.abs(image_data).max()
+            norm = mpl.colors.Normalize(vmin=-abs_max, vmax=abs_max)
             title = "OMP Coefficients\n"
             title += f"Gene {self.selected_gene} {self.gene_names[self.selected_gene]}\n"
             title += f" Score: {str(self.scores[self.selected_gene])[:4]}"
-            abs_max = np.abs(image_data).max()
-            norm = mpl.colors.Normalize(vmin=-abs_max, vmax=abs_max)
 
         for ax in self.axes[0]:
             ax.clear()
@@ -253,13 +235,8 @@ class ViewOMPImage:
             if z_plane > 0:
                 ax_title = f"+ {abs(z_plane)}"
             ax.set_title(ax_title)
-        self.function_coefs_button.active = not self.show_iteration_counts
         self.gene_slider.active = not self.show_iteration_counts
         plt.draw()
-
-    def function_gene_coefficients_updated(self, _) -> None:
-        self.function_coefficients = self.function_coefs_button.get_status()[0]
-        self.draw_data()
 
     def show_iteration_count_changed(self, _) -> None:
         self.show_iteration_counts = self.show_iteration_count_button.get_status()[0]
@@ -310,19 +287,15 @@ class ViewOMPPixelColours:
         colour_norm_factor = np.array(nb.call_spots.colour_norm_factor, dtype=np.float32)
         colour_norm_factor = torch.asarray(colour_norm_factor).float()
         bled_codes = nb.call_spots.bled_codes
+        assert (~np.isnan(bled_codes)).all(), "bled codes cannot contain nan values"
+        assert np.allclose(np.linalg.norm(bled_codes, axis=(1, 2)), 1), "bled codes must be L2 normalised"
         n_genes = bled_codes.shape[0]
         bled_codes = torch.asarray(bled_codes).float()
 
-        image_colours = image_colours.reshape((1, n_rounds_use, n_channels_use))
         bled_codes = bled_codes.reshape((n_genes, n_rounds_use * n_channels_use))
 
         if config["colour_normalise"]:
             image_colours *= colour_norm_factor[[tile]]
-        # Divide each spot colour c by sum(square(c)) + lambda_d.
-        colour_rms = image_colours.detach().clone()
-        colour_rms = colour_rms.square().reshape((-1, n_rounds_use * n_channels_use))
-        colour_rms = colour_rms.sum(dim=1).sqrt()
-        image_colours = image_colours / (colour_rms + config["lambda_d"])[:, np.newaxis, np.newaxis]
         image_colours = image_colours.reshape((1, n_rounds_use * n_channels_use))
         bg_coefficients = torch.zeros((1, n_channels_use), dtype=torch.float32)
         bg_codes = torch.repeat_interleave(torch.eye(n_channels_use)[:, None, :], n_rounds_use, dim=1)
@@ -331,7 +304,6 @@ class ViewOMPPixelColours:
         if config["fit_background"]:
             image_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(image_colours)
         bg_codes = bg_codes.float()
-        self.true_pixel_colour: np.ndarray = image_colours.numpy().reshape((n_rounds_use, n_channels_use))
         bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
 
         # Get the maximum number of OMP gene assignments made and what genes.
@@ -342,13 +314,14 @@ class ViewOMPPixelColours:
             background_coefficients=bg_coefficients,
             background_codes=bg_codes,
             dot_product_threshold=config["dp_thresh"],
-            dot_product_norm_shift=0.0,
+            norm_shift=config["lambda_d"],
             weight_coefficient_fit=config["weight_coef_fit"],
             alpha=config["alpha"],
             beta=config["beta"],
             do_not_compute_on=None,
             force_cpu=config["force_cpu"],
         )[0].numpy()
+        print(f"{coefficients=}")
         final_selected_genes = (~np.isclose(coefficients, 0)).nonzero()[0]
         self.n_assigned_genes: int = (~np.isclose(coefficients, 0)).sum().item()
         if self.n_assigned_genes == 0:
@@ -363,17 +336,18 @@ class ViewOMPPixelColours:
                 background_coefficients=bg_coefficients,
                 background_codes=bg_codes,
                 dot_product_threshold=config["dp_thresh"],
-                dot_product_norm_shift=0.0,
+                norm_shift=config["lambda_d"],
                 weight_coefficient_fit=config["weight_coef_fit"],
                 alpha=config["alpha"],
                 beta=config["beta"],
-                do_not_compute_on=None,
                 force_cpu=config["force_cpu"],
             )[0].numpy()[final_selected_genes]
         self.assigned_genes_names = nb.call_spots.gene_names[final_selected_genes]
         self.gene_bled_codes = bled_codes.numpy()[final_selected_genes].reshape((-1, n_rounds_use, n_channels_use))
         self.gene_bled_codes = self.gene_bled_codes[np.newaxis].repeat(self.n_assigned_genes + 1, axis=0)
         self.gene_bled_codes *= self.coefficients[:, :, np.newaxis, np.newaxis]
+        self.true_pixel_colour: np.ndarray = image_colours.numpy().reshape((n_rounds_use, n_channels_use))
+        self.true_pixel_colour /= np.sqrt(np.square(self.true_pixel_colour).sum()) + config["lambda_d"]
         self.omp_final_colour = self.gene_bled_codes.sum(1)
 
         # Order genes based on their final coefficient strength.
@@ -396,13 +370,13 @@ class ViewOMPPixelColours:
         n_rows = 2
         self.fig, self.axes = plt.subplots(n_rows, n_columns, squeeze=False, num="OMP Colour")
         self.axes = self.axes.ravel()
-        self.fig.suptitle(f"OMP colours at pixel {tuple(self.local_yxz)}")
+        self.fig.suptitle(f"OMP colour at pixel {tuple(self.local_yxz)}")
 
         abs_max_colour = np.abs(self.true_pixel_colour).max()
         abs_max_colour = np.max([abs_max_colour, np.abs(self.omp_final_colour).max()])
         abs_max_colour = np.max([abs_max_colour, np.abs(self.gene_bled_codes).max()])
         self.norm = mpl.colors.Normalize(vmin=-abs_max_colour, vmax=abs_max_colour)
-        self.cmap = mpl.colormaps["BrBG"]
+        self.cmap = mpl.colormaps["bwr"]
 
         self.gene_images: list[plt.AxesImage] = []
         final_i = self.axes.size - 1
@@ -416,22 +390,22 @@ class ViewOMPPixelColours:
             ax.spines.bottom.set_visible(False)
             ax_title = None
             shown_axes = False
-            empty_data = np.zeros_like(self.true_pixel_colour)
+            empty_data = np.zeros_like(self.true_pixel_colour.T)
             if i < self.assigned_genes.size:
                 ax_title = f"{self.assigned_genes_names[i]}"
                 self.gene_images.append(ax.imshow(empty_data, norm=self.norm, cmap=self.cmap))
                 shown_axes = True
             elif i == final_i - 4:
-                ax_title = f"OMP residual colour"
-                self.omp_residual_im = ax.imshow(empty_data, norm=self.norm, cmap=self.cmap)
+                ax_title = f"True"
+                ax.imshow(self.true_pixel_colour.T, norm=self.norm, cmap=self.cmap)
                 shown_axes = True
             elif i == final_i - 3:
-                ax_title = f"OMP final colour"
+                ax_title = f"Fit"
                 self.omp_final_im = ax.imshow(empty_data, norm=self.norm, cmap=self.cmap)
                 shown_axes = True
             elif i == final_i - 2:
-                ax_title = f"True pixel colour"
-                ax.imshow(self.true_pixel_colour, norm=self.norm, cmap=self.cmap)
+                ax_title = f"True - Fit"
+                self.omp_residual_im = ax.imshow(empty_data, norm=self.norm, cmap=self.cmap)
                 shown_axes = True
             elif i == final_i - 1:
                 self.iteration_slider = Slider(
@@ -452,8 +426,8 @@ class ViewOMPPixelColours:
                 )
             if shown_axes:
                 # Y axis are rounds, x axis are channels.
-                ax.set_xlabel(f"Channel")
-                ax.set_ylabel(f"Round")
+                ax.set_xlabel(f"Round")
+                ax.set_ylabel(f"Channel")
                 ax.set_xticks([])
                 ax.set_yticks([])
                 ax.spines.top.set_visible(True)
@@ -465,11 +439,12 @@ class ViewOMPPixelColours:
 
     def draw_data(self) -> None:
         for i, axes_im in enumerate(self.gene_images):
-            axes_im.set_data(self.gene_bled_codes[self.selected_iteration, i])
+            i_gene_bled_code = self.gene_bled_codes[self.selected_iteration, i].T
+            axes_im.set_data(self.gene_bled_codes[self.selected_iteration, i].T)
 
         final_omp_colour = self.omp_final_colour[self.selected_iteration]
-        self.omp_residual_im.set_data(self.true_pixel_colour - final_omp_colour)
-        self.omp_final_im.set_data(final_omp_colour)
+        self.omp_residual_im.set_data(self.true_pixel_colour.T - final_omp_colour.T)
+        self.omp_final_im.set_data(final_omp_colour.T)
 
         plt.draw()
 

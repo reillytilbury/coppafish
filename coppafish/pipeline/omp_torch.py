@@ -159,12 +159,6 @@ def run_omp(
             subset_colours = torch.asarray(subset_colours)
             if config["colour_normalise"]:
                 subset_colours *= colour_norm_factor[[t]]
-            # Divide each spot colour c by sum(square(c)) + lambda_d.
-            colour_rms = subset_colours.detach().clone()
-            colour_rms = colour_rms.square().reshape((index_max - index_min, n_rounds_use * n_channels_use))
-            colour_rms = colour_rms.sum(dim=1).sqrt()
-            subset_colours = subset_colours / (colour_rms + config["lambda_d"])[:, np.newaxis, np.newaxis]
-            del colour_rms
             bg_coefficients = torch.zeros((subset_colours.shape[0], n_channels_use), dtype=torch.float32)
             bg_codes = torch.repeat_interleave(torch.eye(n_channels_use)[:, None, :], n_rounds_use, dim=1)
             # Give background_vectors an L2 norm of 1 so can compare coefficients with other genes.
@@ -186,7 +180,7 @@ def run_omp(
                 background_coefficients=bg_coefficients,
                 background_codes=bg_codes,
                 dot_product_threshold=config["dp_thresh"],
-                dot_product_norm_shift=0.0,
+                norm_shift=config["lambda_d"],
                 weight_coefficient_fit=config["weight_coef_fit"],
                 alpha=config["alpha"],
                 beta=config["beta"],
@@ -294,9 +288,12 @@ def run_omp(
                 config["radius_xy"],
                 config["radius_z"],
                 force_cpu=config["force_cpu"],
+                remove_duplicates=True,
             )
             del g_score_image
-
+            n_g_spots = g_spot_scores.size(0)
+            if n_g_spots == 0:
+                continue
             # Delete any spot positions that are duplicates.
             g_spot_global_positions = g_spot_local_positions.detach().clone().float()
             g_spot_global_positions += tile_origins[[t]]
