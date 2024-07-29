@@ -144,9 +144,10 @@ def compute_omp_coefficients(
     # Compute a final coefficient for every pixel using the spot colour divided by their norm + norm_shift.
     pixel_colours_norm = pixel_colours.detach().clone().to(run_on)
     pixel_colours_norm /= pixel_colours_norm.square().sum(dim=1).sqrt()[:, np.newaxis] + norm_shift
-    for i in range(maximum_iterations + 1):
+    maximum_iteration = maximum_iterations - 1
+    for i in range(maximum_iterations):
         pixel_is_complete = torch.zeros(n_pixels).bool().to(run_on)
-        if i == maximum_iterations:
+        if i == maximum_iteration:
             pixel_is_complete[:] = True
         else:
             pixel_is_complete[:] = genes_added[:, i] == NO_GENE_SELECTION
