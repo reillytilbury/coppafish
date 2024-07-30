@@ -321,7 +321,6 @@ class ViewOMPPixelColours:
             do_not_compute_on=None,
             force_cpu=config["force_cpu"],
         )[0].numpy()
-        print(f"{coefficients=}")
         final_selected_genes = (~np.isclose(coefficients, 0)).nonzero()[0]
         self.n_assigned_genes: int = (~np.isclose(coefficients, 0)).sum().item()
         if self.n_assigned_genes == 0:

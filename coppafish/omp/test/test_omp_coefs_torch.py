@@ -115,7 +115,6 @@ def test_get_next_best_gene() -> None:
 
 
 def test_weight_selected_genes() -> None:
-    torch.manual_seed(0)
     im_y, im_x, im_z = 4, 5, 6
     n_pixels = im_y * im_x * im_z
     n_rounds_channels = 2
@@ -133,6 +132,9 @@ def test_weight_selected_genes() -> None:
     # Give this pixel a weighting of 2 from the second gene
     pixel_colours[2, 0] = 0
     pixel_colours[2, 1] = 2
+    # Give this pixel a weighting from first and second gene.
+    pixel_colours[3, 0] = 1
+    pixel_colours[3, 1] = 2
     genes = torch.zeros((n_pixels, n_genes_added), dtype=torch.int16)
     genes[:, 1] = 1
     weight = None
@@ -148,7 +150,10 @@ def test_weight_selected_genes() -> None:
     assert np.isclose(coefficients[1, 1].numpy(), 0)
     assert np.isclose(coefficients[2, 0].numpy(), 0)
     assert np.isclose(coefficients[2, 1].numpy(), 2)
+    assert np.isclose(coefficients[3, 0].numpy(), 1)
+    assert np.isclose(coefficients[3, 1].numpy(), 2)
 
+    torch.manual_seed(0)
     weight = torch.rand((n_pixels, n_rounds_channels)).float()
 
     coefficients, residuals = coefs_torch.weight_selected_genes(
