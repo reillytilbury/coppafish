@@ -219,6 +219,7 @@ def run_omp(
                 isolated_yxz = torch.cat((isolated_yxz, g_isolated_yxz), dim=0).int()
                 isolated_gene_no = torch.cat((isolated_gene_no, g_gene_no), dim=0)
                 if isolated_gene_no.size(0) > config["spot_shape_max_spots_considered"]:
+                    # Each iteration of this loop is slow, so we break out if we have lots of spots already.
                     break
                 del g_coef_image, g_isolated_yxz, g_gene_no
             true_isolated = spots_torch.is_true_isolated(
