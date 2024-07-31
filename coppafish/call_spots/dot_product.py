@@ -23,7 +23,6 @@ def dot_product_score(
         - `[n_spots x n_genes] ndarray[float]`: `score` such that `score[d, c]` gives dot product between
             `spot_colours` vector `d` with `bled_codes` vector `c`.
     """
-    use_weight = variance is not None
     n_genes = bled_codes.shape[0]
     # If no variance is provided, we assume all spots are equally reliable
     variance = np.ones_like(spot_colours) if variance is None else variance
@@ -36,8 +35,7 @@ def dot_product_score(
     bled_codes_z_scored = bled_codes[None, :, :] / np.sqrt(variance)[:, None, :]
 
     # Now we can obtain the dot product score for each spot and each gene
-    all_score = (np.sum(spot_colours_z_scored * bled_codes_z_scored, axis=2) /
-                 (np.sum(bled_codes_z_scored ** 2, axis=2) + 0.1 * use_weight))
+    all_score = np.sum(spot_colours_z_scored * bled_codes_z_scored, axis=2) / np.sum(bled_codes_z_scored ** 2, axis=2)
     gene_no = np.argmax(all_score, axis=1)
     all_score_sorted = np.sort(all_score, axis=1)
     gene_score = all_score_sorted[:, -1]

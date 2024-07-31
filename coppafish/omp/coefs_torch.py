@@ -231,7 +231,7 @@ def get_next_best_gene(
     n_genes_ignore = ignore_genes.shape[1]
     # Pick the best scoring gene for each pixel.
     all_gene_scores = dot_product_pytorch.dot_product_score(spot_colours=residual_pixel_colours,
-                                                            bled_codes=all_bled_codes,
+                                                            bled_codes=all_bled_codes.T,
                                                             variance=variance,
                                                             norm_shift=norm_shift)[3]
     best_genes = torch.full((n_pixels,), fill_value=NO_GENE_SELECTION, device=coefficients.device, dtype=torch.int16)
