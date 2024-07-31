@@ -29,6 +29,7 @@ def dot_product_score(
         - `(n_spots x n_genes) tensor[float]`: `score` such that `score[d, c]` gives dot product between
             `spot_colours` vector `d` with `bled_codes` vector `c`.
     """
+    use_weight = variance is not None
     # If no variance is provided, we assume all spots are equally reliable
     variance = torch.ones_like(spot_colours) if variance is None else variance
     # Normalise spot colours
@@ -36,11 +37,13 @@ def dot_product_score(
 
     # z-score spot colours and bled codes by dividing by the standard deviation
     spot_colours_z_scored = spot_colours_norm / torch.sqrt(variance) # [n_spots, n_r * n_c]
+    # repeat spot colours for each gene
+    spot_colours_z_scored = spot_colours_z_scored[:, None, :].repeat(1, bled_codes.shape[0], 1) # [n_spots, n_genes, n_r * n_c]
     bled_codes_z_scored = bled_codes[None, :, :] / torch.sqrt(variance)[:, None, :] # [n_spots, n_genes, n_r * n_c]
 
     # Now we can obtain the dot product score for each spot and each gene
-    all_score = (torch.sum(spot_colours_z_scored[:, None, :] * bled_codes_z_scored, dim=2) /
-                 torch.linalg.norm(bled_codes_z_scored, dim=2))
+    all_score = (torch.sum(spot_colours_z_scored * bled_codes_z_scored, dim=2) /
+                 torch.sum(bled_codes_z_scored ** 2, dim=2) + 0.1 * use_weight)
     gene_no = torch.argmax(all_score, dim=1)
     all_score_sorted = torch.sort(all_score, dim=1)[0]
     gene_score = all_score_sorted[:, -1]
