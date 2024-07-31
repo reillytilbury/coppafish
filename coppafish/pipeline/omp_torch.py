@@ -159,12 +159,6 @@ def run_omp(
             subset_colours = torch.asarray(subset_colours)
             if config["colour_normalise"]:
                 subset_colours *= colour_norm_factor[[t]]
-            # Divide each spot colour c by sum(square(c)) + lambda_d.
-            colour_rms = subset_colours.detach().clone()
-            colour_rms = colour_rms.square().reshape((index_max - index_min, n_rounds_use * n_channels_use))
-            colour_rms = colour_rms.sum(dim=1).sqrt()
-            subset_colours = subset_colours / (colour_rms + config["lambda_d"])[:, np.newaxis, np.newaxis]
-            del colour_rms
             bg_coefficients = torch.zeros((subset_colours.shape[0], n_channels_use), dtype=torch.float32)
             bg_codes = torch.repeat_interleave(torch.eye(n_channels_use)[:, None, :], n_rounds_use, dim=1)
             # Give background_vectors an L2 norm of 1 so can compare coefficients with other genes.
@@ -186,7 +180,7 @@ def run_omp(
                 background_coefficients=bg_coefficients,
                 background_codes=bg_codes,
                 dot_product_threshold=config["dp_thresh"],
-                dot_product_norm_shift=0.0,
+                norm_shift=config["lambda_d"],
                 weight_coefficient_fit=config["weight_coef_fit"],
                 alpha=config["alpha"],
                 beta=config["beta"],
@@ -225,6 +219,7 @@ def run_omp(
                 isolated_yxz = torch.cat((isolated_yxz, g_isolated_yxz), dim=0).int()
                 isolated_gene_no = torch.cat((isolated_gene_no, g_gene_no), dim=0)
                 if isolated_gene_no.size(0) > config["spot_shape_max_spots_considered"]:
+                    # Each iteration of this loop is slow, so we break out if we have lots of spots already.
                     break
                 del g_coef_image, g_isolated_yxz, g_gene_no
             true_isolated = spots_torch.is_true_isolated(
@@ -294,9 +289,12 @@ def run_omp(
                 config["radius_xy"],
                 config["radius_z"],
                 force_cpu=config["force_cpu"],
+                remove_duplicates=True,
             )
             del g_score_image
-
+            n_g_spots = g_spot_scores.size(0)
+            if n_g_spots == 0:
+                continue
             # Delete any spot positions that are duplicates.
             g_spot_global_positions = g_spot_local_positions.detach().clone().float()
             g_spot_global_positions += tile_origins[[t]]
@@ -336,7 +334,7 @@ def run_omp(
             chunks=(n_chunk_max, 1, 1),
         )
         for i, r in enumerate(nbp_basic.use_rounds):
-            t_spots_colours[:, i] = spot_colors.base.get_spot_colours_new(
+            t_r_spot_colours = spot_colors.base.get_spot_colours_new(
                 nbp_filter.images,
                 nbp_register.flow,
                 nbp_register.icp_correction,
@@ -349,6 +347,8 @@ def run_omp(
                 dtype=np.float16,
                 force_cpu=config["force_cpu"],
             ).T
+            t_r_spot_colours[np.isnan(t_r_spot_colours)] = 0
+            t_spots_colours[:, i] = t_r_spot_colours
         del t_spots_local_yxz, t_spots_tile, t_spots_gene_no, t_spots_score, t_spots_colours
         del t_local_yxzs, tile_results
         log.debug(f"Gathering spot colours complete")

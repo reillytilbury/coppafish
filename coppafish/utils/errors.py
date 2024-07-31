@@ -268,7 +268,7 @@ def compare_spots(
             where a wrong positive is a spot assigned to the wrong gene, but found in the location of a true spot.
     
     Notes:
-        See ``RoboMinnie.compare_ref_spots`` or ``RoboMinnie.compare_omp_spots`` for more details.
+        See `RoboMinnie.compare_spots` for more details.
     """
     true_positives = 0
     wrong_positives = 0
@@ -348,4 +348,5 @@ def compare_spots(
         continue
     # False negatives are any true spots that have not been paired to a spot
     false_negatives = true_spot_count - true_spots_paired.size
+
     return (true_positives, wrong_positives, false_positives, false_negatives)

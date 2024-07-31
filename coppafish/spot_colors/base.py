@@ -140,11 +140,11 @@ def get_spot_colours_new(
         assert from_yxz.shape[-1] == 3
         yxz_mins = from_yxz.min(dim=0)[0].min(dim=0)[0] + 1
         yxz_mins = torch.floor(((yxz_mins / torch.asarray(half_pixels)) - 1) * 0.5)
-        yxz_mins -= torch.asarray([5, 5, 1])
+        yxz_mins -= torch.asarray([1, 1, 1])
         yxz_mins = torch.clamp(yxz_mins, torch.zeros(3), torch.asarray(image_shape)).int()
         yxz_maxs = from_yxz.max(dim=0)[0].max(dim=0)[0] + 1
         yxz_maxs = torch.ceil(((yxz_maxs / torch.asarray(half_pixels)) - 1) * 0.5)
-        yxz_maxs += torch.asarray([5, 5, 1])
+        yxz_maxs += torch.asarray([1, 1, 1])
         yxz_maxs = torch.clamp(yxz_maxs, torch.zeros(3), torch.asarray(image_shape)).int()
         assert yxz_mins.shape == (3,)
         assert yxz_maxs.shape == (3,)

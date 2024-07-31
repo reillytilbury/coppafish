@@ -31,11 +31,11 @@ def dot_product_score(
         weight_squared = weight_squared.to(spot_colours.device)
 
     weight_squared = weight_squared / torch.sum(weight_squared, dim=1)[:, None]
-    spot_colours = spot_colours / (torch.linalg.norm(spot_colours, dim=1)[:, None] + norm_shift)
-    spot_colours = n_rounds_channels_use * spot_colours * weight_squared
+    spot_colours_norm = spot_colours / (torch.linalg.norm(spot_colours, dim=1)[:, None] + norm_shift)
+    spot_colours_norm *= n_rounds_channels_use * weight_squared
 
     # Now we can obtain the dot product score for each spot and each gene
-    all_score = spot_colours @ bled_codes.T
+    all_score = spot_colours_norm @ bled_codes.T
     gene_no = torch.argmax(all_score, dim=1)
     all_score_sorted = torch.sort(all_score, dim=1)[0]
     gene_score = all_score_sorted[:, -1]
