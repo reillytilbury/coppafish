@@ -84,8 +84,8 @@ _options = {
         "z_plane_mean_warning": "number",
     },
     "filter": {
+        "force_cpu": "bool",
         "r_dapi": "maybe_int",
-        "r_dapi_auto_microns": "maybe_number",
         "auto_thresh_multiplier": "number",
         "deconvolve": "bool",
         "wiener_constant": "number",

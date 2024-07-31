@@ -16,7 +16,7 @@ def compute_omp_coefficients(
     background_coefficients: torch.Tensor,
     background_codes: torch.Tensor,
     dot_product_threshold: float,
-    dot_product_norm_shift: float,
+    norm_shift: float,
     weight_coefficient_fit: bool,
     alpha: float,
     beta: float,
@@ -36,8 +36,8 @@ def compute_omp_coefficients(
         background_codes (`(n_channels_use x (n_rounds_use * n_channels_use)) tensor`): each background gene code.
         dot_product_threshold (float): any dot product below this threshold is a failed gene assignment and the
             iterations stop for that pixel.
-        dot_product_norm_shift (float): a shift applied during the dot product calculations to limit the boost of weak
-            pixel intensities.
+        norm_shift (float): when finding the next best gene, the residual spot colour is divided by its norm +
+            norm_shift. The final OMP coefficients are computed from `pixel_colours / norm(pixel_colours) + norm_shift`.
         weight_coefficient_fit (bool): apply Josh's OMP weighting, used to try and reduce the boost of large residuals
             after subtracting a gene assignment.
         alpha (float): OMP weighting parameter. Applied if weight_coefficient_fit is true.
@@ -61,7 +61,7 @@ def compute_omp_coefficients(
     assert background_coefficients.ndim == 2
     assert background_codes.ndim == 2
     assert dot_product_threshold >= 0
-    assert dot_product_norm_shift >= 0
+    assert norm_shift >= 0
     assert alpha >= 0
     assert beta >= 0
     if do_not_compute_on is None:
@@ -90,54 +90,63 @@ def compute_omp_coefficients(
     residual_pixel_colours = pixel_colours.detach().clone()
 
     # Move all variables used in computation to the selected device.
+    pixel_colours = pixel_colours.to(device=run_on)
     residual_pixel_colours = residual_pixel_colours.to(device=run_on)
     do_not_compute_on = do_not_compute_on.to(device=run_on)
-    bled_codes = bled_codes.to(device=run_on)
+    bled_codes = bled_codes.detach().clone().to(device=run_on)
     all_bled_codes = all_bled_codes.to(device=run_on)
-    genes_added_coefficients = torch.zeros_like(genes_added).float().to(device=run_on)
+    new_coefficients = torch.zeros_like(genes_added).float().to(device=run_on)
     genes_added = genes_added.to(device=run_on)
     background_genes = background_genes.to(device=run_on)
     background_variance = background_variance.to(device=run_on)
 
     # Run on every non-zero pixel colour.
     iterate_on_pixels = torch.logical_not(torch.isclose(pixel_colours, torch.asarray(0).float()).all(dim=1)).to(run_on)
-    iterate_on_pixels = torch.logical_and(iterate_on_pixels, do_not_compute_on.logical_not_())
-    # Start with a lil_matrix when populating results as this is faster than the csr matrix.
-    coefficient_image = torch.zeros((n_pixels, n_genes), dtype=torch.float32)
+    iterate_on_pixels = torch.logical_and(iterate_on_pixels, ~do_not_compute_on)
+    coefficient_image = torch.zeros((n_pixels, n_genes), dtype=torch.float32, device=run_on)
 
     for i in range(maximum_iterations):
         best_genes, pass_threshold, inverse_variance = get_next_best_gene(
             iterate_on_pixels,
             residual_pixel_colours,
             all_bled_codes.T,
-            genes_added_coefficients,
+            new_coefficients,
             genes_added,
-            dot_product_norm_shift,
+            norm_shift,
             dot_product_threshold,
             alpha,
             background_genes,
             background_variance,
         )
 
+        genes_added = torch.cat((genes_added, best_genes[:, np.newaxis]), dim=1)
+        del best_genes
+
         # Update what pixels to continue iterating on
-        iterate_on_pixels = torch.logical_and(iterate_on_pixels, pass_threshold).to(device=run_on)
+        iterate_on_pixels = torch.logical_and(iterate_on_pixels, pass_threshold)
         if iterate_on_pixels.sum() == 0:
             break
-        genes_added = torch.cat((genes_added, best_genes[:, np.newaxis]), dim=1).to(device=run_on)
+        del pass_threshold
 
         # Update coefficients for pixels with new a gene assignment and keep the residual pixel colour.
-        genes_added_coefficients, residual_pixel_colours = weight_selected_genes(
+        new_coefficients, residual_pixel_colours = weight_selected_genes(
             iterate_on_pixels,
             bled_codes.T,
-            pixel_colours.detach().clone().to(device=run_on),
+            pixel_colours,
             genes_added,
             weight=torch.sqrt(inverse_variance) if weight_coefficient_fit else None,
         )
-
-        selected_pixels = torch.nonzero(genes_added[:, i] != NO_GENE_SELECTION, as_tuple=True)[0].cpu()
+        changed_pixels = torch.nonzero(genes_added[:, i] != NO_GENE_SELECTION, as_tuple=True)[0]
         for j in range(i + 1):
-            selected_genes = genes_added[:, j][selected_pixels].cpu().int()
-            coefficient_image[selected_pixels, selected_genes] = genes_added_coefficients[selected_pixels, j].cpu()
+            selected_genes = genes_added[:, j][changed_pixels].int()
+            coefficient_image[changed_pixels, selected_genes] = new_coefficients[changed_pixels, j]
+            del selected_genes
+        del changed_pixels, inverse_variance
+
+    pixel_colours_norms = pixel_colours.detach().clone().to(run_on)
+    pixel_colours_norms = pixel_colours_norms.square().sum(dim=1).sqrt()[:, np.newaxis] + norm_shift
+    coefficient_image /= pixel_colours_norms
+    coefficient_image = coefficient_image.cpu()
 
     return coefficient_image
 
@@ -169,7 +178,8 @@ def get_next_best_gene(
             previous iteration of OMP.
         genes_added (`(n_pixels x n_genes_added) tensor`): the genes that have already been assigned to the
             pixels.
-        norm_shift (float): shift to apply to normalisation of spot colours to limit the boost of weak spots.
+        norm_shift (float): spot colours are divided by their norm + norm_shift to limit the boost of weak background
+            residual colour.
         score_threshold (float): a gene assignment with a dot product score below this value is not assigned to the
             pixel and OMP iterations will stop for the pixel.
         alpha (float): an OMP weighting parameter.
@@ -180,9 +190,9 @@ def get_next_best_gene(
 
     Returns:
         - (`(n_pixels) tensor`) best_gene: the best gene to add for each pixel. A pixel is given a value of
-            np.iinfo(np.int16).min if consider_pixels is false for the given pixel.
-        - (`(n_pixels) tensor`) pass_threshold: true if the next gene given passes the thresholds. This is
-            false if consider_pixels is false for the given pixel.
+            np.iinfo(np.int16).min if pass_threshold is false for the given pixel.
+        - (`(n_pixels) tensor`) pass_threshold: true if the next gene given passes the thresholds. Also false if
+            consider_pixels is false for the given pixel.
         - (`(n_pixels x (n_rounds * n_channels)) tensor`) inverse_variance: the reciprocal of the variance
             for each round/channel based on the genes fit to the pixel.
     """
@@ -240,11 +250,11 @@ def get_next_best_gene(
             dim=1,
         ),
     )
-    # The score is considered zero if the assigned gene is in ignore_genes
+    # The score is considered zero if the assigned gene is within ignore_genes
     best_scores[~consider_pixels] = 0
-    best_genes[~consider_pixels] = NO_GENE_SELECTION
     genes_passing_score = torch.zeros((n_pixels,), device=coefficients.device, dtype=torch.bool)
     genes_passing_score[consider_pixels] = torch.abs(best_scores[consider_pixels]) > score_threshold
+    best_genes[~genes_passing_score] = NO_GENE_SELECTION
     del best_scores, all_gene_scores
 
     return (best_genes, genes_passing_score, inverse_variances)
@@ -289,12 +299,14 @@ def weight_selected_genes(
     if weight is None:
         weight = torch.ones_like(pixel_colours).float()
     assert weight.dim() == 2
+    assert consider_pixels.shape[0] == pixel_colours.shape[0]
+    assert consider_pixels.shape[0] == genes.shape[0]
     assert pixel_colours.shape == weight.shape
 
     n_pixels, _ = pixel_colours.shape
     n_genes_added = genes.shape[1]
 
-    # Flatten and weight the bled codes, becomes shape n_pixels x n_rounds_channels x n_genes_added.
+    # Flatten and weight the bled codes, becomes shape n_pixels_consider x n_rounds_channels x n_genes_added.
     bled_codes_weighted = (
         bled_codes[:, genes[consider_pixels].int()].swapaxes(0, 1) * weight[consider_pixels, :, np.newaxis]
     )
@@ -308,7 +320,7 @@ def weight_selected_genes(
         rcond=-1,
     )[0]
 
-    residuals = pixel_colours
+    residuals = pixel_colours.detach().clone()
     residuals[consider_pixels] = (
         pixel_colours[consider_pixels]
         - torch.matmul(bled_codes_weighted, coefficients[consider_pixels, :, np.newaxis])[..., 0]

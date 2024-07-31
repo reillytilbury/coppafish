@@ -65,8 +65,8 @@ def detect_spots(
         consider_intensity_random = consider_intensity_random.to(image_temp.dtype)
         # To avoid nearby duplicates
         rng = np.random.default_rng(0)  # So shift is always the same.
-        # rand_shift must be larger than small to detect a single spot.
-        rand_im_shift = torch.asarray(rng.uniform(low=0.1, high=0.9, size=n_consider), dtype=image_temp.dtype)
+        image_median = consider_intensity_random.median().median().median().item()
+        rand_im_shift = torch.asarray(rng.uniform(low=0, high=image_median, size=n_consider), dtype=image_temp.dtype)
         image_temp[consider_yxz] = image_temp[consider_yxz] + rand_im_shift
         consider_intensity_random += rand_im_shift
 

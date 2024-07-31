@@ -668,8 +668,7 @@ class RoboMinnie:
         self,
         output_dir: str,
         overwrite: bool = True,
-        omp_iterations: int = 2,
-        omp_initial_intensity_thresh_percentile: int = 50,
+        omp_iterations: int = 5,
         register_with_dapi: bool = True,
     ) -> None:
         """
@@ -682,10 +681,7 @@ class RoboMinnie:
             overwrite (bool, optional): overwrite any saved coppafish data inside the directory, delete old
                 `notebook.npz` file if there is one and ignore any other files inside the directory. Default: true.
             omp_iterations (int, optional): number of OMP iterations on every pixel. Increasing this may improve gene
-                scoring. Default: `2`.
-            omp_initial_intensity_thresh_percentile (float, optional): percentile of the absolute intensity of all
-                pixels in the mid z-plane of the central tile. Used as a threshold for pixels to decide what to apply
-                OMP on. A higher number leads to stricter picking of pixels. Default: `90`.
+                scoring. Default: `5`.
             register_with_dapi (bool, optional): apply channel registration using the DAPI channel, if available.
                 Default: true.
         """
@@ -984,10 +980,9 @@ class RoboMinnie:
         
         [omp]
         max_genes = {omp_iterations}
-        shape_isolation_distance_yx = 4
+        shape_isolation_distance_yx = 5
         pixel_max_percentile = 1
-        shape_sign_thresh = 0.33
-        score_threshold = 0.01
+        score_threshold = 0.1
         subset_size_xy = 50
         """
         # Remove any large spaces in the config contents
@@ -1098,7 +1093,7 @@ class RoboMinnie:
                 relevant to reference spots. Default: `0`.
             intensity_threshold (float, optional): Reference spot intensity threshold. Default: `0`.
             location_threshold (float, optional): Maximum distance, in pixels, two spots can be apart to be considered
-                the same spot. Default: `4`.
+                the same spot. Default: `2`.
 
         Returns:
             `tuple` (true_positives: `list` of `int`, wrong_positives: `list` of `int`,
