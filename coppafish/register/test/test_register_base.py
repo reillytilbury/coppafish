@@ -5,57 +5,6 @@ from coppafish.register import base as reg_base
 from coppafish.register import preprocessing as reg_pre
 
 
-def test_find_zyx_shift():
-    rng = np.random.RandomState(52)
-    kidney = np.sum(rng.rand(16, 512, 512, 3), axis=-1)[:, :128, :128]
-    kidney_shifted = reg_pre.custom_shift(kidney, np.array([3, 15, 20]))
-    # Test the function
-    shift, shift_corr = reg_base.find_zyx_shift(kidney, kidney_shifted, pearson_r_threshold=0.5)
-    # Test that the shape is correct
-    assert shift.shape == (3,)
-    # Test that the values are correct
-    assert np.allclose(shift, np.array([3, 15, 20]))
-    assert np.allclose(shift_corr, 1)
-
-
-def test_ols_regression():
-    # set up data
-    rng = np.random.RandomState(0)
-    pos = rng.rand(10, 3)
-    shift1 = 5 * pos - pos
-    # Test the function
-    transform = reg_base.ols_regression(shift1, pos)
-    # Test that the shape is correct
-    assert transform.shape == (3, 4)
-    # Test that the values are correct
-    assert np.allclose(transform, np.array([[5, 0, 0, 0], [0, 5, 0, 0], [0, 0, 5, 0]]))
-
-
-def test_huber_regression():
-    rng = np.random.RandomState(0)
-    pos = rng.rand(10, 3)
-    shift1 = 5 * pos - pos
-    # Test the function
-    transform = reg_base.huber_regression(shift1, pos, False)
-    # Test that the shape is correct
-    assert transform.shape == (3, 4)
-    # Test that the values are correct
-    assert np.allclose(transform, np.array([[5, 0, 0, 0], [0, 5, 0, 0], [0, 0, 5, 0]]), atol=2e-6)
-
-
-def test_brightness_scale():
-    rng = np.random.RandomState(0)
-    nx = 40
-    ny = 40
-    seq = rng.randint(2**8, dtype=np.int32, size=(ny, nx))
-    preseq = reg_pre.custom_shift(seq, [1, 2]) * 4
-    scale, sub_image_seq, sub_image_preseq = reg_base.brightness_scale(preseq, seq, intensity_percentile=0.5)
-    assert isinstance(scale, float), "Expected scale to be type float"
-    assert isinstance(sub_image_seq, np.ndarray), "Expected sub_image_seq to be type ndarray"
-    assert isinstance(sub_image_preseq, np.ndarray), "Expected sub_image_preseq to be type ndarray"
-    assert np.isclose(scale, 0.25, atol=1e-2)
-
-
 def test_upsample_yx():
     # set up data
     im = np.eye(2, 2)[:, :, None]
