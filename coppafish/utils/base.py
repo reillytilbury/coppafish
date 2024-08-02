@@ -191,7 +191,7 @@ def expand_channels(array: npt.NDArray[np.float_], use_channels: List[int], n_ch
     return expanded_array
 
 
-def reed_solomon_codes(n_genes: int, n_rounds: int, n_channels: Optional[int] = None) -> Dict:
+def reed_solomon_codes(n_genes: int, n_rounds: int, n_channels: Optional[int] = None) -> Dict[str, str]:
     """
     Generates random gene codes based on reed-solomon principle, using the lowest degree polynomial possible for the
     number of genes needed. The `i`th gene name will be `gene_i`. We assume that `n_channels` is the number of unique
