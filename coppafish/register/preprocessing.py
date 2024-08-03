@@ -12,7 +12,7 @@ from tqdm import tqdm
 import zarr
 
 from .. import spot_colors
-from ..setup import NotebookPage
+from ..setup import Notebook, NotebookPage
 
 
 def load_reg_data(nbp_file: NotebookPage, nbp_basic: NotebookPage):
@@ -413,6 +413,7 @@ def generate_reg_images(
         nbp_register: unfinished `register` notebook page.
         nbp_register_debug: unfinished `register_debug` notebook page.
     """
+    # initialise index variables
     use_tiles, use_rounds, use_channels = (
         list(nbp_basic.use_tiles),
         list(nbp_basic.use_rounds),
@@ -423,6 +424,8 @@ def generate_reg_images(
         nbp_basic.anchor_channel,
         nbp_basic.dapi_channel,
     )
+
+    # get the yxz coords for the central 500 x 500 x 10 region
     yx_centre = nbp_basic.tile_centre.astype(int)[:2]
     yx_radius = min(250, nbp_basic.tile_sz // 2)
     z_central_index = int(np.median(np.arange(len(nbp_basic.use_z))))
@@ -443,6 +446,7 @@ def generate_reg_images(
     yxz_coords = np.array(yxz_coords).reshape((3, -1)).T
     image_shape = tuple([yxz_max[i] - yxz_min[i] for i in range(3)])
 
+    # initialise zarr arrays to store the images
     anchor_images = zarr.open_array(
         os.path.join(nbp_file.output_dir, "anchor_reg_images.zarr"),
         dtype=np.uint8,
@@ -474,10 +478,11 @@ def generate_reg_images(
 
     # get the round images, apply optical flow, apply icp + optical flow, concatenate and save
     for t, r in tqdm(product(use_tiles, use_rounds), desc="Round Images", total=len(use_tiles) * len(use_rounds)):
-        im = nbp_filter.images[
+        im_tr = nbp_filter.images[
             t, r, dapi_channel, yxz_min[0] : yxz_max[0], yxz_min[1] : yxz_max[1], yxz_min[2] : yxz_max[2]
         ]
-        im_flow = spot_colors.base.get_spot_colours_new(
+        # TODO: The below code doesn't work (seems to return blank image) - need to debug
+        im_tr_flow = spot_colors.base.get_spot_colours_new(
             nbp_filter.images,
             nbp_register.flow,
             nbp_register.icp_correction,
@@ -490,7 +495,7 @@ def generate_reg_images(
             yxz=yxz_coords,
             registration_type="flow",
         ).reshape((1,) + image_shape)
-        im_flow_icp = spot_colors.base.get_spot_colours_new(
+        im_tr_flow_icp = spot_colors.base.get_spot_colours_new(
             nbp_filter.images,
             nbp_register.flow,
             nbp_register.icp_correction,
@@ -503,16 +508,17 @@ def generate_reg_images(
             yxz=yxz_coords,
             registration_type="flow_and_icp",
         ).reshape((1,) + image_shape)
-        im_concat = np.concatenate([im[None], im_flow, im_flow_icp], axis=0)
-        im_concat = fill_to_uint8(im_concat)
-        round_images[t, r] = im_concat
+        im_tr_concat = np.concatenate([im_tr[None], im_tr_flow, im_tr_flow_icp], axis=0)
+        im_tr_concat = fill_to_uint8(im_tr_concat)
+        round_images[t, r] = im_tr_concat
     nbp_register.round_images = round_images
 
     # get the channel images, save, apply optical flow, save, apply icp, save
     r_mid = 3
     for t, c in tqdm(product(use_tiles, use_channels), desc="Channel Images", total=len(use_tiles) * len(use_channels)):
-        im = nbp_filter.images[t, r_mid, c, yxz_min[0] : yxz_max[0], yxz_min[1] : yxz_max[1], yxz_min[2] : yxz_max[2]]
-        im_flow = spot_colors.base.get_spot_colours_new(
+        im_tc = nbp_filter.images[t, r_mid, c, yxz_min[0] : yxz_max[0], yxz_min[1] : yxz_max[1], yxz_min[2] : yxz_max[2]]
+        # TODO: The below code doesn't work (seems to return blank image) - need to debug
+        im_tc_flow = spot_colors.base.get_spot_colours_new(
             nbp_filter.images,
             nbp_register.flow,
             nbp_register.icp_correction,
@@ -525,7 +531,7 @@ def generate_reg_images(
             yxz=yxz_coords,
             registration_type="flow",
         ).reshape((1,) + image_shape)
-        im_flow_icp = spot_colors.base.get_spot_colours_new(
+        im_tc_flow_icp = spot_colors.base.get_spot_colours_new(
             nbp_filter.images,
             nbp_register.flow,
             nbp_register.icp_correction,
@@ -538,16 +544,14 @@ def generate_reg_images(
             yxz=yxz_coords,
             registration_type="flow_and_icp",
         ).reshape((1,) + image_shape)
-        im_concat = np.concatenate([im[None], im_flow, im_flow_icp], axis=0)
-        im_concat = fill_to_uint8(im_concat)
-        channel_images[t, c] = im_concat
+        im_tc_concat = np.concatenate([im_tc[None], im_tc_flow, im_tc_flow_icp], axis=0)
+        im_tc_concat = fill_to_uint8(im_tc_concat)
+        channel_images[t, c] = im_tc_concat
     nbp_register.channel_images = channel_images
 
 
 def load_transformed_image(
-    nbp_basic_info: NotebookPage,
-    nbp_register: NotebookPage,
-    nbp_register_debug: NotebookPage,
+    nb: Notebook,
     t: int,
     r: int,
     c: int,
@@ -558,10 +562,6 @@ def load_transformed_image(
     Load the image from tile t, round r, channel c, apply the relevant registration and return the image.
 
     Args:
-        nbp_basic_info (NotebookPage)
-        nbp_file_names (NotebookPage)
-        nbp_register (NotebookPage)
-        nbp_register_debug (NotebookPage)
         nb: Notebook (must have register and register_debug page)
         t: tile (int)
         r: round (int)
@@ -576,10 +576,9 @@ def load_transformed_image(
         im: np.ndarray, image
     """
     assert reg_type in ["none", "flow", "flow_icp"], "reg_type must be 'none', 'flow' or 'flow_icp'"
-    raise NotImplementedError(f"This function is broken")
-    # im = tiles_io.load_image(nbp_file, nbp_basic_info, nbp_extract.file_type, t, r, c, yxz=yxz).astype(np.float32)
+    im = nb.filter.images[t, r, c].astype(np.float32)
     # anchor round has no flow or affine correction so can return early
-    if reg_type == "none" or r == nbp_basic_info.anchor_round:
+    if reg_type == "none" or r == nb.basic_info.anchor_round:
         return im
 
     # If we get this far, we will either be doing flow or flow icp, and we will not be in the anchor round.
@@ -590,13 +589,13 @@ def load_transformed_image(
         new_origin = np.zeros(3, dtype=int)
     affine_correction = np.eye(4, 3)
     if "reg_type" == "flow":
-        if c != nbp_basic_info.dapi_channel:
-            affine_correction = nbp_register_debug.channel_correction[t, c].copy()
+        if c != nb.basic_info.dapi_channel:
+            affine_correction = nb.register_debug.channel_correction[t, c].copy()
     elif reg_type == "flow_icp":
-        if c == nbp_basic_info.dapi_channel:
-            affine_correction = nbp_register.icp_correction[t, r, nbp_basic_info.anchor_channel].copy()
-        if c != nbp_basic_info.dapi_channel:
-            affine_correction = nbp_register.icp_correction[t, r, c].copy()
+        if c == nb.basic_info.dapi_channel:
+            affine_correction = nb.register.icp_correction[t, r, nb.basic_info.anchor_channel].copy()
+        if c != nb.basic_info.dapi_channel:
+            affine_correction = nb.register.icp_correction[t, r, c].copy()
     # adjust the affine correction for the new origin
     affine_correction = adjust_affine(affine=affine_correction, new_origin=new_origin)
     if yxz is not None:
@@ -608,7 +607,7 @@ def load_transformed_image(
         )
     else:
         flow_indices = None
-    im = transform_im(im=im, affine=affine_correction, flow=nbp_register.flow[t, r], flow_ind=flow_indices)
+    im = transform_im(im=im, affine=affine_correction, flow=nb.register.flow[t, r], flow_ind=flow_indices)
 
     return im
 
@@ -631,6 +630,8 @@ def transform_im(im: np.ndarray, affine: np.ndarray, flow: zarr.Array, flow_ind:
     flow = flow[:]
     if flow_ind is not None:
         flow = -(flow[flow_ind].astype(np.float32))
+    else:
+        flow = -(flow.astype(np.float32))
     coords = np.meshgrid(
         np.arange(im.shape[0], dtype=np.float32),
         np.arange(im.shape[1], dtype=np.float32),

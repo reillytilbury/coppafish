@@ -48,31 +48,30 @@ def call_reference_spots(
     nbp = NotebookPage("call_spots", {"call_spots": config})
 
     # assign config values that have not been provided
-    target_values, d_max, kappa = config["target_values"], config["d_max"], config["kappa"]
-    if target_values is None:
+    if config["target_values"] is None:
         if len(nbp_basic.use_channels) == 7:
-            target_values = [1, 1, 0.9, 0.7, 0.8, 1, 1]
+            config["target_values"] = [1, 1, 0.9, 0.7, 0.8, 1, 1]
         elif len(nbp_basic.use_channels) == 9:
-            target_values = [1, 0.8, 0.2, 0.9, 0.6, 0.8, 0.3, 0.7, 1]
+            config["target_values"] = [1, 0.8, 0.2, 0.9, 0.6, 0.8, 0.3, 0.7, 1]
         else:
             raise ValueError("The target values should be provided in the config.")
-    if d_max is None:
+    if config["d_max"] is None:
         if len(nbp_basic.use_channels) == 7:
-            d_max = [0, 1, 3, 2, 4, 5, 6]
+            config["d_max"] = [0, 1, 3, 2, 4, 5, 6]
         elif len(nbp_basic.use_channels) == 9:
-            d_max = [0, 1, 1, 3, 2, 4, 5, 5, 6]
+            config["d_max"] = [0, 1, 1, 3, 2, 4, 5, 5, 6]
         else:
             raise ValueError("The d_max values should be provided in the config.")
 
     gene_names, gene_codes = np.genfromtxt(nbp_file.code_book, dtype=(str, str)).transpose()
     gene_codes = np.array([[int(i) for i in gene_codes[j]] for j in range(len(gene_codes))])
-    if kappa is None:
+    if config["kappa"] is None:
         n_genes = len(gene_names)
-        kappa = np.round(np.log(1 + n_genes // 75)) + 2
+        config["kappa"] = 2 if n_genes <= 100 else 3
 
     # check shapes
     assert (
-        len(target_values) == len(d_max) == len(nbp_basic.use_channels)
+        len(config["target_values"]) == len(config["d_max"]) == len(nbp_basic.use_channels)
     ), "The target values, d_max and use_channels should have the same length."
 
     # load in frequently used variables
@@ -99,7 +98,7 @@ def call_reference_spots(
 
     # 2. Compute gene probabilities for each spot
     bled_codes = raw_bleed_matrix[gene_codes]
-    gene_prob_initial = gene_prob_score(spot_colours, bled_codes, kappa=kappa)
+    gene_prob_initial = gene_prob_score(spot_colours, bled_codes, kappa=config["kappa"])
 
     # 3. Use spots with score above threshold to work out global dye codes
     prob_mode_initial, prob_score_initial = np.argmax(gene_prob_initial, axis=1), np.max(gene_prob_initial, axis=1)
@@ -136,14 +135,14 @@ def call_reference_spots(
     # values. Then rename the product V_rc * free_bled_codes to bled_codes
     rc_scale = np.ones((n_rounds, n_channels_use))
     for r, c in np.ndindex(n_rounds, n_channels_use):
-        rc_genes = np.where(gene_codes[:, r] == d_max[c])[0]
+        rc_genes = np.where(gene_codes[:, r] == config["d_max"][c])[0]
         n_spots_per_gene = np.array(
             [np.sum((prob_mode_initial == g) & (prob_score_initial > prob_threshold)) for g in rc_genes]
         )
         if np.sum(n_spots_per_gene) == 0:
             continue
         rc_scale[r, c] = np.sum(
-            np.sqrt(n_spots_per_gene) * free_bled_codes_tile_indep[rc_genes, r, c] * target_values[c]
+            np.sqrt(n_spots_per_gene) * free_bled_codes_tile_indep[rc_genes, r, c] * config["target_values"][c]
         ) / np.sum(np.sqrt(n_spots_per_gene) * free_bled_codes_tile_indep[rc_genes, r, c] ** 2)
     bled_codes = free_bled_codes_tile_indep * rc_scale[None, :, :]
     # normalise the constrained bled codes
@@ -153,7 +152,7 @@ def call_reference_spots(
     # bled codes
     tile_scale = np.ones((n_tiles, n_rounds, n_channels_use))
     for t, r, c in itertools.product(use_tiles, range(n_rounds), range(n_channels_use)):
-        relevant_genes = np.where(gene_codes[:, r] == d_max[c])[0]
+        relevant_genes = np.where(gene_codes[:, r] == config["target_values"][c])[0]
         n_spots_per_gene = np.array(
             [
                 np.sum((prob_mode_initial == g) & (prob_score_initial > prob_threshold) & (spot_tile == t))
@@ -169,7 +168,7 @@ def call_reference_spots(
     # 7. update the normalised spots and the bleed matrix, then do a second round of gene assignments with the new bled
     # codes
     spot_colours = spot_colours * tile_scale[spot_tile, :, :]  # update the spot colours
-    gene_prob = gene_prob_score(spot_colours=spot_colours, bled_codes=bled_codes, kappa=kappa)  # update probs
+    gene_prob = gene_prob_score(spot_colours=spot_colours, bled_codes=bled_codes, kappa=config["kappa"])  # update probs
     prob_mode, prob_score = np.argmax(gene_prob, axis=1), np.max(gene_prob, axis=1)
     gene_dot_products = dot_product_score(
         spot_colours=spot_colours.reshape((n_spots, n_rounds * n_channels_use)),
