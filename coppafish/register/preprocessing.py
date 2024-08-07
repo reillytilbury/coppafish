@@ -48,23 +48,6 @@ def load_reg_data(nbp_file: NotebookPage, nbp_basic: NotebookPage):
     return registration_data
 
 
-def replace_scale(transform: np.ndarray, scale: np.ndarray):
-    """
-    Replace the diagonal of transform with new scales
-    Args:
-        transform: n_tiles x n_rounds x 3 x 4 or n_tiles x n_channels x 3 x 4 of zyx affine transforms
-        scale: 3 x n_tiles x n_rounds or 3 x n_tiles x n_channels of zyx scales
-
-    Returns:
-        transform: n_tiles x n_rounds x 3 x 4 or n_tiles x n_channels x 3 x 4 of zyx affine transforms
-    """
-    # Loop through dimensions i: z = 0, y = 1, x = 2
-    for i in range(3):
-        transform[:, :, i, i] = scale[i]
-
-    return transform
-
-
 def populate_full(sublist_1, list_1, sublist_2, list_2, array):
     """
     Function to convert array from len(sublist1) x len(sublist2) to len(list1) x len(list2), listing elems not in
@@ -621,17 +604,14 @@ def transform_im(im: np.ndarray, affine: np.ndarray, flow: zarr.Array, flow_ind:
         affine: 3 x 4 affine transform
         flow: flow as zarr array
         flow_ind: indices to take from the flow file. If None, use the entire flow file.
-        contains_channel_index (bool): true if the first axis of im is the channel axis. All channels have the same
-            transformation applied to them.
     """
     assert type(flow) is zarr.Array or type(flow) is np.ndarray
 
     im = affine_transform(im, affine, order=1, mode="constant", cval=0)
-    flow = flow[:]
     if flow_ind is not None:
-        flow = -(flow[flow_ind].astype(np.float32))
+        flow = flow[flow_ind].astype(np.float32)
     else:
-        flow = -(flow.astype(np.float32))
+        flow = flow.astype(np.float32)
     coords = np.meshgrid(
         np.arange(im.shape[0], dtype=np.float32),
         np.arange(im.shape[1], dtype=np.float32),
@@ -712,36 +692,3 @@ def flow_zyx_to_yxz(flow_zyx: np.ndarray) -> np.ndarray:
     flow_yxz = np.moveaxis(flow_zyx, 1, -1)
     flow_yxz = np.roll(flow_yxz, -1, axis=0)
     return flow_yxz
-
-
-def apply_flow(flow: np.ndarray, points: np.ndarray, ignore_oob: bool = True, round_to_int: bool = True) -> np.ndarray:
-    """
-    Apply a flow to a set of points. Note that this is applying forward warping, meaning that the points are moved to
-    their location in the warp array.
-
-    Args:
-        flow (np.ndarray): flow to apply. (3 x ny x nx x nz). In our case, this flow will always be the inverse flow,
-        so we need to apply the negative of the flow to the points.
-        points: integer points to apply the warp to. (n_points x 3 in yxz coords)
-        ignore_oob: remove points that go out of bounds. Default: True.
-
-    Returns:
-        new_points: new points.
-    """
-    # have to subtract the flow from the points as we are applying the inverse warp
-    y_indices, x_indices, z_indices = points.T
-    new_points = points - flow[:, y_indices, x_indices, z_indices].T
-    if round_to_int:
-        new_points = np.round(new_points).astype(int)
-    ny, nx, nz = flow.shape[1:]
-    if ignore_oob:
-        oob = (
-            (new_points[:, 0] < 0)
-            | (new_points[:, 0] >= ny)
-            | (new_points[:, 1] < 0)
-            | (new_points[:, 1] >= nx)
-            | (new_points[:, 2] < 0)
-            | (new_points[:, 2] >= nz)
-        )
-        new_points = new_points[~oob]
-    return new_points

@@ -158,8 +158,7 @@ def register(
     log.info("Running Iterative Closest Point (ICP)")
     # Initialise variables for ICP step
     ny, nx, nz = nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)
-    use_rounds = nbp_basic.use_rounds
-    c_ref = nbp_basic.anchor_channel
+    use_rounds, c_ref = nbp_basic.use_rounds, nbp_basic.anchor_channel
     icp_correction = np.zeros((n_tiles, n_rounds, n_channels, 4, 3))
     round_correction = np.zeros((n_tiles, n_rounds, 4, 3))
     channel_correction = np.zeros((n_tiles, n_channels, 4, 3))

@@ -201,7 +201,7 @@ def optical_flow_single(
     if loc:
         # save in yxz format
         zarray = zarr.open_array(loc, mode="r+")
-        zarray[tile, round] = flow_up
+        zarray[tile, round] = -flow_up
     t_end = time.time()
     log.info("Optical flow computation took " + str(t_end - t_start) + " seconds")
 
