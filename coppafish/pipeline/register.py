@@ -251,7 +251,7 @@ def register(
         for t, r, c in itertools.product(use_tiles, use_rounds, use_channels):
             round_correction_matrix = np.hstack((round_correction[t, r], np.array([0, 0, 0, 1])[:, None]))
             channel_correction_matrix = np.hstack((channel_correction[t, c], np.array([0, 0, 0, 1])[:, None]))
-            icp_correction[t, r, c] = (round_correction_matrix @ channel_correction_matrix)[:, :3]
+            icp_correction[t, r, c] = (channel_correction_matrix @ round_correction_matrix)[:, :3]
 
         registration_data["icp"] = {
             "icp_correction": icp_correction,
