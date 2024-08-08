@@ -8,6 +8,7 @@ from typing import Dict, List, Literal, Optional, Tuple, Union
 from typing_extensions import Self
 
 import dask
+import napari
 import numpy as np
 import numpy.typing as npt
 import pandas
@@ -217,7 +218,7 @@ class Robominnie:
         `n_channels == n_dyes`.
 
         Args:
-            n_spots (int, optional): Number of spots to superimpose. Default: `floor(1% * total_image_volume)`.
+            n_spots (int, optional): Number of spots to superimpose. Default: `floor(0.2% * total_image_volume)`.
             bleed_matrix (`n_dyes x n_channels ndarray[float, float]`, optional): The bleed matrix, used to map each
                 dye to its pattern as viewed by the camera in each channel. Default: Ones along the diagonals.
             spot_size_pixels (`(3) ndarray[float]`): The spot's standard deviation in directions `x, y, z`
@@ -281,7 +282,7 @@ class Robominnie:
             spot_size_pixels_dapi = spot_size_pixels.copy()
         assert spot_size_pixels_dapi.size == 3, "DAPI spot size must be in three dimensions"
         if n_spots is None:
-            n_spots = maths.floor(1 * np.prod(self.giant_image_shape) / 100)
+            n_spots = maths.floor(0.2 * np.prod(self.giant_image_shape) / 100)
         assert n_spots > 0, f"Expected n_spots > 0, got {n_spots}"
 
         # Generate random spots.
@@ -590,8 +591,10 @@ class Robominnie:
         
         [omp]
         max_genes = 10
+        spot_shape = 13, 13, 1
         shape_isolation_distance_yx = 5
         pixel_max_percentile = 1
+        shape_sign_thresh = 0.75
         score_threshold = 0.1
         subset_size_xy = 50
         """
@@ -689,7 +692,8 @@ class Robominnie:
         """
         Computes the overall score as true positives / (true positives + wrong positives + false positives + false
         negatives) for each tile. This is done by comparing known spot locations to the spot locations from coppafish
-        results. See `coppafish/utils/errors.py` `compare_spots` function for details on how the scoring is computed.
+        results. Only spots outside of the tile overlapping region are computed on so that duplicate spots are not an
+        issue. See `coppafish/utils/errors.py` `compare_spots` function for details on how the scoring is computed.
 
         Args:
             - method (str): the method to compute for the score for. Can be 'OMP', 'anchor', or 'prob'.
@@ -720,26 +724,60 @@ class Robominnie:
         else:
             raise ValueError(f"Unknown method: {method}")
 
+        tile_origins = np.array(self._get_tile_bounds()[2]).astype(np.float32)
         tile_scores = []
         for t in range(self.n_tiles):
             in_tile = spot_tiles == t
             within_score_threshold = spot_scores >= score_threshold
-            keep = np.logical_and(in_tile, within_score_threshold)
+            keep = in_tile & within_score_threshold
             t_spot_positions = spot_positions[keep]
             t_spot_gene_indices = spot_gene_indices[keep]
+            # Cut out spot positions near the edge where there could be tile overlap.
+            in_bound = self._is_not_overlapping(t_spot_positions)
+            t_spot_positions = t_spot_positions[in_bound]
+            t_spot_gene_indices = t_spot_gene_indices[in_bound]
             # Coppafish positions must be converted to global image positions for comparison.
             t_spot_positions += self.stitch_tile_origins[[t]]
             t_spot_positions += np.array(self.image_padding, np.float32)[np.newaxis]
             t_truth_positions = self.true_spot_positions[self.true_spot_tile_numbers == t]
             t_truth_gene_indices = self._get_true_gene_indices()[self.true_spot_tile_numbers == t]
+            in_bound = self._is_not_overlapping(t_truth_positions - tile_origins[[t]])
+            t_truth_positions = t_truth_positions[in_bound]
+            t_truth_gene_indices = t_truth_gene_indices[in_bound]
             TPs, WPs, FPs, FNs = utils.errors.compare_spots(
                 t_spot_positions, t_spot_gene_indices, t_truth_positions, t_truth_gene_indices, 2.0
             )
             t_score = 100 * TPs / (TPs + WPs + FPs + FNs)
+            t_score = round(t_score * 10) / 10
             print(f"{TPs=}, {WPs=}, {FPs=}, {FNs=}")
             tile_scores.append(t_score)
 
         return tuple(tile_scores)
+
+    def view_spot_positions(self) -> None:
+        """
+        View the true spot positions, coppafish's OMP, probability, and anchor spot positions in separate layers in
+        a napari viewer. No visual distinction is made between genes.
+        """
+        colours = ("green", "blue", "red", "white")
+        viewer = napari.Viewer()
+        viewer.add_points(self.true_spot_positions, name="True", face_color=colours[0])
+        viewer.add_points(
+            self.prob_spots_positions + self.stitch_tile_origins[self.prob_spots_tile],
+            name="Prob",
+            face_color=colours[1],
+        )
+        viewer.add_points(
+            self.ref_spots_local_positions_yxz + self.stitch_tile_origins[self.ref_spots_tile],
+            name="Anchor",
+            face_color=colours[2],
+        )
+        viewer.add_points(
+            self.omp_spot_local_positions + self.stitch_tile_origins[self.omp_tile_number],
+            name="OMP",
+            face_color=colours[3],
+        )
+        napari.run()
 
     def _unstitch_image(
         self, image: npt.NDArray[np.float_], tile_size_yxz: npt.NDArray[np.int_]
@@ -813,3 +851,14 @@ class Robominnie:
         gene_indices = [gene_names.index(name) for name in self.true_spot_identities.tolist()]
 
         return np.array(gene_indices, np.int16)
+
+    def _is_not_overlapping(self, positions: np.ndarray) -> np.ndarray[bool]:
+        assert positions.shape[1] == 3
+
+        # Assuming that all z positions are not overlapping, since they should not be.
+        not_overlapping = np.ones_like(positions, bool)
+        not_overlapping[:, :2] = positions[:, :2] >= self.tile_sz * self.tile_overlap
+        not_overlapping = not_overlapping[:, :2] & (positions[:, :2] <= self.tile_sz * (1 - self.tile_overlap))
+        not_overlapping = not_overlapping.all(1)
+
+        return not_overlapping
