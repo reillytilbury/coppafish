@@ -4,7 +4,7 @@ import pytest
 from coppafish import BuildPDF
 
 
-@pytest.mark.slow
+@pytest.mark.manual
 def test_BuildPDF():
     robominnie_notebook = os.path.join(
         os.path.dirname(os.path.realpath(__file__)),
