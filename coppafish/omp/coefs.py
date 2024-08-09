@@ -109,13 +109,8 @@ def compute_omp_coefficients(
                 + normalisation_shift
             )
             # Find the next best gene for pixels that have not reached a stopping criteria yet.
-            fail_gene_indices = torch.cat(
-                (
-                    subset_genes_selected[subset_pixels_to_continue, :iteration],
-                    bg_gene_indices[subset_pixels_to_continue],
-                ),
-                1,
-            )
+            fail_gene_indices = torch.cat((subset_genes_selected[:, :iteration], bg_gene_indices), 1)
+            fail_gene_indices = fail_gene_indices[subset_pixels_to_continue]
             next_best_genes = get_next_gene_assignments(
                 subset_residual_colours,
                 all_bled_codes,
@@ -141,6 +136,7 @@ def compute_omp_coefficients(
                 subset_colours[subset_pixels_to_continue, :, np.newaxis],
                 bled_codes_to_continue,
             )
+            print(new_coefficients)
             subset_coefficients[subset_pixels_to_continue] = new_coefficients
             del new_coefficients, bled_codes_to_continue
 
