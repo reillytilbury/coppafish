@@ -111,6 +111,7 @@ def optical_flow_single(
     clip_val: np.ndarray = np.array([10, 10, 15]),
     upsample_factor_yx: int = 4,
     chunks_yx: int = 4,
+    overlap: float = 1/3,
     n_cores: Optional[int] = None,
     loc: str = "",
 ) -> np.ndarray:
@@ -125,6 +126,7 @@ def optical_flow_single(
         clip_val: np.ndarray size [3] of the clip value for the optical flow in y, x and z
         upsample_factor_yx: int specifying how much to upsample the optical flow in y and x
         chunks_yx: int specifying the number of subvolumes to split the images into in y and x
+        overlap: float specifying the overlap between subvolumes
         n_cores (int, optional): int specifying the number of cores to use for parallel processing. Default: CPU core
             count available.
         loc: str specifying the location to save/ load the optical flow
@@ -150,8 +152,8 @@ def optical_flow_single(
 
     # split the images into subvolumes and run optical flow on each subvol in parallel
     ny, _, nz = target.shape    # ny = nx = 2304 / 4 = 576
-    target_sub, pos, overlap = preprocessing.split_image(im=target, subvols_yx=chunks_yx, overlap=0.2)
-    base_sub, _, _ = preprocessing.split_image(im=base, subvols_yx=chunks_yx)
+    target_sub, pos = preprocessing.split_image(im=target, n_subvols_yx=chunks_yx, overlap=overlap)
+    base_sub, _ = preprocessing.split_image(im=base, n_subvols_yx=chunks_yx)
     # Normalise each subvolume to have mean 1 (this is just so that the images are in a similar range in each subvol)
     target_sub = target_sub / np.mean(target_sub, axis=(1, 2, 3))[:, None, None, None]
     base_sub = base_sub / np.mean(base_sub, axis=(1, 2, 3))[:, None, None, None]
@@ -169,7 +171,7 @@ def optical_flow_single(
     flow_sub = np.array(flow_sub)   # convert list to numpy array. Shape: (n_subvols, 3, n_y, n_x, n_z)
 
     # Now that we have the optical flow for each subvolume, we need to merge them back together
-    flow = np.array([preprocessing.merge_subvols(im_split=flow_sub[i], positions=pos,
+    flow = np.array([preprocessing.merge_subvols(im_split=flow_sub[:, i], positions=pos,
                                                  output_shape=target.shape, overlap=overlap) for i in range(3)])
     # clip the flow
     flow = np.array([np.clip(flow[i], -clip_val[i], clip_val[i]) for i in range(3)])

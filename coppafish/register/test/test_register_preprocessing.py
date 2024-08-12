@@ -4,118 +4,32 @@ from skimage import data
 from coppafish.register import preprocessing as reg_pre
 
 
-def test_replace_scale():
-    # set up transform and scales
-    rng = np.random.RandomState(0)
-    transform = rng.rand(10, 2, 3, 4)
-    scale = np.ones((3, 10, 2))
-    # replace scale
-    transform = reg_pre.replace_scale(transform, scale)
-    # check that all diagonals are 1
-    for t in range(10):
-        for r in range(2):
-            assert np.allclose(np.diag(transform[t, r]), np.ones(3))
-
-
-def test_populate_full():
-    # Setup data
-    rng = np.random.RandomState(0)
-    sublist1, sublist2 = [0, 2], [1, 3]
-    list1, list2 = [0, 1, 2, 3], [0, 1, 2, 3]
-    array = rng.rand(2, 2, 3, 4)
-    # Test the function
-    array_new = reg_pre.populate_full(sublist1, list1, sublist2, list2, array)
-    # This should have 2 * 2 non-zero matrices
-    # All odd matrices in axis 0 should be 0, all even matrices in axis 1 should be 0
-    assert np.count_nonzero(array_new[:, :, 0, 0]) == 2 * 2
-    assert np.all(array_new[1::2, :] == 0)
-    assert np.all(array_new[:, ::2] == 0)
-
-
-def test_yxz_to_zyx():
-    # Setup data
-    rng = np.random.RandomState(0)
-    im = rng.rand(1, 2, 3)
-    new_im = reg_pre.yxz_to_zyx(im)
-    # Test that the shape is correct
-    assert new_im.shape == (3, 1, 2)
-
-
-def test_n_matches_to_frac_matches():
-    # Setup data
-    rng = np.random.RandomState(0)
-    n_matches = rng.randint(0, 10, size=(3, 4, 10))
-    spot_no = np.ones((3, 4)) * 10
-    # Test the function
-    frac_matches = reg_pre.n_matches_to_frac_matches(n_matches, spot_no)
-    # Test that the shape is correct
-    assert frac_matches.shape == (3, 4, 10)
-    # Test that the values are correct
-    assert np.allclose(frac_matches, n_matches / 10)
-
-
 def test_split_3d_image():
-    # Setup data (10, 256, 256)
+    # Set up data (256, 256, 10)
     brain = data.brain()
+    # swap axes to match the expected shape
+    brain = np.swapaxes(brain, 0, 2)
     # Test the function
-    z_box, y_box, x_box = 10, 64, 64
-    brain_split, pos = reg_pre.split_3d_image(brain, 1, 4, 4, z_box, y_box, x_box)
+    brain_split, pos = reg_pre.split_image(brain, n_subvols_yx=5, overlap=0.25)
     # Test that the shape is correct
-    assert brain_split.shape == (1, 4, 4, 10, 64, 64)
+    expected_size_yx = 64
+    assert brain_split.shape == (25, expected_size_yx, expected_size_yx, 10)
     # Test that the values are correct
-    assert np.allclose(brain_split[0, 0, 0], brain[:, :64, :64])
-    # Test that the positions are correct
-    assert all(pos[0] == [z_box // 2, y_box // 2, x_box // 2])
+    assert np.allclose(brain_split[0], brain[:expected_size_yx, :expected_size_yx])
+    assert np.allclose(brain_split[-1], brain[-expected_size_yx:, -expected_size_yx:])
 
-
-def test_compose_affine():
-    # Setup data
-    matrix1 = 2 * np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]])
-    matrix2 = 3 * np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]])
-    matrix3 = np.array([[1, 0, 0, 1], [0, 1, 0, 2], [0, 0, 1, 3]])
-    matrix4 = np.array([[1, 0, 0, 4], [0, 1, 0, 5], [0, 0, 1, 6]])
+    # test on some images of the same size that we use in the registration
+    # Set up data (576, 576, 10)
+    rng = np.random.RandomState(23)
+    im = rng.rand(576, 576, 10)
     # Test the function
-    scaled_matrix = reg_pre.compose_affine(matrix1, matrix2)
-    summed_matrix = reg_pre.compose_affine(matrix3, matrix4)
+    im_split, pos = reg_pre.split_image(im, n_subvols_yx=4, overlap=1/3)
     # Test that the shape is correct
-    assert scaled_matrix.shape == (3, 4)
-    assert summed_matrix.shape == (3, 4)
+    expected_size_yx = 192
+    assert im_split.shape == (16, expected_size_yx, expected_size_yx, 10)
     # Test that the values are correct
-    assert np.allclose(scaled_matrix, 6 * np.eye(3, 4))
-    assert np.allclose(summed_matrix, np.array([[1, 0, 0, 5], [0, 1, 0, 7], [0, 0, 1, 9]]))
-
-
-def test_invert_affine():
-    # set up data
-    rng = np.random.RandomState(0)
-    affine = rng.rand(3, 4)
-    # invert affine
-    affine_inv = reg_pre.invert_affine(affine)
-    # check that the inverse is correct
-    assert np.allclose(reg_pre.compose_affine(affine, affine_inv), np.eye(3, 4))
-    assert np.allclose(reg_pre.compose_affine(affine_inv, affine), np.eye(3, 4))
-
-
-def test_yxz_to_zyx_affine():
-    # set up data
-    matrix_yxz = np.array([[1, 0, 0], [0, 2, 0], [0, 0, 3], [1, 2, 3]])
-    # convert to zyx
-    matrix_zyx = reg_pre.yxz_to_zyx_affine(matrix_yxz)
-    # check that the shape is correct
-    assert matrix_zyx.shape == (3, 4)
-    # check that the values are correct
-    assert np.allclose(matrix_zyx, np.array([[3, 0, 0, 3], [0, 1, 0, 1], [0, 0, 2, 2]]))
-
-
-def test_zyx_to_yxz_affine():
-    # set up data
-    matrix_zyx = np.array([[3, 0, 0, 3], [0, 1, 0, 1], [0, 0, 2, 2]]).astype(float)
-    # convert to zyx
-    matrix_yxz = reg_pre.zyx_to_yxz_affine(matrix_zyx)
-    # check that the shape is correct
-    assert matrix_yxz.shape == (4, 3)
-    # check that the values are correct
-    assert np.allclose(matrix_yxz, np.array([[1, 0, 0], [0, 2, 0], [0, 0, 3], [1, 2, 3]]))
+    assert np.allclose(im_split[0], im[:expected_size_yx, :expected_size_yx])
+    assert np.allclose(im_split[-1], im[-expected_size_yx:, -expected_size_yx:])
 
 
 def test_custom_shift():
@@ -131,17 +45,26 @@ def test_custom_shift():
 
 
 def test_merge_subvols():
-    # set up data
-    rng = np.random.RandomState(0)
-    subvols = rng.rand(2, 3, 4, 5)
-    pos = np.array([[0, 0, 0], [10, 10, 10]])
-    subvol_3 = np.ones((3, 4, 5))
-    pos_3 = np.array([1, 1, 1])
-    # merge subvols
-    merged = reg_pre.merge_subvols(pos, subvols)
-    # TODO: Do this after the meeting
-    # check that the shape is correct
-    assert merged.shape == (13, 14, 15)
-    # check that the values are correct
-    assert np.allclose(merged[:3, :4, :5], subvols[0])
-    assert np.allclose(merged[10:, 10:, 10:], subvols[1])
+    # Set up data (256, 256, 10)
+    brain = data.brain().astype(float)
+    # swap axes to match the expected shape
+    brain = np.swapaxes(brain, 0, 2)
+    # Test the function
+    brain_split, pos = reg_pre.split_image(brain, n_subvols_yx=5, overlap=0.25)
+    brain_merged = reg_pre.merge_subvols(im_split=brain_split, positions=pos, output_shape=brain.shape, overlap=0.25)
+    # Test that the shape is correct
+    assert brain_merged.shape == brain.shape
+    # Test that the values are correct
+    assert np.allclose(brain_merged, brain)
+
+    # test on some images of the same size that we use in the registration
+    rng = np.random.RandomState(61)
+    # Set up data (576, 576, 10)
+    im = rng.rand(576, 576, 10)
+    # Test the function
+    im_split, pos = reg_pre.split_image(im, n_subvols_yx=4, overlap=1/3)
+    im_merged = reg_pre.merge_subvols(im_split=im_split, positions=pos, output_shape=im.shape, overlap=1/3)
+    # Test that the shape is correct
+    assert im_merged.shape == im.shape
+    # Test that the values are correct
+    assert np.allclose(im_merged, im)

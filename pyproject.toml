@@ -6,7 +6,8 @@ markers = [
 # Create a code coverage report at the end of pytest using the package pytest-cov.
 # It seems that debugging is not possible with this option enabled. See the following link for more information:
 # https://github.com/microsoft/vscode-python/issues/693
-addopts = "--cov=coppafish --cov-report term"
+# comment out the following line to enable debugging.
+#addopts = "--cov=coppafish --cov-report term"
 
 [tool.black]
 line-length = 120
