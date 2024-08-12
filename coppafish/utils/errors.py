@@ -1,10 +1,10 @@
-import tqdm
-import numpy as np
-import numpy.typing as npt
-from typing import Union, Optional, Dict, Tuple
+from typing import Optional, Tuple, Union
 
-from ..setup import NotebookPage
+import numpy as np
+import scipy
+
 from .. import log
+from ..setup import NotebookPage
 
 
 class OutOfBoundsError(Exception):
@@ -241,112 +241,95 @@ class ColorInvalidError(Exception):
 
 
 def compare_spots(
-    spot_positions_yxz: npt.NDArray[np.float64],
-    spot_gene_indices: npt.NDArray[np.int_],
-    true_spot_positions_yxz: npt.NDArray[np.float64],
-    true_spot_gene_identities: npt.NDArray[np.str_],
-    location_threshold_squared: float,
-    codes: Dict[str, str],
-    description: str,
+    spot_positions_0: np.ndarray,
+    spot_gene_indices_0: np.ndarray,
+    spot_positions_1: np.ndarray,
+    spot_gene_indices_1: np.ndarray,
+    distance_threshold: float,
 ) -> Tuple[int, int, int, int]:
     """
-    Compare two collections of spots (one is the ground truth) based on their positions and gene identities.
+    Compare two collections of spots and assign each spot in the 0 collection either true positive, wrong positive,
+    false positive. If a spot in collection 0 is matched to a spot in collection 1 if close together and of the same
+    gene index, then this spot is a true positive. Any remaining spots are matched to close together spots in
+    collection 1 also left unmatched and assigned as wrong positives. Any left over spots in collection 0 are false
+    positives. If there are still unassigned spots in collection 1, these add to the false negative count. When
+    multiple matches are found, the matched spots are the ones appearing first in the arrays for deterministic
+    results. Collection 1 acts as the ground truth dataset.
 
     Args:
-        spot_positions_yxz (`(n_spots x 3) ndarray`): The calculated spot positions.
-        spot_gene_indices (`(n_spots) ndarray`): The indices for the gene identities assigned to each spot. The genes \
-            are assumed to be in the order that they are found in the genes parameter.
-        true_spot_positions_yxz (`(n_true_spots x 3) ndarray`): The ground truth spot positions.
-        true_spot_gene_identities (`(n_true_spots) ndarray`): Array of every ground truth gene name, given as a `str`.
-        location_threshold_squared (`float`): The square of the maximum distance two spots can be apart to be paired.
-        codes (`dict` of `str: str`): Each code name as a key is mapped to a unique code, both stored as `str`.
-        description (`str`, optional): Description of progress bar for printing. Default: empty.
+        - spot_positions_0 (`(n_spots_0 x 3) ndarray[float]`): spot collection 0 positions. spot_positions_0[i] is the
+            ith spot's y, x, and z position.
+        - spot_gene_indices_0 (`(n_spots_0) ndarray[int]`): spot gene indices.
+        - spot_positions_1 (`(n_spots_1 x 3) ndarray[float]`): spot collection 1 positions.
+        - spot_gene_indices_1 (`(n_spots_1) ndarray[int]`): spot collection 1 gene indices.
+        - distance_threshold (float): spot's are matched if their distance is no greater than distance_threshold.
 
     Returns:
-        `tuple` (true_positives: int, wrong_positives: int, false_positives: int, false_negatives: int): The \
-            number of spots assigned to true positive, wrong positive, false positive and false negative respectively, \
-            where a wrong positive is a spot assigned to the wrong gene, but found in the location of a true spot.
-    
-    Notes:
-        See `RoboMinnie.compare_spots` for more details.
+        `tuple` of (true_positives: int, wrong_positives: int, false_positives: int, false_negatives: int): The number
+            of spots assigned to true positive, wrong positive, false positive and false negative respectively, where
+            a wrong positive is a spot assigned to the wrong gene, but found in the location of a true spot.
     """
-    true_positives = 0
-    wrong_positives = 0
-    false_positives = 0
-    false_negatives = 0
+    assert type(spot_positions_0) is np.ndarray
+    assert spot_positions_0.ndim == 2
+    assert spot_positions_0.shape[1] == 3
+    assert type(spot_gene_indices_0) is np.ndarray
+    assert spot_gene_indices_0.ndim == 1
+    spot_gene_indices_0.shape[0] == spot_positions_0.shape[0]
+    assert type(spot_positions_1) is np.ndarray
+    assert spot_positions_1.ndim == 2
+    assert spot_positions_1.shape[1] == 3
+    assert type(spot_gene_indices_1) is np.ndarray
+    assert spot_gene_indices_1.ndim == 1
+    spot_gene_indices_1.shape[0] == spot_positions_1.shape[0]
+    assert type(distance_threshold) is float
+    assert distance_threshold > 0
 
-    spot_count = spot_positions_yxz.shape[0]
-    true_spot_count = true_spot_positions_yxz.shape[0]
-    # Stores the indices of every true spot index that has been paired to a spot already
-    true_spots_paired = np.empty(0, dtype=int)
-    for s in tqdm.trange(spot_count, ascii=True, desc=description, unit="spots"):
-        x = spot_positions_yxz[s, 1]
-        y = spot_positions_yxz[s, 0]
-        z = spot_positions_yxz[s, 2]
-        position_s = np.repeat([[y, x, z]], true_spot_count, axis=0)
-        # Subtract the spot position along all true spots
-        position_delta = np.subtract(true_spot_positions_yxz, position_s)
-        position_delta_squared = (
-            position_delta[:, 0] * position_delta[:, 0]
-            + position_delta[:, 1] * position_delta[:, 1]
-            + position_delta[:, 2] * position_delta[:, 2]
-        )
+    true_positive_count = 0
+    wrong_positive_count = 0
+    false_positive_count = 0
+    false_negative_count = 0
+    n_spots_0 = spot_positions_0.shape[0]
+    n_spots_1 = spot_positions_1.shape[0]
+    unmatched_spot_0 = np.ones(n_spots_0, bool)
+    unmatched_spot_1 = np.ones(n_spots_1, bool)
 
-        # Find true spots close enough and closest to the spot, stored as a boolean array
-        matches = np.logical_and(
-            position_delta_squared <= location_threshold_squared,
-            position_delta_squared == np.min(position_delta_squared),
-        )
-
-        # True spot indices
-        matches_indices = np.where(matches)
-        delete_indices = []
-        if np.sum(matches) > 0:
-            # Ignore true spots close enough to the spot if already paired to a previous spot
-            for i in range(len(matches_indices)):
-                if matches_indices[i] in true_spots_paired:
-                    delete_indices.append(i)
-                    matches[matches_indices[i]] = False
-        delete_indices = np.array(delete_indices, dtype=int)
-        if delete_indices.size > 0:
-            matches_indices = np.delete(matches_indices, delete_indices)
-        matches_count = np.sum(matches)
-
-        if matches_count == 0:
-            # This spot is considered a false positive because there are no true spots close enough to it that
-            # have not already been paired
-            false_positives += 1
+    # Loop through spots, find matches of the same gene index.
+    for i in range(n_spots_0):
+        i_gene = spot_gene_indices_0[i]
+        if unmatched_spot_1.sum() == 0:
+            break
+        spot_positions_1_unmatched = np.full_like(spot_positions_1, -999_999, np.float32)
+        spot_positions_1_unmatched[unmatched_spot_1] = spot_positions_1[unmatched_spot_1]
+        kdtree = scipy.spatial.KDTree(spot_positions_1_unmatched)
+        matching_spots_1 = kdtree.query_ball_point(spot_positions_0[i], r=distance_threshold, workers=-1)
+        if len(matching_spots_1) == 0:
             continue
-        if matches_count == 1:
-            # Found a single true spot matching the spot, see if they are the same gene (true positive)
-
-            # Get the spot gene name from the gene number. For some reason coppafish adds a new gene called
-            # Bcl11b, hence the -1
-            spot_gene_name = str(list(codes.keys())[spot_gene_indices[s]])
-            # Actual true spot gene name as a string
-            true_gene_name = str(true_spot_gene_identities[matches][0])
-            matching_gene = spot_gene_name == true_gene_name
-            true_positives += matching_gene
-            wrong_positives += not matching_gene
-            true_spots_paired = np.append(true_spots_paired, matches_indices[0])
+        is_matching_gene_1 = np.zeros_like(spot_gene_indices_1, bool)
+        is_matching_gene_1[matching_spots_1] = spot_gene_indices_1[matching_spots_1] == i_gene
+        if is_matching_gene_1.sum() == 0:
             continue
+        first_matching_spot_1 = is_matching_gene_1.nonzero()[0][0]
+        unmatched_spot_0[i] = False
+        unmatched_spot_1[first_matching_spot_1] = False
+        true_positive_count += 1
 
-        # Logic for dealing with multiple, equidistant true spots near the spot
-        for match_index in matches_indices:
-            spot_gene_name = str(list(codes.keys())[spot_gene_indices[s]])
-            # Actual true spot gene names as strings
-            true_gene_name = str(true_spot_gene_identities[matches[match_index][0]])
-            matching_gene = spot_gene_name == true_gene_name
-            if matching_gene:
-                true_positives += 1
-                true_spots_paired = np.append(true_spots_paired, match_index)
-                continue
-        # If reaching here, all close true spots are not the spot gene
-        # Assign the first true spot in the array as the pair and label it a wrong_positive
-        true_spots_paired = np.append(true_spots_paired, matches_indices[0])
-        wrong_positives += 1
-        continue
-    # False negatives are any true spots that have not been paired to a spot
-    false_negatives = true_spot_count - true_spots_paired.size
+    # Now loop through unmatched 0 spots again. Any matching spots with wrong gene are now considered wrong positives.
+    for i in unmatched_spot_0.nonzero()[0]:
+        i_gene = spot_gene_indices_0[i]
+        spot_positions_1_unmatched = np.full_like(spot_positions_1, -999_999, np.float32)
+        spot_positions_1_unmatched[unmatched_spot_1] = spot_positions_1[unmatched_spot_1]
+        kdtree = scipy.spatial.KDTree(spot_positions_1_unmatched)
+        matching_spots_1 = kdtree.query_ball_point(spot_positions_0[i], r=distance_threshold, workers=-1)
+        if len(matching_spots_1) == 0:
+            false_positive_count += 1
+            continue
+        is_matching_gene_1 = spot_gene_indices_1[matching_spots_1] == i_gene
+        assert is_matching_gene_1.sum() == 0
+        first_matching_spot_1 = matching_spots_1[0]
+        unmatched_spot_0[i] = False
+        unmatched_spot_1[first_matching_spot_1] = False
+        wrong_positive_count += 1
 
-    return (true_positives, wrong_positives, false_positives, false_negatives)
+    false_negative_count = unmatched_spot_1.sum()
+
+    return true_positive_count, wrong_positive_count, false_positive_count, false_negative_count

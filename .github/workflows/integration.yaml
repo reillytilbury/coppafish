@@ -33,7 +33,7 @@ jobs:
         run: python -m pip install --upgrade pip
 
       - name: Install dev packages
-        run: python -m pip install -r requirements-development.txt
+        run: python -m pip install -r requirements-dev.txt
 
       - name: Install default dependencies
         run: |
@@ -41,7 +41,7 @@ jobs:
           python -m pip install .
 
       - name: Run default unit tests
-        run: pytest -m "not integration and not slow"
+        run: pytest -m "not integration and not manual"
 
       - name: Run default integration tests
-        run: pytest -m "integration and not slow"
+        run: pytest -m "integration and not manual"
