@@ -190,7 +190,7 @@ def test_viewers() -> None:
         - Requires a robominnie instance to have successfully run through first.
     """
     notebook_path = get_notebook_path()
-    if not os.path.isfile(notebook_path):
+    if not os.path.exists(notebook_path):
         return
     gene_colours_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), ".integration_dir/gene_colours.csv")
     notebook = Notebook(notebook_path)

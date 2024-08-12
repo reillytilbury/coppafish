@@ -10,7 +10,7 @@ def test_compute_omp_coefficients() -> None:
     n_genes = 2
     n_rounds_use = 4
     n_channels_use = 3
-    bled_codes = torch.zeros((n_genes, n_rounds_use, n_channels_use)).float()
+    bled_codes = np.zeros((n_genes, n_rounds_use, n_channels_use), np.float32)
     bled_codes[0, 0, 0] = 1
     bled_codes[0, 1, 1] = 1
     bled_codes[1, 0, 1] = 1
@@ -22,57 +22,68 @@ def test_compute_omp_coefficients() -> None:
     # Pixel 1 has only background, expecting zero coefficients.
     pixel_colours[1, 1] = 2
     # Pixel 2 has a one strong gene expression weak background.
-    pixel_colours[2] = 1.2 * bled_codes[1].numpy()
-    pixel_colours[2, 0] = 0.02
-    pixel_colours[2, 1] = 0.03
+    pixel_colours[2] = 1.2 * bled_codes[1]
+    pixel_colours[2, 0] += 0.02
+    pixel_colours[2, 1] += 0.03
     # Pixel 3 has a weak gene expression and strong background.
-    pixel_colours[3] = 0.5 * bled_codes[0].numpy()
-    pixel_colours[3, 0] = 2
+    pixel_colours[3] = 0.5 * bled_codes[0]
+    pixel_colours[3, 0] += 2
     # Pixel 4 has a weak gene expression below the normalisation_shift.
-    pixel_colours[4] = 0.015 * bled_codes[0].numpy()
+    pixel_colours[4] = 0.005 * bled_codes[0]
     # Pixel 5 has a weak and strong gene expression.
-    pixel_colours[5] = 0.1 * bled_codes[0].numpy() + 2 * bled_codes[1].numpy()
+    pixel_colours[5] = 0.1 * bled_codes[0] + 2.0 * bled_codes[1]
     # Pixel 6 has both strong gene expressions.
-    pixel_colours[6] = 1.4 * bled_codes[0].numpy() + 2.0 * bled_codes[1].numpy()
-    background_codes = torch.zeros((n_channels_use, n_rounds_use, n_channels_use)).float()
+    pixel_colours[6] = 1.4 * bled_codes[0] + 2.0 * bled_codes[1]
+    background_codes = np.zeros((n_channels_use, n_rounds_use, n_channels_use), np.float32)
     background_codes[0, 0] = 1
     background_codes[1, 1] = 1
     background_codes[2, 2] = 1
     colour_norm_factor = np.ones((1, n_rounds_use, n_channels_use), np.float32)
     colour_norm_factor[0, 3, 2] = 0.1
-    maximum_iterations = 2
+    maximum_iterations = 4
     dot_product_threshold = 0.5
     normalisation_shift = 0.03
     pixel_subset_count = 3
 
-    coefficients = coefs.compute_omp_coefficients(
-        pixel_colours=pixel_colours,
-        bled_codes=bled_codes,
-        background_codes=background_codes,
-        colour_norm_factor=colour_norm_factor,
-        maximum_iterations=maximum_iterations,
-        dot_product_threshold=dot_product_threshold,
-        normalisation_shift=normalisation_shift,
-        pixel_subset_count=pixel_subset_count,
-    )
-    assert type(coefficients) is scipy.sparse.lil_matrix
+    pixel_colours_previous = pixel_colours.copy()
+    bled_codes_previous = bled_codes.copy()
+    background_codes_previous = background_codes.copy()
+    colour_norm_factor_previous = colour_norm_factor.copy()
+    previous_coefficients = None
+    omp_solver = coefs.CoefficientSolverOMP()
+    for pixel_subset_count in range(1, n_pixels + 2):
+        coefficients = omp_solver.compute_omp_coefficients(
+            pixel_colours=pixel_colours,
+            bled_codes=bled_codes,
+            background_codes=background_codes,
+            colour_norm_factor=colour_norm_factor,
+            maximum_iterations=maximum_iterations,
+            dot_product_threshold=dot_product_threshold,
+            normalisation_shift=normalisation_shift,
+            pixel_subset_count=pixel_subset_count,
+        )
+        assert type(coefficients) is scipy.sparse.lil_matrix
+        coefficients: np.ndarray = coefficients.toarray()
+        if previous_coefficients is not None:
+            # Ensure the pixel subset count value does not affect the results.
+            assert np.allclose(coefficients, previous_coefficients)
+        previous_coefficients = coefficients
+    assert np.allclose(pixel_colours_previous, pixel_colours)
+    assert np.allclose(bled_codes_previous, bled_codes)
+    assert np.allclose(background_codes_previous, background_codes)
+    assert np.allclose(colour_norm_factor_previous, colour_norm_factor)
     assert coefficients.shape == (n_pixels, n_genes)
-    coefficients: np.ndarray = coefficients.toarray()
+    abs_tol = 0.01
     assert np.allclose(coefficients[0], 0)
     assert np.allclose(coefficients[1], 0)
-    print(coefficients)
-    print(1.2 / np.sqrt(np.square(pixel_colours[2]).sum()))
-    assert np.allclose(coefficients[2], 1.2 / np.sqrt(np.square(pixel_colours[2]).sum()))
-    assert np.allclose(coefficients[0], 0)
-    assert np.allclose(coefficients[0], 0)
-    assert np.allclose(coefficients[0], 0)
-    assert np.allclose(coefficients[0], 0)
-    assert np.allclose(coefficients[0], 0)
-    assert np.allclose(coefficients[0], 0)
-
-
-if __name__ == "__main__":
-    test_compute_omp_coefficients()
+    assert np.allclose(coefficients[2, 0], 0)
+    assert np.allclose(coefficients[2, 1], 1.2 / (np.linalg.norm(pixel_colours[2]) + normalisation_shift), atol=abs_tol)
+    assert np.allclose(coefficients[3], 0)
+    assert np.allclose(coefficients[4], 0)
+    assert np.allclose(coefficients[5, 0], 0.1 / (np.linalg.norm(pixel_colours[5]) + normalisation_shift), atol=abs_tol)
+    assert np.allclose(coefficients[5, 1], 2.0 / (np.linalg.norm(pixel_colours[5]) + normalisation_shift), atol=abs_tol)
+    assert np.allclose(coefficients[6, 0], 1.4 / (np.linalg.norm(pixel_colours[6]) + normalisation_shift), atol=abs_tol)
+    assert np.allclose(coefficients[6, 1], 2.0 / (np.linalg.norm(pixel_colours[6]) + normalisation_shift), atol=abs_tol)
 
 
 def test_get_next_gene_assignments() -> None:
@@ -111,7 +122,8 @@ def test_get_next_gene_assignments() -> None:
     residual_colours_previous = residual_colours.detach().clone()
     all_bled_codes_previous = all_bled_codes.detach().clone()
     fail_gene_indices_previous = fail_gene_indices.detach().clone()
-    best_genes = coefs.get_next_gene_assignments(
+    omp_solver = coefs.CoefficientSolverOMP()
+    best_genes = omp_solver.get_next_gene_assignments(
         residual_colours=residual_colours,
         all_bled_codes=all_bled_codes,
         fail_gene_indices=fail_gene_indices,
@@ -122,9 +134,9 @@ def test_get_next_gene_assignments() -> None:
     assert best_genes.shape == (n_pixels,), f"Got shape {best_genes.shape}"
     assert best_genes[0] == 0, f"Got {best_genes[0]}"
     assert best_genes[1] == 0
-    assert best_genes[2] == coefs.NO_GENE_ASSIGNMENT
-    assert best_genes[3] == coefs.NO_GENE_ASSIGNMENT
-    assert best_genes[4] == coefs.NO_GENE_ASSIGNMENT
+    assert best_genes[2] == omp_solver.NO_GENE_ASSIGNMENT
+    assert best_genes[3] == omp_solver.NO_GENE_ASSIGNMENT
+    assert best_genes[4] == omp_solver.NO_GENE_ASSIGNMENT
     assert best_genes[5] == 1
     # Since tensors are mutable, check that the parameter tensors have not changed.
     assert torch.allclose(residual_colours_previous, residual_colours)
@@ -155,7 +167,8 @@ def test_get_next_gene_coefficients() -> None:
 
     pixel_colours_previous = pixel_colours.detach().clone()
     bled_codes_previous = bled_codes.detach().clone()
-    coefficients, residuals = coefs.get_next_gene_coefficients(pixel_colours=pixel_colours, bled_codes=bled_codes)
+    omp_solver = coefs.CoefficientSolverOMP()
+    coefficients, residuals = omp_solver.get_next_gene_coefficients(pixel_colours=pixel_colours, bled_codes=bled_codes)
 
     assert type(coefficients) is torch.Tensor
     assert type(residuals) is torch.Tensor

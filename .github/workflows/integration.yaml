@@ -41,7 +41,7 @@ jobs:
           python -m pip install .
 
       - name: Run default unit tests
-        run: pytest -m 'not integration and not slow'
+        run: pytest -m "not integration and not slow"
 
       - name: Run default integration tests
-        run: pytest -m 'integration and not slow'
+        run: pytest -m "integration and not slow"

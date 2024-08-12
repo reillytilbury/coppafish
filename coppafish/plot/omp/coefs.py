@@ -8,7 +8,7 @@ import torch
 
 from ... import spot_colors
 from ...call_spots import background_pytorch
-from ...omp import coefs_torch, scores_torch
+from ...omp import coefs, scores_torch
 from ...omp import base as omp_base
 from ...setup import Notebook
 
@@ -89,44 +89,22 @@ class ViewOMPImage:
                 registration_type="flow_and_icp",
             ).T.reshape((spot_shape_yxz + (n_channels_use,)))
         assert not np.allclose(image_colours, 0)
-        image_colours = torch.asarray(image_colours, dtype=torch.float32)
-        colour_norm_factor = np.array(nb.call_spots.colour_norm_factor, dtype=np.float32)
-        colour_norm_factor = torch.asarray(colour_norm_factor).float()
-        bled_codes = nb.call_spots.bled_codes
-        n_genes = bled_codes.shape[0]
-        bled_codes = torch.asarray(bled_codes).float()
-
         image_colours = image_colours.reshape((-1, n_rounds_use, n_channels_use))
-        bled_codes = bled_codes.reshape((n_genes, n_rounds_use * n_channels_use))
-
-        image_colours[torch.isnan(image_colours)] = 0
-        if config["colour_normalise"]:
-            image_colours *= colour_norm_factor[[tile]]
-        image_colours = image_colours.reshape((-1, n_rounds_use * n_channels_use))
-        assert not torch.allclose(image_colours, torch.asarray([0]).float())
-        bg_coefficients = torch.zeros((image_colours.shape[0], n_channels_use), dtype=torch.float32)
-        bg_codes = torch.repeat_interleave(torch.eye(n_channels_use)[:, None, :], n_rounds_use, dim=1)
-        # give background_vectors an L2 norm of 1 so can compare coefficients with other genes.
-        bg_codes = bg_codes / torch.linalg.norm(bg_codes, axis=(1, 2), keepdims=True)
-        if config["fit_background"]:
-            image_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(image_colours)
-        bg_codes = bg_codes.float()
-        bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
-
-        coefficient_image = coefs_torch.compute_omp_coefficients(
-            image_colours,
-            bled_codes,
+        bled_codes = nb.call_spots.bled_codes.astype(np.float32)
+        n_genes = bled_codes.shape[0]
+        assert (~np.isnan(bled_codes)).all(), "bled codes cannot contain nan values"
+        assert np.allclose(np.linalg.norm(bled_codes, axis=(1, 2)), 1), "bled codes must be L2 normalised"
+        coefficient_image = coefs.compute_omp_coefficients(
+            pixel_colours=image_colours,
+            bled_codes=bled_codes,
+            background_codes=np.eye(n_channels_use)[:, None, :].repeat(n_rounds_use, axis=1),
+            colour_norm_factor=nb.call_spots.colour_norm_factor[[tile]].astype(np.float32),
             maximum_iterations=config["max_genes"],
-            background_coefficients=bg_coefficients,
-            background_codes=bg_codes,
             dot_product_threshold=config["dp_thresh"],
-            norm_shift=config["lambda_d"],
-            weight_coefficient_fit=config["weight_coef_fit"],
-            alpha=config["alpha"],
-            beta=config["beta"],
-            do_not_compute_on=None,
-            force_cpu=config["force_cpu"],
+            normalisation_shift=config["lambda_d"],
+            pixel_subset_count=config["subset_pixels"],
         )
+        coefficient_image = coefficient_image.toarray()
         coefficient_image = torch.asarray(coefficient_image).T.reshape(
             (len(nb.call_spots.gene_names),) + spot_shape_yxz
         )
@@ -281,46 +259,25 @@ class ViewOMPPixelColours:
                 yxz=self.local_yxz[np.newaxis],
                 registration_type="flow_and_icp",
             ).T[np.newaxis]
-        image_colours = torch.asarray(image_colours, dtype=torch.float32)
-        image_colours[torch.isnan(image_colours)] = 0
-        assert not torch.allclose(image_colours, torch.zeros(1).float())
+        image_colours[np.isnan(image_colours)] = 0
+        assert not np.allclose(image_colours, 0)
         colour_norm_factor = np.array(nb.call_spots.colour_norm_factor, dtype=np.float32)
         colour_norm_factor = torch.asarray(colour_norm_factor).float()
         bled_codes = nb.call_spots.bled_codes
         assert (~np.isnan(bled_codes)).all(), "bled codes cannot contain nan values"
         assert np.allclose(np.linalg.norm(bled_codes, axis=(1, 2)), 1), "bled codes must be L2 normalised"
-        n_genes = bled_codes.shape[0]
-        bled_codes = torch.asarray(bled_codes).float()
-
-        bled_codes = bled_codes.reshape((n_genes, n_rounds_use * n_channels_use))
-
-        if config["colour_normalise"]:
-            image_colours *= colour_norm_factor[[tile]]
-        image_colours = image_colours.reshape((1, n_rounds_use * n_channels_use))
-        bg_coefficients = torch.zeros((1, n_channels_use), dtype=torch.float32)
-        bg_codes = torch.repeat_interleave(torch.eye(n_channels_use)[:, None, :], n_rounds_use, dim=1)
-        # give background_vectors an L2 norm of 1 so can compare coefficients with other genes.
-        bg_codes = bg_codes / torch.linalg.norm(bg_codes, axis=(1, 2), keepdims=True)
-        if config["fit_background"]:
-            image_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(image_colours)
-        bg_codes = bg_codes.float()
-        bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
 
         # Get the maximum number of OMP gene assignments made and what genes.
-        coefficients = coefs_torch.compute_omp_coefficients(
-            image_colours,
-            bled_codes,
+        coefficients = coefs.compute_omp_coefficients(
+            pixel_colours=image_colours,
+            bled_codes=bled_codes,
+            background_codes=np.eye(n_channels_use)[:, None, :].repeat(n_rounds_use, axis=1),
+            colour_norm_factor=nb.call_spots.colour_norm_factor[[tile]].astype(np.float32),
             maximum_iterations=config["max_genes"],
-            background_coefficients=bg_coefficients,
-            background_codes=bg_codes,
             dot_product_threshold=config["dp_thresh"],
-            norm_shift=config["lambda_d"],
-            weight_coefficient_fit=config["weight_coef_fit"],
-            alpha=config["alpha"],
-            beta=config["beta"],
-            do_not_compute_on=None,
-            force_cpu=config["force_cpu"],
-        )[0].numpy()
+            normalisation_shift=config["lambda_d"],
+            pixel_subset_count=config["subset_pixels"],
+        ).toarray()[0]
         final_selected_genes = (~np.isclose(coefficients, 0)).nonzero()[0]
         self.n_assigned_genes: int = (~np.isclose(coefficients, 0)).sum().item()
         if self.n_assigned_genes == 0:
@@ -328,24 +285,21 @@ class ViewOMPPixelColours:
         # Show the zeroth iteration too with no genes assigned.
         self.coefficients = np.zeros((self.n_assigned_genes + 1, self.n_assigned_genes), dtype=np.float32)
         for i in range(1, self.n_assigned_genes + 1):
-            self.coefficients[i] = coefs_torch.compute_omp_coefficients(
-                image_colours,
-                bled_codes,
-                maximum_iterations=i,
-                background_coefficients=bg_coefficients,
-                background_codes=bg_codes,
+            self.coefficients[i] = coefs.compute_omp_coefficients(
+                pixel_colours=image_colours,
+                bled_codes=bled_codes,
+                background_codes=np.eye(n_channels_use)[:, None, :].repeat(n_rounds_use, axis=1),
+                colour_norm_factor=nb.call_spots.colour_norm_factor[[tile]].astype(np.float32),
+                maximum_iterations=config["max_genes"],
                 dot_product_threshold=config["dp_thresh"],
-                norm_shift=config["lambda_d"],
-                weight_coefficient_fit=config["weight_coef_fit"],
-                alpha=config["alpha"],
-                beta=config["beta"],
-                force_cpu=config["force_cpu"],
-            )[0].numpy()[final_selected_genes]
+                normalisation_shift=config["lambda_d"],
+                pixel_subset_count=config["subset_pixels"],
+            ).toarray()[0, final_selected_genes]
         self.assigned_genes_names = nb.call_spots.gene_names[final_selected_genes]
-        self.gene_bled_codes = bled_codes.numpy()[final_selected_genes].reshape((-1, n_rounds_use, n_channels_use))
+        self.gene_bled_codes = bled_codes[final_selected_genes].reshape((-1, n_rounds_use, n_channels_use))
         self.gene_bled_codes = self.gene_bled_codes[np.newaxis].repeat(self.n_assigned_genes + 1, axis=0)
         self.gene_bled_codes *= self.coefficients[:, :, np.newaxis, np.newaxis]
-        self.true_pixel_colour: np.ndarray = image_colours.numpy().reshape((n_rounds_use, n_channels_use))
+        self.true_pixel_colour: np.ndarray = image_colours.reshape((n_rounds_use, n_channels_use))
         self.true_pixel_colour /= np.sqrt(np.square(self.true_pixel_colour).sum()) + config["lambda_d"]
         self.omp_final_colour = self.gene_bled_codes.sum(1)
 
