@@ -1,7 +1,7 @@
 from itertools import product
 import os
 import pickle
-from typing import Optional, Union
+from typing import Optional, Union, Tuple
 
 import numpy as np
 from scipy import signal
@@ -48,252 +48,92 @@ def load_reg_data(nbp_file: NotebookPage, nbp_basic: NotebookPage):
     return registration_data
 
 
-def populate_full(sublist_1, list_1, sublist_2, list_2, array):
+def split_image(im: np.ndarray, subvols_yx: int, overlap: float = 0.2) -> Tuple[np.ndarray, np.ndarray, float]:
     """
-    Function to convert array from len(sublist1) x len(sublist2) to len(list1) x len(list2), listing elems not in
-    sub-lists as 0
+    Function to split an image into yx subvolumes with overlap. If the image does not divide evenly into subvolumes with
+    the given overlap, the overlap will be increased to ensure that it does.
     Args:
-        sublist_1: sublist in the 0th dim
-        list_1: entire list in 0th dim
-        sublist_2: sublist in the 1st dim
-        list_2: entire list in 1st dim
-        array: array to be converted (dimensions len(sublist 1) x len(sublist2) x 3 x 4)
+        im: np.ndarray (n_y, n_x, n_z) image
+        subvols_yx: int number of subvolumes in y and x
+        overlap: float overlap fraction between subvolumes (0 <= overlap < 1)
 
     Returns:
-        full_array: len(list1) x len(list2) x 3 x 4 ndarray
+        im_split: np.ndarray (subvols_yx**2, n_y, n_x, n_z) image
+        positions: np.ndarray (subvols_yx**2, 2) yx positions of bottom left of subvolumes
+        overlap_adjusted: float adjusted overlap fraction
     """
-    full_array = np.zeros((len(list_1), len(list_2), 3, 4))
-    for i in range(len(sublist_1)):
-        for j in range(len(sublist_2)):
-            full_array[sublist_1[i], sublist_2[j]] = array[i, j]
-    return full_array
+    im_size_yx, im_size_z = im.shape[0], im.shape[2]
+    subvol_size_yx = int(im_size_yx / (subvols_yx * (1 - overlap) + overlap))
+    # rounding errors will cause this overlap to be slightly different. Let's recompute given the integer subvol size
+    overlap = (subvols_yx - im_size_yx / subvol_size_yx) / (subvols_yx - 1)
+
+    # define im_split and positions
+    im_split = np.zeros((subvols_yx, subvols_yx, subvol_size_yx, subvol_size_yx, im_size_z), dtype=im.dtype)
+    positions = np.zeros((subvols_yx, subvols_yx, 2), dtype=int)
+
+    # loop through subvolumes and populate im_split and positions
+    for i, j in product(range(subvols_yx), range(subvols_yx)):
+        y_start = int(i * (subvol_size_yx * (1 - overlap)))
+        x_start = int(j * (subvol_size_yx * (1 - overlap)))
+        y_end = y_start + subvol_size_yx
+        x_end = x_start + subvol_size_yx
+        im_split[i, j] = im[y_start:y_end, x_start:x_end]
+        positions[i, j] = np.array([y_start, x_start])
+
+    # flatten dims 0 and 1 of im_split and positions
+    im_split = im_split.reshape((subvols_yx**2, subvol_size_yx, subvol_size_yx, im_size_z))
+    positions = positions.reshape((subvols_yx**2, 2))
+
+    return im_split, positions, overlap
 
 
-def yxz_to_zyx(image: np.ndarray):
+def merge_subvols(im_split: np.ndarray, positions: np.ndarray, overlap: float,
+                  output_shape: Union[list, tuple]) -> np.ndarray:
     """
-    Function to convert image from yxz to zyx
+    Function to merge subvolumes back into a single image. In cases of overlap, the subvolume with closest centre to the
+    pixel will be used.
     Args:
-        image: yxz image
+        im_split: np.ndarray (subvols_yx**2, n_y, n_x, n_z) image
+        positions: np.ndarray (subvols_yx**2, 2) yx positions of bottom left of subvolumes
+        overlap: float overlap fraction between subvolumes (0 <= overlap < 1)
+        output_shape: shape of the output image (n_y, n_x, n_z).
 
     Returns:
-        image_new: zyx image
+        im: np.ndarray (n_y, n_x, n_z) image
     """
-    image = np.swapaxes(image, 0, 2)
-    image = np.swapaxes(image, 1, 2)
-    return image
+    # initialise variables
+    subvol_size_yx = im_split.shape[1]
+    subvols_yx = int(np.sqrt(im_split.shape[0]))
+    im = np.zeros(output_shape, dtype=im_split.dtype)
 
+    # reshape im_split and positions
+    im_split = im_split.reshape((subvols_yx, subvols_yx, subvol_size_yx, subvol_size_yx, im_split.shape[3]))
+    positions = positions.reshape((subvols_yx, subvols_yx, 2))
 
-def zyx_to_yxz(image: np.ndarray):
-    """
-    Function to convert image from zyx to yxz
-    Args:
-        image: zyx image
+    # taper the subvolumes where there is overlap so that we can add them together without double counting
+    n_overlap = int(subvol_size_yx * overlap)
+    taper_array_1d = np.linspace(0, 1, n_overlap)
+    for i, j in product(range(subvols_yx), range(subvols_yx)):
+        # does tile have northern neighbour?
+        if i > 0:
+            im_split[i, j, :n_overlap] *= taper_array_1d[:, None, None]
+        # does tile have southern neighbour?
+        if i < subvols_yx - 1:
+            im_split[i, j, -n_overlap:] *= taper_array_1d[::-1, None, None]
+        # does tile have western neighbour?
+        if j > 0:
+            im_split[i, j, :, :n_overlap] *= taper_array_1d[None, :, None]
+        # does tile have eastern neighbour?
+        if j < subvols_yx - 1:
+            im_split[i, j, :, -n_overlap:] *= taper_array_1d[None, ::-1, None]
 
-    Returns:
-        image_new: yxz image
-    """
-    image = np.swapaxes(image, 0, 2)
-    image = np.swapaxes(image, 0, 1)
-    return image
+    # loop through subvolumes and populate im
+    for i, j in product(range(subvols_yx), range(subvols_yx)):
+        y_start, x_start = positions[i, j]
+        y_end, x_end = y_start + subvol_size_yx, x_start + subvol_size_yx
+        im[y_start:y_end, x_start:x_end] += im_split[i, j]
 
-
-def n_matches_to_frac_matches(n_matches: np.ndarray, spot_no: np.ndarray):
-    """
-    Function to convert n_matches to fraction of matches
-    Args:
-        n_matches: n_rounds x n_channels_use x n_iters
-        spot_no: n_rounds x n_channels_use
-
-    Returns:
-        frac_matches: n_tiles x n_rounds x n_channels x n_iters
-    """
-    frac_matches = np.zeros_like(n_matches, dtype=np.float32)
-
-    for r in range(frac_matches.shape[0]):
-        for c in range(frac_matches.shape[1]):
-            frac_matches[r, c] = n_matches[r, c] / spot_no[r, c]
-
-    return frac_matches
-
-
-def split_3d_image(image, z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box, x_box):
-    """
-    Splits a 3D image into y_subvolumes * x_subvolumes * z_subvolumes subvolumes. z_box, y_box and x_box must be even
-    numbers.
-
-    Parameters
-    ----------
-    image : (nz x ny x nx) ndarray or (ny x nx x nz) ndarray
-        The 3D image to be split.
-    y_subvolumes : int
-        The number of subvolumes to split the image into in the y dimension.
-    x_subvolumes : int
-        The number of subvolumes to split the image into in the x dimension.
-    z_subvolumes : int
-        The number of subvolumes to split the image into in the z dimension.
-    z_box : int
-        The size of the subvolume in the z dimension.
-    y_box : int
-        The size of the subvolume in the y dimension.
-    x_box : int
-        The size of the subvolume in the x dimension.
-
-    Returns
-    -------
-    subvolume : ((z_subvols * y_subvols * x_subvols) x z_box x y_box x z_box) ndarray
-        An array of subvolumes. The first three dimensions index the subvolume, the rest store the actual data.
-    position: ndarray
-        (y_subvolumes * x_subvolumes * z_sub_volumes) x 3 The middle coord of each subtile
-    """
-    # Convert image to zyx
-    if np.argmin(image.shape) == 2:
-        image = yxz_to_zyx(image)
-
-    # Make sure that box dims are even
-    assert y_box % 2 == 0 and x_box % 2 == 0, "Box dimensions must be even numbers!"
-    z_image, y_image, x_image = image.shape
-
-    # Allow 0.5 of a box either side and then split the middle with subvols evenly spaced points, ie into subvols - 1
-    # intervals.
-    while (y_image - y_box) % (y_subvolumes - 1) != 0 or y_box % 2 != 0:
-        y_box += 1
-    while (x_image - x_box) % (x_subvolumes - 1) != 0 or x_box % 2 != 0:
-        x_box += 1
-    # define the unit spacing between centres for y and x
-    y_unit = (y_image - y_box) // (y_subvolumes - 1)
-    x_unit = (x_image - x_box) // (x_subvolumes - 1)
-
-    # 2 cases for z, if z_subvolumes = 1, then z_box = z_image and z_unit = 0, else, deal with z_box and z_unit
-    if z_subvolumes == 1:
-        z_box = z_image
-        z_unit = 0
-    else:
-        z_unit = (z_image - z_box) // (z_subvolumes - 1)
-        while (z_image - z_box) % (z_subvolumes - 1) != 0 or z_box % 2 != 0:
-            z_box += 1
-
-    # Create an array to store the subvolumes in
-    subvolume = np.zeros((z_subvolumes, y_subvolumes, x_subvolumes, z_box, y_box, x_box))
-
-    # Create an array to store the positions in
-    position = np.zeros((z_subvolumes, y_subvolumes, x_subvolumes, 3))
-
-    # Split the image into subvolumes and store them in the array
-    for z, y, x in np.ndindex(z_subvolumes, y_subvolumes, x_subvolumes):
-        z_centre, y_centre, x_centre = z_box // 2 + z * z_unit, y_box // 2 + y * y_unit, x_box // 2 + x * x_unit
-        y_start, y_end = y_centre - y_box // 2, y_centre + y_box // 2
-        x_start, x_end = x_centre - x_box // 2, x_centre + x_box // 2
-        if z_subvolumes == 1:
-            z_start, z_end = 0, z_image + 1
-        else:
-            z_start, z_end = z_centre - z_box // 2, z_centre + z_box // 2
-
-        subvolume[z, y, x] = image[z_start:z_end, y_start:y_end, x_start:x_end]
-        position[z, y, x] = np.array([(z_start + z_end) // 2, (y_start + y_end) // 2, (x_start + x_end) // 2])
-
-    # Reshape the position array
-    position = np.reshape(position, (z_subvolumes * y_subvolumes * x_subvolumes, 3))
-
-    return subvolume.astype(np.float32), position
-
-
-def compose_affine(A1, A2):
-    """
-    Function to compose 2 affine transforms. A1 comes before A2.
-    Args:
-        A1: 3 x 4 affine transform
-        A2: 3 x 4 affine transform
-    Returns:
-        A1 * A2: Composed Affine transform
-    """
-    assert A1.shape == (3, 4)
-    assert A2.shape == (3, 4)
-    # Add Final row, compose and then get rid of final row
-    A1 = np.vstack((A1, np.array([0, 0, 0, 1])))
-    A2 = np.vstack((A2, np.array([0, 0, 0, 1])))
-
-    composition = (A1 @ A2)[:3, :4]
-
-    return composition
-
-
-def invert_affine(A):
-    """
-    Function to invert affine transform.
-    Args:
-        A: 3 x 4 affine transform
-
-    Returns:
-        inverse: 3 x 4 affine inverse transform
-    """
-    inverse = np.zeros((3, 4))
-
-    inverse[:3, :3] = np.linalg.inv(A[:3, :3])
-    inverse[:, 3] = -np.linalg.inv(A[:3, :3]) @ A[:, 3]
-
-    return inverse
-
-
-def yxz_to_zyx_affine(A: np.ndarray, new_origin: np.ndarray = np.array([0, 0, 0])):
-    """
-    Function to convert 4 x 3 matrix in y, x, z coords into a 3 x 4 matrix of z, y, x coords.
-
-    Args:
-        A: Original transform in old format (4 x 3)
-        new_origin: Origin of new coordinate system in z, y, x coords
-
-    Returns:
-        A_reformatted: 3 x 4 transform with associated changes
-    """
-    # convert A to 3 x 4
-    A = A.T
-
-    # Append a bottom row to A
-    A = np.vstack((A, np.array([0, 0, 0, 1])))
-
-    # Now get the change of basis matrix to go from yxz to zyx. This is just obtained by rolling first 3 rows + cols
-    # of the identity matrix right by 1
-    C = np.eye(4)
-    C[:3, :3] = np.roll(C[:3, :3], 1, axis=1)
-
-    # Change basis and remove the final row
-    A = (np.linalg.inv(C) @ A @ C)[:3, :4]
-
-    # Add new origin conversion for zyx shift, need to do this after changing basis so that the matrix is in zyx coords
-    A[:, 3] += (A[:3, :3] - np.eye(3)) @ new_origin
-
-    return A
-
-
-def zyx_to_yxz_affine(A: np.ndarray, new_origin: np.ndarray = np.array([0, 0, 0])):
-    """
-    Function to convert 3 x 4 matrix in z, y, x coords into a 4 x 3 matrix of y, x, z coords
-
-    Args:
-        A: Original transform in old format (3 x 4)
-        new_origin: new origin to use for the transform (zyx)
-
-    Returns:
-        A_reformatted: 4 x 3 transform with associated changes
-
-    """
-    # convert A to 4 x 3
-    A = A.T
-
-    # Append a right column to A
-    A = np.vstack((A.T, np.array([0, 0, 0, 1]))).T
-
-    # First, change basis to yxz
-    C = np.eye(4)
-    C[:3, :3] = np.roll(C[:3, :3], -1, axis=1)
-
-    # compute the matrix in the new basis and remove the final column
-    A = (np.linalg.inv(C) @ A @ C)[:4, :3]
-
-    # Add new origin conversion for yxz shift, need to do this after changing basis so that the matrix is in yxz coords
-    A[3, :] += (A[:3, :3] - np.eye(3)) @ new_origin
-
-    return A
+    return im
 
 
 def custom_shift(array: np.ndarray, offset: np.ndarray, constant_values=0):
@@ -322,59 +162,6 @@ def custom_shift(array: np.ndarray, offset: np.ndarray, constant_values=0):
         new_array[(slice(None),) * axis + (slice(0, o) if o >= 0 else slice(o, None),)] = constant_values
 
     return new_array
-
-
-def merge_subvols(position, subvol):
-    """
-    Suppose we have a known volume V split into subvolumes. The position of the subvolume corner
-    in the coords of the initial volume is given by position. However, these subvolumes may have been shifted
-    so position may be slightly different. This function finds the minimal volume containing all these
-    shifted subvolumes.
-
-    If regions overlap, we take the values from the later subvolume.
-    Args:
-        position: n_subvols x 3 array of positions of bottom left of subvols (zyx)
-        subvol: n_subvols x z_box x y_box x x_box array of subvols
-
-    Returns:
-        merged: merged image (size will depend on amount of overlap)
-    """
-    position = position.astype(int)
-    # set min values to 0
-    position -= np.min(position, axis=0)
-    z_box, y_box, x_box = subvol.shape[1:]
-    centre = position + np.array([z_box // 2, y_box // 2, x_box // 2])
-    # Get the min and max values of the position, use this to get the size of the merged image and initialise it
-    max_pos = np.max(position, axis=0)
-    merged = np.zeros((max_pos + subvol.shape[1:]).astype(int))
-    neighbour_im = np.zeros_like(merged)
-    # Loop through the subvols and add them to the merged image at the correct position.
-    for i in range(position.shape[0]):
-        subvol_i_mask = np.ix_(
-            range(position[i, 0], position[i, 0] + z_box),
-            range(position[i, 1], position[i, 1] + y_box),
-            range(position[i, 2], position[i, 2] + x_box),
-        )
-        neighbour_im[subvol_i_mask] += 1
-        merged[subvol_i_mask] = subvol[i]
-
-    # identify overlapping regions
-    overlapping_pixels = np.argwhere(neighbour_im > 1)
-    if len(overlapping_pixels) == 0:
-        return merged
-    centre_dist = np.linalg.norm(overlapping_pixels[:, None, :] - centre[None, :, :], axis=2)
-    # get the index of the closest centre
-    closest_centre = np.argmin(centre_dist, axis=1)
-    # now loop through subvols and assign overlapping pixels to the closest centre
-    for i in range(position.shape[0]):
-        subvol_i_pixel_ind = np.where(closest_centre == i)[0]
-        subvol_i_pixel_coords_global = np.array([overlapping_pixels[j] for j in subvol_i_pixel_ind])
-        subvol_i_pixel_coords_local = subvol_i_pixel_coords_global - position[i]
-        z_global, y_global, x_global = subvol_i_pixel_coords_global.T
-        z_local, y_local, x_local = subvol_i_pixel_coords_local.T
-        merged[z_global, y_global, x_global] = subvol[i, z_local, y_local, x_local]
-
-    return merged
 
 
 def generate_reg_images(
@@ -533,6 +320,7 @@ def generate_reg_images(
     nbp_register.channel_images = channel_images
 
 
+# TODO: Get rid of this function
 def load_transformed_image(
     nb: Notebook,
     t: int,
@@ -595,6 +383,7 @@ def load_transformed_image(
     return im
 
 
+# TODO: Get rid of this function
 def transform_im(im: np.ndarray, affine: np.ndarray, flow: zarr.Array, flow_ind: Union[tuple, None]) -> np.ndarray:
     """
     Function to apply affine and flow transformations to an image.
@@ -678,17 +467,3 @@ def window_image(image: np.ndarray) -> np.ndarray:
     window = window_z[:, None, None] * window_yx[None, :, :]
     image = image * window
     return image
-
-
-def flow_zyx_to_yxz(flow_zyx: np.ndarray) -> np.ndarray:
-    """
-    Convert a flow from zyx to yxz.
-    Args:
-        flow_zyx: np.ndarray of shape (3, nz, ny, nx) of flows in zyx coords.
-
-    Returns:
-        flow_yxz: np.ndarray of shape (3, ny, nx, nz)
-    """
-    flow_yxz = np.moveaxis(flow_zyx, 1, -1)
-    flow_yxz = np.roll(flow_yxz, -1, axis=0)
-    return flow_yxz

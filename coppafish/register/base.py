@@ -1,4 +1,3 @@
-import os
 import time
 from typing import Optional, Tuple
 
@@ -8,7 +7,6 @@ import numpy as np
 import scipy
 from scipy.ndimage import gaussian_filter
 import skimage
-from sklearn.linear_model import HuberRegressor
 from tqdm import tqdm
 import zarr
 
@@ -26,7 +24,7 @@ def optical_flow_register(
     smooth_loc: str,
     sample_factor_yx: int = 4,
     window_radius: int = 5,
-    smooth_sigma: list = [20, 20, 2],
+    smooth_sigma: list = [10, 10, 2],
     clip_val: np.ndarray = np.array([40, 40, 15]),
     n_cores: Optional[int] = None,
 ):
@@ -36,22 +34,23 @@ def optical_flow_register(
     Optical flow is computed using an iterative Lucas-Kanade method with 10 iterations and a window radius specified
     by the user.
 
-    Bad regions are removed by thresholding the correlation coefficient of the optical flow and interpolating the flow
-    in these regions. The interpolation is done by smoothing the optical flow and dividing by a smoothed indicator of
-    the flow.
+    Flow is interpolated based on the correlation between the base and target images. The correlation is computed
+    as a dot product between the base and target images within a small window of each pixel.
 
     Args:
         target: np.ndarray size [n_y, n_x, n_z] of the target image (this will be the round image)
         base: np.ndarray size [n_y, n_x, n_z] of the base image (this will be the anchor image)
+        tile: int specifying the tile index
+        round: int specifying the round index
+        raw_loc: str specifying the location to save/ load the optical flow
+        corr_loc: str specifying the location to save/ load the correlation
+        smooth_loc: str specifying the location to save/ load the smoothed flow
         sample_factor_yx: int specifying how much to downsample the images in y and x before computing the optical flow
         window_radius: int specifying the window radius for the optical flow algorithm and correlation calculation
         (Note that this is the radius on the downsampled image, so a radius of 5 with a downsample factor of 4 will
         correspond to a radius of 20 on the original image)
-        smooth_threshold: float specifying the threshold for the correlation coefficient to be considered for smoothing
         smooth_sigma: float specifying the standard deviation of the Gaussian filter to be used for smoothing the flow
         clip_val: np.ndarray size [3] of the clip value for the optical flow in y, x and z
-        output_dir: str specifying the directory to save the optical flow information (flow, corr and smooth)
-        file_name: str specifying the file name to save the optical flow information (flow, corr and smooth)
         n_cores (int, optional): maximum cpu cores to use in parallel when computing optical flow. Default: all found
             cpu cores.
 
@@ -62,12 +61,11 @@ def optical_flow_register(
     target = target.astype(np.float32)
     base = base.astype(np.float32)
     # down-sample the images
-    target = target[::sample_factor_yx, ::sample_factor_yx]
-    base = base[::sample_factor_yx, ::sample_factor_yx]
-    # match historams of the images
-    # target = skimage.exposure.match_histograms(target, base)
-    target = target / np.median(target)
-    base = base / np.median(base)
+    target = skimage.measure.block_reduce(target, (sample_factor_yx, sample_factor_yx, 1), np.mean)
+    base = skimage.measure.block_reduce(base, (sample_factor_yx, sample_factor_yx, 1), np.mean)
+    # smooth the images slightly
+    target = gaussian_filter(target, 1)
+    base = gaussian_filter(base, 1)
     # update clip_val based on down-sampling
     clip_val = np.array(clip_val, dtype=np.float32)
     clip_val[:2] = clip_val[:2] / sample_factor_yx
@@ -91,7 +89,6 @@ def optical_flow_register(
         tile=tile,
         round=round,
         flow=flow,
-        win_size=np.array([6, 6, 2]),
         loc=corr_loc,
     )
     # smooth the flow
@@ -122,6 +119,8 @@ def optical_flow_single(
     Args:
         base: np.ndarray size [n_y, n_x, n_z] of the base image
         target: np.ndarray size [n_y, n_x, n_z] of the target image
+        tile: int specifying the tile index
+        round: int specifying the round index
         window_radius: int specifying the window radius for the optical flow algorithm
         clip_val: np.ndarray size [3] of the clip value for the optical flow in y, x and z
         upsample_factor_yx: int specifying how much to upsample the optical flow in y and x
@@ -136,37 +135,27 @@ def optical_flow_single(
     # start by ensuring images are float32
     base = base.astype(np.float32)
     target = target.astype(np.float32)
-    # First, correct for a yx shift in the images
-    # mid_z = int(target.shape[2] / 2)
-    window_yx = skimage.filters.window("hann", target.shape)
+
+    # First, correct for a shift in the images
+    base_windowed, target_windowed = preprocessing.window_image(base), preprocessing.window_image(target)
     shift = skimage.registration.phase_cross_correlation(
-        reference_image=target * window_yx, moving_image=base * window_yx, upsample_factor=10
+        reference_image=target_windowed,
+        moving_image=base_windowed,
+        upsample_factor=10
     )[0]
-    base = preprocessing.custom_shift(base, shift.astype(int))
-    ny, _, nz = target.shape
-    yx_sub = int((ny / chunks_yx) * 1.25)
-    while (ny - yx_sub) % (chunks_yx - 1) != 0 or yx_sub % 2 != 0:
-        yx_sub += 1
-    target_sub, pos = preprocessing.split_3d_image(
-        image=target,
-        z_subvolumes=1,
-        y_subvolumes=chunks_yx,
-        x_subvolumes=chunks_yx,
-        z_box=nz,
-        y_box=yx_sub,
-        x_box=yx_sub,
-    )
-    base_sub, _ = preprocessing.split_3d_image(
-        image=base, z_subvolumes=1, y_subvolumes=chunks_yx, x_subvolumes=chunks_yx, z_box=nz, y_box=yx_sub, x_box=yx_sub
-    )
-    # this next line assumes that the images are split into 1 subvolume in z (which we always do)
-    target_sub, base_sub = target_sub[0], base_sub[0]
-    # flatten dims 0 and 1
-    target_sub = target_sub.reshape((chunks_yx**2, nz, yx_sub, yx_sub))
-    base_sub = base_sub.reshape((chunks_yx**2, nz, yx_sub, yx_sub))
-    # divide each subvolume by its mean
+    # round this shift and make it an integer
+    shift = np.round(shift).astype(int)
+    # adjust the base image by this shift
+    base = preprocessing.custom_shift(base, shift)
+
+    # split the images into subvolumes and run optical flow on each subvol in parallel
+    ny, _, nz = target.shape    # ny = nx = 2304 / 4 = 576
+    target_sub, pos, overlap = preprocessing.split_image(im=target, subvols_yx=chunks_yx, overlap=0.2)
+    base_sub, _, _ = preprocessing.split_image(im=base, subvols_yx=chunks_yx)
+    # Normalise each subvolume to have mean 1 (this is just so that the images are in a similar range in each subvol)
     target_sub = target_sub / np.mean(target_sub, axis=(1, 2, 3))[:, None, None, None]
     base_sub = base_sub / np.mean(base_sub, axis=(1, 2, 3))[:, None, None, None]
+
     # compute the optical flow (in parallel)
     if n_cores is None:
         n_cores = utils.system.get_core_count()
@@ -177,13 +166,11 @@ def optical_flow_single(
         )
         for n in range(pos.shape[0])
     )
-    flow_sub = np.array(flow_sub)
-    # swap so axis 0 is z,y,x and axis 1 is the subvolume
-    flow_sub = flow_sub.swapaxes(0, 1)
-    # merge the subvolumes
-    flow = np.array([preprocessing.merge_subvols(pos, flow_sub[i]) for i in range(3)])
-    # now convert flow back to yxz
-    flow = preprocessing.flow_zyx_to_yxz(flow)
+    flow_sub = np.array(flow_sub)   # convert list to numpy array. Shape: (n_subvols, 3, n_y, n_x, n_z)
+
+    # Now that we have the optical flow for each subvolume, we need to merge them back together
+    flow = np.array([preprocessing.merge_subvols(im_split=flow_sub[i], positions=pos,
+                                                 output_shape=target.shape, overlap=overlap) for i in range(3)])
     # clip the flow
     flow = np.array([np.clip(flow[i], -clip_val[i], clip_val[i]) for i in range(3)])
     # add back the shift
@@ -214,21 +201,17 @@ def flow_correlation(
     tile: int,
     round: int,
     flow: np.ndarray,
-    win_size: np.ndarray,
     upsample_factor_yx: int = 4,
     loc: str = "",
-) -> np.ndarray:
+) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Compute the correlation between the base and target images within a small window of each pixel.
-    This is done in a vectorized manner by reshaping the images into windows and then computing the correlation
-    coefficient between the base and target images within each window. For this reason the window size must be a factor
-    of the image size in each dimension.
+    Compute the correlation between the base and target images. The correlation is just the dot product of the base and
+    target images at each pixel.
 
     Args:
         base: n_y x n_x x n_z array of the base image
         target: n_y x n_x x n_z array of the target image
         flow: 3 x n_y x n_x x n_z array of flow in y, x and z
-        win_size: 3 element array of the window size in y, x and z
         upsample_factor_yx: int specifying the upsample factor in y and x
         loc: str specifying the location to save/ load the correlation
 
@@ -243,41 +226,18 @@ def flow_correlation(
     coords = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing="ij"), dtype=np.float32)
     base_warped = skimage.transform.warp(base, coords + flow, order=0, mode="constant", cval=0)
     del coords, base, flow
-    # divide base_warped and target by their max.
-    base_warped = base_warped / np.max(base_warped)
-    target = target / np.max(target)
-    for i in range(3):
-        while target.shape[i] % win_size[i] != 0:
-            win_size[i] += 1
-    # compute number of windows in each dimension
-    n_win = np.array(target.shape) // win_size
-    # reshape the images into windows
-    base_warped = base_warped.reshape(n_win[0], win_size[0], n_win[1], win_size[1], n_win[2], win_size[2])
-    target = target.reshape(n_win[0], win_size[0], n_win[1], win_size[1], n_win[2], win_size[2])
-    # move the window dimensions to the front
-    base_warped = np.moveaxis(base_warped, [0, 2, 4], [0, 1, 2])
-    target = np.moveaxis(target, [0, 2, 4], [0, 1, 2])
-    # Now reshape so the window dimensions and pixel dimensions are flattened
-    base_warped = base_warped.reshape(np.prod(n_win), np.prod(win_size))
-    target = target.reshape(np.prod(n_win), np.prod(win_size))
+
     # compute the correlation
-    correlation = np.sum(base_warped * target, axis=1)
-    # reshape the correlation back to the window dimensions
-    correlation = correlation.reshape(n_win)
-    # upsample the correlation to the original image size just by repeating the correlation values
-    correlation = np.repeat(
-        np.repeat(np.repeat(correlation, win_size[2], axis=2), win_size[1], axis=1), win_size[0], axis=0
-    )
-    # upsample
-    correlation_up = upsample_yx(correlation, upsample_factor_yx, order=0).astype(np.float16)
+    correlation = base_warped * target
+    correlation_upsampled = upsample_yx(correlation, upsample_factor_yx, order=1).astype(np.float16)
     # save the correlation
     if loc:
         # save in yxz format
         zarray = zarr.open_array(loc, mode="r+")
-        zarray[tile, round] = correlation_up
+        zarray[tile, round] = correlation_upsampled
     t_end = time.time()
     log.info("Computing correlation took " + str(t_end - t_start) + " seconds")
-    return correlation, correlation_up
+    return correlation, correlation_upsampled
 
 
 def interpolate_flow(
@@ -285,7 +245,7 @@ def interpolate_flow(
     correlation: np.ndarray,
     tile: int,
     round: int,
-    sigma: list = [20, 20, 2],
+    sigma: list = [10, 10, 2],
     upsample_factor_yx: int = 4,
     loc: str = "",
 ):
@@ -308,14 +268,18 @@ def interpolate_flow(
         loc: str specifying the location to save/ load the interpolated flow
     """
     time_start = time.time()
-    # normalise the correlation so that the mean of each z-plane is 1. This is done to use the best shifts on each z
-    # plane, otherwise the middle z-planes dominate the smoothed flow
+
+    # normalise correlation so that mean of each z-plane is 1, otherwise the middle z-planes dominate the smoothed flow
     correlation = correlation / np.mean(correlation, axis=(0, 1))[None, None, :]
+    # smooth the correlation
     correlation_smooth = gaussian_filter(correlation, sigma, truncate=6)
+    # smooth the correlation weighted flow
     for i in range(3):
         flow[i] = gaussian_filter(flow[i] * correlation, sigma, truncate=6)
-    # divide the flow by the smoothed indicator
+
+    # divide the smoothed correlation weighted flow by the smoothed correlation
     flow = np.array([flow[i] / correlation_smooth for i in range(3)])
+
     # remove nan values
     flow = np.nan_to_num(flow)
     upsample_factor = (upsample_factor_yx, upsample_factor_yx, 1)
@@ -361,8 +325,9 @@ def channel_registration(
     Function to carry out channel registration using fluorescent beads. This function assumes that the fluorescent
     bead images are 2D images and that there is one image for each camera.
 
-    Fluorescent beads are assumed to be circles and are detected using the Hough transform. The centre of the detected
-    circles are then used to compute the affine transform between each camera and the round_reg_channel_cam via ICP.
+    Fluorescent beads are assumed to be circles and their centres are detected using the Hough transform.
+    The centres of the detected circles are then used as point clouds to compute the affine transform between each
+    camera and the round_reg_channel_cam via ICP.
 
     Args:
         fluorescent_bead_path: Path to fluorescent beads directory containing the fluorescent bead images.
@@ -375,26 +340,25 @@ def channel_registration(
     Returns:
         transform: n_cams x 3 x 4 array of affine transforms taking anchor camera to each other camera
     """
-    transform = np.zeros((n_cams, 3, 4))
+    transform = np.zeros((n_cams, 4, 3))
     # First check if the fluorescent beads path exists. If not, we assume that the channels are registered to each
     # other and just set channel_transforms to identity matrices
     if fluorescent_bead_path is None:
         # Set registration_data['channel_registration']['channel_transform'][c] = np.eye(3) for all channels c
         for c in range(n_cams):
-            transform[c] = np.eye(3, 4)
+            transform[c] = np.eye(4, 3)
         log.warn("Fluorescent beads directory does not exist. Assuming that all channels are registered to each other.")
         return transform
 
     # open the fluorescent bead images as nd2 files
     with nd2.ND2File(fluorescent_bead_path) as fbim:
         fluorescent_beads = fbim.asarray()
-    # if fluorescent bead images are for all channels, just take one from each camera
 
-    # TODO better deal with 3D
+    # if the fluorescent bead images are 4D, take the middle z-plane
     if fluorescent_beads.ndim == 4:
         nz = fluorescent_beads.shape[0]
         fluorescent_beads = fluorescent_beads[int(nz / 2)]
-
+    # if fluorescent bead images are for all channels, just take one from each camera
     if fluorescent_beads.shape[0] == 28:
         fluorescent_beads = fluorescent_beads[[0, 9, 18, 23]]
 
@@ -422,6 +386,8 @@ def channel_registration(
             hough_res, bead_radii, min_xdistance=10, min_ydistance=10
         )
         cy, cx = cy.astype(int), cx.astype(int)
+
+        # Remove points that are below the noise threshold
         values = fluorescent_beads[i][cy, cx]
         cy_rand, cx_rand = (
             np.random.randint(0, fluorescent_beads[i].shape[0] - 1, 100),
@@ -430,6 +396,7 @@ def channel_registration(
         noise = np.mean(fluorescent_beads[i][cy_rand, cx_rand])
         keep = values > noise
         cy, cx = cy[keep], cx[keep]
+        # Add the points to the point cloud
         bead_point_clouds.append(np.vstack((cy, cx)).T)
 
     # Now convert the point clouds from yx to yxz. This is because our ICP algorithm assumes that the point clouds
@@ -464,12 +431,7 @@ def channel_registration(
     transform[:, 2, 2] = 1
     transform[anchor_cam_idx] = np.eye(4, 3)
 
-    # Convert transforms from yxz to zyx
-    transform_zyx = np.zeros((4, 3, 4))
-    for i in range(n_cams):
-        transform_zyx[i] = preprocessing.yxz_to_zyx_affine(transform[i])
-
-    return transform_zyx
+    return transform
 
 
 # Function which runs a single iteration of the icp algorithm

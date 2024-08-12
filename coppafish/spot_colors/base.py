@@ -8,27 +8,30 @@ import zarr
 
 def apply_flow(yxz: Union[np.ndarray, torch.Tensor],
                flow: Union[np.ndarray, torch.Tensor],
-               tile: int,
-               round: int) -> Union[np.ndarray, torch.Tensor]:
+               top_left: Union[np.ndarray, torch.Tensor] = np.array([0, 0, 0])) -> Union[np.ndarray, torch.Tensor]:
     """
     Apply a flow to a set of points. Note that this is applying forward warping, meaning that
         new_points = points + flow.
-    If ig
+    The flow we pass in may be cropped, so if this is the case, to sample the points correctly, we need to
+        make the points relative to the top left corner of the cropped image.
     Args:
-        yxz: integer points to apply the warp to. (n_points x 3 in yxz coords)
-        flow (np.ndarray): flow to apply. (n_tiles, n_rounds x 3 x ny x nx x nz).
-        tile (int): tile index.
-        round (int): round index.
+        yxz: integer points to apply the warp to. (n_points x 3 in yxz coords) (UNSHIFTED)
+        flow: flow to apply to the points. (3 x cube_size_y x cube_size_x x cube_size_z) (SHIFTED)
+        top_left: the top left corner of the cube in the flow_image. (3 in yxz coords) Default: [0, 0, 0]
 
     Returns:
         yxz_flow: (float) new points. (n_points x 3 in yxz coords)
     """
-    # have to subtract the flow from the points as we are applying the inverse warp
-    y_indices, x_indices, z_indices = yxz.numpy().T
-    flow_subset = np.array([flow[tile, round, i, y_indices, x_indices, z_indices] for i in range(3)]).astype(np.float32).T
+    # First, make yxz coordinates relative to the top left corner of the flow image, so that we can sample the shifts
+    yxz_relative = yxz - top_left
+    y_indices_rel, x_indices_rel, z_indices_rel = yxz_relative.numpy().T
+    # sample the shifts relative to the top left corner of the flow image
+    yxz_shifts = np.array([flow[i, y_indices_rel, x_indices_rel, z_indices_rel] for i in range(3)]).astype(np.float32).T
+    # if original coords are torch, make the shifts torch
     if type(yxz) is torch.Tensor:
-        flow_subset = torch.tensor(flow_subset)
-    yxz_flow = yxz + flow_subset
+        yxz_shifts = torch.tensor(yxz_shifts)
+    # apply the shifts to the original points
+    yxz_flow = yxz + yxz_shifts
     return yxz_flow
 
 
@@ -336,7 +339,7 @@ def get_spot_colours(
     # initialize variables
     n_spots, n_use_rounds, n_use_channels = yxz_base.shape[0], flow.shape[1], len(use_channels)
     use_rounds = list(np.arange(n_use_rounds))
-    tile_sz = torch.tensor(image.shape[3:])
+    tile_size = torch.tensor(image.shape[3:])
     pad_size = torch.tensor([100, 100, 5])
     spot_colours = torch.full((n_spots, n_use_rounds, n_use_channels), fill_value, dtype=output_dtype)
 
@@ -344,11 +347,15 @@ def get_spot_colours(
     yxz_min, yxz_max = yxz_base.min(axis=0).values.int(), yxz_base.max(axis=0).values.int()
     # pad to ensure that we are able to interpolate the points even if the shifts are large.
     yxz_min, yxz_max = (torch.maximum(yxz_min - pad_size, torch.tensor([0, 0, 0])),
-                        torch.minimum(yxz_max + pad_size, tile_sz))
+                        torch.minimum(yxz_max + pad_size, tile_size))
+    cube_size = yxz_max - yxz_min
     # load the sliced images for each round and channel
     image = np.array(
         [[image[tile, r, c, yxz_min[0]:yxz_max[0], yxz_min[1]:yxz_max[1], yxz_min[2]:yxz_max[2]] for c in use_channels]
          for r in use_rounds]
+    )
+    flow = np.array(
+        [flow[tile, r, :, yxz_min[0]:yxz_max[0], yxz_min[1]:yxz_max[1], yxz_min[2]:yxz_max[2]] for r in use_rounds]
     )
     # convert to torch tensor
     image = torch.tensor(image, dtype=torch.float32)
@@ -358,12 +365,15 @@ def get_spot_colours(
         # initialize the coordinates for the round
         yxz_round_r = torch.zeros((n_use_channels, n_spots, 3), dtype=torch.float32)
         # the flow is the same for all channels in the same round. Therefore, only need to read it once.
-        yxz_flow = apply_flow(yxz=yxz_base.int(), flow=flow, tile=tile, round=r)
+        # Since flow is cropped, pass the top left corner to this function, so it reads the coords relative to yxz_min.
+        yxz_flow = apply_flow(yxz=yxz_base.int(), flow=flow[r], top_left=yxz_min)
         for i, c in enumerate(use_channels):
             # apply the affine transform to the spots
             yxz_round_r[i] = apply_affine(yxz=yxz_flow, affine=icp_correction[tile, r, c])
-            # convert tile coordinates [0, tile_sz] to coordinates [0, 2]
-            yxz_round_r[i] = 2 * yxz_round_r[i] / (tile_sz - 1)
+            # Since image has top left corner yxz_min, must make the sampling points relative to this.
+            yxz_round_r[i] -= yxz_min
+            # convert tile coordinates [0, cube_size] to coordinates [0, 2]
+            yxz_round_r[i] = 2 * yxz_round_r[i] / (cube_size - 1)
             # convert coordinates [0, 2] to coordinates [-1, 1]
             yxz_round_r[i] -= 1
 
@@ -374,9 +384,7 @@ def get_spot_colours(
 
         # grid_sample expects grid to be input as [N, D', H', W', 3] where
         # N = batch size: We set this to n_use_channels,
-        # D' = depth output: We set this to n_spots,
-        # H' = height putput: We set this to 1,
-        # W' = width output: We set this to 1,
+        # D' = depth out, H' = height out, W' = width out: We set these to n_spots, 1, 1,
         spot_colours[:, r, :] = torch.nn.functional.grid_sample(
             input=image[r, :, None, :, :, :],
             grid=yxz_round_r[:, :, None, None, :],
