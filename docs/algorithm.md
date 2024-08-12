@@ -407,40 +407,54 @@ OMP is coppafish's current best gene assignment algorithm. OMP runs independentl
 [call spots](#call-spots) for more accurate representation of each gene's unique barcode: its bled code 
 ($\mathbs{b}_{grc}$). Also, OMP does not have any understanding about the difference between rounds and channels.
 
-## Maths Definitions
+## Definitions
 
 - $r$ and $c$ represents sequencing rounds and channels respectively.
 - $\mathbf{B}_{grc}$ represents gene g's bled code in round $r$, channel $c$.
 - $\mathbf{S}_{prc}$ is pixel $p$'s colour in round $r$, channel $c$, after pre-processing is applied.
 - $\mathbf{c}_{pgi}$ is the OMP coefficient given to gene $g$ for image pixel $p$ on the $i$'th iteration. $i$ takes 
 values $1, 2, 3, ...$
+- $||...||_{...}$ represents an L2 norm (or Frobenius norm for a matrix) over indices within the curly brackets.
 
 ## 0: Pre-processing
 
-All pixel colours are gathered using the results from register. Any out of bounds round/channel colour intensities are 
-set to zero. Pixel colours are normalised based on their intensities. If $\widetilde{\mathbf{S}}$ are the initial 
-pixel colours, the final pixel colours $\mathbf{S}$ become
-
-$$
-\mathbf{S}_{prc} = \frac{\widetilde{\mathbf{S}}_{prc}}{\sqrt{\sum_{rc} \widetilde{\mathbf{S}}_{prc}}}
-$$
+All tile pixel colours are gathered using the results from register. Any out of bounds round/channel colour intensities 
+are set to zero. 
 
 ## 1: Assigning the Next Gene
 
-A pixel can have more than one gene assigned to it. Let's say we are on iteration $i$ for pixel $p$. The pixel will 
-already have $i - 1$ genes assigned to it and their coefficients have already been computed ($\mathbf{c}_{pg(i - 1)}$). 
-We compute the latest residual pixel colour $\mathbf{R}_{prci}$ as 
+A pixel can have more than one gene assigned to it. The most genes allowed on each pixel is `max_genes` 
+(typically `10`). Let's say we are on iteration $i$ for pixel $p$. The pixel will already have $i - 1$ genes assigned 
+to it and their coefficients have already been computed ($\mathbf{c}_{pg(i - 1)}$). We compute the latest residual 
+pixel colour $\mathbf{R}_{prci}$ as 
 
 $$
 \mathbf{R}_{prci} = \mathbf{S}_{prc} - \sum_g \mathbf{c}_{pg(i - 1)}\mathbf{B}_{grc}
 $$
 
-For the first iteration, $\mathbf{R}_{prc(i=1)} = \mathbf{S}_{prc}$. Using this residual, a weighted dot product score 
-is computed for every gene $g$ as 
+For the first iteration, $\mathbf{R}_{prc(i=1)} = \mathbf{S}_{prc}$. Using this residual, a dot product score is 
+computed for every gene and background gene $g$ as 
 
 $$
-
+\text{score}_{pg} = \frac{\sum_{rc}\mathbf{B}_{grc}\mathbf{R}_{prci}}{||\mathbf{R}_{prci}||_{rc} + \lambda_d}
 $$
+
+A gene is successfully assigned to a pixel when all conditions are met:
+
+- The best gene score is above `dp_thresh` (typically 0.225).
+- The best gene is not already assigned to the pixel.
+- The best gene is not a background gene.
+- There are fewer than $\text{max_genes} - i + 1$ genes/background genes above the `dp_thresh` score.
+
+The reasons for each of these conditions is:
+
+- to remove poor gene reads and dim pixels.
+- to not double assign genes.
+- to avoid over-fitting on high-background pixel colour.
+- to cut out ambiguous pixel colour.
+
+respectively. If a pixel fails to meet these conditions, then no more genes are assigned to it. If all remaining pixels 
+fail the conditions, then the iterations stop and the coefficients $\mathbf{c}$ are kept as final.
 
 ## 2: Gene Coefficients
 
@@ -460,5 +474,18 @@ $$
 
 where $\bar{...}$ represents flattening the round and channel dimensions into a single dimension, so 
 $\bar{\mathbf{B}}$ is of shape $\text{genes}$ by $\text{rounds} * \text{channels}$ and $\bar{\mathbf{S}}$ is of shape 
-$\text{rounds} * \text{channels}$. $(...)^{-1}$ is the Moore-Penrose matrix inverse (a psuedoinverse).
+$\text{rounds} * \text{channels}$. $(...)^{-1}$ is the Moore-Penrose matrix inverse (a pseudo-inverse).
 
+With the new, updated coefficients, step 1 is repeated on the remaining pixels unless $i$ is equal to `max_genes`.
+
+## 3: Coefficient Post-Processing
+
+The final coefficients, $\mathbf{c}_{pg}$ are normalised pixel-wise by dividing by
+
+$$
+||\mathbf{S}_{prc}||_{rc} + \lambda_d
+$$
+
+$\lambda_d$ should be roughly the maximum of background signal, typically $0.4$.
+
+## 4: Mean Sign Spot Computation
