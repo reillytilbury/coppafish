@@ -77,7 +77,6 @@ class BuildPDF:
         self.use_channels_all.sort()
         self.use_rounds_all = list(nb.basic_info.use_rounds) + nb.basic_info.use_anchor * [nb.basic_info.anchor_round]
         self.use_rounds_all.sort()
-        gene_names = nb.call_spots.gene_names
 
         if not os.path.isfile(os.path.join(output_dir, "_basic_info.pdf") and nb.has_page("basic_info")):
             with PdfPages(os.path.join(output_dir, "_basic_info.pdf")) as pdf:
@@ -341,6 +340,7 @@ class BuildPDF:
         prob_heatmap_path = os.path.join(output_dir, "_heat_maps_prob.pdf")
         file_missing = not os.path.isfile(anchor_heatmap_path) or not os.path.isfile(prob_heatmap_path)
         if nb.has_page("call_spots") and file_missing:
+            gene_names = nb.call_spots.gene_names
             local_yxzs = nb.ref_spots.local_yxz.astype(np.float32)
             tile_numbers = nb.ref_spots.tile
             global_yxzs = local_yxzs + nb.stitch.tile_origin[tile_numbers]
@@ -365,6 +365,7 @@ class BuildPDF:
         pbar.set_postfix_str("omp_heatmaps")
         omp_heatmap_path = os.path.join(output_dir, "_heat_maps_omp.pdf")
         if nb.has_page("omp") and not os.path.isfile(omp_heatmap_path):
+            gene_names = nb.call_spots.gene_names
             with PdfPages(omp_heatmap_path) as pdf:
                 local_yxzs, tile_numbers = omp_base.get_all_local_yxz(nb.basic_info, nb.omp)
                 local_yxzs = local_yxzs.astype(np.float32)
