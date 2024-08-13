@@ -9,28 +9,31 @@ import matplotlib.pyplot as plt
 from matplotlib.transforms import ScaledTranslation
 import numpy as np
 from tqdm import tqdm
+from typing_extensions import Self
 
 from .. import log
 from ..omp import base as omp_base
 from ..setup import Notebook, NotebookPage
-from ..utils import tiles_io
-
-
-# Plot settings
-A4_SIZE_INCHES = (11.693, 8.268)
-LARGE_FONTSIZE = 25
-NORMAL_FONTSIZE = 18
-SMALL_FONTSIZE = 15
-SMALLER_FONTSIZE = 10
-TINY_FONTSIZE = 4
-INFO_FONTDICT = {"fontsize": NORMAL_FONTSIZE, "verticalalignment": "center"}
-N_GENES_SHOW = 40
-GENE_PROB_THRESHOLD = 0.7
-DEFAULT_REF_SCORE_THRESHOLD = 0.3
-DEFAULT_OMP_SCORE = 0.3
 
 
 class BuildPDF:
+    # Plot settings
+    A4_SIZE_INCHES = (11.693, 8.268)
+    LARGE_FONTSIZE = 25
+    NORMAL_FONTSIZE = 18
+    SMALL_FONTSIZE = 15
+    SMALLER_FONTSIZE = 10
+    TINY_FONTSIZE = 4
+    INFO_FONTDICT = {"fontsize": NORMAL_FONTSIZE, "verticalalignment": "center"}
+    N_GENES_SHOW = 40
+    GENE_PROB_THRESHOLD = 0.7
+    DEFAULT_REF_SCORE_THRESHOLD = 0.3
+    DEFAULT_OMP_SCORE = 0.3
+    HEATMAP_BIN_SIZE = 10  # In pixel count
+    HEATMAP_PROB_SCORE_THRESH = 0.5
+    HEATMAP_ANCHOR_SCORE_THRESH = 0.5
+    HEATMAP_OMP_SCORE_THRESH = 0.3
+
     def __init__(
         self,
         nb: Union[Notebook, str],
@@ -47,7 +50,7 @@ class BuildPDF:
             auto_open (bool, optional): open the PDF in a web browser after creation. Default: true.
         """
         log.debug("Creating diagnostic PDF started")
-        pbar = tqdm(desc="Creating Diagnostic PDFs", total=9, unit="section")
+        pbar = tqdm(desc="Creating Diagnostic PDFs", total=11, unit="section")
         pbar.set_postfix_str("Loading notebook")
         if type(nb) is str:
             nb = Notebook(nb)
@@ -74,6 +77,7 @@ class BuildPDF:
         self.use_channels_all.sort()
         self.use_rounds_all = list(nb.basic_info.use_rounds) + nb.basic_info.use_anchor * [nb.basic_info.anchor_round]
         self.use_rounds_all.sort()
+        gene_names = nb.call_spots.gene_names
 
         if not os.path.isfile(os.path.join(output_dir, "_basic_info.pdf") and nb.has_page("basic_info")):
             with PdfPages(os.path.join(output_dir, "_basic_info.pdf")) as pdf:
@@ -83,7 +87,7 @@ class BuildPDF:
                 text_intro_info = self.get_basic_info(nb.basic_info, nb.file_names)
                 fig, axes = self.create_empty_page(1, 1)
                 self.empty_plot_ticks(axes)
-                axes[0, 0].set_title(text_intro_info, fontdict=INFO_FONTDICT, y=0.5)
+                axes[0, 0].set_title(text_intro_info, fontdict=self.INFO_FONTDICT, y=0.5)
                 pdf.savefig(fig)
                 plt.close(fig)
         pbar.update()
@@ -96,7 +100,7 @@ class BuildPDF:
                     fig, axes = self.create_empty_page(1, 1)
                     text_extract_info = ""
                     text_extract_info += self.get_extract_text_info(nb.extract)
-                    axes[0, 0].set_title(text_extract_info, fontdict=INFO_FONTDICT, y=0.5)
+                    axes[0, 0].set_title(text_extract_info, fontdict=self.INFO_FONTDICT, y=0.5)
                     extract_image_dtype = np.uint16
                     self.empty_plot_ticks(axes[0, 0])
                     pdf.savefig(fig)
@@ -138,7 +142,7 @@ class BuildPDF:
                         text_filter_info += self.get_filter_info(nb.filter, nb.filter_debug)
                     else:
                         text_filter_info += self.get_filter_info(nb.extract)
-                    axes[0, 0].set_title(text_filter_info, fontdict=INFO_FONTDICT, y=0.5)
+                    axes[0, 0].set_title(text_filter_info, fontdict=self.INFO_FONTDICT, y=0.5)
                     self.empty_plot_ticks(axes[0, 0])
                     pdf.savefig(fig)
                     plt.close(fig)
@@ -151,7 +155,7 @@ class BuildPDF:
                     fig, axes = self.create_empty_page(1, 1)
                     text_find_spots_info = ""
                     text_find_spots_info += self.get_find_spots_info(nb.find_spots)
-                    axes[0, 0].set_title(text_find_spots_info, fontdict=INFO_FONTDICT, y=0.5)
+                    axes[0, 0].set_title(text_find_spots_info, fontdict=self.INFO_FONTDICT, y=0.5)
                     self.empty_plot_ticks(axes[0, 0])
                     pdf.savefig(fig)
                     plt.close(fig)
@@ -218,10 +222,10 @@ class BuildPDF:
                     fig = self.create_positions_histograms(
                         nb.call_spots.dot_product_gene_score[keep],
                         nb.ref_spots.local_yxz[keep],
-                        DEFAULT_REF_SCORE_THRESHOLD,
+                        self.DEFAULT_REF_SCORE_THRESHOLD,
                         title=f"Spot position histograms for {t=}, scores "
                         + r"$\geq$"
-                        + str(DEFAULT_REF_SCORE_THRESHOLD),
+                        + str(self.DEFAULT_REF_SCORE_THRESHOLD),
                         use_z=nb.basic_info.use_z,
                     )
                     pdf.savefig(fig)
@@ -243,24 +247,26 @@ class BuildPDF:
                     g_bled_code = g_bled_code / np.linalg.norm(g_bled_code, axis=1)[:, None]
                     g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code[None, :, :], axis=2))
                     thresh_spots = np.argmax(gene_probabilities, axis=1) == g
-                    thresh_spots = thresh_spots * (np.max(gene_probabilities) > GENE_PROB_THRESHOLD)
+                    thresh_spots = thresh_spots * (np.max(gene_probabilities) > self.GENE_PROB_THRESHOLD)
                     colours_mean = np.mean(scores[thresh_spots], axis=0)
                     fig, axes = self.create_empty_page(2, 2, gridspec_kw={"width_ratios": [2, 1]})
                     self.empty_plot_ticks(axes[1, 1])
-                    fig.suptitle(f"{gene_names[g]}", size=NORMAL_FONTSIZE)
-                    im = axes[0, 0].imshow(g_r_dot_products[g_spots[:N_GENES_SHOW], :].T, vmin=0, vmax=1, aspect="auto")
+                    fig.suptitle(f"{gene_names[g]}", size=self.NORMAL_FONTSIZE)
+                    im = axes[0, 0].imshow(
+                        g_r_dot_products[g_spots[: self.N_GENES_SHOW], :].T, vmin=0, vmax=1, aspect="auto"
+                    )
                     axes[0, 0].set_yticks(range(n_rounds))
                     axes[0, 0].set_ylim([n_rounds - 0.5, -0.5])
                     axes[0, 0].set_ylabel("round")
                     axes[0, 0].set_title(f"dye code match")
                     self.empty_plot_ticks(axes[1, 0], show_bottom_frame=True, show_left_frame=True)
-                    max_shown = g_probs[:N_GENES_SHOW].size
-                    axes[1, 0].plot(np.arange(max_shown), g_probs[:N_GENES_SHOW])
-                    axes[1, 0].plot(np.arange(max_shown), g_r_dot_products[g_spots[:N_GENES_SHOW]].mean(1))
+                    max_shown = g_probs[: self.N_GENES_SHOW].size
+                    axes[1, 0].plot(np.arange(max_shown), g_probs[: self.N_GENES_SHOW])
+                    axes[1, 0].plot(np.arange(max_shown), g_r_dot_products[g_spots[: self.N_GENES_SHOW]].mean(1))
                     axes[1, 0].legend(("probability score", "mean match"), loc="lower right")
                     for ax in [axes[0, 0], axes[1, 0]]:
-                        ax.set_xlim([0, N_GENES_SHOW - 1])
-                        ax.set_xticks([0, N_GENES_SHOW - 1], labels=["1", N_GENES_SHOW])
+                        ax.set_xlim([0, self.N_GENES_SHOW - 1])
+                        ax.set_xticks([0, self.N_GENES_SHOW - 1], labels=["1", self.N_GENES_SHOW])
                     axes[1, 0].set_xlabel("spot number (ranked by probability)")
                     axes[1, 0].set_ylim([0, 1])
                     axes[1, 0].set_yticks([0, 0.25, 0.5, 0.75, 1])
@@ -273,7 +279,7 @@ class BuildPDF:
                         range(len(nb.basic_info.use_channels)), labels=(str(c) for c in nb.basic_info.use_channels)
                     )
                     axes[1, 1].imshow(colours_mean, vmin=0, vmax=1)
-                    axes[1, 1].set_title(f"mean spot colour\nspots with prob > {GENE_PROB_THRESHOLD}")
+                    axes[1, 1].set_title(f"mean spot colour\nspots with prob > {self.GENE_PROB_THRESHOLD}")
                     axes[1, 1].set_ylabel("rounds")
                     axes[1, 1].set_yticks(
                         range(len(nb.basic_info.use_rounds)), labels=(str(r) for r in nb.basic_info.use_rounds)
@@ -297,7 +303,7 @@ class BuildPDF:
             with PdfPages(omp_filepath) as pdf:
                 fig, axes = self.create_empty_page(1, 1)
                 info = self.get_omp_text_info(nb.omp)
-                axes[0, 0].set_title(info, fontdict=INFO_FONTDICT, y=0.5)
+                axes[0, 0].set_title(info, fontdict=self.INFO_FONTDICT, y=0.5)
                 self.empty_plot_ticks(axes[0, 0])
                 pdf.savefig(fig)
                 plt.close(fig)
@@ -321,13 +327,54 @@ class BuildPDF:
                     fig = self.create_positions_histograms(
                         nb.omp.results[f"tile_{t}/scores"][:],
                         nb.omp.results[f"tile_{t}/local_yxz"][:],
-                        DEFAULT_OMP_SCORE,
-                        title=f"Spot position histograms for {t=}, scores " + r"$\geq$" + str(DEFAULT_OMP_SCORE),
+                        self.DEFAULT_OMP_SCORE,
+                        title=f"Spot position histograms for {t=}, scores " + r"$\geq$" + str(self.DEFAULT_OMP_SCORE),
                         use_z=nb.basic_info.use_z,
                     )
                     pdf.savefig(fig)
                     plt.close(fig)
             plt.close(fig)
+        pbar.update()
+
+        pbar.set_postfix_str("call_spots_heatmaps")
+        anchor_heatmap_path = os.path.join(output_dir, "_heat_maps_anchor.pdf")
+        prob_heatmap_path = os.path.join(output_dir, "_heat_maps_prob.pdf")
+        file_missing = not os.path.isfile(anchor_heatmap_path) or not os.path.isfile(prob_heatmap_path)
+        if nb.has_page("call_spots") and file_missing:
+            local_yxzs = nb.ref_spots.local_yxz.astype(np.float32)
+            tile_numbers = nb.ref_spots.tile
+            global_yxzs = local_yxzs + nb.stitch.tile_origin[tile_numbers]
+
+            # Anchor heat maps.
+            gene_numbers = nb.call_spots.dot_product_gene_no
+            scores = nb.call_spots.dot_product_gene_score
+            with PdfPages(anchor_heatmap_path) as pdf:
+                self.create_spatial_heatmaps(
+                    pdf, global_yxzs, gene_numbers, scores, gene_names, self.HEATMAP_ANCHOR_SCORE_THRESH
+                )
+
+            # Probability heat maps.
+            gene_numbers = np.argmax(nb.call_spots.gene_probabilities, axis=1)
+            scores = nb.call_spots.gene_probabilities.max(1)
+            with PdfPages(prob_heatmap_path) as pdf:
+                self.create_spatial_heatmaps(
+                    pdf, global_yxzs, gene_numbers, scores, gene_names, self.HEATMAP_PROB_SCORE_THRESH
+                )
+        pbar.update()
+
+        pbar.set_postfix_str("omp_heatmaps")
+        omp_heatmap_path = os.path.join(output_dir, "_heat_maps_omp.pdf")
+        if nb.has_page("omp") and not os.path.isfile(omp_heatmap_path):
+            with PdfPages(omp_heatmap_path) as pdf:
+                local_yxzs, tile_numbers = omp_base.get_all_local_yxz(nb.basic_info, nb.omp)
+                local_yxzs = local_yxzs.astype(np.float32)
+                # Convert local positions to global positions using stitch tile origins.
+                global_yxzs = local_yxzs + nb.stitch.tile_origin[tile_numbers].astype(np.float32)
+                scores, _ = omp_base.get_all_scores(nb.basic_info, nb.omp)
+                gene_numbers, _ = omp_base.get_all_gene_no(nb.basic_info, nb.omp)
+                self.create_spatial_heatmaps(
+                    pdf, global_yxzs, gene_numbers, scores, gene_names, self.HEATMAP_OMP_SCORE_THRESH
+                )
         pbar.update()
         pbar.close()
 
@@ -490,14 +537,14 @@ class BuildPDF:
             fig, axes = self.create_empty_page(
                 nrows=len(use_rounds_all),
                 ncols=len(set(use_channels + self.use_channels_anchor)),
-                size=(A4_SIZE_INCHES[0] * 2, A4_SIZE_INCHES[1] * 2),
+                size=(self.A4_SIZE_INCHES[0] * 2, self.A4_SIZE_INCHES[1] * 2),
                 share_x=True,
                 share_y=True,
             )
             fig.set_layout_engine("constrained")
             fig.suptitle(
                 f"{section_name} {' log of ' if log_count else ''} pixel values, {t=}",
-                fontsize=SMALL_FONTSIZE,
+                fontsize=self.SMALL_FONTSIZE,
             )
             for i, r in enumerate(use_rounds_all):
                 if r == nb.basic_info.anchor_round:
@@ -563,12 +610,12 @@ class BuildPDF:
                         round_label += "\n" + r"$\log_2$ count" if log_count else "count"
                         ax.set_ylabel(
                             f"round {round_label}",
-                            fontdict={"fontsize": SMALL_FONTSIZE},
+                            fontdict={"fontsize": self.SMALL_FONTSIZE},
                         )
                     if r == final_round:
                         ax.set_xlabel(
                             f"channel {c if c != nb.basic_info.dapi_channel else 'dapi'}",
-                            fontdict={"fontsize": SMALL_FONTSIZE},
+                            fontdict={"fontsize": self.SMALL_FONTSIZE},
                         )
                         ax.set_xticks([pixel_min, pixel_max])
             figures.append(fig)
@@ -821,3 +868,56 @@ class BuildPDF:
             fig.suptitle(title)
         fig.tight_layout()
         return fig
+
+    def create_spatial_heatmaps(
+        self: Self,
+        pdf: PdfPages,
+        global_yxzs: np.ndarray[np.float32],
+        gene_numbers: np.ndarray[np.int32],
+        scores: np.ndarray[np.float32],
+        gene_names: np.ndarray[str],
+        score_threshold: float,
+    ) -> Tuple[plt.Figure]:
+        """
+        Save a spatial heat map of each spot location for each gene along y and x directions for all z positions. This
+        is saved to the given PDF file.
+
+        Args:
+            - (PdfPages): pdf pages to save every figure to.
+            - (`(n_spots x 3) ndarray[float32]`) global_yxzs: the y, x, and z position for every spot on a global picture.
+            - (`(n_spots) ndarray[int32]`) gene_numbers: gene number for each spot.
+            - (`(n_spots) ndarray[float32]`) scores: every spot score.
+            - (`(n_spots) ndarray[str]`) gene_names: every gene name.
+
+        Returns:
+            (tuple of Figures) figures: each genes' heatmap figure.
+        """
+        assert global_yxzs.shape[0] == gene_numbers.shape[0] == scores.shape[0]
+        assert np.logical_and(gene_numbers >= 0, gene_numbers < gene_names.size).all()
+
+        global_maximums_yxz = global_yxzs.max(0)
+        bin_counts = np.ceil(global_maximums_yxz / self.HEATMAP_BIN_SIZE)[:2].astype(int).tolist()
+        hist_range = ((0, global_maximums_yxz[0]), (0, global_maximums_yxz[1]))
+        cmap = mpl.cm.plasma
+
+        for g, gene_name in enumerate(gene_names):
+            spot_passes = scores >= score_threshold
+            spot_gene_g = gene_numbers == g
+            subset_yxzs = global_yxzs[spot_passes & spot_gene_g]
+            image = np.histogram2d(subset_yxzs[:, 0], subset_yxzs[:, 1], bins=bin_counts, range=hist_range)[0]
+            max_count = image.max().astype(int).item()
+            norm = mpl.colors.Normalize(vmin=0, vmax=max_count)
+            fig, axes = self.create_empty_page(1, 1)
+            im = axes[0, 0].imshow(image, cmap=cmap, norm=norm)
+            axes[0, 0].set_xlabel("")
+            axes[0, 0].set_ylabel("")
+            axes[0, 0].set_xticks([])
+            axes[0, 0].set_yticks([])
+            axes[0, 0].set_xlim(-0.5, global_maximums_yxz[1] / self.HEATMAP_BIN_SIZE)
+            axes[0, 0].set_ylim(-0.5, global_maximums_yxz[0] / self.HEATMAP_BIN_SIZE)
+            fig.colorbar(im, ax=axes[0, 0], label="Spot count", ticks=[n for n in range(max_count + 1)])
+            fig.suptitle(f"Gene {g}: {gene_name}, score >= {score_threshold}")
+            fig.tight_layout()
+
+            pdf.savefig(fig)
+            plt.close(fig)
