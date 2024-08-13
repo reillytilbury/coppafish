@@ -4,13 +4,14 @@ import time
 from typing import Optional, Union
 import warnings
 
-from PyQt5.QtWidgets import QMainWindow, QPushButton
+import importlib.resources as importlib_resources
 import matplotlib.pyplot as plt
 import napari
 from napari.layers.points import Points
 from napari.layers.points._points_constants import Mode
 import numpy as np
 import pandas as pd
+from PyQt5.QtWidgets import QMainWindow, QPushButton
 from qtpy.QtCore import Qt
 from superqt import QDoubleRangeSlider, QDoubleSlider
 import tifffile
@@ -24,14 +25,6 @@ from ..call_spots import ViewAllGeneHistograms, HistogramScore
 from ..omp import ViewOMPImage, ViewOMPPixelColours
 from .hotkeys import KeyBinds, ViewHotkeys
 
-try:
-    import importlib_resources
-except ModuleNotFoundError:
-    import importlib.resources as importlib_resources  # Python 3.10 support
-
-
-# set matplotlib background to dark
-plt.style.use("dark_background")
 
 
 class Viewer:
@@ -84,6 +77,8 @@ class Viewer:
             downsample_factor: int, factor by which to downsample the images in y and x. Default is 1 which means no
                 downsampling.
         """
+        # set matplotlib background to dark
+        plt.style.use("dark_background")
         # set up gene legend info
         if gene_marker_file is None:
             gene_marker_file = importlib_resources.files("coppafish.plot.results_viewer").joinpath("gene_color.csv")
@@ -296,8 +291,9 @@ class Viewer:
             # 1. score range
             good_score = (self.spots[m].score >= score_range[0]) & (self.spots[m].score <= score_range[1])
             # 2. intensity threshold
-            good_intensity = ((self.spots[m].intensity >= intensity_range[0]) &
-                              (self.spots[m].intensity <= intensity_range[1]))
+            good_intensity = (self.spots[m].intensity >= intensity_range[0]) & (
+                self.spots[m].intensity <= intensity_range[1]
+            )
             # 3. gene active
             active_genes = np.array([g.notebook_index for g in self.genes if g.active])
             good_gene = np.isin(self.spots[m].gene, active_genes)
@@ -797,8 +793,11 @@ class Viewer:
 
         @self.viewer.bind_key(KeyBinds.view_gene_efficiency)
         def call_to_view_gene_efficiency(viewer):
-            self.open_plot = GEViewer(self.nb, mode=self.method["names"][self.method["active"]],
-                                      score_threshold=self.sliders["score_range"].value()[0])
+            self.open_plot = GEViewer(
+                self.nb,
+                mode=self.method["names"][self.method["active"]],
+                score_threshold=self.sliders["score_range"].value()[0],
+            )
 
         @self.viewer.bind_key(KeyBinds.view_histogram_scores)
         def call_to_view_omp_score(viewer):

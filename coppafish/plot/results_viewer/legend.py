@@ -1,20 +1,14 @@
-import napari
+import importlib.resources as importlib_resources
+import os
+from typing import Optional, Tuple
+
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import pandas as pd
-import os
+import napari
 import numpy as np
-
-try:
-    import importlib_resources
-except ModuleNotFoundError:
-    import importlib.resources as importlib_resources
-from typing import Optional
-
-# MPL background
-plt.style.use("dark_background")
 
 # Subplot settings
 left = 0.05
@@ -86,7 +80,7 @@ def add_legend(
     gene_legend_info: Optional[pd.DataFrame],
     genes: Optional[np.ndarray] = None,
     cell_legend_info: Optional[pd.DataFrame] = None,
-) -> [FigureCanvas, plt.Axes, int]:
+) -> Tuple[FigureCanvas, plt.Axes, int]:
     """
     This returns a legend which displays the genes and/or cell types present.
 

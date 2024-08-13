@@ -1,3 +1,4 @@
+import importlib.resources as importlib_resources  # Python 3.10 support
 import math as maths
 import sys
 from typing import Optional, Tuple, Union
@@ -8,11 +9,6 @@ import pandas as pd
 
 from ... import log
 from ...setup.notebook import Notebook
-
-try:
-    import importlib_resources
-except ModuleNotFoundError:
-    import importlib.resources as importlib_resources  # Python 3.10 support
 
 
 class Viewer2D:

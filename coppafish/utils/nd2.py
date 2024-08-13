@@ -8,8 +8,7 @@ from tqdm import tqdm
 from typing import Optional, List, Union, Tuple
 
 from .. import setup, log
-from ..setup import NotebookPage
-from ..utils import raw
+from . import raw
 from . import errors
 
 
@@ -241,80 +240,6 @@ def get_jobs_metadata(files: list, input_dir: str, config: dict) -> dict:
     return metadata
 
 
-# def get_jobs_xypos(input_dir: str, files: list) -> list:
-#     """
-#     Extract the xy stage position for each individual files, convert it as pixels and return a list
-#     Args:
-#         input_dir: path to nd2 files
-#         files: file to read metadata from
-#
-#     Returns:
-#         List [n_tiles x 2]. xy position of tiles in pixels
-#     """
-#     xy_pos = np.zeros((len(files), 2))
-#     for f_id, f in tqdm(enumerate(files), desc='Reading XY metadata'):
-#         with nd2.ND2File(os.path.join(input_dir, f)) as im:
-#             xy_pos[f_id, :] = np.array(im.frame_metadata(0).channels[0].position.stagePositionUm[:2])
-#             cal = im.metadata.channels[0].volume.axesCalibration[0]
-#
-#     xy_pos = (xy_pos - np.min(xy_pos, 0)) / cal
-#
-#     return xy_pos.tolist()
-
-
-# def get_jobs_lasers(input_dir: str, files: list) -> list:
-#     """
-#     Extract the lasers used for the experiment from metadata
-#     Args:
-#         input_dir: path to nd2 files
-#         files: file to read metadata from
-#
-#     Returns:
-#         List [n_tiles]. lasers in use.
-#     """
-#     # We don't need to loop through all files, just first 100 as we'll never have this many lasers and it takes long
-#     # To opem all files.
-#     N = min(len(files), 100)
-#     files = files[:N]
-#     laser = np.zeros(N, dtype=int)
-#
-#     for f_id, f in tqdm(enumerate(files), desc='Reading laser info'):
-#         with nd2.ND2File(os.path.join(input_dir, f)) as im:
-#             desc = im.text_info['description']
-#             laser[f_id] = int(desc[desc.index('; On')-3:desc.index('; On')])
-#     # Get rid of duplicates
-#     laser = list(set(laser))
-#
-#     return laser
-
-
-# def get_jobs_rounds_tiles(input_dir: str, files: list, n_lasers: int) -> tuple:
-#     """
-#     Extract the number of rounds and number of tiles used for the jobs experiment from metadata
-#     Args:
-#         input_dir: path to nd2 files
-#         files: file to read metadata from
-#         n_lasers: number of lasers
-#
-#     Returns:
-#         List [2]. rounds, tiles in use.
-#     """
-#     # Get all tiles/rounds corresponding to the first laser
-#     l1_files = files[::n_lasers]
-#
-#     # Idea now is to loop through these until we get back to the same xy position, at which point we have gone through
-#     # all tiles
-#     xy_pos = get_jobs_xypos(input_dir, l1_files)
-#     for i in range(1, len(l1_files)):
-#         if xy_pos[i] == xy_pos[0]:
-#             n_tiles = i
-#             break
-#     # n_rounds is just len(l1_files)/n_tiles -1 to account for anchor
-#     n_rounds = len(l1_files)//n_tiles - 1
-#
-#     return n_tiles, n_rounds
-
-
 def get_images(images: np.ndarray, fov: int, channels: List[int], use_z: Optional[List[int]] = None) -> np.ndarray:
     """
     Using dask array from nd2 file, this loads the image of the desired fov and channel.
@@ -368,34 +293,6 @@ def save_metadata(json_file: str, nd2_file: str, use_channels: Optional[List] = 
     json.dump(metadata, open(json_file, "w"))
 
 
-# def get_nd2_tile_ind(tile_ind_npy: Union[int, List[int]], tile_pos_yx_nd2: np.ndarray,
-#                      tile_pos_yx_npy: np.ndarray) -> Union[int, List[int]]:
-#     """
-#     Gets index of tiles in nd2 file from tile index of npy file.
-#
-#     Args:
-#         tile_ind_npy: Indices of tiles in npy file
-#         tile_pos_yx_nd2: ```int [n_tiles x 2]```.
-#             ```[i,:]``` contains YX position of tile with nd2 index ```i```.
-#             Index 0 refers to ```YX = [0, 0]```.
-#             Index 1 refers to ```YX = [0, 1] if MaxX > 0```.
-#         tile_pos_yx_npy: ```int [n_tiles x 2]```.
-#             ```[i,:]``` contains YX position of tile with npy index ```i```.
-#             Index 0 refers to ```YX = [MaxY, MaxX]```.
-#             Index 1 refers to ```YX = [MaxY, MaxX - 1] if MaxX > 0```.
-#
-#     Returns:
-#         Corresponding index in nd2 file
-#     """
-#     Since nd2 tiles are numbered 0,0 from bottom left, and npy tiles are numbered 0,0 from top right, we need to
-#     convert tile_pos_yx[tile_ind_npy] to nd2 tile indices
-# n_rows, n_cols = tile_pos_yx_nd2.max(axis=0)
-# get index in the nd2 tile pos array of [n_rows, n_cols] - tile_pos_yx_np[tile_ind_npy]
-# tile_pos = np.array([n_rows, n_cols]) - tile_pos_yx_npy[tile_ind_npy]
-# nd2_index = np.where(np.sum(tile_pos_yx_nd2 == tile_pos, axis=1) == 2)[0][0]
-# return nd2_index
-
-
 def get_nd2_tile_ind(
     tile_ind_npy: Union[int, List[int]], tile_pos_yx_nd2: np.ndarray, tile_pos_yx_npy: np.ndarray
 ) -> Union[int, List[int]]:
@@ -429,8 +326,8 @@ def get_nd2_tile_ind(
 
 
 def get_raw_images(
-    nbp_basic: NotebookPage,
-    nbp_file: NotebookPage,
+    nbp_basic,
+    nbp_file,
     tiles: List[int],
     rounds: List[int],
     channels: List[int],
@@ -487,92 +384,6 @@ def get_raw_images(
     return raw_images
 
 
-# '''with nd2reader'''
-# # Does not work with QuadCam data hence the switch to nd2 package
-# from nd2reader import ND2Reader
-#
-#
-# def load(file_path):
-#     """
-#     :param file_path: path to desired nd2 file
-#     :return: ND2Reader object with z index
-#              iterating fastest and then channel index
-#              and then field of view.
-#     """
-#     if not os.path.isfile(file_path):
-#         log.error(errors.NoFileError(file_path))
-#     images = ND2Reader(file_path)
-#     images.iter_axes = 'vcz'
-#     return images
-#
-#
-# def get_metadata(file_name):
-#     """
-#     returns dictionary containing (at the bare minimum) the keys
-#         xy_pos: xy position of tiles in pixels. ([nTiles x 2] List)
-#         pixel_microns: xy pixel size in microns (float)
-#         pixel_microns_z: z pixel size in microns (float)
-#         sizes: dictionary with fov (t), channels (c), y, x, z-planes (z) dimensions
-#
-#     :param file_name: path to desired nd2 file
-#     """
-#     images = load(file_name)
-#     images = update_metadata(images)
-#     full_metadata = images.metadata
-#     metadata = {'sizes': full_metadata['sizes'],
-#                 'pixel_microns': full_metadata['pixel_microns'],
-#                 'pixel_microns_z': full_metadata['pixel_microns_z'],
-#                 'xy_pos': full_metadata['xy_pos'].tolist()}
-#     return metadata
-#
-#
-# def get_image(images, fov, channel, use_z=None):
-#     """
-#     get image as numpy array from nd2 file
-#
-#     :param images: ND2Reader object with fov, channel, z as index order.
-#     :param fov: fov index of desired image
-#     :param channel: channel of desired image
-#     :param use_z: integer list, optional
-#         which z-planes of image to load
-#         default: will load all z-planes
-#     :return: 3D uint16 numpy array
-#     """
-#     if use_z is None:
-#         use_z = np.arange(images.sizes['z'])
-#     else:
-#         use_z = np.array(np.array(use_z).flatten())
-#     image = np.zeros((images.sizes['x'], images.sizes['y'], len(use_z)), dtype=np.uint16)
-#     start_index = fov * images.sizes['c'] * images.sizes['z'] + channel * images.sizes['z']
-#     for i in range(len(use_z)):
-#         image[:, :, i] = images[start_index + use_z[i]]
-#     return image
-#
-#
-# def update_metadata(images):
-#     """
-#     Updates metadata dictionary in images to include:
-#     pixel_microns_z: z pixel size in microns (float)
-#     xy_pos: xy position of tiles in pixels. ([nTiles x 2] numpy array)
-#     sizes: dictionary with fov (t), channels (c), y, x, z-planes (z) dimensions
-#
-#     :param images: ND2Reader object with metadata dictionary
-#     """
-#     if 'pixel_microns_z' not in images.metadata:
-#         # NOT 100% SURE THIS IS THE CORRECT VALUE!!
-#         images.metadata['pixel_microns_z'] = \
-#             images.parser._raw_metadata.image_calibration[b'SLxCalibration'][b'dAspect']
-#     if 'xy_pos' not in images.metadata:
-#         images.metadata['xy_pos'] = np.zeros((images.sizes['v'], 2))
-#         for i in range(images.sizes['v']):
-#             images.metadata['xy_pos'][i, 0] = images.parser._raw_metadata.x_data[i * images.sizes['z']]
-#             images.metadata['xy_pos'][i, 1] = images.parser._raw_metadata.y_data[i * images.sizes['z']]
-#         images.metadata['xy_pos'] = (images.metadata['xy_pos'] - np.min(images.metadata['xy_pos'], 0)
-#                                      ) / images.metadata['pixel_microns']
-#     if 'sizes' not in images.metadata:
-#         images.metadata['sizes'] = {'t': images.sizes['v'], 'c': images.sizes['c'], 'y': images.sizes['y'],
-#                                     'x': images.sizes['x'], 'z': images.sizes['z']}
-#     return images
 def get_bleed_estimates(dye_image: list, dye_names: list, percentiles: list = [80, 90]) -> dict:
     """
     Estimate bleed matrix from dye images. Do this by taking in a list of images (one for each dye) and then

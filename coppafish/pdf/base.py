@@ -13,24 +13,22 @@ from tqdm import tqdm
 from .. import log
 from ..omp import base as omp_base
 from ..setup import Notebook, NotebookPage
-from ..utils import tiles_io
-
-
-# Plot settings
-A4_SIZE_INCHES = (11.693, 8.268)
-LARGE_FONTSIZE = 25
-NORMAL_FONTSIZE = 18
-SMALL_FONTSIZE = 15
-SMALLER_FONTSIZE = 10
-TINY_FONTSIZE = 4
-INFO_FONTDICT = {"fontsize": NORMAL_FONTSIZE, "verticalalignment": "center"}
-N_GENES_SHOW = 40
-GENE_PROB_THRESHOLD = 0.7
-DEFAULT_REF_SCORE_THRESHOLD = 0.3
-DEFAULT_OMP_SCORE = 0.3
 
 
 class BuildPDF:
+    # Plot settings
+    A4_SIZE_INCHES = (11.693, 8.268)
+    LARGE_FONTSIZE = 25
+    NORMAL_FONTSIZE = 18
+    SMALL_FONTSIZE = 15
+    SMALLER_FONTSIZE = 10
+    TINY_FONTSIZE = 4
+    INFO_FONTDICT = {"fontsize": NORMAL_FONTSIZE, "verticalalignment": "center"}
+    N_GENES_SHOW = 40
+    GENE_PROB_THRESHOLD = 0.7
+    DEFAULT_REF_SCORE_THRESHOLD = 0.3
+    DEFAULT_OMP_SCORE = 0.3
+
     def __init__(
         self,
         nb: Union[Notebook, str],
@@ -83,7 +81,7 @@ class BuildPDF:
                 text_intro_info = self.get_basic_info(nb.basic_info, nb.file_names)
                 fig, axes = self.create_empty_page(1, 1)
                 self.empty_plot_ticks(axes)
-                axes[0, 0].set_title(text_intro_info, fontdict=INFO_FONTDICT, y=0.5)
+                axes[0, 0].set_title(text_intro_info, fontdict=self.INFO_FONTDICT, y=0.5)
                 pdf.savefig(fig)
                 plt.close(fig)
         pbar.update()
@@ -96,7 +94,7 @@ class BuildPDF:
                     fig, axes = self.create_empty_page(1, 1)
                     text_extract_info = ""
                     text_extract_info += self.get_extract_text_info(nb.extract)
-                    axes[0, 0].set_title(text_extract_info, fontdict=INFO_FONTDICT, y=0.5)
+                    axes[0, 0].set_title(text_extract_info, fontdict=self.INFO_FONTDICT, y=0.5)
                     extract_image_dtype = np.uint16
                     self.empty_plot_ticks(axes[0, 0])
                     pdf.savefig(fig)
@@ -138,7 +136,7 @@ class BuildPDF:
                         text_filter_info += self.get_filter_info(nb.filter, nb.filter_debug)
                     else:
                         text_filter_info += self.get_filter_info(nb.extract)
-                    axes[0, 0].set_title(text_filter_info, fontdict=INFO_FONTDICT, y=0.5)
+                    axes[0, 0].set_title(text_filter_info, fontdict=self.INFO_FONTDICT, y=0.5)
                     self.empty_plot_ticks(axes[0, 0])
                     pdf.savefig(fig)
                     plt.close(fig)
@@ -151,7 +149,7 @@ class BuildPDF:
                     fig, axes = self.create_empty_page(1, 1)
                     text_find_spots_info = ""
                     text_find_spots_info += self.get_find_spots_info(nb.find_spots)
-                    axes[0, 0].set_title(text_find_spots_info, fontdict=INFO_FONTDICT, y=0.5)
+                    axes[0, 0].set_title(text_find_spots_info, fontdict=self.INFO_FONTDICT, y=0.5)
                     self.empty_plot_ticks(axes[0, 0])
                     pdf.savefig(fig)
                     plt.close(fig)
@@ -218,13 +216,14 @@ class BuildPDF:
                     fig = self.create_positions_histograms(
                         nb.call_spots.dot_product_gene_score[keep],
                         nb.ref_spots.local_yxz[keep],
-                        DEFAULT_REF_SCORE_THRESHOLD,
+                        self.DEFAULT_REF_SCORE_THRESHOLD,
                         title=f"Spot position histograms for {t=}, scores "
                         + r"$\geq$"
-                        + str(DEFAULT_REF_SCORE_THRESHOLD),
+                        + str(self.DEFAULT_REF_SCORE_THRESHOLD),
                         use_z=nb.basic_info.use_z,
                     )
                     pdf.savefig(fig)
+                    plt.close(fig)
                 # Create a page for every gene
                 gene_probabilities = nb.call_spots.gene_probabilities
                 scores = nb.ref_spots.colours * nb.call_spots.colour_norm_factor[nb.ref_spots.tile]
@@ -243,24 +242,26 @@ class BuildPDF:
                     g_bled_code = g_bled_code / np.linalg.norm(g_bled_code, axis=1)[:, None]
                     g_r_dot_products = np.abs(np.sum(spot_colours_rnorm * g_bled_code[None, :, :], axis=2))
                     thresh_spots = np.argmax(gene_probabilities, axis=1) == g
-                    thresh_spots = thresh_spots * (np.max(gene_probabilities) > GENE_PROB_THRESHOLD)
+                    thresh_spots = thresh_spots * (np.max(gene_probabilities) > self.GENE_PROB_THRESHOLD)
                     colours_mean = np.mean(scores[thresh_spots], axis=0)
                     fig, axes = self.create_empty_page(2, 2, gridspec_kw={"width_ratios": [2, 1]})
                     self.empty_plot_ticks(axes[1, 1])
-                    fig.suptitle(f"{gene_names[g]}", size=NORMAL_FONTSIZE)
-                    im = axes[0, 0].imshow(g_r_dot_products[g_spots[:N_GENES_SHOW], :].T, vmin=0, vmax=1, aspect="auto")
+                    fig.suptitle(f"{gene_names[g]}", size=self.NORMAL_FONTSIZE)
+                    im = axes[0, 0].imshow(
+                        g_r_dot_products[g_spots[: self.N_GENES_SHOW], :].T, vmin=0, vmax=1, aspect="auto"
+                    )
                     axes[0, 0].set_yticks(range(n_rounds))
                     axes[0, 0].set_ylim([n_rounds - 0.5, -0.5])
                     axes[0, 0].set_ylabel("round")
                     axes[0, 0].set_title(f"dye code match")
                     self.empty_plot_ticks(axes[1, 0], show_bottom_frame=True, show_left_frame=True)
-                    max_shown = g_probs[:N_GENES_SHOW].size
-                    axes[1, 0].plot(np.arange(max_shown), g_probs[:N_GENES_SHOW])
-                    axes[1, 0].plot(np.arange(max_shown), g_r_dot_products[g_spots[:N_GENES_SHOW]].mean(1))
+                    max_shown = g_probs[: self.N_GENES_SHOW].size
+                    axes[1, 0].plot(np.arange(max_shown), g_probs[: self.N_GENES_SHOW])
+                    axes[1, 0].plot(np.arange(max_shown), g_r_dot_products[g_spots[: self.N_GENES_SHOW]].mean(1))
                     axes[1, 0].legend(("probability score", "mean match"), loc="lower right")
                     for ax in [axes[0, 0], axes[1, 0]]:
-                        ax.set_xlim([0, N_GENES_SHOW - 1])
-                        ax.set_xticks([0, N_GENES_SHOW - 1], labels=["1", N_GENES_SHOW])
+                        ax.set_xlim([0, self.N_GENES_SHOW - 1])
+                        ax.set_xticks([0, self.N_GENES_SHOW - 1], labels=["1", self.N_GENES_SHOW])
                     axes[1, 0].set_xlabel("spot number (ranked by probability)")
                     axes[1, 0].set_ylim([0, 1])
                     axes[1, 0].set_yticks([0, 0.25, 0.5, 0.75, 1])
@@ -273,7 +274,7 @@ class BuildPDF:
                         range(len(nb.basic_info.use_channels)), labels=(str(c) for c in nb.basic_info.use_channels)
                     )
                     axes[1, 1].imshow(colours_mean, vmin=0, vmax=1)
-                    axes[1, 1].set_title(f"mean spot colour\nspots with prob > {GENE_PROB_THRESHOLD}")
+                    axes[1, 1].set_title(f"mean spot colour\nspots with prob > {self.GENE_PROB_THRESHOLD}")
                     axes[1, 1].set_ylabel("rounds")
                     axes[1, 1].set_yticks(
                         range(len(nb.basic_info.use_rounds)), labels=(str(r) for r in nb.basic_info.use_rounds)
@@ -297,7 +298,7 @@ class BuildPDF:
             with PdfPages(omp_filepath) as pdf:
                 fig, axes = self.create_empty_page(1, 1)
                 info = self.get_omp_text_info(nb.omp)
-                axes[0, 0].set_title(info, fontdict=INFO_FONTDICT, y=0.5)
+                axes[0, 0].set_title(info, fontdict=self.INFO_FONTDICT, y=0.5)
                 self.empty_plot_ticks(axes[0, 0])
                 pdf.savefig(fig)
                 plt.close(fig)
@@ -321,8 +322,8 @@ class BuildPDF:
                     fig = self.create_positions_histograms(
                         nb.omp.results[f"tile_{t}/scores"][:],
                         nb.omp.results[f"tile_{t}/local_yxz"][:],
-                        DEFAULT_OMP_SCORE,
-                        title=f"Spot position histograms for {t=}, scores " + r"$\geq$" + str(DEFAULT_OMP_SCORE),
+                        self.DEFAULT_OMP_SCORE,
+                        title=f"Spot position histograms for {t=}, scores " + r"$\geq$" + str(self.DEFAULT_OMP_SCORE),
                         use_z=nb.basic_info.use_z,
                     )
                     pdf.savefig(fig)
@@ -490,14 +491,14 @@ class BuildPDF:
             fig, axes = self.create_empty_page(
                 nrows=len(use_rounds_all),
                 ncols=len(set(use_channels + self.use_channels_anchor)),
-                size=(A4_SIZE_INCHES[0] * 2, A4_SIZE_INCHES[1] * 2),
+                size=(self.A4_SIZE_INCHES[0] * 2, self.A4_SIZE_INCHES[1] * 2),
                 share_x=True,
                 share_y=True,
             )
             fig.set_layout_engine("constrained")
             fig.suptitle(
                 f"{section_name} {' log of ' if log_count else ''} pixel values, {t=}",
-                fontsize=SMALL_FONTSIZE,
+                fontsize=self.SMALL_FONTSIZE,
             )
             for i, r in enumerate(use_rounds_all):
                 if r == nb.basic_info.anchor_round:
@@ -563,12 +564,12 @@ class BuildPDF:
                         round_label += "\n" + r"$\log_2$ count" if log_count else "count"
                         ax.set_ylabel(
                             f"round {round_label}",
-                            fontdict={"fontsize": SMALL_FONTSIZE},
+                            fontdict={"fontsize": self.SMALL_FONTSIZE},
                         )
                     if r == final_round:
                         ax.set_xlabel(
                             f"channel {c if c != nb.basic_info.dapi_channel else 'dapi'}",
-                            fontdict={"fontsize": SMALL_FONTSIZE},
+                            fontdict={"fontsize": self.SMALL_FONTSIZE},
                         )
                         ax.set_xticks([pixel_min, pixel_max])
             figures.append(fig)

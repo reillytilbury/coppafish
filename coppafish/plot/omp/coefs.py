@@ -7,7 +7,6 @@ import numpy as np
 import torch
 
 from ... import spot_colors
-from ...call_spots import background_pytorch
 from ...omp import coefs, scores_torch
 from ...omp import base as omp_base
 from ...setup import Notebook
@@ -94,7 +93,8 @@ class ViewOMPImage:
         n_genes = bled_codes.shape[0]
         assert (~np.isnan(bled_codes)).all(), "bled codes cannot contain nan values"
         assert np.allclose(np.linalg.norm(bled_codes, axis=(1, 2)), 1), "bled codes must be L2 normalised"
-        coefficient_image = coefs.compute_omp_coefficients(
+        omp_solver = coefs.CoefficientSolverOMP()
+        coefficient_image = omp_solver.compute_omp_coefficients(
             pixel_colours=image_colours,
             bled_codes=bled_codes,
             background_codes=np.eye(n_channels_use)[:, None, :].repeat(n_rounds_use, axis=1),
@@ -268,7 +268,8 @@ class ViewOMPPixelColours:
         assert np.allclose(np.linalg.norm(bled_codes, axis=(1, 2)), 1), "bled codes must be L2 normalised"
 
         # Get the maximum number of OMP gene assignments made and what genes.
-        coefficients = coefs.compute_omp_coefficients(
+        omp_solver = coefs.CoefficientSolverOMP()
+        coefficients = omp_solver.compute_omp_coefficients(
             pixel_colours=image_colours,
             bled_codes=bled_codes,
             background_codes=np.eye(n_channels_use)[:, None, :].repeat(n_rounds_use, axis=1),
@@ -285,7 +286,7 @@ class ViewOMPPixelColours:
         # Show the zeroth iteration too with no genes assigned.
         self.coefficients = np.zeros((self.n_assigned_genes + 1, self.n_assigned_genes), dtype=np.float32)
         for i in range(1, self.n_assigned_genes + 1):
-            self.coefficients[i] = coefs.compute_omp_coefficients(
+            self.coefficients[i] = omp_solver.compute_omp_coefficients(
                 pixel_colours=image_colours,
                 bled_codes=bled_codes,
                 background_codes=np.eye(n_channels_use)[:, None, :].repeat(n_rounds_use, axis=1),

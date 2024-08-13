@@ -21,16 +21,12 @@
 #    "_option_formatters" dictionaries.)
 # 2. Add it, and a description of what it does, to "config.default.ini".
 import configparser
+import importlib.resources as importlib_resources
 import os
 import re
 from typing import Any, Dict
 
 from .. import log
-
-try:
-    import importlib_resources
-except ModuleNotFoundError:
-    import importlib.resources as importlib_resources
 
 
 # List of options and their type.  If you change this, update the

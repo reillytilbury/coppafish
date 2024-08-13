@@ -7,16 +7,14 @@ from matplotlib import cm
 import mplcursors
 import numpy as np
 
-from ...call_spots.qual_check import omp_spot_score
-from ...spot_colors import base as spot_colours_base
+from ...call_spots.dot_product import gene_prob_score
 from ...omp import base as omp_base
-from ...call_spots import gene_prob_score
 from ...setup import Notebook
+from ...spot_colors import base as spot_colours_base
 
-try:
-    import importlib_resources
-except ModuleNotFoundError:
-    import importlib.resources as importlib_resources
+import importlib.resources as importlib_resources
+
+# FIXME: Code outside any functions or classes will slow coppafish importing significantly.
 try:
     # So matplotlib plots pop out
     # Put in try so don't get error when unit testing in continuous integration
@@ -24,7 +22,6 @@ try:
     mpl.use("qtagg")
 except ImportError:
     pass
-plt.style.use("dark_background")
 
 
 class ColorPlotBase:
@@ -74,6 +71,7 @@ class ColorPlotBase:
                 Position of button which triggers change of normalisation.
                 If not given, will be set to `[0.85, 0.02, 0.1, 0.05]`.
         """
+        plt.style.use("dark_background")
         self.n_images = len(images)
         if subplot_row_columns is None:
             subplot_row_columns = [self.n_images, 1]
@@ -231,8 +229,9 @@ class ColorPlotBase:
 
 
 class view_codes(ColorPlotBase):
-    def __init__(self, nb: Notebook, spot_no: int, tile: int, method: str = "anchor", bg_removed=True,
-                 save_loc: str = None):
+    def __init__(
+        self, nb: Notebook, spot_no: int, tile: int, method: str = "anchor", bg_removed=True, save_loc: str = None
+    ):
         """
         Diagnostic to compare `spot_colour` to `bled_code` of predicted gene.
 
@@ -244,13 +243,14 @@ class view_codes(ColorPlotBase):
                 Which method of gene assignment used i.e. `spot_no` belongs to `ref_spots` or `omp` page of Notebook.
         """
         assert method.lower() in ["anchor", "omp", "prob"], "method must be 'anchor', 'omp' or 'prob'"
+        plt.style.use("dark_background")
         if method.lower() == "omp":
             # convert spot_no to be relative to tile
             spot_no = omp_base.global_to_local_index(nb.basic_info, nb.omp, spot_no)
             # now that spot_no is relative to tile, get spot_score, spot_colour and gene_no
-            spot_score = nb.omp.results[f'tile_{tile}'].scores[spot_no]
-            self.spot_colour = nb.omp.results[f'tile_{tile}'].colours[spot_no]
-            gene_no = nb.omp.results[f'tile_{tile}'].gene_no[spot_no]
+            spot_score = nb.omp.results[f"tile_{tile}"].scores[spot_no]
+            self.spot_colour = nb.omp.results[f"tile_{tile}"].colours[spot_no]
+            gene_no = nb.omp.results[f"tile_{tile}"].gene_no[spot_no]
         elif method.lower() == "anchor":
             spot_score = nb.call_spots.dot_product_gene_score[spot_no]
             self.spot_colour = nb.ref_spots.colours[spot_no]
@@ -373,17 +373,20 @@ class view_spot(ColorPlotBase):
             - Requires access to `nb.file_names.tile_dir`.
         """
         assert method.lower() in ["anchor", "omp", "prob"], "method must be 'anchor', 'omp' or 'prob'"
+        plt.style.use("dark_background")
         if method.lower() == "omp":
             # convert spot_no to be relative to tile
             spot_no = omp_base.global_to_local_index(nb.basic_info, nb.omp, spot_no)
             # now that spot_no is relative to tile, get spot_score, spot_colour and gene_no
-            spot_score = nb.omp.results[f'tile_{tile}'].scores[spot_no]
-            gene_no = nb.omp.results[f'tile_{tile}'].gene_no[spot_no]
-            spot_yxz = nb.omp.results[f'tile_{tile}'].local_yxz[spot_no]
+            spot_score = nb.omp.results[f"tile_{tile}"].scores[spot_no]
+            gene_no = nb.omp.results[f"tile_{tile}"].gene_no[spot_no]
+            spot_yxz = nb.omp.results[f"tile_{tile}"].local_yxz[spot_no]
         else:
             spot_score = nb.call_spots.dot_product_gene_score[spot_no]
-            gene_no = nb.call_spots.dot_product_gene_no[spot_no] if method.lower() == "anchor" else np.argmax(
-                nb.call_spots.gene_probabilities[spot_no]
+            gene_no = (
+                nb.call_spots.dot_product_gene_no[spot_no]
+                if method.lower() == "anchor"
+                else np.argmax(nb.call_spots.gene_probabilities[spot_no])
             )
             spot_yxz = nb.ref_spots.local_yxz[spot_no]
 
@@ -417,7 +420,7 @@ class view_spot(ColorPlotBase):
                 round=r,
                 use_channels=nb.basic_info.use_channels,
                 dapi_channel=nb.basic_info.dapi_channel,
-                yxz=im_yxz
+                yxz=im_yxz,
             )
         # put round as the last axis to match colour_norm
         spot_colours = spot_colours.transpose(2, 1, 0)
@@ -491,7 +494,7 @@ class view_spot(ColorPlotBase):
                 self.ax[i].set_ylabel(f"{nb.basic_info.use_channels[int(i/n_use_rounds)]}")
             if i >= self.n_images - n_use_rounds:
                 r = nb.basic_info.use_rounds[i - (self.n_images - n_use_rounds)]
-                self.ax[i].set_xlabel(f'{r}')
+                self.ax[i].set_xlabel(f"{r}")
 
         self.ax[0].set_xticks([spot_yxz_global[1]])
         self.ax[0].set_yticks([spot_yxz_global[0]])
@@ -509,18 +512,20 @@ class view_spot(ColorPlotBase):
 # We are now going to create a new class that will allow us to view the spots used to calculate the gene efficiency
 # for a given gene. This will be useful for checking that the spots used are representative of the gene as a whole.
 class GEViewer:
-    def __init__(self, nb: Notebook, mode: str = 'prob', score_threshold: float = 0):
+    def __init__(self, nb: Notebook, mode: str = "prob", score_threshold: float = 0):
         """
         Diagnostic to show the n_genes x n_rounds gene efficiency matrix as a heatmap.
+
         Args:
             nb: Notebook containing experiment details. Must have run at least as far as `call_reference_spots`.
         """
+        plt.style.use("dark_background")
         # Get gene probabilities and number of spots for each gene
-        if mode == 'omp':
+        if mode == "omp":
             use_tiles = nb.basic_info.use_tiles
-            gene_no = np.concatenate([nb.omp.results[f'tile_{t}'].gene_no for t in use_tiles], axis=0)
-            score = np.concatenate([nb.omp.results[f'tile_{t}'].scores for t in use_tiles], axis=0)
-        elif mode == 'anchor':
+            gene_no = np.concatenate([nb.omp.results[f"tile_{t}"].gene_no for t in use_tiles], axis=0)
+            score = np.concatenate([nb.omp.results[f"tile_{t}"].scores for t in use_tiles], axis=0)
+        elif mode == "anchor":
             gene_no = nb.call_spots.dot_product_gene_no
             score = nb.call_spots.dot_product_gene_score
         else:
@@ -542,8 +547,9 @@ class GEViewer:
         # set location of axes
         self.ax.set_position([0.1, 0.1, 0.7, 0.8])
         gene_efficiency = np.linalg.norm(nb.call_spots.free_bled_codes_tile_independent, axis=2)
-        self.ax.imshow(gene_efficiency, cmap="viridis", vmin=0, vmax=gene_efficiency.max(), aspect="auto",
-                       interpolation="none")
+        self.ax.imshow(
+            gene_efficiency, cmap="viridis", vmin=0, vmax=gene_efficiency.max(), aspect="auto", interpolation="none"
+        )
         self.ax.set_xlabel("Round")
         self.ax.set_ylabel("Gene")
         self.ax.set_xticks(ticks=np.arange(gene_efficiency.shape[1]))
@@ -559,10 +565,9 @@ class GEViewer:
         # hovering over row r of the heatmap. This means we need to only extract the y position of the mouse cursor.
         mplcursors.cursor(self.ax, hover=True).connect("add", lambda sel: self.plot_gene_name(sel.index[0]))
         # 2. Allow genes to be selected by clicking on them
-        mplcursors.cursor(self.ax, hover=False).connect("add", lambda sel: GESpotViewer(nb,
-                                                                                        gene_index=sel.index[0],
-                                                                                        mode=mode,
-                                                                                        score_threshold=score_threshold))
+        mplcursors.cursor(self.ax, hover=False).connect(
+            "add", lambda sel: GESpotViewer(nb, gene_index=sel.index[0], mode=mode, score_threshold=score_threshold)
+        )
         # 3. We would like to add a white rectangle around the observed spot when we hover over it. We will
         # use mplcursors to do this. We need to add a rectangle to the plot when hovering over a gene.
         # We also want to turn off annotation when hovering over a gene so we will use the `hover=False` option.
@@ -577,8 +582,7 @@ class GEViewer:
         for rectangle in self.ax.patches:
             rectangle.remove()
         # We can then add a new rectangle to the plot
-        self.ax.add_patch(Rectangle((-0.5, index - 0.5), self.nb.basic_info.n_rounds, 1, fill=False,
-                                    edgecolor="white"))
+        self.ax.add_patch(Rectangle((-0.5, index - 0.5), self.nb.basic_info.n_rounds, 1, fill=False, edgecolor="white"))
 
     def plot_gene_name(self, index):
         # We need to remove any existing gene names from the plot
@@ -600,7 +604,7 @@ class GEViewer:
 
 
 class GESpotViewer:
-    def __init__(self, nb: Notebook, gene_index: int = 0, mode: str = 'prob', score_threshold: float = 0):
+    def __init__(self, nb: Notebook, gene_index: int = 0, mode: str = "prob", score_threshold: float = 0):
         """
         Diagnostic to show the spots used to calculate the gene efficiency for a given gene.
         Args:
@@ -611,6 +615,7 @@ class GESpotViewer:
             score_threshold: Minimum score for a spot to be considered.
 
         """
+        plt.style.use("dark_background")
         assert mode.lower() in ["prob", "anchor", "omp"], "mode must be 'prob', 'anchor' or 'omp'"
         assert nb.has_page("call_spots"), "Notebook must have run at least as far as `call_spots`"
 
@@ -635,15 +640,16 @@ class GESpotViewer:
         colour_norm = nb.call_spots.colour_norm_factor
 
         # get spots for gene gene_index
-        if self.mode == 'omp':
+        if self.mode == "omp":
             use_tiles = nb.basic_info.use_tiles
-            spots = np.concatenate([nb.omp.results[f'tile_{t}'].colours for t in use_tiles], axis=0)
-            gene_no = np.concatenate([nb.omp.results[f'tile_{t}'].gene_no for t in use_tiles], axis=0)
-            score = np.concatenate([nb.omp.results[f'tile_{t}'].scores for t in use_tiles], axis=0)
-            tile = np.concatenate([t * np.ones(nb.omp.results[f'tile_{t}'].scores.shape[0], dtype=int)
-                                   for t in use_tiles])
-            spot_index = np.concatenate([np.arange(nb.omp.results[f'tile_{t}'].scores.shape[0]) for t in use_tiles])
-        elif self.mode == 'anchor':
+            spots = np.concatenate([nb.omp.results[f"tile_{t}"].colours for t in use_tiles], axis=0)
+            gene_no = np.concatenate([nb.omp.results[f"tile_{t}"].gene_no for t in use_tiles], axis=0)
+            score = np.concatenate([nb.omp.results[f"tile_{t}"].scores for t in use_tiles], axis=0)
+            tile = np.concatenate(
+                [t * np.ones(nb.omp.results[f"tile_{t}"].scores.shape[0], dtype=int) for t in use_tiles]
+            )
+            spot_index = np.concatenate([np.arange(nb.omp.results[f"tile_{t}"].scores.shape[0]) for t in use_tiles])
+        elif self.mode == "anchor":
             spots = nb.ref_spots.colours
             gene_no = nb.call_spots.dot_product_gene_no
             score = nb.call_spots.dot_product_gene_score
@@ -687,9 +693,9 @@ class GESpotViewer:
         n_rounds, n_channels = len(self.nb.basic_info.use_rounds), len(self.nb.basic_info.use_channels)
         mean_cosine = np.zeros(n_rounds)
         for r in range(n_rounds):
-            colours_r = self.spots[:, r * n_channels:(r + 1) * n_channels].copy()
+            colours_r = self.spots[:, r * n_channels : (r + 1) * n_channels].copy()
             colours_r /= np.linalg.norm(colours_r, axis=1)[:, None]
-            bled_code_r = self.bled_code[0, r * n_channels:(r + 1) * n_channels].copy()
+            bled_code_r = self.bled_code[0, r * n_channels : (r + 1) * n_channels].copy()
             bled_code_r /= np.linalg.norm(bled_code_r)
             mean_cosine[r] = np.mean(colours_r @ bled_code_r, axis=0)
 
@@ -697,7 +703,7 @@ class GESpotViewer:
         self.ax[0].imshow(self.spots, cmap="viridis", vmin=vmin, vmax=vmax, aspect="auto", interpolation="none")
         self.ax[1].imshow(self.bled_code, cmap="viridis", aspect="auto", interpolation="none")
         # We can then add titles and axis labels to the subplots.
-        names = ['observed spots', 'bled code']
+        names = ["observed spots", "bled code"]
         for i, a in enumerate(self.ax):
             a.set_title(names[i])
             if i == 1:
@@ -707,10 +713,9 @@ class GESpotViewer:
             n_rounds, n_channels = len(self.nb.basic_info.use_rounds), len(self.nb.basic_info.use_channels)
             x_tick_loc = np.arange(n_channels // 2, n_channels * n_rounds, n_channels)
             if i == 0:
-                x_tick_label = [f'R {r} \n {str(np.around(mean_cosine[r], 2))}'
-                                for r in self.nb.basic_info.use_rounds]
+                x_tick_label = [f"R {r} \n {str(np.around(mean_cosine[r], 2))}" for r in self.nb.basic_info.use_rounds]
             else:
-                x_tick_label = [f'R {r}' for r in self.nb.basic_info.use_rounds]
+                x_tick_label = [f"R {r}" for r in self.nb.basic_info.use_rounds]
             a.set_xticks(x_tick_loc, x_tick_label)
             a.set_yticks([])
 
@@ -720,9 +725,11 @@ class GESpotViewer:
                 a.axvline(i * len(self.nb.basic_info.use_channels) - 0.5, color="r")
 
         # Set supertitle, colorbar and show plot
-        self.fig.suptitle(f"Method: {self.mode}, Gene: {self.nb.call_spots.gene_names[self.gene_index]}, "
-                          f"(Code: {gene_code}) \n Score Threshold: {self.score_threshold:.2f}, "
-                          f"N: {self.spots.shape[0]}")
+        self.fig.suptitle(
+            f"Method: {self.mode}, Gene: {self.nb.call_spots.gene_names[self.gene_index]}, "
+            f"(Code: {gene_code}) \n Score Threshold: {self.score_threshold:.2f}, "
+            f"N: {self.spots.shape[0]}"
+        )
 
         self.add_main_widgets()
         plt.show()
@@ -732,15 +739,18 @@ class GESpotViewer:
         bled_codes = self.nb.call_spots.bled_codes
         n_genes, n_rounds, n_channels = bled_codes.shape
         kappa = np.log(1 + n_genes // 75) + 2
-        gene_probs = gene_prob_score(spot_colours=self.spots.reshape(-1, n_rounds, n_channels),
-                                     bled_codes=bled_codes, kappa=kappa)[:, self.gene_index]
+        gene_probs = gene_prob_score(
+            spot_colours=self.spots.reshape(-1, n_rounds, n_channels), bled_codes=bled_codes, kappa=kappa
+        )[:, self.gene_index]
         self.fig_scatter, self.ax_scatter = plt.subplots()
         spot_brightness = np.linalg.norm(self.spots, axis=1)
         self.ax_scatter.scatter(x=gene_probs, y=self.score, alpha=0.5, c=spot_brightness, cmap="viridis")
         self.ax_scatter.set_xlabel("Gene Probability")
         self.ax_scatter.set_ylabel("Gene Score")
-        self.ax_scatter.set_title(f"Gene Probability vs Gene Score ({self.mode}) for Gene "
-                                  f"{self.nb.call_spots.gene_names[self.gene_index]}")
+        self.ax_scatter.set_title(
+            f"Gene Probability vs Gene Score ({self.mode}) for Gene "
+            f"{self.nb.call_spots.gene_names[self.gene_index]}"
+        )
         # add colorbar
         cbar = self.fig_scatter.colorbar(cm.ScalarMappable(norm=None, cmap="viridis"), ax=self.ax_scatter)
         cbar.set_label("Spot Brightness")
@@ -751,9 +761,10 @@ class GESpotViewer:
         # Initialise buttons and cursors
         # 1. We would like each row of the plot to be clickable, so that we can view the observed spot.
         mplcursors.cursor(self.ax[0], hover=False).connect(
-            "add", lambda sel: view_codes(self.nb, self.spot_index[sel.index[0]],
-                                          tile=self.tile[sel.index[0]],
-                                          method=self.mode)
+            "add",
+            lambda sel: view_codes(
+                self.nb, self.spot_index[sel.index[0]], tile=self.tile[sel.index[0]], method=self.mode
+            ),
         )
         # 2. We would like to add a white rectangle around the observed spot when we hover over it
         mplcursors.cursor(self.ax[0], hover=2).connect("add", lambda sel: self.add_rectangle(sel.index[0]))
@@ -791,8 +802,9 @@ class GESpotViewer:
         # get visible spots by the visible bounding box of ax_scatter
         bottom, top = self.ax_scatter.get_ylim()
         left, right = self.ax_scatter.get_xlim()
-        visible_spots = np.where((self.score >= bottom) & (self.score <= top) & (gene_probs >= left) &
-                                 (gene_probs <= right))[0]
+        visible_spots = np.where(
+            (self.score >= bottom) & (self.score <= top) & (gene_probs >= left) & (gene_probs <= right)
+        )[0]
         # plot these spots (if there are any, and not too many)
         if len(visible_spots) == 0:
             print("No spots in visible range")
@@ -810,6 +822,7 @@ class BGNormViewer:
     """
 
     def __init__(self, nb):
+        plt.style.use("dark_background")
         self.nb = nb
         isolated = nb.ref_spots.isolated
         tile = nb.ref_spots.tile
@@ -902,5 +915,3 @@ class BGNormViewer:
     # self.slider.on_changed(lambda val: self.update_hist(int(val)))
     #
     # TODO: Add 2 buttons, one for separating normalisation by channel and one for separating by round and channel
-
-

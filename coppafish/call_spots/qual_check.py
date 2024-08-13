@@ -85,7 +85,7 @@ def quality_threshold(
 
     """
     if method.lower() != "omp" and method.lower() != "ref" and method.lower() != "anchor" and method.lower() != "prob":
-        log.error(ValueError(f"method must be 'omp' or 'anchor' but {method} given."))
+        raise ValueError(f"method must be 'omp' or 'anchor' but {method} given.")
     method_omp = method.lower() == "omp"
     method_anchor = method.lower() == "anchor" or method.lower() == "ref"
     method_prob = method.lower() == "prob"
