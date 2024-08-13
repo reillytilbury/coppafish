@@ -39,6 +39,7 @@ nav:
   - Advanced Usage: advanced_usage.md
   - Troubleshoot: troubleshoot.md
   - Algorithm: algorithm.md
+  - Registration: register.md
   - Contributing: contributing.md
   - Glossary: glossary.md
 
@@ -47,7 +48,11 @@ markdown_extensions:
   - pymdownx.arithmatex:
       generic: true
   # Code can be highlighted, for example python code by code block: ``` python ...``` or inline: `#!python ...`.
+  - admonition
+  - pymdownx.details
   - pymdownx.superfences
+  - pymdownx.tabbed:
+        alternate_style: true
   - pymdownx.highlight
   - pymdownx.inlinehilite
   # Footnote support
