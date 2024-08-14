@@ -7,6 +7,7 @@ import matplotlib as mpl
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 from matplotlib.transforms import ScaledTranslation
+from matplotlib import colors as mcolours
 import numpy as np
 from tqdm import tqdm
 from typing_extensions import Self
@@ -210,6 +211,89 @@ class BuildPDF:
         pbar.update()
 
         pbar.set_postfix_str("Stitch")
+        stitch_filepath = os.path.join(output_dir, "_stitch.pdf")
+        if nb.has_page("stitch") and not os.path.isfile(stitch_filepath):
+            with PdfPages(stitch_filepath) as pdf:
+                # Plot the neighbouring tile scores.
+                tile_scores = nb.stitch.scores
+                n_tiles = tile_scores.shape[0]
+                max_neighbours = (~np.isclose(nb.stitch.scores, 0)).sum(1).max()
+                n_bars = n_tiles * max_neighbours
+                bar_scores_x = [i + 1 for i in range(n_bars)]
+                bar_scores = [0 for _ in range(n_bars)]
+                bar_scores_colours = ["black" for _ in range(n_bars)]
+                if max_neighbours > 0:
+                    rng = np.random.default_rng(0)
+                    for tile in range(n_tiles):
+                        tile_colour = rng.choice(list(mcolours.CSS4_COLORS.values()), replace=False)
+                        tile_nonzero_scores = tile_scores[tile, ~np.isclose(tile_scores[tile], 0)]
+                        tile_nonzero_scores = np.append(
+                            tile_nonzero_scores, np.full(max_neighbours - tile_nonzero_scores.size, np.nan)
+                        )
+                        for i in range(max_neighbours):
+                            bar_scores[tile * max_neighbours + i] = tile_nonzero_scores[i]
+                            bar_scores_colours[tile * max_neighbours + i] = tile_colour
+                fig, axes = self.create_empty_page(1, 1, hide_frames=False)
+                fig.suptitle("Stitch tile shift scores")
+                ax: plt.Axes = axes[0, 0]
+                ax.bar(bar_scores_x, bar_scores, width=0.9, color=bar_scores_colours, linewidth=0.5, edgecolor="black")
+                ax.spines["top"].set_visible(False)
+                ax.spines["right"].set_visible(False)
+                ax.set_xticks([])
+                ax.set_ylabel("Shift score")
+                fig.tight_layout()
+                pdf.savefig(fig)
+                plt.close(fig)
+
+                # Plot the neighbouring tile shifts for every tile.
+                all_tile_scores = nb.stitch.scores
+                all_tile_shifts = nb.stitch.shifts
+                zero_shifts = np.isclose(all_tile_scores, 0)
+                max_neighbours = (~zero_shifts).sum(1).max()
+                n_bars = 3 * max_neighbours * n_tiles
+                bar_x = [i for i in range(n_bars)]
+                bar_heights = [i for i in range(n_bars)]
+                bar_colours = ["black" for _ in range(n_bars)]
+                bar_labels = ["" for _ in range(n_bars)]
+                if max_neighbours > 0:
+                    for tile in range(n_tiles):
+                        tile_shifts = all_tile_shifts[tile]
+                        # Remove zero shifts.
+                        tile_shifts = tile_shifts[~zero_shifts[tile]]
+                        # Add zeros back in to reach shape[0] of max_neighbours for consistency.
+                        tile_shifts = np.append(tile_shifts, np.zeros((max_neighbours - tile_shifts.shape[0], 3)), 0)
+                        rng = np.random.default_rng(0)
+                        tile_colour = rng.choice(list(mcolours.CSS4_COLORS.values()), replace=False)
+                        for i in range(max_neighbours):
+                            bar_heights[3 * tile * max_neighbours + i + 0] = tile_shifts[i, 0]
+                            bar_heights[3 * tile * max_neighbours + i + 1] = tile_shifts[i, 1]
+                            bar_heights[3 * tile * max_neighbours + i + 2] = tile_shifts[i, 2]
+                            bar_colours[3 * tile * max_neighbours + i + 0] = tile_colour
+                            bar_colours[3 * tile * max_neighbours + i + 1] = tile_colour
+                            bar_colours[3 * tile * max_neighbours + i + 2] = tile_colour
+                            bar_labels[3 * tile * max_neighbours + i + 0] = f"Tile {tile}"
+                    fig, axes = self.create_empty_page(1, 1, hide_frames=False)
+                    fig.suptitle("Stitch tile shifts")
+                    ax: plt.Axes = axes[0, 0]
+                    ax.bar(bar_x, bar_heights, width=0.7, edgecolor="black", linewidth=0.5)
+                    ax.set_xticks([])
+                    ax.set_ylabel("Shift (pixels)")
+                    fig.tight_layout()
+                    pdf.savefig(fig)
+                    plt.close(fig)
+
+                dapi_image = nb.stitch.dapi_image[...]
+                for z in range(dapi_image.shape[0]):
+                    fig, axes = self.create_empty_page(1, 1)
+                    fig.suptitle(f"Fused dapi, {z=}")
+                    ax: plt.Axes = axes[0, 0]
+                    im = ax.imshow(dapi_image[z], interpolation="antialiased")
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+                    fig.tight_layout()
+                    pdf.savefig(fig)
+                    plt.close(fig)
+                del dapi_image
         pbar.update()
 
         pbar.set_postfix_str("Call spots")
@@ -335,7 +419,7 @@ class BuildPDF:
             plt.close(fig)
         pbar.update()
 
-        pbar.set_postfix_str("call_spots_heatmaps")
+        pbar.set_postfix_str("Call Spots Heatmaps")
         anchor_heatmap_path = os.path.join(output_dir, "_heat_maps_anchor.pdf")
         prob_heatmap_path = os.path.join(output_dir, "_heat_maps_prob.pdf")
         file_missing = not os.path.isfile(anchor_heatmap_path) or not os.path.isfile(prob_heatmap_path)
@@ -362,7 +446,7 @@ class BuildPDF:
                 )
         pbar.update()
 
-        pbar.set_postfix_str("omp_heatmaps")
+        pbar.set_postfix_str("Omp Heatmaps")
         omp_heatmap_path = os.path.join(output_dir, "_heat_maps_omp.pdf")
         if nb.has_page("omp") and not os.path.isfile(omp_heatmap_path):
             gene_names = nb.call_spots.gene_names
