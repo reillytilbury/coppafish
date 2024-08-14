@@ -333,19 +333,19 @@ class NotebookPage:
                 "ndarray[float]",
                 "Numpy array (n_tiles x n_tiles x 3)"
                 + "`shifts[t1, t2, :]` is the $yxz$ shift from tile $t1$ to tile $t2$."
-                + "nan is populated in places where shift is not calculated, i.e. if tiles are not adjacent,"
+                + "Zeros are populated in places where shift is not calculated, i.e. if tiles are not adjacent,"
                 + "or if one of the tiles is not used in the pipeline.",
             ],
             "scores": [
                 "ndarray[float]",
                 "Numpy array [n_tiles x n_tiles]"
-                + "`scores[t1, t2]` is the score of the shift from tile $t1$ to tile $t2$."
-                + "nan is populated in places where shift is not calculated, i.e. if tiles are not adjacent,"
+                + "`scores[t1, t2]` is the score of the shift from tile $t1$ to tile $t2$. "
+                + "Zeros are populated in places where the shift is not calculated, i.e. if tiles are not adjacent "
                 + "or if one of the tiles is not used in the pipeline.",
             ],
             "dapi_image": [
                 "zarray",
-                "uint16 array (im_y x im_x x im_z). "
+                "float16 array (im_z x im_y x im_x). "
                 + "Fused large dapi image created by merging all tiles together after stitch shifting is applied.",
             ],
         },

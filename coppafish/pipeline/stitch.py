@@ -6,7 +6,6 @@ import zarr
 
 from .. import log, stitch as stitch_base
 from ..setup import NotebookPage
-from ..utils import tiles_io
 
 
 def stitch(config: dict, nbp_basic: NotebookPage, nbp_file: NotebookPage, nbp_filter: NotebookPage) -> NotebookPage:
@@ -25,6 +24,9 @@ def stitch(config: dict, nbp_basic: NotebookPage, nbp_file: NotebookPage, nbp_fi
     log.debug("Stitch started")
     nbp = NotebookPage("stitch", {"stitch": config})
 
+    # TODO: Make non-adjacent tiles have shifts and scores of nan instead of zero to distinguish from true zero
+    # shift/scores.
+
     # initialize the variables
     overlap = config["expected_overlap"]
     use_tiles, anchor_round, dapi_channel = list(nbp_basic.use_tiles), nbp_basic.anchor_round, nbp_basic.dapi_channel
@@ -40,7 +42,7 @@ def stitch(config: dict, nbp_basic: NotebookPage, nbp_file: NotebookPage, nbp_fi
     for t in tqdm(use_tiles, total=n_tiles_use, desc="Loading tiles"):
         tile = nbp_filter.images[t, anchor_round, dapi_channel]
         tiles.append(tile)
-    tiles = np.array(tiles)
+    tiles = np.array(tiles, np.float32)
 
     # fill the shift and score matrices
     for i, j in tqdm(np.ndindex(n_tiles_use, n_tiles_use), total=n_tiles_use**2, desc="Computing shifts between tiles"):
