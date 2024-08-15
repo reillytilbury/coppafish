@@ -1,15 +1,15 @@
 import math as maths
-from typing import Tuple, Literal
-from typing_extensions import Self
+from typing import Tuple
 
 import numpy as np
 import scipy
 import torch
 import tqdm
+from typing_extensions import Self
 
 
 class CoefficientSolverOMP:
-    NO_GENE_ASSIGNMENT: Literal[-32_768] = -32_768
+    NO_GENE_ASSIGNMENT: int = -32_768
 
     def __init__(self: Self) -> None:
         """
