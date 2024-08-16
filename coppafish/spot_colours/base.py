@@ -349,7 +349,7 @@ def get_spot_colours(
     yxz_min, yxz_max = (torch.maximum(yxz_min - pad_size, torch.tensor([0, 0, 0])),
                         torch.minimum(yxz_max + pad_size, tile_size))
     cube_size = yxz_max - yxz_min
-    # load the sliced images for each round and channel
+    # load the sliced images for each round and channel (from yxz_min to yxz_max)
     image = np.array(
         [[image[tile, r, c, yxz_min[0]:yxz_max[0], yxz_min[1]:yxz_max[1], yxz_min[2]:yxz_max[2]] for c in use_channels]
          for r in use_rounds]
@@ -384,12 +384,16 @@ def get_spot_colours(
 
         # grid_sample expects grid to be input as [N, D', H', W', 3] where
         # N = batch size: We set this to n_use_channels,
-        # D' = depth out, H' = height out, W' = width out: We set these to n_spots, 1, 1,
-        spot_colours[:, r, :] = torch.nn.functional.grid_sample(
+        # D' = depth out, H' = height out, W' = width out: We set these to n_spots, 1, 1
+        round_r_colours = torch.nn.functional.grid_sample(
             input=image[r, :, None, :, :, :],
             grid=yxz_round_r[:, :, None, None, :],
             mode='bilinear',
             align_corners=False,
-        )[:, 0, :, 0, 0].transpose(0, 1)
+        )
+
+        # grid_sample gives output as [N, M, D', H', W'] as defined above.
+        round_r_colours = round_r_colours[:, 0, :, 0, 0]    # [n_use_channels, n_spots]
+        spot_colours[:, r, :] = round_r_colours.T
 
     return spot_colours

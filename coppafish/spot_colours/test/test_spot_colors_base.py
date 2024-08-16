@@ -1,6 +1,7 @@
 import numpy as np
-
-from coppafish.spot_colors.base import get_spot_colours_new
+import skimage
+import scipy
+from coppafish.spot_colours.base import get_spot_colours_new, get_spot_colours
 
 
 def test_get_spot_colours_new() -> None:
@@ -123,3 +124,67 @@ def test_get_spot_colours_new() -> None:
     result = result.reshape(tile_shape)
     assert np.allclose(result[:, :-1], image.swapaxes(0, 1)[:, 1:])
     assert np.isnan(result[:, -1]).all()
+
+
+def test_get_spot_colours():
+    """
+    Function to test the get_spot_colours function from the spot_colours.base module.
+    """
+    # create some artificial data with 2 rounds, 3 channels and a 10 x 10 x 5 image
+    rng = np.random.RandomState(0)
+    tile_shape = 100, 100, 10
+    n_rounds, n_channels = 2, 3
+    images_aligned = rng.rand(n_rounds, n_channels, *tile_shape)
+    # set values below 0.5 to 0, and above 0.5 to 1
+    images_aligned = (images_aligned > 0.5).astype(np.float32)
+    # smooth each round and channel independently
+    for r in range(n_rounds):
+        for c in range(n_channels):
+            images_aligned[r, c] = skimage.filters.gaussian(images_aligned[r, c], sigma=5)
+
+    # now we would like to move these images by applying the inverse transform of the one we want to apply
+    # to the spot colours and then check if we can recover the original images
+    affine = np.zeros((n_channels, 4, 3))
+    affine[:, :3, :3] = np.eye(3)
+    # set these affine transforms to be shifts in y and x by 1, 2, 3 and scales in y and x by 0.9, 0.8
+    # these are the transforms we need to apply to go from anchor to target, so we need to apply the inverse to the
+    # images
+    # affine[:, 3, 0] = [1, 2, 3]
+    # affine[:, 3, 1] = [1, 2, 3]
+    # affine[:, 0, 0] = 0.9
+    # affine[:, 1, 1] = 0.8
+    # repeat the affine transforms for each round
+    affine = np.repeat(affine[None], n_rounds, axis=0)
+
+    # define flow shifts to be 1 shift in z for round 0 and 2 shifts in z for round 1
+    flow = np.zeros((n_rounds, 3, *tile_shape))
+    # flow[0, 2] = 1
+    # flow[1, 2] = 2
+
+    # get coords and define warps (coords + flow) for each round
+    coords = np.array(np.meshgrid(*[np.arange(s) for s in tile_shape], indexing='ij'))
+    warp = np.array([coords + flow[r] for r in range(n_rounds)])
+
+    # the transform we will apply to align is A(F(x)), so to disalign apply A^(-1)(F^(-1)(x))
+    images_disaligned = np.zeros_like(images_aligned)
+    for r in range(n_rounds):
+        for c in range(n_channels):
+            # scipy ndimage affine automatically applies the inverse transform
+            images_disaligned[r, c] = scipy.ndimage.affine_transform(images_aligned[r, c], affine[r, c].T, order=0,
+                                                                     cval=np.nan)
+            # skimage transform warp will also apply the inverse of the flow
+            images_disaligned[r, c] = skimage.transform.warp(images_disaligned[r, c], warp[r], order=0, cval=np.nan)
+
+    # now we want to get the spot colours from the disaligned images
+    yxz_base = coords.reshape(3, -1).T
+    spot_colours = get_spot_colours(image=images_disaligned[None], flow=flow[None], icp_correction=affine[None],
+                                    yxz_base=yxz_base).numpy()
+    # check the spot_colours against the image
+    spot_colours_true = np.zeros_like(spot_colours)
+    for r in range(n_rounds):
+        for c in range(n_channels):
+            spot_colours_true[:, r, c] = images_aligned[r, c].reshape(-1)
+    # reshape spot colours from n_spots x n_rounds x n_channels to n_y x n_x x n_z x n_rounds x n_channels
+    spot_colours = spot_colours.reshape(*tile_shape, n_rounds, n_channels)
+    # reorder spot colours tensor to n_rounds x n_channels x n_y x n_x x n_z
+    spot_colours = spot_colours.permute(3, 4, 0, 1, 2)

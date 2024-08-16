@@ -118,13 +118,13 @@ def check_color_nan(colors: np.ndarray, nbp_basic: NotebookPage) -> None:
     This raises an error if this is not the case or if a round/channel not in use_rounds/channels
     contains a value other than `invalid_value`.
     `invalid_value = -nbp_basic.tile_pixel_value_shift` if colors is integer i.e. the non-normalised colors,
-    usually spot_colors.
+    usually spot_colours.
     `invalid_value = np.nan` if colors is float i.e. the normalised colors or most likely the bled_codes.
 
     Args:
         colors: `int or float [n_codes x n_rounds x n_channels]` \
             `colors[s, r, c]` is the color for code `s` in round `r`, channel `c`. \
-            This is likely to be `spot_colors` if `int` or `bled_codes` if `float`.
+            This is likely to be `spot_colours` if `int` or `bled_codes` if `float`.
         nbp_basic: basic_info NotebookPage. Requires values for `n_rounds`, `n_channels`, `use_rounds`, \
             `use_channels` and `tile_pixel_value_shift`.
     """
@@ -182,7 +182,7 @@ def check_color_nan(colors: np.ndarray, nbp_basic: NotebookPage) -> None:
     if n_nan_spots > 0:
         log.info(f"{n_nan_spots=}")
         s = nan_codes[0][0]
-        # round, channel number in spot_colors different from in use_spot_colors.
+        # round, channel number in spot_colours different from in use_spot_colors.
         r = np.arange(n_rounds)[nan_codes[1][0]]
         c = np.arange(n_channels)[nan_codes[2][0]]
         log.error(ColorInvalidError(colors, nbp_basic, invalid_value, round_no=r, channel_no=c, code_no=s))
@@ -199,12 +199,12 @@ class ColorInvalidError(Exception):
         code_no: Optional[int] = None,
     ):
         """
-        Error raised because `spot_colors` contains a `invalid_value` where it should not.
+        Error raised because `spot_colours` contains a `invalid_value` where it should not.
 
         Args:
             colors: `int or float [n_codes x n_rounds x n_channels]`
                 `colors[s, r, c]` is the color for code `s` in round `r`, channel `c`.
-                This is likely to be `spot_colors` if `int` or `bled_codes` if `float`.
+                This is likely to be `spot_colours` if `int` or `bled_codes` if `float`.
             nbp_basic: basic_info NotebookPage
             invalid_value: This is the value that colors should only be in rounds/channels not used.
                 Likely to be np.nan if colors is float or -nbp_basic.tile_pixel_value_shift if integer.

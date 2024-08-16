@@ -15,7 +15,7 @@ import zarr
 from coppafish.find_spots import spot_yxz
 from coppafish.register import preprocessing
 from coppafish.setup import Notebook
-from coppafish.spot_colors import apply_affine, apply_flow
+from coppafish.spot_colours import apply_affine, apply_flow
 
 
 class RegistrationViewer:

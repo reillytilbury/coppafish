@@ -11,7 +11,7 @@ from skimage.transform import warp
 from tqdm import tqdm
 import zarr
 
-from .. import spot_colors
+from .. import spot_colours
 from ..setup import Notebook, NotebookPage
 
 
@@ -262,7 +262,7 @@ def generate_reg_images(
             t, r, dapi_channel, yxz_min[0] : yxz_max[0], yxz_min[1] : yxz_max[1], yxz_min[2] : yxz_max[2]
         ]
         # TODO: The below code doesn't work (seems to return blank image) - need to debug
-        im_tr_flow = spot_colors.base.get_spot_colours_new(
+        im_tr_flow = spot_colours.base.get_spot_colours_new(
             nbp_filter.images,
             nbp_register.flow,
             nbp_register.icp_correction,
@@ -275,7 +275,7 @@ def generate_reg_images(
             yxz=yxz_coords,
             registration_type="flow",
         ).reshape((1,) + image_shape)
-        im_tr_flow_icp = spot_colors.base.get_spot_colours_new(
+        im_tr_flow_icp = spot_colours.base.get_spot_colours_new(
             nbp_filter.images,
             nbp_register.flow,
             nbp_register.icp_correction,
@@ -298,7 +298,7 @@ def generate_reg_images(
     for t, c in tqdm(product(use_tiles, use_channels), desc="Channel Images", total=len(use_tiles) * len(use_channels)):
         im_tc = nbp_filter.images[t, r_mid, c, yxz_min[0] : yxz_max[0], yxz_min[1] : yxz_max[1], yxz_min[2] : yxz_max[2]]
         # TODO: The below code doesn't work (seems to return blank image) - need to debug
-        im_tc_flow = spot_colors.base.get_spot_colours_new(
+        im_tc_flow = spot_colours.base.get_spot_colours_new(
             nbp_filter.images,
             nbp_register.flow,
             nbp_register.icp_correction,
@@ -311,7 +311,7 @@ def generate_reg_images(
             yxz=yxz_coords,
             registration_type="flow",
         ).reshape((1,) + image_shape)
-        im_tc_flow_icp = spot_colors.base.get_spot_colours_new(
+        im_tc_flow_icp = spot_colours.base.get_spot_colours_new(
             nbp_filter.images,
             nbp_register.flow,
             nbp_register.icp_correction,

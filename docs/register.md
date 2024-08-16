@@ -1,10 +1,10 @@
 # Registration
 The register section is the part of the pipeline concerned with aligning different rounds and channels. This is crucial for decoding spot colours into genes in the Call Spots and OMP sections. The aim of this section is to find a function $g_{trc}(\mathbf{x})$ for each tile, round and channel that takes in a location $\mathbf{x}$ on the anchor image for tile $t$ and returns the corresponding location in round $r$, channel $c$ of the same tile. Since registration is done independently for each tile and we are often only working on one tile, we sometimes omit the subscript $t$ in this documentation.
 
-Once we have these transformations $g$, we can get a $n_{\textrm{rounds}} \times n_{\textrm{channels}}$ spot colours matrix $\boldsymbol{\zeta}(\mathbf{x})$ for each location $\mathbf{x}$ in the anchor image of a given tile via
+Once we have these transformations $g$, we can get a $n_{\textrm{rounds}} \times n_{\textrm{channels}}$ spot colours matrix $\boldsymbol{F}(\mathbf{x})$ for each location $\mathbf{x}$ in the anchor image of a given tile via
 
 $$
-\boldsymbol{\zeta}(\mathbf{x}) =
+\boldsymbol{F}(\mathbf{x}) =
 \begin{pmatrix}
 f_{0, 0}(g_{0, 0}(\mathbf{x})) & \cdots & f_{0, n_c}(g_{0, n_c}(\mathbf{x})) \\
 \vdots & \ddots & \vdots \\
@@ -12,7 +12,7 @@ f_{n_r, 0}(g_{n_r, 0}(\mathbf{x})) & \cdots & f_{n_r, n_c}(g_{n_r, n_c}(\mathbf{
 \end{pmatrix},
 $$
 
-where $f_{rc}(\mathbf{x})$ is the intensity of round $r$, channel $c$ at location $\mathbf{x}$. Note that even a single poorly aligned round or channel makes this matrix difficult to decode, which highlights the importance of this section.
+where $f_{rc}(\mathbf{x})$ is the intensity of round $r$, channel $c$ at location $\mathbf{x}$ in round $r$, channel $c$ coordinates. Note that even a single poorly aligned round or channel makes this matrix difficult to decode, which highlights the importance of this section.
 
 ## High Level Overview
 We need to consider a few questions when building the register pipeline. Some of the most important are:
@@ -97,7 +97,7 @@ The round transforms are computed with [Optical Flow](https://en.wikipedia.org/w
 We use optical flow to align the anchor DAPI $D_{r_{\textrm{ref}}}(\mathbf{x})$  to the round $r$ DAPI $D_r(\mathbf{x})$. The output of this algorithm is a function $\mathcal{F}_r$ which satisfies the relation 
 
 $$
-D_{r_{\textrm{ref}}}(\mathcal{F}_r(\mathbf{x})) \approx D_r(\mathbf{x}).
+D_{r_{\textrm{ref}}}(\mathcal{F}_r(\mathbf{x})) = D_r(\mathbf{x}).
 $$
 
 ### 1. How does it work?
@@ -125,7 +125,7 @@ $$
 \begin{pmatrix} \boldsymbol{\nabla} I(\mathbf{x}_1)^T \\ \vdots \\ \boldsymbol{\nabla} I(\mathbf{x}_n)^T  \end{pmatrix} \mathbf{s} = \begin{pmatrix} J(\mathbf{x}_1) - I(\mathbf{x}_1) \\ \vdots \\ J(\mathbf{x}_n) - I(\mathbf{x}_n)  \end{pmatrix}, 
 $$
 
-which is now overdetermined! This is a better problem to have though, as the solution can be approximated by least squares. The
+which is now overdetermined! This is a better problem to have though, as the solution can be approximated by least squares.
 
 The above derivation makes the following assumptions
 
@@ -239,7 +239,7 @@ It is easy to see that this satisfies both the desired properties for the weight
 
     - as $\sigma \to 0$ this tends to nearest neighbour interpolation, 
 
-    - as $\sigma \to \infty$ the image takes the same value everywhere, the $\lambda$ weighted mean of the flow image.
+    - as $\sigma \to \infty$ the image takes the same value everywhere, the mean of the flow image at the sample points.
 
     Another way of saying this is that as $\sigma$ grows, so does the radius of contributing pixels.
 
@@ -322,44 +322,36 @@ $$
 The algorithm can be summarised as follows:
 ```pseudo
 # Args:
-# X = m x 4 matrix of padded base positions
-# Y = n x 3 matrix of target positions
-# transform_initial refers to the 4 x 3 starting estimate
-# epsilon = neighb_dist_thresh
-# ||a|| refers to the norm of a vector a: ||a|| = sqrt(sum_i a_i ** 2)
+# X = m x 4 matrix (base positions padded)
+# Y = n x 3 matrix (target positions)
+# transform_initial = 4 x 3 initial transform
+# epsilon = distance threshold
 
-# initialise neighb_prev and transform
-transform, neighb_prev = transform_initial, None
-
-# Update X according to our initial guess
+# Initialize
+transform = transform_initial
 X = X @ transform
+neighb_prev = None
 
 # begin loop
-for i in range(n_iter):
-
+for _ in range(n_iter):
     # Find closest point in X to each point in Y
     neighb = [argmin_k || X[k] - Y[j] || for j in range(n)]
 
-    # Remove these matches if they are above the neighb_dist_thresh.
-    # In the real code there are different thresholds for xy and for z
+    # Remove these matches if they are above the neighb_dist_thresh
     neighb = [neighb [j] if || X[neighb[j]] - Y[j] || < epsilon, 
               else None for j in range(n)]
 
-    # Terminate if neighb = neighb_prev for all points
+    # Terminate if no change in neighbours
     if neighb == neighb_prev:
         QUIT
 
-    # Find transform_update minimising squared error loss
-    transform_update = argmin_B sum_j ||X[neighb[i]] @ B - Y[i]|| ** 2
-
-    # Update: 
-    # - X by applying the correction transform,
-    # - Our working estimate of transform,
-    # - neighb_prev to the current neighb
-    X = X @ transform_update 
-    transform = transform_update  @ transform
+    # Update transform
+    transform_update = argmin_B sum_j || X[neighb[j]] @ B - Y[j] || ** 2
+    X = X @ transform_update
+    transform = transform_update @ transform
+    
+    # Update neighb_prev
     neighb_prev = neighb
-
 ```
 
 ### 2. Implementation

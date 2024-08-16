@@ -6,7 +6,7 @@ from matplotlib.widgets import CheckButtons, Slider
 import numpy as np
 import torch
 
-from ... import spot_colors
+from ... import spot_colours
 from ...call_spots import background_pytorch
 from ...omp import coefs_torch, scores_torch
 from ...omp import base as omp_base
@@ -76,7 +76,7 @@ class ViewOMPImage:
         n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
         image_colours = np.zeros(spot_shape_yxz + (n_rounds_use, n_channels_use), dtype=np.float32)
         for i, r in enumerate(nb.basic_info.use_rounds):
-            image_colours[:, :, :, i] = spot_colors.base.get_spot_colours_new(
+            image_colours[:, :, :, i] = spot_colours.base.get_spot_colours_new(
                 nb.filter.images,
                 nb.register.flow,
                 nb.register.icp_correction,
@@ -269,7 +269,7 @@ class ViewOMPPixelColours:
         n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
         image_colours = np.zeros((1, n_rounds_use, n_channels_use), dtype=np.float32)
         for i, r in enumerate(nb.basic_info.use_rounds):
-            image_colours[:, i] = spot_colors.base.get_spot_colours_new(
+            image_colours[:, i] = spot_colours.base.get_spot_colours_new(
                 nb.filter.images,
                 nb.register.flow,
                 nb.register.icp_correction,

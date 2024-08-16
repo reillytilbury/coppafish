@@ -8,7 +8,7 @@ import mplcursors
 import numpy as np
 
 from ...call_spots.qual_check import omp_spot_score
-from ...spot_colors import base as spot_colours_base
+from ...spot_colours import base as spot_colours_base
 from ...omp import base as omp_base
 from ...call_spots import gene_prob_score
 from ...setup import Notebook

@@ -1,5 +1,5 @@
 import numpy as np
-from ..spot_colors import base as spot_colors_base
+from ..spot_colours import base as spot_colors_base
 from ..call_spots import base as call_spots_base
 from .. import find_spots as fs
 from .. import log
@@ -76,7 +76,7 @@ def get_reference_spots(
     local_yxz = np.zeros((0, 3), dtype=np.int16)
     isolated = np.zeros(0, dtype=bool)
     tile = np.zeros(0, dtype=np.int16)
-    log.info("Reading in spot_colors for ref_round spots")
+    log.info("Reading in spot_colours for ref_round spots")
     for t in nbp_basic.use_tiles:
         in_tile = nd_local_tile == t
         if np.sum(in_tile) == 0:

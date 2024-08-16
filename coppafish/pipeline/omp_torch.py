@@ -10,7 +10,7 @@ import torch
 import tqdm
 import zarr
 
-from .. import log, spot_colors, utils
+from .. import log, spot_colours, utils
 from ..call_spots import background_pytorch
 from ..find_spots import detect_torch
 from ..omp import coefs_torch, scores_torch, spots_torch
@@ -124,7 +124,7 @@ def run_omp(
                 index_min = j * batch_size
                 index_max = (j + 1) * batch_size
                 index_max = min(index_max, np.prod(tile_shape))
-                batch_spot_colours = spot_colors.base.get_spot_colours_new(
+                batch_spot_colours = spot_colours.base.get_spot_colours_new(
                     nbp_filter.images,
                     nbp_register.flow,
                     nbp_register.icp_correction,
@@ -334,7 +334,7 @@ def run_omp(
             chunks=(n_chunk_max, 1, 1),
         )
         for i, r in enumerate(nbp_basic.use_rounds):
-            t_r_spot_colours = spot_colors.base.get_spot_colours_new(
+            t_r_spot_colours = spot_colours.base.get_spot_colours_new(
                 nbp_filter.images,
                 nbp_register.flow,
                 nbp_register.icp_correction,

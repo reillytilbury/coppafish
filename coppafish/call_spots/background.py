@@ -21,7 +21,7 @@ def fit_background(spot_colors: np.ndarray, weight_shift: float = 0) -> Tuple[np
 
     Returns:
         - residual - `float [n_spots x n_rounds x n_channels]`.
-            `spot_colors` after background removed.
+            `spot_colours` after background removed.
         - coef - `float [n_spots, n_channels]`.
             coefficient value for each background vector found for each spot.
         - background_vectors `float [n_channels x n_rounds x n_channels]`.
