@@ -1,5 +1,11 @@
-pytest==8.0.0
-pytest-cov==5.0.0
-pyright==1.1.357
-black==24.3.0
+# Continuous integration testing
+pytest
+# Code coverage
+pytest-cov
+# Static type checker
+pyright
+# Code formatter
+black
+# Automatic imports organiser
+isort
 
