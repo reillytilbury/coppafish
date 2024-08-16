@@ -46,11 +46,8 @@ install package dependencies and coppafish by
 cd coppafish
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-python -m pip install -e .
+python -m pip install .
 ```
-
-If you do not wish to keep a local copy of coppafish (i.e. you not interested in `git pull`ing higher coppafish versions
-later) then remove the `-e` option. The source code can then be deleted after installing.
 
 ## Updating
 
@@ -65,4 +62,4 @@ If you do not have the source code downloaded anymore, follow all the [install](
 coppafish environment.
 
 You can verify your install by running `#!bash pip show coppafish` in the coppafish environment to check you have the 
-right version.
+latest version.
