@@ -376,24 +376,27 @@ def get_spot_colours(
             yxz_round_r[i] = 2 * yxz_round_r[i] / (cube_size - 1)
             # convert coordinates [0, 2] to coordinates [-1, 1]
             yxz_round_r[i] -= 1
+        zxy_round_r = yxz_round_r[:, :, [2, 1, 0]]
 
         # grid_sample expects image to be input as [N, M, D, H, W] where
         # N = batch size: We set this to n_use_channels,
         # M = number of images to be sampled at the same grid locations: We set this to 1,
-        # D = depth, H = height, W = width: We set these to n_y x n_x x n_z.
+        # D = depth, H = height, W = width: We set these to n_y, n_x and n_z respectively.
 
         # grid_sample expects grid to be input as [N, D', H', W', 3] where
         # N = batch size: We set this to n_use_channels,
         # D' = depth out, H' = height out, W' = width out: We set these to n_spots, 1, 1
+        # 3 = 3D coordinates of the points to sample (NOTE: These must be in the order z, x, y).
+        # This is NOT included in the documentation, but is inferred from the source code.
         round_r_colours = torch.nn.functional.grid_sample(
             input=image[r, :, None, :, :, :],
-            grid=yxz_round_r[:, :, None, None, :],
+            grid=zxy_round_r[:, :, None, None, :],
             mode='bilinear',
             align_corners=False,
         )
 
         # grid_sample gives output as [N, M, D', H', W'] as defined above.
-        round_r_colours = round_r_colours[:, 0, :, 0, 0]    # [n_use_channels, n_spots]
+        round_r_colours = round_r_colours.squeeze()    # [n_use_channels, n_spots]
         spot_colours[:, r, :] = round_r_colours.T
 
-    return spot_colours
+    return spot_colours.numpy()
