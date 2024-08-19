@@ -114,7 +114,6 @@ _options = {
         "sample_factor_yx": "int",
         "window_radius": "int",
         "smooth_sigma": "tuple_number",
-        "smooth_thresh": "number",
         "flow_cores": "maybe_int",
         "flow_clip": "maybe_tuple_number",
         # these parameters are for icp
