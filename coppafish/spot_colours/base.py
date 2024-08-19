@@ -292,13 +292,13 @@ def remove_background(spot_colours: np.ndarray) -> Tuple[np.ndarray, np.ndarray]
 def get_spot_colours(
     image: Union[np.ndarray, zarr.Array],
     flow: Union[np.ndarray, zarr.Array],
-    icp_correction: Union[np.ndarray, torch.Tensor],
+    affine_correction: Union[np.ndarray, torch.Tensor],
     yxz_base: Union[np.ndarray, torch.Tensor],
     output_dtype: torch.dtype = torch.float32,
     fill_value: float = float('nan'),
     tile: int = None,
     use_channels: List[int] = None,
-) -> torch.Tensor:
+) -> np.ndarray:
     """
     Takes some spots found on the reference round, and computes the corresponding spot intensity
     in specified imaging rounds/channels. The algorithm goes as follows:
@@ -316,7 +316,9 @@ def get_spot_colours(
     Args:
         image: 'float16 memmap [n_tiles x n_rounds x n_channels x im_y x im_x x im_z]' unregistered image data.
         flow: 'float16 memmap [n_tiles x n_rounds x 3 x im_y x im_x x im_z]' flow data.
-        icp_correction: 'float32 [n_tiles x n_rounds x n_channels x 4 x 3]' icp correction data.
+        affine_correction: 'float32 [n_tiles x n_rounds x n_channels x 4 x 3]' affine correction data, or
+        [n_rounds x n_channels x 4 x 3] for the tile of interest or
+        [n_channels x 4 x 3] if round independent.
         yxz_base: 'int [n_spots x 3]' spot coordinates, or tuple
         output_dtype: 'dtype' dtype of the output spot colours.
         fill_value: 'float' value to fill in for out of bounds spots.
@@ -331,10 +333,15 @@ def get_spot_colours(
         tile = 0
     if use_channels is None:
         use_channels = list(range(image.shape[2]))
-    if type(icp_correction) is np.ndarray:
-        icp_correction = torch.tensor(icp_correction, dtype=torch.float32)
+    if type(affine_correction) is np.ndarray:
+        affine_correction = torch.tensor(affine_correction, dtype=torch.float32)
     if type(yxz_base) is np.ndarray:
         yxz_base = torch.tensor(yxz_base, dtype=torch.float32)
+    if np.ndim(affine_correction) == 3:
+        # repeat n_rounds times
+        affine_correction = affine_correction[None].repeat(image.shape[1], 1, 1, 1)
+        # repeat n_tiles times
+        affine_correction = affine_correction[None].repeat(image.shape[0], 1, 1, 1, 1)
 
     # initialize variables
     n_spots, n_use_rounds, n_use_channels = yxz_base.shape[0], flow.shape[1], len(use_channels)
@@ -369,7 +376,7 @@ def get_spot_colours(
         yxz_flow = apply_flow(yxz=yxz_base.int(), flow=flow[r], top_left=yxz_min)
         for i, c in enumerate(use_channels):
             # apply the affine transform to the spots
-            yxz_round_r[i] = apply_affine(yxz=yxz_flow, affine=icp_correction[tile, r, c])
+            yxz_round_r[i] = apply_affine(yxz=yxz_flow, affine=affine_correction[tile, r, c])
             # Since image has top left corner yxz_min, must make the sampling points relative to this.
             yxz_round_r[i] -= yxz_min
             # convert tile coordinates [0, cube_size] to coordinates [0, 2]
@@ -396,7 +403,7 @@ def get_spot_colours(
         )
 
         # grid_sample gives output as [N, M, D', H', W'] as defined above.
-        round_r_colours = round_r_colours.squeeze()    # [n_use_channels, n_spots]
+        round_r_colours = round_r_colours[:, 0, :, 0, 0]
         spot_colours[:, r, :] = round_r_colours.T
 
     return spot_colours.numpy()

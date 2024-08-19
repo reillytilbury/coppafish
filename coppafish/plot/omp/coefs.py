@@ -6,7 +6,7 @@ from matplotlib.widgets import CheckButtons, Slider
 import numpy as np
 import torch
 
-from ... import spot_colours
+from ...spot_colours import base as spot_colours_base
 from ...call_spots import background_pytorch
 from ...omp import coefs_torch, scores_torch
 from ...omp import base as omp_base
@@ -74,20 +74,14 @@ class ViewOMPImage:
         spot_shape_yxz = tuple([coord_max[i] - coord_min[i] for i in range(3)])
         central_yxz = tuple(torch.asarray(spot_shape_yxz)[np.newaxis].T.int() // 2)
         n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
-        image_colours = np.zeros(spot_shape_yxz + (n_rounds_use, n_channels_use), dtype=np.float32)
-        for i, r in enumerate(nb.basic_info.use_rounds):
-            image_colours[:, :, :, i] = spot_colours.base.get_spot_colours_new(
-                nb.filter.images,
-                nb.register.flow,
-                nb.register.icp_correction,
-                nb.register_debug.channel_correction,
-                nb.basic_info.use_channels,
-                nb.basic_info.dapi_channel,
-                int(tile),
-                r,
-                yxz=yxz,
-                registration_type="flow_and_icp",
-            ).T.reshape((spot_shape_yxz + (n_channels_use,)))
+        image_colours = spot_colours_base.get_spot_colours(
+            image=nb.filter.images,
+            flow=nb.register.flow,
+            affine_correction=nb.register.icp_correction,
+            yxz_base=yxz,
+            tile=int(tile),
+            use_channels=nb.basic_info.use_channels,
+        ).reshape((spot_shape_yxz + (n_rounds_use, n_channels_use,)))
         assert not np.allclose(image_colours, 0)
         image_colours = torch.asarray(image_colours, dtype=torch.float32)
         colour_norm_factor = np.array(nb.call_spots.colour_norm_factor, dtype=np.float32)
@@ -267,20 +261,14 @@ class ViewOMPPixelColours:
         self.local_yxz, tile = get_spot_position_and_tile(nb, spot_no, method)
 
         n_rounds_use, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
-        image_colours = np.zeros((1, n_rounds_use, n_channels_use), dtype=np.float32)
-        for i, r in enumerate(nb.basic_info.use_rounds):
-            image_colours[:, i] = spot_colours.base.get_spot_colours_new(
-                nb.filter.images,
-                nb.register.flow,
-                nb.register.icp_correction,
-                nb.register_debug.channel_correction,
-                nb.basic_info.use_channels,
-                nb.basic_info.dapi_channel,
-                int(tile),
-                r,
-                yxz=self.local_yxz[np.newaxis],
-                registration_type="flow_and_icp",
-            ).T[np.newaxis]
+        image_colours = spot_colours_base.get_spot_colours(
+            image=nb.filter.images,
+            flow=nb.register.flow,
+            affine_correction=nb.register.icp_correction,
+            yxz_base=self.local_yxz[np.newaxis],
+            tile=int(tile),
+            use_channels=nb.basic_info.use_channels,
+        )
         image_colours = torch.asarray(image_colours, dtype=torch.float32)
         image_colours[torch.isnan(image_colours)] = 0
         assert not torch.allclose(image_colours, torch.zeros(1).float())

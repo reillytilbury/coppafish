@@ -115,33 +115,22 @@ def run_omp(
         yxz_all = np.array(np.meshgrid(*yxz_all, indexing="ij")).reshape((3, -1)).astype(np.int32).T
         batch_size = maths.floor(utils.system.get_available_memory() * 1.3e7 / n_channels_use)
         n_batches = maths.ceil(np.prod(tile_shape) / batch_size)
-        device_str = "gpu" if (not config["force_cpu"] and torch.cuda.is_available()) else "cpu"
-        postfix = {"tile": t, "device": device_str.upper()}
-        for i, r in enumerate(
-            tqdm.tqdm(nbp_basic.use_rounds, desc="Loading spot colours", unit="round", postfix=postfix)
-        ):
-            for j in range(n_batches):
-                index_min = j * batch_size
-                index_max = (j + 1) * batch_size
-                index_max = min(index_max, np.prod(tile_shape))
-                batch_spot_colours = spot_colours.base.get_spot_colours_new(
-                    nbp_filter.images,
-                    nbp_register.flow,
-                    nbp_register.icp_correction,
-                    nbp_register_debug.channel_correction,
-                    nbp_basic.use_channels,
-                    nbp_basic.dapi_channel,
-                    t,
-                    r,
-                    yxz=yxz_all[index_min:index_max],
-                    dtype=np.float16,
-                    force_cpu=config["force_cpu"],
-                )
-                batch_spot_colours = batch_spot_colours.T
-                batch_spot_colours = torch.asarray(batch_spot_colours)
-                batch_spot_colours[torch.isnan(batch_spot_colours)] = 0.0
-                colour_image[index_min:index_max, i] = batch_spot_colours
-                del batch_spot_colours
+        for j in tqdm.trange(n_batches, desc=f"Loading colours", unit="batch"):
+            index_min = j * batch_size
+            index_max = (j + 1) * batch_size
+            index_max = min(index_max, np.prod(tile_shape))
+            batch_spot_colours = spot_colours.base.get_spot_colours(
+                image=nbp_filter.images,
+                flow=nbp_register.flow,
+                affine_correction=nbp_register.icp_correction,
+                yxz_base=yxz_all[index_min:index_max],
+                output_dtype=torch.float16,
+                use_channels=nbp_basic.use_channels,
+            )
+            batch_spot_colours = torch.asarray(batch_spot_colours)
+            batch_spot_colours[torch.isnan(batch_spot_colours)] = 0.0
+            colour_image[index_min:index_max, :, :] = batch_spot_colours
+            del batch_spot_colours
         log.debug(f"Loading tile {t} colours complete")
 
         # STEP 2: Compute OMP coefficients on tile subsets.
@@ -150,7 +139,7 @@ def run_omp(
         description = f"Computing OMP coefficients"
         coefficients = scipy.sparse.lil_matrix((np.prod(tile_shape), n_genes), dtype=np.float32)
         subset_count = maths.ceil(np.prod(tile_shape) / config["subset_pixels"])
-        for j in tqdm.trange(subset_count, desc=description, unit="subset", postfix=postfix):
+        for j in tqdm.trange(subset_count, desc=description, unit="subset"):
             index_min = j * config["subset_pixels"]
             index_max = (j + 1) * config["subset_pixels"]
             # Shrink the subset if it is at the end of the tile.
@@ -274,7 +263,7 @@ def run_omp(
         t_spots_score = tile_results.zeros("scores", overwrite=True, shape=0, chunks=(n_chunk_max,), dtype=np.float16)
 
         # TODO: This can be sped up when there is sufficient RAM by running on multiple genes at once.
-        for g in tqdm.trange(n_genes, desc=f"Scoring/detecting spots", unit="gene", postfix=postfix):
+        for g in tqdm.trange(n_genes, desc=f"Scoring/detecting spots", unit="gene"):
             # STEP 3: Score every gene's coefficient image.
             g_coef_image = torch.asarray(coefficients[:, [g]].toarray()).float().reshape(tile_shape)
             g_coef_image = g_coef_image[np.newaxis]
@@ -333,22 +322,16 @@ def run_omp(
             dtype=np.float16,
             chunks=(n_chunk_max, 1, 1),
         )
-        for i, r in enumerate(nbp_basic.use_rounds):
-            t_r_spot_colours = spot_colours.base.get_spot_colours_new(
-                nbp_filter.images,
-                nbp_register.flow,
-                nbp_register.icp_correction,
-                nbp_register_debug.channel_correction,
-                nbp_basic.use_channels,
-                nbp_basic.dapi_channel,
-                t,
-                r,
-                yxz=t_local_yxzs,
-                dtype=np.float16,
-                force_cpu=config["force_cpu"],
-            ).T
-            t_r_spot_colours[np.isnan(t_r_spot_colours)] = 0
-            t_spots_colours[:, i] = t_r_spot_colours
+        t_spot_colours_torch = spot_colours.base.get_spot_colours(
+            image=nbp_filter.images,
+            flow=nbp_register.flow,
+            affine_correction=nbp_register.icp_correction,
+            yxz_base=t_local_yxzs,
+            output_dtype=torch.float16,
+            use_channels=nbp_basic.use_channels,
+        )
+        t_spot_colours_torch[torch.isnan(t_spot_colours_torch)] = 0.0
+        t_spots_colours[:] = t_spot_colours_torch.numpy()
         del t_spots_local_yxz, t_spots_tile, t_spots_gene_no, t_spots_score, t_spots_colours
         del t_local_yxzs, tile_results
         log.debug(f"Gathering spot colours complete")

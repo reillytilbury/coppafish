@@ -189,7 +189,7 @@ def generate_reg_images(
     Args:
         nbp_basic: `basic_info` notebook page.
         nbp_file: `file_names` notebook page.
-        nbp_extract: `extract` notebook page.
+        nbp_filter: `filter` notebook page.
         nbp_register: unfinished `register` notebook page.
         nbp_register_debug: unfinished `register_debug` notebook page.
     """
@@ -208,11 +208,12 @@ def generate_reg_images(
     # get the yxz coords for the central 500 x 500 x 10 region
     yx_centre = nbp_basic.tile_centre.astype(int)[:2]
     yx_radius = min(250, nbp_basic.tile_sz // 2)
-    z_central_index = int(np.median(np.arange(len(nbp_basic.use_z))))
+    z_centre = int(np.median(np.arange(len(nbp_basic.use_z))))
+    z_radius = min(5, len(nbp_basic.use_z) // 2)
     if len(nbp_basic.use_z) <= 10:
         z_planes = np.arange(len(nbp_basic.use_z))
     else:
-        z_planes = np.arange(z_central_index - 5, z_central_index + 5)
+        z_planes = np.arange(z_centre - z_radius, z_centre + z_radius)
 
     tile_centre = (int(yx_centre[0]), int(yx_centre[1]))
     yxz_min = (tile_centre[0] - yx_radius, tile_centre[1] - yx_radius, int(z_planes[0]))
@@ -249,176 +250,71 @@ def generate_reg_images(
     anchor_round_active_channels = [dapi_channel, anchor_channel]
     for t, c in tqdm(product(use_tiles, anchor_round_active_channels), desc="Anchor Images", total=len(use_tiles) * 2):
         im = nbp_filter.images[
-            t, anchor_round, c, yxz_min[0] : yxz_max[0], yxz_min[1] : yxz_max[1], yxz_min[2] : yxz_max[2]
+            t, anchor_round, c, yxz_min[0]: yxz_max[0], yxz_min[1]: yxz_max[1], yxz_min[2]: yxz_max[2]
         ]
         im = fill_to_uint8(im)
         sub_index = 0 if c == dapi_channel else 1
         anchor_images[t, sub_index] = im
     nbp_register.anchor_images = anchor_images
 
-    # get the round images, apply optical flow, apply icp + optical flow, concatenate and save
-    for t, r in tqdm(product(use_tiles, use_rounds), desc="Round Images", total=len(use_tiles) * len(use_rounds)):
-        im_tr = nbp_filter.images[
-            t, r, dapi_channel, yxz_min[0] : yxz_max[0], yxz_min[1] : yxz_max[1], yxz_min[2] : yxz_max[2]
-        ]
-        # TODO: The below code doesn't work (seems to return blank image) - need to debug
-        im_tr_flow = spot_colours.base.get_spot_colours_new(
-            nbp_filter.images,
-            nbp_register.flow,
-            nbp_register.icp_correction,
-            nbp_register_debug.channel_correction,
-            nbp_basic.use_channels,
-            nbp_basic.dapi_channel,
-            t,
-            r,
-            dapi_channel,
-            yxz=yxz_coords,
-            registration_type="flow",
-        ).reshape((1,) + image_shape)
-        im_tr_flow_icp = spot_colours.base.get_spot_colours_new(
-            nbp_filter.images,
-            nbp_register.flow,
-            nbp_register.icp_correction,
-            nbp_register_debug.channel_correction,
-            nbp_basic.use_channels,
-            nbp_basic.dapi_channel,
-            t,
-            r,
-            dapi_channel,
-            yxz=yxz_coords,
-            registration_type="flow_and_icp",
-        ).reshape((1,) + image_shape)
-        im_tr_concat = np.concatenate([im_tr[None], im_tr_flow, im_tr_flow_icp], axis=0)
-        im_tr_concat = fill_to_uint8(im_tr_concat)
-        round_images[t, r] = im_tr_concat
+    # get the round images, apply optical flow, optical flow + icp, concatenate and save
+    for t in tqdm(use_tiles, desc="Round Images", total=len(use_tiles)):
+        im_t_flow = spot_colours.base.get_spot_colours(
+            image=nbp_filter.images,
+            flow=nbp_register.flow,
+            affine_correction=np.repeat(np.eye(4, 3)[None], len(use_channels), axis=0),
+            yxz_base=yxz_coords,
+            use_channels=[dapi_channel],
+            tile=t,
+        ).reshape((len(use_rounds),) + image_shape)
+        im_t_flow_icp = spot_colours.base.get_spot_colours(
+            image=nbp_filter.images,
+            flow=nbp_register.flow,
+            affine_correction=nbp_register.icp_correction,
+            yxz_base=yxz_coords,
+            use_channels=[dapi_channel],
+            tile=t,
+        ).reshape((len(use_rounds),) + image_shape)
+
+        # concatenate the images for each round and save
+        for r in use_rounds:
+            im_tr = nbp_filter.images[
+                t, r, dapi_channel, yxz_min[0]: yxz_max[0], yxz_min[1]: yxz_max[1], yxz_min[2]: yxz_max[2]
+            ]
+            im_tr_concat = np.concatenate([im_tr[None], im_t_flow[r], im_t_flow_icp[r]], axis=0)
+            im_tr_concat = fill_to_uint8(im_tr_concat)
+            round_images[t, r] = im_tr_concat
     nbp_register.round_images = round_images
 
-    # get the channel images, save, apply optical flow, save, apply icp, save
+    # get the channel images, save, apply optical flow + channel transform initial, save, apply icp, save
     r_mid = 3
-    for t, c in tqdm(product(use_tiles, use_channels), desc="Channel Images", total=len(use_tiles) * len(use_channels)):
-        im_tc = nbp_filter.images[t, r_mid, c, yxz_min[0] : yxz_max[0], yxz_min[1] : yxz_max[1], yxz_min[2] : yxz_max[2]]
-        # TODO: The below code doesn't work (seems to return blank image) - need to debug
-        im_tc_flow = spot_colours.base.get_spot_colours_new(
-            nbp_filter.images,
-            nbp_register.flow,
-            nbp_register.icp_correction,
-            nbp_register_debug.channel_correction,
-            nbp_basic.use_channels,
-            nbp_basic.dapi_channel,
-            t,
-            r_mid,
-            c,
-            yxz=yxz_coords,
-            registration_type="flow",
-        ).reshape((1,) + image_shape)
-        im_tc_flow_icp = spot_colours.base.get_spot_colours_new(
-            nbp_filter.images,
-            nbp_register.flow,
-            nbp_register.icp_correction,
-            nbp_register_debug.channel_correction,
-            nbp_basic.use_channels,
-            nbp_basic.dapi_channel,
-            t,
-            r_mid,
-            c,
-            yxz=yxz_coords,
-            registration_type="flow_and_icp",
-        ).reshape((1,) + image_shape)
-        im_tc_concat = np.concatenate([im_tc[None], im_tc_flow, im_tc_flow_icp], axis=0)
-        im_tc_concat = fill_to_uint8(im_tc_concat)
-        channel_images[t, c] = im_tc_concat
+    for t in tqdm(use_tiles, desc="Channel Images", total=len(use_tiles)):
+        im_t_flow = spot_colours.base.get_spot_colours(
+            image=nbp_filter.images,
+            flow=nbp_register.flow,
+            affine_correction=nbp_register_debug.channel_transform_initial,
+            yxz_base=yxz_coords,
+            use_channels=use_channels,
+            tile=t,
+        ).reshape((len(use_rounds), len(use_channels),) + image_shape)[r_mid][None]
+        im_t_flow_icp = spot_colours.base.get_spot_colours(
+            image=nbp_filter.images,
+            flow=nbp_register.flow,
+            affine_correction=nbp_register.icp_correction,
+            yxz_base=yxz_coords,
+            use_channels=use_channels,
+            tile=t,
+        ).reshape((len(use_rounds), len(use_channels),) + image_shape)[r_mid][None]
+
+        # concatenate the images for each channel and save
+        for i, c in enumerate(use_channels):
+            im_tc = nbp_filter.images[
+                t, anchor_round, c, yxz_min[0]: yxz_max[0], yxz_min[1]: yxz_max[1], yxz_min[2]: yxz_max[2]
+            ]
+            im_tc_concat = np.concatenate([im_tc[None], im_t_flow[:, i], im_t_flow_icp[:, i]], axis=0)
+            im_tc_concat = fill_to_uint8(im_tc_concat)
+            channel_images[t, c] = im_tc_concat
     nbp_register.channel_images = channel_images
-
-
-# TODO: Get rid of this function
-def load_transformed_image(
-    nb: Notebook,
-    t: int,
-    r: int,
-    c: int,
-    yxz: Optional[list] = None,
-    reg_type: str = "none",
-) -> np.ndarray:
-    """
-    Load the image from tile t, round r, channel c, apply the relevant registration and return the image.
-
-    Args:
-        nb: Notebook (must have register and register_debug page)
-        t: tile (int)
-        r: round (int)
-        c: channel (int)
-        yxz: [np.arange(y), np.arange(x), np.arange(z)] (list). If None, load the entire transformed image.
-        reg_type: str, 'none', 'flow' or 'flow_icp'
-            - none: no registration
-            - flow: apply channel correction (due to fluorescent beads) followed by optical flow
-            - flow_icp: apply affine correction (due to icp) followed by optical flow
-
-    Returns:
-        im: np.ndarray, image
-    """
-    assert reg_type in ["none", "flow", "flow_icp"], "reg_type must be 'none', 'flow' or 'flow_icp'"
-    im = nb.filter.images[t, r, c].astype(np.float32)
-    # anchor round has no flow or affine correction so can return early
-    if reg_type == "none" or r == nb.basic_info.anchor_round:
-        return im
-
-    # If we get this far, we will either be doing flow or flow icp, and we will not be in the anchor round.
-    # These differ only by the affine correction we apply before.
-    if yxz is not None:
-        new_origin = np.array([yxz[0][0], yxz[1][0], yxz[2][0]])
-    else:
-        new_origin = np.zeros(3, dtype=int)
-    affine_correction = np.eye(4, 3)
-    if "reg_type" == "flow":
-        if c != nb.basic_info.dapi_channel:
-            affine_correction = nb.register_debug.channel_correction[t, c].copy()
-    elif reg_type == "flow_icp":
-        if c == nb.basic_info.dapi_channel:
-            affine_correction = nb.register.icp_correction[t, r, nb.basic_info.anchor_channel].copy()
-        if c != nb.basic_info.dapi_channel:
-            affine_correction = nb.register.icp_correction[t, r, c].copy()
-    # adjust the affine correction for the new origin
-    affine_correction = adjust_affine(affine=affine_correction, new_origin=new_origin)
-    if yxz is not None:
-        flow_indices = np.ix_(
-            np.arange(3),
-            np.arange(yxz[0][0], yxz[0][-1] + 1),
-            np.arange(yxz[1][0], yxz[1][-1] + 1),
-            np.arange(yxz[2][0], yxz[2][-1] + 1),
-        )
-    else:
-        flow_indices = None
-    im = transform_im(im=im, affine=affine_correction, flow=nb.register.flow[t, r], flow_ind=flow_indices)
-
-    return im
-
-
-# TODO: Get rid of this function
-def transform_im(im: np.ndarray, affine: np.ndarray, flow: zarr.Array, flow_ind: Union[tuple, None]) -> np.ndarray:
-    """
-    Function to apply affine and flow transformations to an image.
-
-    Args:
-        im: image to transform
-        affine: 3 x 4 affine transform
-        flow: flow as zarr array
-        flow_ind: indices to take from the flow file. If None, use the entire flow file.
-    """
-    assert type(flow) is zarr.Array or type(flow) is np.ndarray
-
-    im = affine_transform(im, affine, order=1, mode="constant", cval=0)
-    if flow_ind is not None:
-        flow = flow[flow_ind].astype(np.float32)
-    else:
-        flow = flow.astype(np.float32)
-    coords = np.meshgrid(
-        np.arange(im.shape[0], dtype=np.float32),
-        np.arange(im.shape[1], dtype=np.float32),
-        np.arange(im.shape[2], dtype=np.float32),
-        indexing="ij",
-    )
-    im = warp(im, coords + flow, order=1, mode="constant", cval=0, preserve_range=True)
-    return im
 
 
 def adjust_affine(affine: np.ndarray, new_origin: np.ndarray) -> np.ndarray:
@@ -465,15 +361,15 @@ def window_image(image: np.ndarray) -> np.ndarray:
     Window the image by a hann window in y and x and a Tukey window in z.
 
     Args:
-        image: image to be windowed. (z, y, x)
+        image: image to be windowed. (n_y, n_x, n_z)
 
     Returns:
         image: windowed image.
     """
     window_yx = skimage.filters.window("hann", image.shape[1:])
-    window_z = signal.windows.tukey(image.shape[0], alpha=0.33)
+    window_z = signal.windows.tukey(image.shape[2], alpha=0.33)
     if (window_z == 0).all():
         window_z[...] = 1
-    window = window_z[:, None, None] * window_yx[None, :, :]
+    window = window_z[None, None, :] * window_yx[None, :, :]
     image = image * window
     return image
