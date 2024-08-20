@@ -3,7 +3,7 @@ import numpy as np
 
 
 def dot_product_score(
-    spot_colours: np.ndarray, bled_codes: np.ndarray, weight_squared: np.ndarray = None, norm_shift: float = 0
+    spot_colours: np.ndarray, bled_codes: np.ndarray, variance: np.ndarray = None, norm_shift: float = 0
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Simple dot product score assigning each spot to the gene with the highest score.
@@ -11,7 +11,7 @@ def dot_product_score(
     Args:
         spot_colours (`[n_spots x (n_rounds * n_channels_use)] ndarray[float]`): spot colours.
         bled_codes (`[n_genes x (n_rounds * n_channels_use)] ndarray[float]`): normalised bled codes.
-        weight_squared (`[n_spots x (n_rounds * n_channels_use)] ndarray[float]`, optional): array of weights. Default:
+        variance (`[n_spots x (n_rounds * n_channels_use)] ndarray[float]`, optional): array of variances. Default:
             all ones.
         norm_shift (float, optional): added to the norm of each spot colour to avoid boosting weak spots too much.
             Default: 0.
@@ -23,17 +23,19 @@ def dot_product_score(
         - `[n_spots x n_genes] ndarray[float]`: `score` such that `score[d, c]` gives dot product between
             `spot_colours` vector `d` with `bled_codes` vector `c`.
     """
-    n_spots, n_rounds_channels_use = spot_colours.shape
-    # If no weighting is given, use equal weighting
-    if weight_squared is None:
-        weight_squared = np.ones((n_spots, n_rounds_channels_use), dtype=spot_colours.dtype)
-
-    weight_squared = weight_squared / np.sum(weight_squared, axis=1)[:, None]
+    n_genes = bled_codes.shape[0]
+    # If no variance is provided, we assume all spots are equally reliable
+    variance = np.ones_like(spot_colours) if variance is None else variance
+    # Normalise spot colours
     spot_colours = spot_colours / (np.linalg.norm(spot_colours, axis=1)[:, None] + norm_shift)
-    spot_colours = n_rounds_channels_use * spot_colours * weight_squared
+
+    # z-score spot colours and bled codes by dividing by the standard deviation
+    # we want these to both have shape [n_spots, n_genes, n_rounds * n_channels_use]
+    spot_colours_z_scored = np.repeat((spot_colours / np.sqrt(variance))[:, None, :], n_genes, axis=1)
+    bled_codes_z_scored = bled_codes[None, :, :] / np.sqrt(variance)[:, None, :]
 
     # Now we can obtain the dot product score for each spot and each gene
-    all_score = spot_colours @ bled_codes.T
+    all_score = np.sum(spot_colours_z_scored * bled_codes_z_scored, axis=2) / np.sum(bled_codes_z_scored ** 2, axis=2)
     gene_no = np.argmax(all_score, axis=1)
     all_score_sorted = np.sort(all_score, axis=1)
     gene_score = all_score_sorted[:, -1]

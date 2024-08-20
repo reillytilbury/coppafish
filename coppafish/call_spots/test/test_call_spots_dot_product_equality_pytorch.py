@@ -7,10 +7,7 @@ def test_dot_product_score_equality():
     from coppafish.call_spots.dot_product_pytorch import dot_product_score as dot_product_score_torch
 
     rng = np.random.RandomState(7)
-    n_spots = 2
-    n_rounds = 7
-    n_genes = 4
-    n_channels_use = 3
+    n_spots, n_rounds, n_channels_use, n_genes = 100, 3, 4, 5
     spot_colours = rng.rand(n_spots, n_rounds * n_channels_use)
     bled_codes = rng.rand(n_genes, n_rounds * n_channels_use)
     bled_codes /= np.linalg.norm(bled_codes, axis=1, keepdims=True)

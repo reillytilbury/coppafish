@@ -32,10 +32,10 @@ class ViewFreeAndConstrainedBledCodes:
         # get the data
         n_genes, n_rounds, n_channels_use = (len(nb.call_spots.gene_names), len(nb.basic_info.use_rounds),
                                              len(nb.basic_info.use_channels))
-        d_max = nb.call_spots.associated_configs["call_spots"]["d_max"]
-        target_values = nb.call_spots.associated_configs["call_spots"]["target_values"]
-        gene_codes = nb.call_spots.gene_codes
 
+        config = nb.call_spots.associated_configs["call_spots"]
+        target_values, d_max = config["target_values"], config["d_max"]
+        gene_codes = nb.call_spots.gene_codes
         initial_scale = nb.call_spots.initial_scale[nb.basic_info.use_tiles].mean(axis=0).T
         rc_scale = nb.call_spots.rc_scale.T * initial_scale
         free_bled_codes = nb.call_spots.free_bled_codes_tile_independent.transpose(0, 2, 1) / initial_scale
@@ -150,8 +150,8 @@ class ViewTargetRegression:
 
         # get the data
         n_genes, n_rounds, n_channels_use = nb.call_spots.bled_codes.shape
-        d_max = nb.call_spots.associated_configs["call_spots"]["d_max"]
-        target_values = nb.call_spots.associated_configs["call_spots"]["target_values"]
+        config = nb.call_spots.associated_configs["call_spots"]
+        target_values, d_max = config["target_values"], config["d_max"]
         gene_codes = nb.call_spots.gene_codes
         # get the free and constrained bled codes
         initial_scale = nb.call_spots.initial_scale[nb.basic_info.use_tiles].mean(axis=0)

@@ -4,16 +4,21 @@ import torch
 
 
 def dot_product_score(
-    spot_colours: torch.Tensor, bled_codes: torch.Tensor, weight_squared: torch.Tensor = None, norm_shift: float = 0
+    spot_colours: torch.Tensor, bled_codes: torch.Tensor, variance: torch.Tensor = None, norm_shift: float = 0
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Simple dot product score assigning each spot to the gene with the highest score.
+    Weighted dot product score between spot colours and bled codes. The weighting is determined by the variance of the
+    spot colours, which is a function of the genes previously fit to the spot, and the coefficients of each of these
+    genes.
+
+    The dot product is calculated as the maximum likelihood estimate under a noise model which will be described in
+    the documentation.
 
     Args:
         spot_colours (`[n_spots x (n_rounds * n_channels_use)] ndarray[float]`): spot colours.
         bled_codes (`[n_genes x (n_rounds * n_channels_use)] ndarray[float]`): normalised bled codes.
-        weight_squared (`[n_spots x (n_rounds * n_channels_use)] ndarray[float]`, optional): array of weights. Default:
-            all ones.
+        variance (`[n_spots x (n_rounds * n_channels_use)] ndarray[float]`, optional): array of sigma_rc^2.
+            Default: all ones.
         norm_shift (float, optional): added to the norm of each spot colour to avoid boosting weak spots too much.
             Default: 0.
 
@@ -24,18 +29,21 @@ def dot_product_score(
         - `(n_spots x n_genes) tensor[float]`: `score` such that `score[d, c]` gives dot product between
             `spot_colours` vector `d` with `bled_codes` vector `c`.
     """
-    n_spots, n_rounds_channels_use = spot_colours.shape
-    # If no weighting is given, use equal weighting
-    if weight_squared is None:
-        weight_squared = torch.ones((n_spots, n_rounds_channels_use), dtype=spot_colours.dtype)
-        weight_squared = weight_squared.to(spot_colours.device)
+    # If no variance is provided, we assume all spots are equally reliable
+    variance = torch.ones_like(spot_colours) if variance is None else variance
+    concentration = torch.sqrt(torch.reciprocal(variance))
+    del variance
 
-    weight_squared = weight_squared / torch.sum(weight_squared, dim=1)[:, None]
+    # Normalise spot colours
     spot_colours_norm = spot_colours / (torch.linalg.norm(spot_colours, dim=1)[:, None] + norm_shift)
-    spot_colours_norm *= n_rounds_channels_use * weight_squared
 
-    # Now we can obtain the dot product score for each spot and each gene
-    all_score = spot_colours_norm @ bled_codes.T
+    # Now we can obtain the dot product score for each spot and each gene (this is done in a vectorised way to avoid
+    # storing intermediate results which would be very large)
+    # score[s, g] = sum_i spot_colours_weighted[s, i] * bled_codes_weighted[g, i] / sum_i bled_codes_weighted[g, i] ** 2
+    # where spot_colours_weighted[s, i] = spot_colours[s, i] / sqrt(variance[s, i]), and similarly
+    # bled_codes_weighted[g, i] = bled_codes[g, i] / sqrt(variance[s, i])
+    all_score = torch.sum(spot_colours_norm[:, None, :] * bled_codes[None, :, :] * concentration[:, None, :] ** 2,
+                          dim=2) / torch.sum(bled_codes[None, :, :] ** 2 * concentration[:, None, :] ** 2, dim=2)
     gene_no = torch.argmax(all_score, dim=1)
     all_score_sorted = torch.sort(all_score, dim=1)[0]
     gene_score = all_score_sorted[:, -1]

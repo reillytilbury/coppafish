@@ -24,7 +24,7 @@ def fit_background(
 
     Returns:
         - residual - `float [n_spots x n_rounds x n_channels]`.
-            `spot_colors` after background removed.
+            `spot_colours` after background removed.
         - coef - `float [n_spots, n_channels]`.
             coefficient value for each background vector found for each spot.
         - background_vectors `float [n_channels x n_rounds x n_channels]`.

@@ -1,5 +1,4 @@
 from typing import Any, List, Optional, Tuple, Union
-from ..setup import NotebookPage
 import numpy as np
 import numpy.typing as npt
 import torch
@@ -7,22 +6,45 @@ from tqdm import tqdm
 import zarr
 
 
-def apply_transform(
-    yxz: np.ndarray, flow: np.ndarray, icp_correction: np.ndarray, tile_sz: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray]:
+def apply_flow(yxz: Union[np.ndarray, torch.Tensor],
+               flow: Union[np.ndarray, torch.Tensor],
+               top_left: Union[np.ndarray, torch.Tensor] = np.array([0, 0, 0])) -> Union[np.ndarray, torch.Tensor]:
     """
-    This transforms the coordinates yxz based on the flow and icp_correction.
+    Apply a flow to a set of points. Note that this is applying forward warping, meaning that
+        new_points = points + flow.
+    The flow we pass in may be cropped, so if this is the case, to sample the points correctly, we need to
+        make the points relative to the top left corner of the cropped image.
+    Args:
+        yxz: integer points to apply the warp to. (n_points x 3 in yxz coords) (UNSHIFTED)
+        flow: flow to apply to the points. (3 x cube_size_y x cube_size_x x cube_size_z) (SHIFTED)
+        top_left: the top left corner of the cube in the flow_image. (3 in yxz coords) Default: [0, 0, 0]
+
+    Returns:
+        yxz_flow: (float) new points. (n_points x 3 in yxz coords)
+    """
+    # First, make yxz coordinates relative to the top left corner of the flow image, so that we can sample the shifts
+    yxz_relative = yxz - top_left
+    y_indices_rel, x_indices_rel, z_indices_rel = yxz_relative.T
+    # sample the shifts relative to the top left corner of the flow image
+    yxz_shifts = np.array([flow[i, y_indices_rel, x_indices_rel, z_indices_rel] for i in range(3)]).astype(np.float32).T
+    # if original coords are torch, make the shifts torch
+    if type(yxz) is torch.Tensor:
+        yxz_shifts = torch.tensor(yxz_shifts)
+    # apply the shifts to the original points
+    yxz_flow = yxz + yxz_shifts
+    return yxz_flow
+
+
+def apply_affine(yxz: torch.Tensor, affine: torch.Tensor) -> torch.Tensor:
+    """
+    This transforms the coordinates yxz based on the affine transform alone.
     E.g. to find coordinates of spots on the same tile but on a different round and channel.
 
     Args:
         yxz: ```int [n_spots x 3]```.
             ```yxz[i, :2]``` are the non-centered yx coordinates in ```yx_pixels``` for spot ```i```.
             ```yxz[i, 2]``` is the non-centered z coordinate in ```z_pixels``` for spot ```i```.
-            E.g. these are the coordinates stored in ```nb['find_spots']['spot_details']```.
-        flow: '''float mem-map [3 x n_pixels_y x n_pixels_x x n_pixels_z]''' of shifts for each pixel.
-        icp_correction: '''float32 [4 x 3]'''. The affine transform to apply to the coordinates after the flow.
-        tile_sz: ```int16 [3]```.
-            YXZ dimensions of tile
+        affine: '''float32 [4 x 3]'''. The affine transform to apply to the coordinates.
 
     Returns:
         ```int [n_spots x 3]```.
@@ -30,22 +52,11 @@ def apply_transform(
             ```yxz_transform[i, [1,2]]``` are the transformed non-centered yx coordinates in ```yx_pixels```
             for spot ```i```.
             ```yxz_transform[i, 2]``` is the transformed non-centered z coordinate in ```z_pixels``` for spot ```i```.
-        - ```in_range``` - ```bool [n_spots]```.
-            Whether spot s was in the bounds of the tile when transformed to round `r`, channel `c`.
     """
-    if flow is not None:
-        # load in shifts for each pixel
-        y_indices, x_indices, z_indices = yxz.T
-        # apply shifts to each pixel
-        yxz_shifts = (-flow[:, y_indices, x_indices, z_indices].T).astype(np.float32)
-        yxz = np.asarray(yxz + yxz_shifts)
     # apply icp correction
-    yxz_transform = np.pad(yxz, ((0, 0), (0, 1)), constant_values=1)
-    yxz_transform = np.round(yxz_transform @ icp_correction).astype(np.int16)
-    in_range = np.logical_and(
-        (yxz_transform >= np.array([0, 0, 0])).all(axis=1), (yxz_transform < tile_sz).all(axis=1)
-    )  # set color to nan if out range
-    return yxz_transform, in_range
+    yxz_pad = torch.cat([yxz, torch.ones(yxz.shape[0], 1)], dim=1).float()
+    yxz_transform = yxz_pad @ affine
+    return yxz_transform
 
 
 def get_spot_colours_new(
@@ -278,102 +289,121 @@ def remove_background(spot_colours: np.ndarray) -> Tuple[np.ndarray, np.ndarray]
     return spot_colours, background_noise
 
 
-def get_spot_colors(
-    yxz_base: np.ndarray,
-    t: int,
-    nbp_basic: NotebookPage,
-    nbp_filter: NotebookPage,
-    nbp_register: NotebookPage,
-    use_rounds: Optional[List[int]] = None,
-    use_channels: Optional[List[int]] = None,
-    return_in_bounds: bool = False,
-    output_dtype: np.dtype = np.float32,
-) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+def get_spot_colours(
+    image: Union[np.ndarray, zarr.Array],
+    flow: Union[np.ndarray, zarr.Array],
+    affine_correction: Union[np.ndarray, torch.Tensor],
+    yxz_base: Union[np.ndarray, torch.Tensor],
+    output_dtype: torch.dtype = torch.float32,
+    fill_value: float = float('nan'),
+    tile: int = None,
+    use_channels: List[int] = None,
+) -> np.ndarray:
     """
     Takes some spots found on the reference round, and computes the corresponding spot intensity
-    in specified imaging rounds/channels.
-    By default, will run on `nbp_basic.use_rounds` and `nbp_basic.use_channels`.
+    in specified imaging rounds/channels. The algorithm goes as follows:
+    Loop over rounds:
+        Apply flow: yxz_flow = yxz_base + flow
+        Loop over channels:
+            Apply ICP correction: yxz_flow_and_affine = yxz_flow @ icp_correction
+            Interpolate spot intensities: spot_colours[:, r, c] = grid_sample(image[r, c], yxz_flow_and_affine)
+    The code has been profiled, and any time-consuming operations have been passed to PyTorch and can be run on a GPU.
+
+    - Note: Although yxz is a list of n_spots x 3 and does not need to be made up of intervals, we load the bounding
+    box of the image to speed up the loading process and help interpolate points. This means that accessing many random
+    points will be slower than accessing a subset of the image at once.
 
     Args:
-        yxz_base: `int16 [n_spots x 3]`.
-            Local yxz coordinates of spots found in the reference round/reference channel of tile `t`
-            yx coordinates are in units of `yx_pixels`. z coordinates are in units of `z_pixels`.
-        t: `int`. Tile number.
-        nbp_basic: `basic_info` notebook page.
-        nbp_register: `register` notebook page.
-        use_rounds: `int [n_use_rounds]`.
-            Rounds you would like to find the `spot_color` for.
-            Error will raise if transform is zero for particular round.
-            If `None`, all rounds in `nbp_basic.use_rounds` are used.
-        use_channels: `int [n_use_channels]`.
-            Channels you would like to find the `spot_color` for.
-            Error will raise if transform is zero for particular channel.
-            If `None`, all channels in `nbp_basic.use_channels` used.
-        return_in_bounds: `bool`. If 'True' will only return spots that are in the bounds of the tile.
-        output_dtype (`np.dtype`): return the resulting colours in this data type.
+        image: 'float16 memmap [n_tiles x n_rounds x n_channels x im_y x im_x x im_z]' unregistered image data.
+        flow: 'float16 memmap [n_tiles x n_rounds x 3 x im_y x im_x x im_z]' flow data.
+        affine_correction: 'float32 [n_tiles x n_rounds x n_channels x 4 x 3]' affine correction data, or
+        [n_rounds x n_channels x 4 x 3] for the tile of interest or
+        [n_channels x 4 x 3] if round independent.
+        yxz_base: 'int [n_spots x 3]' spot coordinates, or tuple
+        output_dtype: 'dtype' dtype of the output spot colours.
+        fill_value: 'float' value to fill in for out of bounds spots.
+        tile: 'int' tile index to run on.
+        use_channels: 'List[int]' channels to run on.
 
     Returns:
-        - `spot_colors` - `int32 [n_spots x n_rounds_use x n_channels_use]` or
-            `int32 [n_spots_in_bounds x n_rounds_use x n_channels_use]`.
-            `spot_colors[s, r, c]` is the spot color for spot `s` in round `use_rounds[r]`, channel `use_channels[c]`.
-        - `yxz_base` - `int16 [n_spots_in_bounds x 3]` or `int16 [n_spots x 3]`.
-        - `bg_colours` - `int32 [n_spots_in_bounds x n_rounds_use x n_channels_use]` or
-        `int32 [n_spots x n_rounds_use x n_channels_use]`. (only returned if `bg_scale` is not `None`).
-        - in_bounds - `bool [n_spots]`. Whether spot s was in the bounds of the tile when transformed to round `r`,
-        channel `c`. (only returned if `return_in_bounds` is `True`).
+        spot_colours: 'output_dtype [n_spots x n_rounds x n_channels]' spot colours.
     """
-    if use_rounds is None:
-        use_rounds = nbp_basic.use_rounds
+    # deal with none values
+    if tile is None:
+        tile = 0
     if use_channels is None:
-        use_channels = nbp_basic.use_channels
+        use_channels = list(range(image.shape[2]))
+    if type(affine_correction) is np.ndarray:
+        affine_correction = torch.tensor(affine_correction, dtype=torch.float32)
+    if type(yxz_base) is np.ndarray:
+        yxz_base = torch.tensor(yxz_base, dtype=torch.float32)
+    if np.ndim(affine_correction) == 3:
+        # repeat n_rounds times
+        affine_correction = affine_correction[None].repeat(image.shape[1], 1, 1, 1)
+        # repeat n_tiles times
+        affine_correction = affine_correction[None].repeat(image.shape[0], 1, 1, 1, 1)
 
-    n_spots = yxz_base.shape[0]
-    no_verbose = n_spots < 10_000
-    # note using nan means can't use integer even though data is integer
-    n_use_rounds = len(use_rounds)
-    n_use_channels = len(use_channels)
-    # spots outside tile bounds on particular r/c will initially be set to 0.
-    spot_colors = np.zeros((n_spots, n_use_rounds, n_use_channels), dtype=np.float32) * np.nan
-    if not nbp_basic.is_3d:
-        # use numpy not jax.numpy as reading images outputs to numpy.
-        tile_sz = np.asarray([nbp_basic.tile_sz, nbp_basic.tile_sz, 1], dtype=np.int16)
-    else:
-        tile_sz = np.asarray([nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)], dtype=np.int16)
+    # initialize variables
+    n_spots, n_use_rounds, n_use_channels = yxz_base.shape[0], flow.shape[1], len(use_channels)
+    use_rounds = list(np.arange(n_use_rounds))
+    tile_size = torch.tensor(image.shape[3:])
+    pad_size = torch.tensor([100, 100, 5])
+    spot_colours = torch.full((n_spots, n_use_rounds, n_use_channels), fill_value, dtype=output_dtype)
 
-    with tqdm(total=n_use_rounds * n_use_channels, disable=no_verbose) as pbar:
-        pbar.set_description(f"Reading {n_spots} spot_colors")
-        for i, r in enumerate(use_rounds):
-            flow_tr = nbp_register.flow[t, r]
-            for j, c in enumerate(use_channels):
-                transform_rc = nbp_register.icp_correction[t, r, c]
-                pbar.set_postfix({"round": r, "channel": c})
-                if transform_rc[0, 0] == 0:
-                    raise ValueError(f"Transform for tile {t}, round {r}, channel {c} is zero:" f"\n{transform_rc}")
+    # load slices of the images rather than sampling coordinates directly.
+    yxz_min, yxz_max = yxz_base.min(axis=0).values.int(), yxz_base.max(axis=0).values.int()
+    # pad to ensure that we are able to interpolate the points even if the shifts are large.
+    yxz_min, yxz_max = (torch.maximum(yxz_min - pad_size, torch.tensor([0, 0, 0])),
+                        torch.minimum(yxz_max + pad_size, tile_size))
+    cube_size = yxz_max - yxz_min
+    # load the sliced images for each round and channel (from yxz_min to yxz_max)
+    image = np.array(
+        [[image[tile, r, c, yxz_min[0]:yxz_max[0], yxz_min[1]:yxz_max[1], yxz_min[2]:yxz_max[2]] for c in use_channels]
+         for r in use_rounds]
+    )
+    flow = np.array(
+        [flow[tile, r, :, yxz_min[0]:yxz_max[0], yxz_min[1]:yxz_max[1], yxz_min[2]:yxz_max[2]] for r in use_rounds]
+    )
+    # convert to torch tensor
+    image = torch.tensor(image, dtype=torch.float32)
 
-                yxz_transform, in_range = apply_transform(yxz_base, flow_tr, transform_rc, tile_sz)
-                yxz_transform, in_range = np.asarray(yxz_transform), np.asarray(in_range)
-                yxz_transform = yxz_transform[in_range]
-                # if no spots in range, then continue
-                if yxz_transform.shape[0] == 0:
-                    pbar.update(1)
-                    continue
+    # begin the loop over rounds and channels
+    for r in tqdm(range(n_use_rounds), total=n_use_rounds, desc="Round Loop"):
+        # initialize the coordinates for the round
+        yxz_round_r = torch.zeros((n_use_channels, n_spots, 3), dtype=torch.float32)
+        # the flow is the same for all channels in the same round. Therefore, only need to read it once.
+        # Since flow is cropped, pass the top left corner to this function, so it reads the coords relative to yxz_min.
+        yxz_flow = apply_flow(yxz=yxz_base.int(), flow=flow[r], top_left=yxz_min)
+        for i, c in enumerate(use_channels):
+            # apply the affine transform to the spots
+            yxz_round_r[i] = apply_affine(yxz=yxz_flow, affine=affine_correction[tile, r, c])
+            # Since image has top left corner yxz_min, must make the sampling points relative to this.
+            yxz_round_r[i] -= yxz_min
+            # convert tile coordinates [0, cube_size] to coordinates [0, 2]
+            yxz_round_r[i] = 2 * yxz_round_r[i] / (cube_size - 1)
+            # convert coordinates [0, 2] to coordinates [-1, 1]
+            yxz_round_r[i] -= 1
+        zxy_round_r = yxz_round_r[:, :, [2, 1, 0]]
 
-                # Read in the shifted float16 colours here, and remove shift later.
-                spot_colors[in_range, i, j] = nbp_filter.images[t, r, c][tuple(yxz_transform.T)]
-                spot_colors[in_range, i, j] += nbp_basic.tile_pixel_value_shift
-                pbar.update(1)
-                print(f"Round {r}, Channel {c} done.")
-            del flow_tr
+        # grid_sample expects image to be input as [N, M, D, H, W] where
+        # N = batch size: We set this to n_use_channels,
+        # M = number of images to be sampled at the same grid locations: We set this to 1,
+        # D = depth, H = height, W = width: We set these to n_y, n_x and n_z respectively.
 
-    # remove invalid spots (spots where any round or channel is nan)
-    colours_valid = np.all(~np.isnan(spot_colors), axis=(1, 2))
+        # grid_sample expects grid to be input as [N, D', H', W', 3] where
+        # N = batch size: We set this to n_use_channels,
+        # D' = depth out, H' = height out, W' = width out: We set these to n_spots, 1, 1
+        # 3 = 3D coordinates of the points to sample (NOTE: These must be in the order z, x, y).
+        # This is NOT included in the documentation, but is inferred from the source code.
+        round_r_colours = torch.nn.functional.grid_sample(
+            input=image[r, :, None, :, :, :],
+            grid=zxy_round_r[:, :, None, None, :],
+            mode='bilinear',
+            align_corners=False,
+        )
 
-    if return_in_bounds:
-        spot_colors = spot_colors[colours_valid]
-        yxz_base = yxz_base[colours_valid]
+        # grid_sample gives output as [N, M, D', H', W'] as defined above.
+        round_r_colours = round_r_colours[:, 0, :, 0, 0]
+        spot_colours[:, r, :] = round_r_colours.T
 
-    output_tuple = (spot_colors.astype(output_dtype), yxz_base)
-    if not return_in_bounds:
-        output_tuple += (colours_valid,)
-
-    return output_tuple
+    return spot_colours.numpy()

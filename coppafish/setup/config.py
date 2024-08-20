@@ -112,9 +112,10 @@ _options = {
         "bead_radii": "maybe_tuple_number",
         # these parameters are for round registration
         "sample_factor_yx": "int",
+        "chunks_yx": "int",
+        "overlap_yx": "number",
         "window_radius": "int",
         "smooth_sigma": "tuple_number",
-        "smooth_thresh": "number",
         "flow_cores": "maybe_int",
         "flow_clip": "maybe_tuple_number",
         # these parameters are for icp

@@ -8,7 +8,7 @@ import mplcursors
 import numpy as np
 
 from ...call_spots.qual_check import omp_spot_score
-from ...spot_colors import base as spot_colours_base
+from ...spot_colours import base as spot_colours_base
 from ...omp import base as omp_base
 from ...call_spots import gene_prob_score
 from ...setup import Notebook
@@ -404,24 +404,18 @@ class view_spot(ColorPlotBase):
             dtype=np.int16,
         ).T.reshape(-1, 3)
         im_diameter = [2 * im_size + 1, 2 * im_size + 1]
-        spot_colours = np.zeros((n_use_rounds, n_use_channels, im_diameter[0] * im_diameter[1]))
 
         # get spot colours for each round and channel
-        for r in nb.basic_info.use_rounds:
-            spot_colours[r] = spot_colours_base.get_spot_colours_new(
-                nb.filter.images,
-                nb.register.flow,
-                nb.register.icp_correction,
-                nb.register_debug.channel_correction,
-                tile=tile,
-                round=r,
-                use_channels=nb.basic_info.use_channels,
-                dapi_channel=nb.basic_info.dapi_channel,
-                yxz=im_yxz
-            )
-        # put round as the last axis to match colour_norm
-        spot_colours = spot_colours.transpose(2, 1, 0)
-        spot_colours = spot_colours.reshape(im_diameter[0] * im_diameter[1], n_use_channels * n_use_rounds)
+        spot_colours = spot_colours_base.get_spot_colours(
+            image=nb.filter.images,
+            flow=nb.register.flow,
+            affine_correction=nb.register.icp_correction,
+            tile=tile,
+            use_channels=nb.basic_info.use_channels,
+            yxz_base=im_yxz
+        )
+        # n_pixels x n_rounds x n_channels -> n_pixels x n_channels x n_rounds
+        spot_colours = spot_colours.transpose(0, 2, 1)
         # reshape
         cr_images = [
             spot_colours[:, i].reshape(im_diameter[0], im_diameter[1]) * colour_norm[i]
