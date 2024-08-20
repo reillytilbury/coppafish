@@ -322,7 +322,7 @@ def run_omp(
             dtype=np.float16,
             chunks=(n_chunk_max, 1, 1),
         )
-        t_spot_colours_torch = spot_colours.base.get_spot_colours(
+        t_spots_colours_temp = spot_colours.base.get_spot_colours(
             image=nbp_filter.images,
             flow=nbp_register.flow,
             affine_correction=nbp_register.icp_correction,
@@ -330,8 +330,8 @@ def run_omp(
             output_dtype=torch.float16,
             use_channels=nbp_basic.use_channels,
         )
-        t_spot_colours_torch[torch.isnan(t_spot_colours_torch)] = 0.0
-        t_spots_colours[:] = t_spot_colours_torch.numpy()
+        t_spots_colours_temp = np.nan_to_num(t_spots_colours_temp)
+        t_spots_colours[:] = t_spots_colours_temp
         del t_spots_local_yxz, t_spots_tile, t_spots_gene_no, t_spots_score, t_spots_colours
         del t_local_yxzs, tile_results
         log.debug(f"Gathering spot colours complete")

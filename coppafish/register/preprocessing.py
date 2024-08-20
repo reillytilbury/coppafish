@@ -266,7 +266,7 @@ def generate_reg_images(
             yxz_base=yxz_coords,
             use_channels=[dapi_channel],
             tile=t,
-        ).reshape((len(use_rounds),) + image_shape)
+        ).reshape((len(use_rounds), 1,) + image_shape)
         im_t_flow_icp = spot_colours.base.get_spot_colours(
             image=nbp_filter.images,
             flow=nbp_register.flow,
@@ -274,7 +274,7 @@ def generate_reg_images(
             yxz_base=yxz_coords,
             use_channels=[dapi_channel],
             tile=t,
-        ).reshape((len(use_rounds),) + image_shape)
+        ).reshape((len(use_rounds), 1,) + image_shape)
 
         # concatenate the images for each round and save
         for r in use_rounds:

@@ -971,6 +971,8 @@ class RoboMinnie:
         subvols = {self.n_planes}, {8}, {8}
         box_size = {box_size_z}, {box_size_yx}, {box_size_yx}
         pearson_r_thresh = 0.25
+        chunks_yx = 5
+        overlap_yx = 0.25
         round_registration_channel = {self.dapi_channel if (self.include_dapi and register_with_dapi) else ''}
         icp_min_spots = 10
         

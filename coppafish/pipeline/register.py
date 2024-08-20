@@ -9,6 +9,7 @@ import zarr
 from .. import find_spots, log
 from ..register import preprocessing
 from ..register import base as register_base
+from ..spot_colours import base as spot_colours_base
 from ..setup import NotebookPage
 
 
@@ -140,6 +141,8 @@ def register(
                 raw_loc=raw_loc,
                 corr_loc=corr_loc,
                 smooth_loc=smooth_loc,
+                chunks_yx=config["chunks_yx"],
+                overlap=config["overlap_yx"],
                 sample_factor_yx=config["sample_factor_yx"],
                 window_radius=config["window_radius"],
                 smooth_sigma=config["smooth_sigma"],
@@ -184,7 +187,7 @@ def register(
             # load in optical flow
             flow_tr = nbp.flow[t, r]
             # apply the flow to the reference spots to put anchor spots in the target frame
-            ref_spots_tr_ref = preprocessing.apply_flow(flow=flow_tr, points=ref_spots_tr_ref, round_to_int=False)
+            ref_spots_tr_ref = spot_colours_base.apply_flow(flow=flow_tr, yxz=ref_spots_tr_ref)
             # load in target spots
             ref_spots_tr = find_spots.spot_yxz(nbp_find_spots.spot_yxz, t, r, c_ref, nbp_find_spots.spot_no)
             round_correction[t, r], n_matches_round[t, r], mse_round[t, r], converged_round[t, r] = register_base.icp(
@@ -223,7 +226,7 @@ def register(
                 im_spots_trc = im_spots_trc[~oob]
                 # 2. apply the inverse of the flow to the spots
                 flow_tr = nbp.flow[t, r]
-                im_spots_trc = preprocessing.apply_flow(flow=-flow_tr, points=im_spots_trc, round_to_int=False)
+                im_spots_trc = spot_colours_base.apply_flow(flow=-flow_tr, yxz=im_spots_trc)
                 im_spots_tc = np.vstack((im_spots_tc, im_spots_trc))
             # check if there are enough spots to run ICP
             if im_spots_tc.shape[0] < config["icp_min_spots"]:

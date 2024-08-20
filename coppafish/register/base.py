@@ -23,6 +23,8 @@ def optical_flow_register(
     corr_loc: str,
     smooth_loc: str,
     sample_factor_yx: int = 4,
+    chunks_yx: int = 4,
+    overlap: float = 1/3,
     window_radius: int = 5,
     smooth_sigma: list = [10, 10, 2],
     clip_val: np.ndarray = np.array([40, 40, 15]),
@@ -46,6 +48,8 @@ def optical_flow_register(
         corr_loc: str specifying the location to save/ load the correlation
         smooth_loc: str specifying the location to save/ load the smoothed flow
         sample_factor_yx: int specifying how much to downsample the images in y and x before computing the optical flow
+        chunks_yx: int specifying the number of subvolumes to split the downsampled images into in y and x
+        overlap: float specifying the overlap between subvolumes
         window_radius: int specifying the window radius for the optical flow algorithm and correlation calculation
         (Note that this is the radius on the downsampled image, so a radius of 5 with a downsample factor of 4 will
         correspond to a radius of 20 on the original image)
@@ -78,7 +82,8 @@ def optical_flow_register(
         round=round,
         window_radius=window_radius,
         clip_val=clip_val,
-        chunks_yx=4,
+        chunks_yx=chunks_yx,
+        overlap=overlap,
         loc=raw_loc,
         n_cores=n_cores,
     )

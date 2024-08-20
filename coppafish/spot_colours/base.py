@@ -24,7 +24,7 @@ def apply_flow(yxz: Union[np.ndarray, torch.Tensor],
     """
     # First, make yxz coordinates relative to the top left corner of the flow image, so that we can sample the shifts
     yxz_relative = yxz - top_left
-    y_indices_rel, x_indices_rel, z_indices_rel = yxz_relative.numpy().T
+    y_indices_rel, x_indices_rel, z_indices_rel = yxz_relative.T
     # sample the shifts relative to the top left corner of the flow image
     yxz_shifts = np.array([flow[i, y_indices_rel, x_indices_rel, z_indices_rel] for i in range(3)]).astype(np.float32).T
     # if original coords are torch, make the shifts torch
