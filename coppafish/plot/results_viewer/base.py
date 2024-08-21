@@ -169,8 +169,8 @@ class Viewer:
         # Slider to change intensity_thresh
         self.add_slider(
             name="intensity_thresh",
-            value=(abs_intensity_thresh, np.max(self.spots["omp"].intensity)),
-            slider_range=(0, np.nanmax(self.spots["omp"].intensity)),
+            value=(abs_intensity_thresh, np.max(self.spots[self.method["names"][self.method["active"]]].intensity)),
+            slider_range=(0, np.nanmax(self.spots[self.method["names"][self.method["active"]]].intensity)),
             slider_mode="range",
             slider_variable="spot",
         )
