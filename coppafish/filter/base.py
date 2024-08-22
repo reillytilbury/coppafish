@@ -36,7 +36,7 @@ def compute_auto_thresh(image: np.ndarray, auto_thresh_multiplier: float, z_plan
     """
     assert image.ndim == 3, "image must be three-dimensional"
 
-    auto_thresh = np.median(np.abs(image[:, :, z_plane])) * auto_thresh_multiplier
+    auto_thresh = np.median(np.abs(image[:, :, z_plane])).clip(min=1) * auto_thresh_multiplier
     return float(auto_thresh)
 
 
