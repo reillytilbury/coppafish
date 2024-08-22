@@ -98,7 +98,7 @@ Let:
 
 We define the probability of spot $s$ being assigned to gene $g$ as
 
-$$ \mathbb{P}[G = g \mid \mathbf{F} = \mathbf{f}] = \frac{\exp(\kappa \mathbf{b}_g \cdot \mathbf{f})}{\sum_g \exp(\kappa\mathbf{b}_g \cdot \mathbf{f})},$$
+$$ \mathbb{P}[G = g \mid \mathbf{F} = \mathbf{f}] = \frac{\exp(\kappa \mathbf{b}_g \cdot \mathbf{f})}{\sum_{g'} \exp(\kappa\mathbf{b}_{g'} \cdot \mathbf{f})},$$
 
 where $\kappa$ is a concentration parameter which controls how much the probabilities are spread out among the genes.
 
@@ -173,18 +173,18 @@ $$
 $$
 
 $$ 
-G_{dr} = \{ g : d(g,r) = d \},
+G_{rd} = \{ g : d(g,r) = d \},
 $$
 
 $$ 
-J_{dr} = \{ \mathbf{F_{sr}} : s \in \mathcal{S}, \ g_s \in G_{dr} \}
+J_{dr} = \{ \mathbf{F_{sr}} : s \in \mathcal{S}, \ g_s \in G_{rd} \}
 $$
 
 In words, these can be described as follows:
 
 - $\mathcal{S}$ is the set of spots with $s$ with probability $p(s) > \gamma$, ie: the high probability spots,
 
-- $G_{dr}$ is the set of genes with dye $d$ in round $r$,
+- $G_{rd}$ is the set of genes with dye $d$ in round $r$,
 
 - $J_{dr}$ is the set of colours of high probability spots assigned to genes with dye $d$ in round $r$.
 
@@ -336,27 +336,30 @@ The values $\alpha^2$ and $\beta^2$ are in the config file as `concentration_par
 
 ### 4: Round and Channel Normalisation
 
-The purpose of this step is to find a scale factor $V_{rc}$ for each round $r$ and channel $c$ which gets as many of our spots as close as possible to their target values. Since $E_{grc}$ is a representative sample of the colour spectrum of gene $g$ in round $r$ and channel $c$, we want the scale factor to satisfy 
+The purpose of this step is to find a scale factor $V_{rc}$ for each round $r$ and channel $c$ which gets as many of our spots as close as possible to their target values. 
+
+The target values work as follows: 
+
+- $T_c$ is defined as `target_values` in the config file as a list of length $n_c$,
+
+- $d_{\textrm{max}}(c)$ is defined as `d_max` in the config file as a list of length $n_c$,
+
+Any gene that has dye $d_{\textrm{max}}(c)$ in round $r$ will have its free bled code $E_{grc}$ scaled by $V_{rc}$ to get as close as possible to $T_c$. Since $E_{grc}$ is a representative colour for all spots assigned to gene $g$, this will also get the spots as close as possible to their target values. 
+
+As in section 2 above, let $G_{rd}$ be the set of genes with dye $d$ in round $r$ and define the loss function 
 
 $$
-E_{grc}V_{rc} \approx T_{c},
-$$
-
-where $T_c$ is the target value for channel $c$ when 
-
-To begin, fix a round $r$ and channel $c$ and let $d_{max}(c)$ be the dye which is most intense in channel $c$. We define a target value $T_d$ for each dye $d$ in its maximal channel $c_{max}(d)$. Now let $G_{r,d}$ be the set of genes with dye $d$ in round $r$, and define the loss function 
-
-$$
-L(V_{r, c}) = \sum_{g \in G_{r, \ d_{max}(c)}} \sqrt{N_{g}} \  \bigg( V_{r, c} \ E_{grc} - T_{d_{max}(c)} \bigg)^2,
+L(V_{rc}) = \sum_{g \in G_{r, \ d_{max}(c)}} \sqrt{N_{g}} \  \bigg( V_{rc} \ E_{grc} - T_{c} \bigg)^2,
 $$ 
 
-where $N_g$ is the number of high probability spots assigned to gene $g$. There is no reason this has to be a square root, though if it is not, too much influence is given to the most frequent genes. Minimise this loss to obtain
+where $N_g$ is the number of high probability spots assigned to gene $g$. There is no reason this has to be a square root, though if it is not, too much influence is given to the most frequent genes. We minimise this loss to obtain the optimal value
 
 $$
-V_{r, c} = \dfrac{ \sum_{g \in G_{r, \ d_{max}(c) }} \sqrt{N_g} E_{grc} T_{d_{max}(c)} } { \sum_{g \in G_{r, \ d_{max}(c) }} \sqrt{N_g} E_{grc}^2 },
+V_{rc} = \dfrac{ \sum_{g \in G_{r, \ d_{max}(c) }} \sqrt{N_g} E_{grc} T_{c} } { \sum_{g \in G_{r, \ d_{max}(c) }} \sqrt{N_g} E_{grc}^2 },
 $$
 
-which is our optimal value!
+??? warning "Outliers in the Regression"
+    L2 regression is susceptible to outliers, so it may be better to use a more robust regression method like L1 regression. This is not currently implemented in the pipeline.
 
 Now define the _constrained bled codes_, which we will just call _bled codes_ 
 
@@ -364,78 +367,42 @@ $$
 K_{grc} = E_{grc}V_{rc}.
 $$
 
-We will use these instead of $E_{grc}$ from here onwards.
 
 ### 5: Tile Normalisation
 
-The purpose of this step is to remove brightness differences between tiles, and improve the round and channel normalisation we found in the previous step. We do this by finding a scale factor $Q_{trc}$ such that 
+The purpose of this step is to remove brightness differences between images from different tiles in the same round and channel. We do this by finding a scale factor $Q_{trc}$ for each tile $t$, round $r$ and channel $c$ which gets as many of our spots on tile $t$ as close as possible to $K_{grc}$.
 
-$$
-Q_{trc} D_{gtrc} \approx K_{grc},
-$$
-
-where $\mathbf{D_{g, t,}}$ is the tile-dependent bled code for gene $g$ in tile $t$ defined in step 3 and $\mathbf{K_g}$ is the constrained bled code for gene $g$ defined in step 4.
-
-Our method works in a similar way to step 4: fix a tile $t$, round $r$ and channel $c$ and as above, let $G_{r,d}$ be the genes with dye $d$ in round $r$. Define the loss
+Our method works almost identically to step 4. Let $G_{rd}$ be the genes with dye $d$ in round $r$. Define the loss
 
 $$
 L(Q_{trc}) = \sum_{g \in G_{r, \ d_{max}(c)}} \sqrt{N_{g,t}} \  \bigg( Q_{trc} \ D_{gtrc} - K_{grc} \bigg)^2,
 $$ 
 
-where $N_{g, t}$ is the number of high probability spots of gene $g$ in tile $t$. Remember that $K_{grc} = E_{grc}V_{r, c},$ so writing this in full yields
+where $N_{g, t}$ is the number of high probability spots of gene $g$ in tile $t$. 
 
-$$
-L(Q_{trc}) = \sum_{g \in G_{r, \ d_{max}(c)}} \sqrt{N_{gt}} \  \bigg( Q_{trc} \ D_{gtrc} - E_{grc}V_{rc} \bigg)^2.
-$$ 
+??? note "If Q is correcting for tile differences, why does it have indices for $r$ and $c$?"
 
-This means that if $D_{gtrc} \approx E_{grc}$ for all genes $g$ then $Q_{t,r,c} \approx V_{r,c}$. This means that $\mathbf{Q}$ is correcting for tile differences. Then why does it have indices for $r$ and $c$? Because the way that the brightness varies between tiles may be completely independent for different round-channel pairs. This is addressed further in the diagnostics. Minimising this loss yields:
+    The scale factor $Q_{trc}$ is defined to correct for differences in brightness between tiles, but the way that the brightness varies between tiles is completely independent for different round-channel pairs. 
+
+    This is because the cause of brightness differences between tiles is largely random from image to image, as can be observed by looking at spots in the overlapping regions of adjacent tiles in the same round and channel.
+
+We minimise this loss to obtain the optimal value
 
 $$
 Q_{trc} = \dfrac{ \sum_{g \in G_{r, \ d_{max}(c) }} \sqrt{N_{gt}} \ K_{grc}  D_{gtrc}} { \sum_{g \in G_{r,\ d_{max}(c) }} \sqrt{N_{gt}}  D_{gtrc}^2 }.
 $$
 
-<figure markdown="span">
-  ![Image title](images/algorithm/call_spots/tile scale regression.png)
-</figure>
-*We can use the `view_tile_scale_regression` diagnostic to view the regression for a single tile. Note that the regressions seem to have a high $r^2$ value and the slopes are significantly different even within channels.*
-
-<figure markdown="span">
-  ![Image title](images/algorithm/call_spots/different scales.png)
-</figure>
-*We can use the `view_scale_factors` diagnostic to view the round/channel scale, the tile scale and the tile scales relative to the round/channel scales. The final plot being non-uniform implies that the tile scale corrections are independent between different $(r, c)$ pairs.*
-
 ### 6 and 7: Application of Scales, Computation of Final Scores and Bleed Matrix
 
-The purpose of this step is to bring all the components together and compute the final scores and bleed matrix.
+All that is left to do is multiply the spot colours $F_{src}$ by the updated normalisation factor $Q_{trc}$ to get the final spot colours: $F_{src} \mapsto Q_{trc} F_{src}$.
 
-Now that we have the tile scale $Q_{t,r,c}$, we multiply it by the initial scale factor $P_{trc}$ to get our final colour normalisation factor $A_{trc}$:
+We then compute the cosine similarity between each spot colour $\mathbf{F_s}$ and each bled code $\mathbf{K_{grc}}$ to get the two variables
 
-$$
-A_{trc} = P_{trc} Q_{trc}.
-$$
+- `dot_product_gene_no[s]` = $\textrm{argmax}_g \bigg( \dfrac{\mathbf{F_s \cdot K_{g}}}{\| \mathbf{F_s} \| \| \mathbf{K_{g}} \|} \bigg)$,
+- `dot_product_gene_score[s]` = $\textrm{max}_g \bigg( \dfrac{\mathbf{F_s \cdot K_{g}}}{\| \mathbf{F_s} \| \| \mathbf{K_{g}} \|} \bigg)$.
 
-This is important as all our calculations have been done on preprocessed spot colours which have already been multiplied by $\mathbf{P}$. We apply this scale to all of our spot colours $F$ by pointwise multiplication.
+We also compute probabilities for each spot $s$ being assigned to gene $g$ as
 
-Next, we compute the final probabilities and dot product scores. We might ask at this point whether we should use:
+- `gene_prob[s, g]` = $\dfrac{\exp(\kappa \mathbf{K_{g} \cdot F_s})}{\sum_{g'} \exp(\kappa \mathbf{K_{g'} \cdot F_s})}$,
 
-1. The tile-independent free bled codes $E_{grc}$, 
-
-2. the tile-dependent free bled codes $D_{gtrc}$ or,
-
-3. the constrained bled codes $K_{grc}$? 
-
-The best answer is definitely the constrained bled codes $K_{grc}$! We calculated $\mathbf{E}$ and $\mathbf{D}$ as important summary statistics which act as representative samples for each gene in the case of $\mathbf{E}$, and for each gene and tile in the case of $\mathbf{D}$. These were only computed to facilitate the computations of $\mathbf{A}$ and $\mathbf{K}$.
-
-While it may seem more accurate to have a different gene code for each tile, the estimates $\mathbf{D_{g, t}}$ are noisy due to small numbers of samples. The colour normalisation factor $\mathbf{A}$ was calculated specifically to maximise similarity of the **tile-dependent** free codes $\mathbf{D}$ with the **tile-independent** constrained codes $\mathbf{K}$, meaning that multiplying spot colours by $\mathbf{A}$ has the dual effect of
-
-1. homogenising them across tiles and,
-
-2. bringing them all close to the constrained codes $\mathbf{K}$.
-
-With that in mind, we compute:
-
-1. Final gene probabilities using the scaled spots $\mathbf{AF}$ and comparing against the constrained codes $\mathbf{K}$
-
-2. Final Dot Products using the scaled spots $\mathbf{AF}$ and comparing against the constrained codes $\mathbf{K}$. These would not have been accurate in step 1 as we had no model of how each gene varied in brightness between rounds, but now this is something we have accounted for in $\mathbf{K}$.
-
-3. The Final Bleed Matrix using the same method as discussed in step 2, but with updated gene probabilities.
+where $\mathbf{F_s}$ and $\mathbf{K_{g}}$ have both been round-normalised. Finally, with these updated gene assignments, we can compute the final bleed matrix $\mathbf{B}$ in the same way as in step 2.
