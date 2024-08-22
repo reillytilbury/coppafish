@@ -108,10 +108,16 @@ where $\kappa$ is a concentration parameter which controls how much the probabil
     
     - $\kappa = 0$ yields a uniform distribution of probabilities between all genes,
     
-    - $\kappa \rightarrow \infty$ yields a ditribution that tends to 1 for the gene with the maximum dot product and 0 for all others.
+    - $\kappa \rightarrow \infty$ yields a distribution that tends to 1 for the gene with the maximum dot product and 0 for all others.
+
+    <p align="center">
+      <img src="https://github.com/user-attachments/assets/1171503d-f64d-4a82-b675-9ef8bb432cf4" width="600" />
+      <br />
+      <span> Effects of varying $\kappa$ on the probabilities of a single spot.</span>
+    </p>
 
     When working with larger gene panels, all probabilities are spread out more naturally, so it helps to increase $\kappa$ so that probabilities have a consistent interpretation. Out current implementation sets $\kappa = 2$ if $n_g < 200$ and 3 otherwise.
-
+    
 
 ??? info "Gene Probability Derivation"
 
@@ -177,7 +183,7 @@ G_{rd} = \{ g : d(g,r) = d \},
 $$
 
 $$ 
-J_{dr} = \{ \mathbf{F_{sr}} : s \in \mathcal{S}, \ g_s \in G_{rd} \}
+J_{rd} = \{ \mathbf{F_{sr}} \in \mathbb{R}^{n_c}: s \in \mathcal{S}, \ g_s \in G_{rd} \}
 $$
 
 In words, these can be described as follows:
@@ -186,12 +192,12 @@ In words, these can be described as follows:
 
 - $G_{rd}$ is the set of genes with dye $d$ in round $r$,
 
-- $J_{dr}$ is the set of colours of high probability spots assigned to genes with dye $d$ in round $r$.
+- $J_{rd}$ is the set of colours of high probability spots assigned to genes with dye $d$ in round $r$.
 
-By taking the union of $J_{dr}$ across rounds, we end up with a set of reliable colour vector estimates for dye $d$:
+By taking the union of $J_{rd}$ across rounds, we end up with a set of reliable colour vector estimates for dye $d$:
 
 $$ 
-\mathcal{J}_d = \bigcup_r J_{dr}
+\mathcal{J}_d = \bigcup_r J_{rd}
 $$
 
 
@@ -214,61 +220,92 @@ ADD IMAGE OF THIS PROCESS.
 
 ### 3: Free Bled Code Estimation
 
-Our method of estimating $\mathbf{E_{g}}$ (and its tile dependent equivalent $\mathbf{D_{g,t}}$) should satisfy the following properties:
+The purpose of this step is to estimate a representative colour, which we call a _**free bled code**_ $E_{grc}$ for each gene $g$. 
+
+!!! question "What makes these codes free?"
+    
+    $E_{grc}$ is _free_ in the sense that for each gene $g$, $E_{grc}$ is only determined by spots assigned to gene $g$ and not by spots assigned to other genes.
+
+Our method of estimating the tile-independent free bled codes $\mathbf{E_{g}}$ (and similarly the tile-dependent free bled codes $\mathbf{D_{g,t}}$) should satisfy the following properties:
 
 - If we have no spots, we should use a prior vector $\mathbf{E_g} = (\mathbf{B_{d(g, 1)}}, \ldots, \mathbf{B_{d(g, n_r)}}) ^ T$,
 
-- We should allow each round $\mathbf{E_{g, r}}$ to scale $\mathbf{B_{d(g, r)}}$ easily,
+- We should allow each round $\mathbf{E_{gr}}$ to scale $\mathbf{B_{d(g, r)}}$ easily,
 
-- We should allow each round $\mathbf{E_{g, r}}$ to change the direction of $\mathbf{B_{d(g, r)}}$ less easily, but still allow it to change.
+- We should allow each round $\mathbf{E_{gr}}$ to change the direction of $\mathbf{B_{d(g, r)}}$ less easily, but still allow it to change.
 
 ??? note "Why these properties?"
 
-    Property 1 is necessary because for large gene panels we often have very few reads of each gene, meaning that we have very few samples to compute $\mathbf{E_g}$ and even fewer to compute $\mathbf{D_{g, t}}$.
+    - Property 1 is necessary because for large gene panels we often have very few reads of each gene, meaning that we have very few samples to compute $\mathbf{E_g}$ and even fewer to compute $\mathbf{D_{g, t}}$.
 
-    Property 2 is necessary because, as mentioned previously, different concentrations of bridge probes lead to systematic differences in brightness between genes in different rounds. We want to allow the brightness of each gene in each round to be scaled up or down without needing very many samples to do so.
+    - Property 2 is necessary because, as mentioned previously, different concentrations of bridge probes lead to systematic differences in brightness between genes in different rounds. We want to allow the brightness of each gene in each round to be scaled up or down without needing very many samples to do so.
 
-    Property 3 is necessary because sometimes the way that a particular dye is expressed varies from gene to gene. An example of this is when the dyes are not completely washed out between rounds, leading to a small amount of bleedthrough from the previous round. This is shown below for a single gene.
+    - Property 3 is necessary because sometimes the way that a particular dye is expressed varies from gene to gene. An example of this is when the dyes are not completely washed out between rounds, leading to a small amount of bleedthrough from the previous round. 
 
+    In the example below, both CPLX2 and FOS have dye 2 in their codes (R5 and R4 respectively), but due to incomplete washout of dye 0 in R3 of CPLX2 these genes have very different codes for dye 2.
+    
+    === "CPLX2"
+        <p align="center">
+          <img src="https://github.com/user-attachments/assets/f94d2b84-bc69-4855-9601-b2bc12733866" width="600" />
+          <br />
+          <span> Bleedthrough into R5, Dye 2.</span>
+        </p>
 
-Given $n$ round fluorescence vectors $\mathbf{f_1}, \ldots, \mathbf{f_n}$ and a prior unit vector $\mathbf{b}$, all in $\mathbb{R}^{n_c}$, we define the _parallel bayes mean_ of these as 
+    === "FOS"
+        <p align="center">
+          <img src="https://github.com/user-attachments/assets/9f9ae28b-ec86-4318-a123-f78621087066" width="600" />
+          <br />
+          <span> No bleedthrough into R6, D2.</span>
+        </p>
+
+The following mean satisfies all the properties mentioned above. Given $n$ round fluorescence vectors $\mathbf{f_1}, \ldots, \mathbf{f_n}$ and a prior unit vector $\mathbf{b}$, all in $\mathbb{R}^{n_c}$, we define the _parallel bayes mean_ of these as 
 
 
 $$
-\bar{\mathbf{f}}_{\alpha, \beta} = \dfrac{\alpha^2}{n + \alpha^2} \mathbf{b} + \dfrac{1}{n + \alpha^2} \bigg( \sum_i \mathbf{f_i \cdot b} \bigg) \mathbf{b} + 
+\mathbf{\bar{F}}_{\alpha\beta}(\mathbf{b}) = \dfrac{\alpha^2}{n + \alpha^2} \mathbf{b} + \dfrac{1}{n + \alpha^2} \bigg( \sum_i \mathbf{f_i \cdot b} \bigg) \mathbf{b} + 
 \dfrac{1}{n+\beta^2} \sum_i \bigg( \mathbf{f_i} - (\mathbf{f_i} \cdot \mathbf{b})\mathbf{b} \bigg).
 $$
 
 The values $\alpha^2$ and $\beta^2$ are in the config file as `concentration_parameter_parallel` (default value 10) and `concentration_parameter_perpendicular` (default value 50) respectively.
 
-!!! tip "How to choose and interpret $\alpha$ and $\beta$?"
+??? tip "How to choose and interpret $\alpha$ and $\beta$?"
     
-    The formula for $\bar{\mathbf{f}}_{\alpha, \beta}$ is quite complcated, but it is actually quite easy to interpret once we understand what it is doing for different values of $\alpha$ and $\beta$.
+    The formula for $\mathbf{\bar{F}}_{\alpha \beta}(\mathbf{b})$ is quite complcated, but it is actually quite easy to interpret once we understand what it is doing for different values of $\alpha$ and $\beta$.
 
-      - If $\alpha = \beta = 0$, this is just the average. ie: $\bar{\mathbf{f}}_{0, 0} = \frac{1}{n} \sum_i \mathbf{f_i}$,
+      - If $\alpha = \beta = 0$, this is just the average. ie: $\mathbf{\bar{F}}_{0,0}(\mathbf{b}) = \frac{1}{n} \sum_i \mathbf{f_i}$,
     
-      - if $\alpha = \beta = m$, for some positive integer $m$, this is the average of $\mathbf{f_1}, \ldots, \mathbf{f_n}$ and $m$ copies of $\mathbf{b}$, ie: $\bar{\mathbf{f}}_{m, m} = \frac{1}{n + m} \sum_i \mathbf{f_i} + \frac{m}{n + m} \mathbf{b}$.
-    
-      - The component of $\bar{\mathbf{f}}_{\alpha, \beta}$ parallel to $\mathbf{b}$ has magnitude $\frac{\alpha^2 + \sum_i \mathbf{f_i} \cdot \mathbf{b}}{n + \alpha^2}$, which means that:
+      - if $\alpha = \beta = m$, for some positive integer $m$, this is the average of $\mathbf{f_1}, \ldots, \mathbf{f_n}$ and $m$ copies of $\mathbf{b}$, ie: $$\mathbf{\bar{F}}_{m,m}(\mathbf{b}) = \frac{1}{n + m} \sum_i \mathbf{f_i} + \frac{m}{n + m} \mathbf{b}$.
+      
+      - From the previous point, we see that if $\alpha = \beta = \infty$, this is just the prior vector $\mathbf{b}$, ie: $\mathbf{\bar{F}}_{\infty, \infty}(\mathbf{b}) = \mathbf{b}$.
+      - The component of $\mathbf{\bar{F}}_{\alpha \beta}(\mathbf{b})$ parallel to $\mathbf{b}$ has magnitude $\frac{\alpha^2 + \sum_i \mathbf{f_i} \cdot \mathbf{b}}{n + \alpha^2}$, which means that:
     
           - If $n << \alpha^2$ this magnitude is approximately 1, so this component is approximately $\mathbf{b}$,
       
-          - If $n >> \alpha^2$ this magnitude is approximately $\frac{1}{n} \sum_i (\mathbf{f_i} \cdot \mathbf{b} ) \mathbf{b}$, which is the magnitude of the average $\mathbf{\bar{f}}$ in the direction $\mathbf{b}$.
+          - If $n >> \alpha^2$ this magnitude is approximately $\frac{1}{n} \sum_i (\mathbf{f_i} \cdot \mathbf{b} ) \mathbf{b}$, which is the magnitude of the sample mean $\mathbf{\bar{f}}$ in the direction $\mathbf{b}$.
     
-      - The component of $\bar{\mathbf{f}}_{\alpha, \beta}$ perpendicular to $\mathbf{b}$ has magnitude $\frac{1}{n + \beta^2} \sum_i ( \mathbf{f_i} - (\mathbf{f_i} \cdot \mathbf{b})\mathbf{b} )$ which means that:
+      - The component of $\mathbf{\bar{F}}_{\alpha \beta}(\mathbf{b})$ perpendicular to $\mathbf{b}$ has magnitude $\frac{1}{n + \beta^2} \sum_i ( \mathbf{f_i} - (\mathbf{f_i} \cdot \mathbf{b})\mathbf{b} )$ which means that:
     
           - If $n << \beta^2$ this magnitude is approximately 0, so this component is approximately $\mathbf{0}$,
       
-          - If $n >> \beta^2$ this magnitude is approximately $\frac{1}{n} \sum_i \mathbf{f_i} - (\mathbf{f_i} \cdot \mathbf{b})\mathbf{b}$, which is the average $\mathbf{\bar{f}}$ perpendicular to $\mathbf{b}$.
+          - If $n >> \beta^2$ this magnitude is approximately $\frac{1}{n} \sum_i \mathbf{f_i} - (\mathbf{f_i} \cdot \mathbf{b})\mathbf{b}$, which is the sample mean $\mathbf{\bar{f}}$ perpendicular to $\mathbf{b}$.
     
-    From this analysis, we see that $\alpha^2$ is roughly the number of spots needed to scale $\mathbf{\bar{f}}_{\alpha, \beta}$ in the direction of $\mathbf{b}$, and $\beta^2$ is roughly the number of spots needed to scale $\mathbf{\bar{f}}_{\alpha, \beta}$ perpendicular to $\mathbf{b}$. 
+    From this analysis, we see that $\alpha^2$ is roughly the number of spots needed to scale $\mathbf{\bar{F}}_{\alpha \beta}(\mathbf{b})$ in the direction of $\mathbf{b}$, and $\beta^2$ is roughly the number of spots needed to scale $\mathbf{\bar{F}}_{\alpha \beta}(\mathbf{b})$ perpendicular to $\mathbf{b}$. 
     
     This is why we to set $\alpha^2 << \beta^2$. We want to easily scale the average in the direction of the prior vector, but not easily change its direction.
 
+We use these to estimate the free bled codes $\mathbf{E_{gr}}$ for each gene $g$ and round $r$ as follows:
+
+Let $\mathbf{f_1}, \ldots, \mathbf{f_n} \in \mathbb{R}^{n_c}$ be the round $r$ fluorescence vectors of spots assigned to gene $g$ with probability greater than $\gamma$ and let $\mathbf{B_{d(g, r)}}$ be the prior unit vector. We then set each round $r$ to have free bled codes $\mathbf{E_{gr}}$ given by
+
+$$
+\mathbf{E_{gr}} = \mathbf{\bar{F}}_{\alpha \beta}(\mathbf{B_{d(g, r)}}).
+$$
+
+The case for $\mathbf{D_{g, t}}$ is exactly analogous, except we use the fluorescence vectors of spots assigned to gene $g$ in tile $t$ with probability greater than $\gamma$.
 
 ??? info "Derivation of the Parallel Bayes Mean"
     
-    The formula for the parallel bayes mean is a [maximum a posteriori estimate](https://en.wikipedia.org/wiki/Maximum_a_posteriori_estimation) $\boldsymbol{\hat{\mu}}$ of the mean $\boldsymbol{\mu}$ of a normal distribution with a normal prior $\boldsymbol{\mu} \sim \mathcal{N}(\mathbf{b}, \Sigma)$, where $\Sigma$ is a diagonal matrix with $1/\alpha^2$ in the direction of $\mathbf{b}$ and $1/\beta^2$ in the direction orthogonal to $\mathbf{b}$.
+    The formula for the parallel bayes mean is a [maximum a posteriori estimate](https://en.wikipedia.org/wiki/Maximum_a_posteriori_estimation). This means that we view the data as coming from a particular distribution with some unkown mean $\boldsymbol{\mu}$, which we want to estimate. We have some prior beliefs about what $\boldsymbol{\mu}$ should be and how this should vary, which we encode in a prior distribution of potential values for $\boldsymbol{\mu}$. The observed data has a certain probability given $\boldsymbol{\mu}$, and by Bayes rule each $\boldsymbol{\mu}$ has a probability given the data. The maximum a posteriori estimate $\boldsymbol{\hat{\mu}}$ is the value of $\boldsymbol{\mu}$ which maximises this conditional probability distribution.
     
     Let $\mathbf{F_1}, \ldots, \mathbf{F_n}$  be the round $r$ fluorescence vectors of spots assigned to gene $g$ with high probability and let $\mathbf{B}_{d(g,r)}$ be the prior unit vector.
     
@@ -336,7 +373,13 @@ The values $\alpha^2$ and $\beta^2$ are in the config file as `concentration_par
 
 ### 4: Round and Channel Normalisation
 
-The purpose of this step is to find a scale factor $V_{rc}$ for each round $r$ and channel $c$ which gets as many of our spots as close as possible to their target values. 
+The purpose of this step is to find a scale factor $V_{rc}$ for each round $r$ and channel $c$ which gets as many of our spots as close as possible to their target values. We will then multiply $V_{rc}$ by the free bled codes $E_{grc}$ to get the _**constrained bled codes**_ $K_{grc}$. 
+
+!!! question "What makes these codes constrained?"
+
+    The codes $K_{grc}$ are _constrained_ in the sense that the value of $K_{grc}$ is determined by several genes other than $g$.
+
+    These codes have nice global properties, like as many genes as possible being as close as possible to their target values, but will not be representative of the spots assigned to gene $g$. This is addressed in section 5, where we will be to find a scale to get the spots as close as possible to these new constrained bled codes.
 
 The target values work as follows: 
 

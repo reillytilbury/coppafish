@@ -258,6 +258,7 @@ def generate_reg_images(
     nbp_register.anchor_images = anchor_images
 
     # get the round images, apply optical flow, optical flow + icp, concatenate and save
+    icp_correction = nbp_register.icp_correction
     for t in tqdm(use_tiles, desc="Round Images", total=len(use_tiles)):
         im_t_flow = spot_colours.base.get_spot_colours(
             image=nbp_filter.images,
@@ -266,15 +267,19 @@ def generate_reg_images(
             yxz_base=yxz_coords,
             use_channels=[dapi_channel],
             tile=t,
-        ).reshape((len(use_rounds), 1,) + image_shape)
+        ).reshape(image_shape + (len(use_rounds), 1))
+        im_t_flow = np.transpose(im_t_flow, (3, 4, 0, 1, 2))
+
+        icp_correction[t, :, dapi_channel] = icp_correction[t, :, anchor_channel]
         im_t_flow_icp = spot_colours.base.get_spot_colours(
             image=nbp_filter.images,
             flow=nbp_register.flow,
-            affine_correction=nbp_register.icp_correction,
+            affine_correction=icp_correction,
             yxz_base=yxz_coords,
             use_channels=[dapi_channel],
             tile=t,
-        ).reshape((len(use_rounds), 1,) + image_shape)
+        ).reshape(image_shape + (len(use_rounds), 1))
+        im_t_flow_icp = np.transpose(im_t_flow_icp, (3, 4, 0, 1, 2))
 
         # concatenate the images for each round and save
         for r in use_rounds:
@@ -296,7 +301,8 @@ def generate_reg_images(
             yxz_base=yxz_coords,
             use_channels=use_channels,
             tile=t,
-        ).reshape((len(use_rounds), len(use_channels),) + image_shape)[r_mid][None]
+        ).reshape(image_shape + (len(use_rounds), len(use_channels),))
+        im_t_flow = np.transpose(im_t_flow, (3, 4, 0, 1, 2))[r_mid][None]
         im_t_flow_icp = spot_colours.base.get_spot_colours(
             image=nbp_filter.images,
             flow=nbp_register.flow,
@@ -304,7 +310,8 @@ def generate_reg_images(
             yxz_base=yxz_coords,
             use_channels=use_channels,
             tile=t,
-        ).reshape((len(use_rounds), len(use_channels),) + image_shape)[r_mid][None]
+        ).reshape(image_shape + (len(use_rounds), len(use_channels),))
+        im_t_flow_icp = np.transpose(im_t_flow_icp, (3, 4, 0, 1, 2))[r_mid][None]
 
         # concatenate the images for each channel and save
         for i, c in enumerate(use_channels):
