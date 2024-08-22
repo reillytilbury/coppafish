@@ -983,7 +983,7 @@ class BuildPDF:
         global_maximums_yxz = global_yxzs.max(0)
         bin_counts = np.ceil(global_maximums_yxz / self.HEATMAP_BIN_SIZE)[:2].astype(int).tolist()
         hist_range = ((0, bin_counts[0] * self.HEATMAP_BIN_SIZE), (0, bin_counts[1] * self.HEATMAP_BIN_SIZE))
-        cmap = mpl.cm.plasma
+        cmap = mpl.cm.Reds
 
         for g, gene_name in enumerate(gene_names):
             spot_passes = scores >= score_threshold
