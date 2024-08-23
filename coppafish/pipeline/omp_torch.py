@@ -22,7 +22,6 @@ def run_omp(
     nbp_extract: NotebookPage,
     nbp_filter: NotebookPage,
     nbp_register: NotebookPage,
-    nbp_register_debug: NotebookPage,
     nbp_stitch: NotebookPage,
     nbp_call_spots: NotebookPage,
 ) -> NotebookPage:
@@ -41,7 +40,6 @@ def run_omp(
         - nbp_extract (NotebookPage): `extract` notebook page.
         - nbp_filter (NotebookPage): `filter` notebook page.
         - nbp_register (NotebookPage): `register` notebook page.
-        - nbp_register_debug (NotebookPage): `register_debug` notebook page.
         - nbp_stitch (NotebookPage): `stitch` notebook page.
         - nbp_call_spots (NotebookPage): `call_spots` notebook page.
 
@@ -54,7 +52,6 @@ def run_omp(
     assert type(nbp_extract) is NotebookPage
     assert type(nbp_filter) is NotebookPage
     assert type(nbp_register) is NotebookPage
-    assert type(nbp_register_debug) is NotebookPage
     assert type(nbp_stitch) is NotebookPage
     assert type(nbp_call_spots) is NotebookPage
 
@@ -296,6 +293,7 @@ def run_omp(
         )
         t_spots_colours_temp = spot_colours.base.get_spot_colours(
             image=nbp_filter.images,
+            tile=t,
             flow=nbp_register.flow,
             affine_correction=nbp_register.icp_correction,
             yxz_base=t_local_yxzs,

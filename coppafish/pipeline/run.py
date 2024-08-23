@@ -1,7 +1,5 @@
 import os
 
-from numpy import where
-
 from . import basic_info
 from . import extract_run
 from . import filter_run
@@ -249,7 +247,6 @@ def run_reference_spots(nb: Notebook) -> None:
             nbp_filter=nb.filter,
             nbp_find_spots=nb.find_spots,
             nbp_register=nb.register,
-            nbp_register_debug=nb.register_debug,
             nbp_stitch=nb.stitch,
         )
         nb += nbp_ref_spots
@@ -290,7 +287,6 @@ def run_omp(nb: Notebook) -> None:
             nb.extract,
             nb.filter,
             nb.register,
-            nb.register_debug,
             nb.stitch,
             nb.call_spots,
         )

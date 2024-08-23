@@ -1,9 +1,10 @@
 import numpy as np
-from ..spot_colours import base as spot_colours_base
-from ..call_spots import base as call_spots_base
+
 from .. import find_spots as fs
 from .. import log
+from ..call_spots import base as call_spots_base
 from ..setup import NotebookPage
+from ..spot_colours import base as spot_colours_base
 
 
 def get_reference_spots(
@@ -11,7 +12,6 @@ def get_reference_spots(
     nbp_filter: NotebookPage,
     nbp_find_spots: NotebookPage,
     nbp_register: NotebookPage,
-    nbp_register_debug: NotebookPage,
     nbp_stitch: NotebookPage,
 ) -> NotebookPage:
     """
@@ -82,12 +82,14 @@ def get_reference_spots(
         if np.sum(in_tile) == 0:
             continue
         log.info(f"Tile {np.where(use_tiles==t)[0][0]+1}/{n_use_tiles}")
-        colours = spot_colours_base.get_spot_colours(image=nbp_filter.images,
-                                                     flow=nbp_register.flow,
-                                                     affine_correction=nbp_register.icp_correction,
-                                                     tile=t,
-                                                     yxz_base=nd_local_yxz[in_tile],
-                                                     use_channels=use_channels,)
+        colours = spot_colours_base.get_spot_colours(
+            image=nbp_filter.images,
+            flow=nbp_register.flow,
+            affine_correction=nbp_register.icp_correction,
+            tile=t,
+            yxz_base=nd_local_yxz[in_tile],
+            use_channels=use_channels,
+        )
         valid = ~(np.isnan(colours).any(1).any(1))
         log.debug(f"Valid ref pixel colours: {valid.sum()} out of {valid.size} for tile {t}")
         spot_colours = np.append(spot_colours, colours[valid], axis=0)
