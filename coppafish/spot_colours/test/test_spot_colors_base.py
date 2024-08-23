@@ -60,7 +60,7 @@ def test_get_spot_colours():
     # now we want to get the spot colours from the disaligned images
     yxz_base = coords.reshape(3, -1).T
     spot_colours = get_spot_colours(
-        image=images_disaligned[None], flow=flow[None], affine_correction=affine[None], yxz_base=yxz_base
+        image=images_disaligned[None], flow=flow[None], affine_correction=affine[None], yxz_base=yxz_base, tile=0
     )
     # reshape spot colours from n_spots x n_rounds x n_channels to n_y x n_x x n_z x n_rounds x n_channels
     spot_colours = spot_colours.reshape(*tile_shape, n_rounds, n_channels)

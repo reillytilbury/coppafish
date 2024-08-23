@@ -41,7 +41,7 @@ jobs:
           python -m pip install .
 
       - name: Run default unit tests
-        run: pytest -m "not integration and not manual"
+        run: pytest -m "not integration and not manual" --cov=coppafish --cov-report term
 
       - name: Run default integration tests
-        run: pytest -m "integration and not manual"
+        run: pytest -m "integration and not manual" --cov=coppafish --cov-report term
