@@ -87,9 +87,9 @@ def get_spot_colours(
     flow: Union[np.ndarray, zarr.Array],
     affine_correction: Union[np.ndarray, torch.Tensor],
     yxz_base: Union[np.ndarray, torch.Tensor],
+    tile: int,
     output_dtype: torch.dtype = torch.float32,
     fill_value: float = float("nan"),
-    tile: int = None,
     use_channels: List[int] = None,
 ) -> np.ndarray:
     """
@@ -107,23 +107,21 @@ def get_spot_colours(
     points will be slower than accessing a subset of the image at once.
 
     Args:
-        image: 'float16 memmap [n_tiles x n_rounds x n_channels x im_y x im_x x im_z]' unregistered image data.
-        flow: 'float16 memmap [n_tiles x n_rounds x 3 x im_y x im_x x im_z]' flow data.
-        affine_correction: 'float32 [n_tiles x n_rounds x n_channels x 4 x 3]' affine correction data, or
-        [n_rounds x n_channels x 4 x 3] for the tile of interest or
-        [n_channels x 4 x 3] if round independent
-        yxz_base: 'int [n_spots x 3]' spot coordinates, or tuple
-        output_dtype: 'dtype' dtype of the output spot colours.
-        fill_value: 'float' value to fill in for out of bounds spots.
-        tile: 'int' tile index to run on.
-        use_channels: 'List[int]' channels to run on.
+        - image: 'float16 memmap [n_tiles x n_rounds x n_channels x im_y x im_x x im_z]' unregistered image data.
+        - flow: 'float16 memmap [n_tiles x n_rounds x 3 x im_y x im_x x im_z]' flow data.
+        - affine_correction: 'float32 [n_tiles x n_rounds x n_channels x 4 x 3]' affine correction data, or
+            [n_rounds x n_channels x 4 x 3] for the tile of interest or
+            [n_channels x 4 x 3] if round independent
+        - yxz_base: 'int [n_spots x 3]' spot coordinates, or tuple
+        - tile: 'int' tile index to run on.
+        - output_dtype: 'dtype' dtype of the output spot colours.
+        - fill_value: 'float' value to fill in for out of bounds spots.
+        - use_channels: 'List[int]' channels to run on.
 
     Returns:
         spot_colours: 'output_dtype [n_spots x n_rounds x n_channels]' spot colours.
     """
-    # deal with none values
-    if tile is None:
-        tile = 0
+    # Deal with default values.
     if use_channels is None:
         use_channels = list(range(image.shape[2]))
     if type(affine_correction) is np.ndarray:
