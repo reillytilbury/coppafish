@@ -21,16 +21,12 @@
 #    "_option_formatters" dictionaries.)
 # 2. Add it, and a description of what it does, to "config.default.ini".
 import configparser
+import importlib.resources as importlib_resources
 import os
 import re
 from typing import Any, Dict
 
 from .. import log
-
-try:
-    import importlib_resources
-except ModuleNotFoundError:
-    import importlib.resources as importlib_resources
 
 
 # List of options and their type.  If you change this, update the
@@ -50,7 +46,6 @@ _options = {
         "dye_names": "tuple_str",
         "is_3d": "bool",
         "ignore_first_z_plane": "bool",
-        "minimum_print_severity": "int",
         "bad_trc": "maybe_tuple_tuple_int",
         # From here onwards these are not compulsory to enter and will be taken from the metadata
         # Only leaving them here to have backwards compatibility as Max thinks the user should influence these
@@ -58,9 +53,6 @@ _options = {
         "channel_laser": "maybe_tuple_int",
         "ref_round": "maybe_int",
         "ref_channel": "maybe_int",
-        "sender_email": "maybe_str",
-        "sender_email_password": "maybe_str",
-        "email_me": "maybe_str",
     },
     "file_names": {
         "notebook_name": "str",
@@ -77,7 +69,13 @@ _options = {
         "pciseq": "tuple_str",
         "fluorescent_bead_path": "maybe_str",
         "initial_bleed_matrix": "maybe_str",
+    },
+    "notifications": {
         "log_name": "str",
+        "minimum_print_severity": "int",
+        "sender_email": "maybe_str",
+        "sender_email_password": "maybe_str",
+        "email_me": "maybe_str",
     },
     "extract": {
         "num_rotations": "int",

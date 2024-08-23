@@ -1,15 +1,12 @@
 import itertools
-from typing import Tuple
+import importlib.resources as importlib_resources
 import numpy as np
+from typing import Tuple
 
 from .. import log
-from ..call_spots import dot_product_score, gene_prob_score, bayes_mean, compute_bleed_matrix
+from ..call_spots.base import bayes_mean, compute_bleed_matrix
+from ..call_spots.dot_product import dot_product_score, gene_prob_score
 from ..setup import NotebookPage
-
-try:
-    import importlib_resources
-except ModuleNotFoundError:
-    import importlib.resources as importlib_resources
 
 
 def call_reference_spots(
