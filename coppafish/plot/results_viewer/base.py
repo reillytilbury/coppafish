@@ -19,7 +19,7 @@ from . import legend
 from .. import call_spots as call_spots_plot
 from ...omp import base as omp_base
 from ...setup import Notebook
-from ..call_spots import view_bled_codes, view_bleed_matrix, view_codes, view_spot, BGNormViewer, GEViewer
+from ..call_spots import view_bled_codes, view_bleed_matrix, view_codes, view_spot, BGScaleViewer, GEViewer
 from ..call_spots import ViewAllGeneHistograms, HistogramScore
 from ..omp import ViewOMPImage, ViewOMPPixelColours
 from .hotkeys import KeyBinds, ViewHotkeys
@@ -785,7 +785,7 @@ class Viewer:
 
         @self.viewer.bind_key(KeyBinds.view_background_norm)
         def call_to_view_bg_norm(viewer):
-            BGNormViewer(self.nb)
+            BGScaleViewer(self.nb)
 
         @self.viewer.bind_key(KeyBinds.view_bled_codes)
         def call_to_view_bled(viewer):
