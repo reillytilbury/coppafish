@@ -808,93 +808,69 @@ class GESpotViewer:
                 view_codes(self.nb, self.spot_index[s], tile=self.tile[s], method=self.mode)
 
 
-class BGNormViewer:
+class BGScaleViewer:
     """
-    This function will plot all spots before and after background subtraction and order them by background noise.
+    This function will plot isolated spots before and after background subtraction and order them by background noise.
     We will then plot the normalised spots too.
     """
 
     def __init__(self, nb):
         plt.style.use("dark_background")
         self.nb = nb
-        isolated = nb.ref_spots.isolated
-        tile = nb.ref_spots.tile
-        n_spots = np.sum(isolated)
+        spot_tile = nb.ref_spots.tile
+        n_spots = spot_tile.shape[0]
         n_rounds, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
-        norm_factor = nb.call_spots.colour_norm_factor[tile][isolated]
-        background_noise = nb.ref_spots.background_strength[isolated]
+        norm_factor = nb.call_spots.colour_norm_factor
+        bg_raw = np.repeat(np.percentile(nb.ref_spots.colours, 25, axis=1)[:, None, :], n_rounds, axis=1)
 
-        spot_colour_raw = nb.ref_spots.colours.copy()[isolated][:, :, nb.basic_info.use_channels]
-        spot_colour_no_bg = spot_colour_raw - background_noise
-        spot_colour_normed_no_bg = spot_colour_no_bg * norm_factor[isolated]
-        # Now we'd like to order the spots by background noise in descending order
-        background_noise = np.sum(abs(background_noise), axis=(1, 2))
-        spot_colour_raw = spot_colour_raw[np.argsort(background_noise)[::-1]]
-        spot_colour_no_bg = spot_colour_no_bg[np.argsort(background_noise)[::-1]]
-        spot_colour_normed_no_bg = spot_colour_normed_no_bg[np.argsort(background_noise)[::-1]]
+        # get spot colours raw, no_bg and normed_no_bg
+        spot_colour_raw = nb.ref_spots.colours.copy()
+        spot_colour_no_bg = spot_colour_raw - bg_raw
+        spot_colour_normed_no_bg = spot_colour_no_bg * norm_factor[spot_tile]
+
         # Finally, we need to reshape the spots to be n_spots x n_rounds * n_channels. Since we want the channels to be
         # in consecutive blocks of size n_rounds, we can reshape by first switching the round and channel axes.
-        spot_colour_raw = spot_colour_raw.transpose((0, 2, 1))
-        spot_colour_raw = spot_colour_raw.reshape((n_spots, n_rounds * n_channels_use))
-        spot_colour_no_bg = spot_colour_no_bg.transpose((0, 2, 1))
-        spot_colour_no_bg = spot_colour_no_bg.reshape((n_spots, n_rounds * n_channels_use))
-        spot_colour_normed_no_bg = spot_colour_normed_no_bg.transpose((0, 2, 1))
-        spot_colour_normed_no_bg = spot_colour_normed_no_bg.reshape((n_spots, n_rounds * n_channels_use))
+        # also order the spots by background noise in descending order
+        max_spots = 10_000
+        background_noise = np.sum(abs(bg_raw), axis=(1, 2))
+        colours = [spot_colour_raw, spot_colour_no_bg, spot_colour_normed_no_bg]
+        for i, c in enumerate(colours):
+            c = c[np.argsort(background_noise)[::-1]]
+            c = c.transpose(0, 2, 1)
+            c = c.reshape(n_spots, -1)
+            colours[i] = c
 
-        # We're going to make a little viewer to show spots before and after background subtraction
-        colour_scaling_factor = 10
-        fig, ax = plt.subplots(1, 3, figsize=(10, 5))
-        max_intensity = np.max(spot_colour_raw)
-        min_intensity = np.min(spot_colour_raw)
-        ax[0].imshow(
-            spot_colour_raw,
-            aspect="auto",
-            vmin=min_intensity * colour_scaling_factor,
-            vmax=max_intensity * colour_scaling_factor,
-            interpolation="none",
-        )
-        ax[0].set_title("Before background subtraction and normalisation")
-        ax[0].set_xticks([])
+        # We're going to make a little viewer to show spots before and after background subtraction and normalisation
+        fig, ax = plt.subplots(2, 3, figsize=(10, 5))
+        for i, c in enumerate(colours):
+            min_intensity, max_intensity = np.percentile(c, [1, 99])
+            ax[0, i].imshow(
+                c[:max_spots],
+                aspect="auto",
+                vmin=min_intensity,
+                vmax=max_intensity,
+                interpolation="none",
+            )
+            ax[0, i].set_title(["Raw", "BG Removed", "BG Removed + Scaled"][i])
 
-        max_intensity = np.max(spot_colour_no_bg)
-        min_intensity = np.min(spot_colour_no_bg)
-        ax[1].imshow(
-            spot_colour_no_bg,
-            aspect="auto",
-            vmin=min_intensity * colour_scaling_factor,
-            vmax=max_intensity * colour_scaling_factor,
-            interpolation="none",
-        )
-        ax[1].set_title("After bg removal, before normalisation")
-        ax[1].set_xticks([])
+        for i, c in enumerate(colours):
+            bright_colours = np.percentile(c, 95, axis=0)
+            bright_colours = bright_colours.reshape(n_channels_use, n_rounds).flatten()
+            ax[1, i].plot(bright_colours, color="white")
+            ax[1, i].set_ylim(0, np.max(bright_colours) * 1.1)
+            ax[1, i].set_title("95th Percentile Brightness")
 
-        max_intensity = np.max(spot_colour_normed_no_bg)
-        min_intensity = np.min(spot_colour_normed_no_bg)
-        ax[2].imshow(
-            spot_colour_normed_no_bg,
-            aspect="auto",
-            vmin=min_intensity * colour_scaling_factor,
-            vmax=max_intensity * colour_scaling_factor,
-            interpolation="none",
-        )
-        ax[2].set_title("After background subtraction and normalisation")
-        ax[2].set_xticks([])
-
-        # Now add vertical dashed red lines to separate channels
-        for i in range(n_rounds - 1):
-            for j in range(3):
-                ax[j].axvline((i + 1) * n_channels_use - 0.5, color="r", linestyle="--")
-
-        # For each ax, add the channels to the x axis. Since the x axis has n_rounds channels, followed by n_rounds
-        # channels, etc, we only need to add the channels once. We want to add the channel name at the bottom of
-        # each set of channels, so we'll add the channel name at the position of the middle channel in each set
-        for i in range(n_channels_use):
-            y_pos = int(n_spots * (1 + 0.05))
-            for j in range(3):
-                ax[j].text(i * n_rounds + n_rounds // 2, y_pos, nb.basic_info.use_channels[i], color="w", fontsize=10)
+        for i, j in np.ndindex(2, 3):
+            ax[i, j].set_xticks([k * n_rounds + n_rounds // 2 for k in range(n_channels_use)],
+                                nb.basic_info.use_channels)
+            if i == 0:
+                ax[i, j].set_yticks([])
+            # separate channels with a horizontal line
+            for k in range(1, n_channels_use):
+                ax[i, j].axvline(k * n_rounds - 0.5, color="Red", linestyle="--")
 
         # Add a title
-        fig.suptitle("Background subtraction and normalisation", fontsize=16)
+        fig.suptitle("BG Removal + Scaling")
 
         plt.show()
 
@@ -906,5 +882,5 @@ class BGNormViewer:
     # self.ax_slider = self.fig.add_axes([0.94, 0.15, 0.02, 0.6])
     # self.slider = Slider(self.ax_slider, 'Interpolation Coefficient', 0, 1, valinit=0, orientation='vertical')
     # self.slider.on_changed(lambda val: self.update_hist(int(val)))
-    #
     # TODO: Add 2 buttons, one for separating normalisation by channel and one for separating by round and channel
+

@@ -280,20 +280,21 @@ def interpolate_flow(
     correlation = correlation / np.mean(correlation, axis=(0, 1))[None, None, :]
     # smooth the correlation
     correlation_smooth = gaussian_filter(correlation, sigma, truncate=6)
+    flow_smooth = np.zeros_like(flow)
     # smooth the correlation weighted flow
     for i in range(3):
-        flow[i] = gaussian_filter(flow[i] * correlation, sigma, truncate=6)
+        flow_smooth[i] = gaussian_filter(flow[i] * correlation, sigma, truncate=6)
 
     # divide the smoothed correlation weighted flow by the smoothed correlation
-    flow = np.array([flow[i] / correlation_smooth for i in range(3)])
+    flow_smooth = np.array([flow_smooth[i] / correlation_smooth for i in range(3)])
 
     # remove nan values
-    flow = np.nan_to_num(flow)
+    flow_smooth = np.nan_to_num(flow_smooth)
     upsample_factor = (upsample_factor_yx, upsample_factor_yx, 1)
     # upsample the flow before saving
-    flow = np.array(
+    flow_smooth = np.array(
         [
-            upsample_yx(flow[i], upsample_factor_yx, order=1) * upsample_factor[i]
+            upsample_yx(flow_smooth[i], upsample_factor_yx, order=1) * upsample_factor[i]
             for i in tqdm(range(3), desc="Upsampling smooth flow")
         ],
         dtype=np.float16,
@@ -302,10 +303,10 @@ def interpolate_flow(
     if loc:
         # save in yxz format
         zarray = zarr.open_array(loc, mode="r+")
-        zarray[tile, round] = flow
+        zarray[tile, round] = flow_smooth
     time_end = time.time()
     log.info("Interpolating flow took " + str(time_end - time_start) + " seconds")
-    return flow
+    return flow_smooth
 
 
 def upsample_yx(im: np.ndarray, factor: float = 4, order: int = 1) -> np.ndarray:

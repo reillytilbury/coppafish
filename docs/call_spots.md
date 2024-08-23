@@ -449,3 +449,6 @@ We also compute probabilities for each spot $s$ being assigned to gene $g$ as
 - `gene_prob[s, g]` = $\dfrac{\exp(\kappa \mathbf{K_{g} \cdot F_s})}{\sum_{g'} \exp(\kappa \mathbf{K_{g'} \cdot F_s})}$,
 
 where $\mathbf{F_s}$ and $\mathbf{K_{g}}$ have both been round-normalised. Finally, with these updated gene assignments, we can compute the final bleed matrix $\mathbf{B}$ in the same way as in step 2.
+
+## Diagnostics
+
