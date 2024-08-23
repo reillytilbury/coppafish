@@ -1,133 +1,9 @@
-import matplotlib.pyplot as plt
-import napari
 import numpy as np
-import skimage
 import scipy
+import skimage
 import torch
 
-from coppafish.spot_colours.base import get_spot_colours_new, get_spot_colours
-
-
-def test_get_spot_colours_new() -> None:
-    rng = np.random.RandomState(0)
-    tile_shape = 2, 3, 4
-    image = rng.rand(*tile_shape).astype(np.float64)
-    all_images = image[None, None, None]
-    use_channels = [0]
-    dapi_channel = 2
-    tile = 0
-    round = 0
-    channels = (0,)
-    yxz = None
-    registration_type = "flow_and_icp"
-    dtype = np.float64
-    # Test the optical flow is working using a positive x shift of one pixel on the image.
-    flow = np.zeros((1, 1, 3) + tile_shape, np.float16)
-    flow[:, :, 1] = -1
-    # Add one flow shift of -1.5 in the z direction.
-    flow[:, :, 1, 1, 2, 3] = 0
-    flow[:, :, 2, 1, 2, 3] = 1.5
-    icp_correction = np.eye(4, 3)[np.newaxis, np.newaxis, np.newaxis]
-    channel_correction = np.eye(4, 3)[np.newaxis, np.newaxis]
-    result = get_spot_colours_new(
-        all_images=all_images,
-        flow=flow,
-        icp_correction=icp_correction,
-        channel_correction=channel_correction,
-        use_channels=use_channels,
-        dapi_channel=dapi_channel,
-        tile=tile,
-        round=round,
-        channels=channels,
-        yxz=yxz,
-        registration_type=registration_type,
-        dtype=dtype,
-    )
-    assert type(result) is np.ndarray
-    assert result.shape == (1, np.prod(tile_shape))
-    assert result.dtype == dtype
-    result = result.reshape(tile_shape)
-    assert np.allclose(result[:, :-1], image[:, 1:])
-    assert np.isnan(result[:-1, -1, :-1]).all()
-    assert np.isnan(result[:, -1]).sum() == 7
-    assert np.isclose(result[1, 2, 3], (image[1, 2, 1] + image[1, 2, 2]) / 2)
-
-    # Test the gathering of a subset of pixels.
-    yxz = np.zeros((4, 3), np.int32)
-    yxz[0] = [0, 0, 2]
-    yxz[1] = [0, 0, 2]
-    yxz[2] = [1, 0, 2]
-    yxz[3] = [1, 0, 2]
-    result = get_spot_colours_new(
-        all_images=all_images,
-        flow=flow,
-        icp_correction=icp_correction,
-        channel_correction=channel_correction,
-        use_channels=use_channels,
-        dapi_channel=dapi_channel,
-        tile=tile,
-        round=round,
-        channels=channels,
-        yxz=yxz,
-        registration_type=registration_type,
-        dtype=dtype,
-    )[0]
-    assert np.allclose(result[0], image[0, 1, 2])
-    assert np.allclose(result[1], image[0, 1, 2])
-    assert np.allclose(result[2], image[1, 1, 2])
-    assert np.allclose(result[3], image[1, 1, 2])
-
-    # Test the affine transform with a y and x transpose.
-    tile_shape = 3, 3, 4
-    image = rng.rand(*tile_shape).astype(np.float64)
-    all_images = image[None, None, None]
-    yxz = None
-    flow = np.zeros((1, 1, 3) + tile_shape, np.float16)
-    icp_correction = np.zeros((4, 3))
-    icp_correction[0, 1] = 1
-    icp_correction[1, 0] = 1
-    icp_correction[2, 2] = 1
-    icp_correction = icp_correction[np.newaxis, np.newaxis, np.newaxis]
-    dtype = np.float32
-    result = get_spot_colours_new(
-        all_images=all_images,
-        flow=flow,
-        icp_correction=icp_correction,
-        channel_correction=channel_correction,
-        use_channels=use_channels,
-        dapi_channel=dapi_channel,
-        tile=tile,
-        round=round,
-        channels=channels,
-        yxz=yxz,
-        registration_type=registration_type,
-        dtype=dtype,
-    )[0]
-    assert result.dtype == dtype
-    result = result.reshape(tile_shape)
-    assert np.allclose(result, image.swapaxes(0, 1))
-
-    # Affine and optical flow shift together.
-    flow = np.zeros((1, 1, 3) + tile_shape, np.float16)
-    flow[:, :, 0] = -1
-    result = get_spot_colours_new(
-        all_images=all_images,
-        flow=flow,
-        icp_correction=icp_correction,
-        channel_correction=channel_correction,
-        use_channels=use_channels,
-        dapi_channel=dapi_channel,
-        tile=tile,
-        round=round,
-        channels=channels,
-        yxz=yxz,
-        registration_type=registration_type,
-        dtype=dtype,
-    )[0]
-    assert result.dtype == dtype
-    result = result.reshape(tile_shape)
-    assert np.allclose(result[:, :-1], image.swapaxes(0, 1)[:, 1:])
-    assert np.isnan(result[:, -1]).all()
+from coppafish.spot_colours.base import get_spot_colours
 
 
 def test_get_spot_colours():
@@ -166,7 +42,7 @@ def test_get_spot_colours():
     flow[1, 2] = 2
 
     # get coords and define warps (coords + flow) for each round
-    coords = np.array(np.meshgrid(*[np.arange(s) for s in tile_shape], indexing='ij'))
+    coords = np.array(np.meshgrid(*[np.arange(s) for s in tile_shape], indexing="ij"))
     warp_inv = np.array([coords - flow[r] for r in range(n_rounds)])
 
     # the transform we will apply to align is A(F(x)), so to disalign apply A^(-1)(F^(-1)(x))
@@ -176,14 +52,16 @@ def test_get_spot_colours():
             # invert the affine transform
             affine_rc = np.vstack([affine[r, c].T, [0, 0, 0, 1]])
             affine_rc = np.linalg.inv(affine_rc)
-            images_disaligned[r, c] = scipy.ndimage.affine_transform(images_aligned[r, c], affine_rc, order=1,
-                                                                     cval=np.nan)
+            images_disaligned[r, c] = scipy.ndimage.affine_transform(
+                images_aligned[r, c], affine_rc, order=1, cval=np.nan
+            )
             images_disaligned[r, c] = skimage.transform.warp(images_disaligned[r, c], warp_inv[r], order=1, cval=np.nan)
 
     # now we want to get the spot colours from the disaligned images
     yxz_base = coords.reshape(3, -1).T
-    spot_colours = get_spot_colours(image=images_disaligned[None], flow=flow[None], affine_correction=affine[None],
-                                    yxz_base=yxz_base)
+    spot_colours = get_spot_colours(
+        image=images_disaligned[None], flow=flow[None], affine_correction=affine[None], yxz_base=yxz_base
+    )
     # reshape spot colours from n_spots x n_rounds x n_channels to n_y x n_x x n_z x n_rounds x n_channels
     spot_colours = spot_colours.reshape(*tile_shape, n_rounds, n_channels)
     # reorder spot colours array to n_rounds x n_channels x n_y x n_x x n_z
@@ -192,6 +70,7 @@ def test_get_spot_colours():
     mid_z = tile_shape[2] // 2
 
     # # plot scatter plot of true vs predicted values for mid_z slice
+    # import matplotlib.pyplot as plt
     # plt.scatter(x=images_aligned[:, :, :, :, mid_z].flatten(), y=spot_colours[:, :, :, :, mid_z].flatten())
     # plt.xlabel('True Values')
     # plt.ylabel('Predicted Values')
@@ -199,6 +78,7 @@ def test_get_spot_colours():
     # plt.show()
 
     # # open napari viewer to check the images
+    # import napari
     # v = napari.Viewer()
     # v.add_image(images_aligned, name='Aligned Images', colormap='red', blending='additive',
     #             contrast_limits=np.nanpercentile(images_aligned, [1, 99]))
@@ -206,6 +86,7 @@ def test_get_spot_colours():
     #             contrast_limits=np.nanpercentile(images_disaligned, [1, 99]))
     # v.add_image(spot_colours, name='Spot Colours', colormap='green', blending='additive',
     #             contrast_limits=np.nanpercentile(spot_colours, [1, 99]))
+    # napari.run()
 
     assert np.nanmax(np.abs(images_aligned - spot_colours)[:, :, :, :, mid_z]) < 0.05
 
@@ -247,14 +128,15 @@ def test_grid_sample():
     # grid values should be between -1 and 1, so we need to scale the random points to be between -1 and 1
     random_points = 2 * random_points / (im_sz - 1) - 1
     random_points = random_points[:, [2, 1, 0]]  # convert from yxz to zxy
-    random_points = random_points.float()   # convert to float
-    predicted_vals = torch.nn.functional.grid_sample(input=brain[None, None, :, :, :],
-                                                     grid=random_points[None, :, None, None, :],
-                                                     mode='nearest').squeeze()
+    random_points = random_points.float()  # convert to float
+    predicted_vals = torch.nn.functional.grid_sample(
+        input=brain[None, None, :, :, :], grid=random_points[None, :, None, None, :], mode="nearest"
+    ).squeeze()
     # reshape the predicted values to be the same shape as the true values and turn into numpy
     predicted_vals = predicted_vals.numpy()
 
     # check that the predicted values are the same as the true values
+    # import matplotlib.pyplot as plt
     # plt.scatter(x=true_vals, y=predicted_vals)
     # plt.xlabel('True Values')
     # plt.ylabel('Predicted Values')

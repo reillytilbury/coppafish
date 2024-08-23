@@ -16,4 +16,3 @@ line-length = 120
 typeCheckingMode = "off"
 # Fix relative importing resolves using pyright.
 executionEnvironments = {"root" = "src"}
-

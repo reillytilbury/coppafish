@@ -5,15 +5,13 @@ import platform
 from typing import Any, Dict, Tuple
 
 import numpy as np
-import scipy
 import torch
 import tqdm
 import zarr
 
-from .. import log, spot_colours, utils
-from ..call_spots import background_pytorch
+from .. import log, utils, spot_colours
 from ..find_spots import detect_torch
-from ..omp import coefs_torch, scores_torch, spots_torch
+from ..omp import coefs, scores_torch, spots_torch
 from ..setup import NotebookPage
 
 
@@ -67,17 +65,15 @@ def run_omp(
     omp_config = {"omp": config}
     nbp = NotebookPage("omp", omp_config)
 
-    # We want exact, reproducible results.
     torch.backends.cudnn.deterministic = True
     if platform.system() != "Windows":
+        # Avoids chance of memory crashing on Linux.
         os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
     n_genes = nbp_call_spots.bled_codes.shape[0]
     n_rounds_use = len(nbp_basic.use_rounds)
     n_channels_use = len(nbp_basic.use_channels)
     tile_shape: Tuple[int] = nbp_basic.tile_sz, nbp_basic.tile_sz, len(nbp_basic.use_z)
-    colour_norm_factor = np.array(nbp_call_spots.colour_norm_factor, dtype=np.float32)
-    colour_norm_factor = torch.asarray(colour_norm_factor).float()
     tile_centres = nbp_stitch.tile_origin.astype(np.float32)
     # Invalid tiles are sent far away to avoid mistaken duplicate spot detection.
     tile_centres[np.isnan(tile_centres)] = 1e20
@@ -109,18 +105,20 @@ def run_omp(
 
         # STEP 1: Load every registered sequencing round/channel image into memory
         log.debug(f"Loading tile {t} colours")
-        tile_computed_on = np.zeros(np.prod(tile_shape), dtype=np.int8)
         colour_image = np.zeros((np.prod(tile_shape), n_rounds_use, n_channels_use), dtype=np.float16)
         yxz_all = [np.linspace(0, tile_shape[i], tile_shape[i], endpoint=False) for i in range(3)]
         yxz_all = np.array(np.meshgrid(*yxz_all, indexing="ij")).reshape((3, -1)).astype(np.int32).T
         batch_size = maths.floor(utils.system.get_available_memory() * 1.3e7 / n_channels_use)
         n_batches = maths.ceil(np.prod(tile_shape) / batch_size)
+        device = torch.device("cpu") if (config["force_cpu"] or not torch.cuda.is_available()) else torch.device("cuda")
+        postfix = {"tile": t, "device": str(device).upper()}
         for j in tqdm.trange(n_batches, desc=f"Loading colours", unit="batch"):
             index_min = j * batch_size
             index_max = (j + 1) * batch_size
             index_max = min(index_max, np.prod(tile_shape))
             batch_spot_colours = spot_colours.base.get_spot_colours(
                 image=nbp_filter.images,
+                tile=t,
                 flow=nbp_register.flow,
                 affine_correction=nbp_register.icp_correction,
                 yxz_base=yxz_all[index_min:index_max],
@@ -133,56 +131,24 @@ def run_omp(
             del batch_spot_colours
         log.debug(f"Loading tile {t} colours complete")
 
-        # STEP 2: Compute OMP coefficients on tile subsets.
-        # Store the entire tile's coefficient results into one scipy sparse matrix.
+        # STEP 2: Compute OMP coefficients on the entire tile.
+        # The entire tile's coefficient results are stored in a scipy sparse matrix.
         log.debug(f"Compute coefficients, tile {t} started")
-        description = f"Computing OMP coefficients"
-        coefficients = scipy.sparse.lil_matrix((np.prod(tile_shape), n_genes), dtype=np.float32)
-        subset_count = maths.ceil(np.prod(tile_shape) / config["subset_pixels"])
-        for j in tqdm.trange(subset_count, desc=description, unit="subset"):
-            index_min = j * config["subset_pixels"]
-            index_max = (j + 1) * config["subset_pixels"]
-            # Shrink the subset if it is at the end of the tile.
-            index_max = min(index_max, np.prod(tile_shape))
-            subset_colours = colour_image[index_min:index_max].astype(np.float32)
-            subset_colours = torch.asarray(subset_colours)
-            if config["colour_normalise"]:
-                subset_colours *= colour_norm_factor[[t]]
-            bg_coefficients = torch.zeros((subset_colours.shape[0], n_channels_use), dtype=torch.float32)
-            bg_codes = torch.repeat_interleave(torch.eye(n_channels_use)[:, None, :], n_rounds_use, dim=1)
-            # Give background_vectors an L2 norm of 1 so can compare coefficients with other genes.
-            bg_codes = bg_codes / torch.linalg.norm(bg_codes, axis=(1, 2), keepdims=True)
-            if config["fit_background"]:
-                subset_colours, bg_coefficients, bg_codes = background_pytorch.fit_background(subset_colours)
-            bg_codes = bg_codes.float()
-            bled_codes = nbp_call_spots.bled_codes
-            assert (~np.isnan(bled_codes)).all(), "bled codes cannot contain nan values"
-            assert np.allclose(np.linalg.norm(bled_codes, axis=(1, 2)), 1), "bled codes must be L2 normalised"
-            bled_codes = torch.asarray(bled_codes.astype(np.float32))
-            subset_colours = subset_colours.reshape((-1, n_rounds_use * n_channels_use))
-            bled_codes = bled_codes.reshape((n_genes, n_rounds_use * n_channels_use))
-            bg_codes = bg_codes.reshape((n_channels_use, n_rounds_use * n_channels_use))
-            subset_coefficients = coefs_torch.compute_omp_coefficients(
-                subset_colours,
-                bled_codes,
-                maximum_iterations=config["max_genes"],
-                background_coefficients=bg_coefficients,
-                background_codes=bg_codes,
-                dot_product_threshold=config["dp_thresh"],
-                norm_shift=config["lambda_d"],
-                weight_coefficient_fit=config["weight_coef_fit"],
-                alpha=config["alpha"],
-                beta=config["beta"],
-                force_cpu=config["force_cpu"],
-            )
-            del subset_colours, bg_coefficients, bg_codes, bled_codes
-            subset_coefficients = subset_coefficients.numpy()
-            tile_computed_on[index_min:index_max] += 1
-            coefficients[index_min:index_max] = subset_coefficients
-            del subset_coefficients
-        del colour_image
+        bled_codes = nbp_call_spots.bled_codes.astype(np.float32)
+        assert (~np.isnan(bled_codes)).all(), "bled codes cannot contain nan values"
+        assert np.allclose(np.linalg.norm(bled_codes, axis=(1, 2)), 1), "bled codes must be L2 normalised"
+        solver = coefs.CoefficientSolverOMP()
+        coefficients = solver.compute_omp_coefficients(
+            pixel_colours=colour_image,
+            bled_codes=bled_codes,
+            background_codes=np.eye(n_channels_use)[:, None, :].repeat(n_rounds_use, axis=1),
+            colour_norm_factor=nbp_call_spots.colour_norm_factor[[t]].astype(np.float32),
+            maximum_iterations=config["max_genes"],
+            dot_product_threshold=config["dp_thresh"],
+            normalisation_shift=config["lambda_d"],
+            pixel_subset_count=config["subset_pixels"],
+        )
         coefficients = coefficients.tocsr()
-        assert (tile_computed_on == 1).all()
         log.debug(f"Compute coefficients, tile {t} complete")
 
         # STEP 2.5: On the first tile, compute a mean OMP spot from coefficients for score calculations.
@@ -263,49 +229,55 @@ def run_omp(
         t_spots_score = tile_results.zeros("scores", overwrite=True, shape=0, chunks=(n_chunk_max,), dtype=np.float16)
 
         # TODO: This can be sped up when there is sufficient RAM by running on multiple genes at once.
-        for g in tqdm.trange(n_genes, desc=f"Scoring/detecting spots", unit="gene"):
+        batch_size = int(1e9 * utils.system.get_available_memory(device) // (np.prod(tile_shape).item() * 4.1))
+        batch_size = max(batch_size, 1)
+        gene_batches = [
+            [g for g in range(b * batch_size, min((b + 1) * batch_size, n_genes))]
+            for b in range(maths.ceil(n_genes / batch_size))
+        ]
+        for gene_batch in tqdm.tqdm(gene_batches, desc=f"Scoring/detecting spots", unit="gene batch", postfix=postfix):
             # STEP 3: Score every gene's coefficient image.
-            g_coef_image = torch.asarray(coefficients[:, [g]].toarray()).float().reshape(tile_shape)
-            g_coef_image = g_coef_image[np.newaxis]
+            g_coef_image = torch.asarray(coefficients[:, gene_batch].toarray()).float().T
+            g_coef_image = g_coef_image.reshape((len(gene_batch),) + tile_shape)
             g_score_image = scores_torch.score_coefficient_image(g_coef_image, spot, mean_spot, config["force_cpu"])
-            g_score_image = g_score_image[0].to(torch.float16)
             del g_coef_image
+            g_score_image = g_score_image.to(dtype=torch.float16)
 
             # STEP 4: Detect genes as score local maxima.
-            g_spot_local_positions, g_spot_scores = detect_torch.detect_spots(
-                g_score_image,
-                config["score_threshold"],
-                config["radius_xy"],
-                config["radius_z"],
-                force_cpu=config["force_cpu"],
-                remove_duplicates=True,
-            )
-            del g_score_image
-            n_g_spots = g_spot_scores.size(0)
-            if n_g_spots == 0:
-                continue
-            # Delete any spot positions that are duplicates.
-            g_spot_global_positions = g_spot_local_positions.detach().clone().float()
-            g_spot_global_positions += tile_origins[[t]]
-            duplicates = spots_torch.is_duplicate_spot(g_spot_global_positions, t, tile_centres)
-            g_spot_local_positions = g_spot_local_positions[~duplicates]
-            g_spot_scores = g_spot_scores[~duplicates]
-            del g_spot_global_positions, duplicates
+            for g_i, g in enumerate(gene_batch):
+                g_spot_local_positions, g_spot_scores = detect_torch.detect_spots(
+                    g_score_image[g_i],
+                    config["score_threshold"],
+                    config["radius_xy"],
+                    config["radius_z"],
+                    force_cpu=config["force_cpu"],
+                    remove_duplicates=True,
+                )
+                n_g_spots = g_spot_scores.size(0)
+                if n_g_spots == 0:
+                    continue
+                # Delete any spot positions that are duplicates.
+                g_spot_global_positions = g_spot_local_positions.detach().clone().float()
+                g_spot_global_positions += tile_origins[[t]]
+                duplicates = spots_torch.is_duplicate_spot(g_spot_global_positions, t, tile_centres)
+                g_spot_local_positions = g_spot_local_positions[~duplicates]
+                g_spot_scores = g_spot_scores[~duplicates]
+                del g_spot_global_positions, duplicates
 
-            g_spot_local_positions = g_spot_local_positions.to(torch.int16)
-            g_spot_scores = g_spot_scores.to(torch.float16)
-            n_g_spots = g_spot_scores.size(0)
-            if n_g_spots == 0:
-                continue
-            g_spots_tile = torch.full((n_g_spots,), t).to(torch.int16)
-            g_spots_gene_no = torch.full((n_g_spots,), g).to(torch.int16)
+                g_spot_local_positions = g_spot_local_positions.to(torch.int16)
+                g_spot_scores = g_spot_scores.to(torch.float16)
+                n_g_spots = g_spot_scores.size(0)
+                if n_g_spots == 0:
+                    continue
+                g_spots_tile = torch.full((n_g_spots,), t).to(torch.int16)
+                g_spots_gene_no = torch.full((n_g_spots,), g).to(torch.int16)
 
-            # Append new results.
-            t_spots_local_yxz.append(g_spot_local_positions.numpy(), axis=0)
-            t_spots_score.append(g_spot_scores.numpy(), axis=0)
-            t_spots_tile.append(g_spots_tile.numpy(), axis=0)
-            t_spots_gene_no.append(g_spots_gene_no.numpy(), axis=0)
-            del g_spot_local_positions, g_spot_scores, g_spots_tile, g_spots_gene_no
+                # Append new results.
+                t_spots_local_yxz.append(g_spot_local_positions.numpy(), axis=0)
+                t_spots_score.append(g_spot_scores.numpy(), axis=0)
+                t_spots_tile.append(g_spots_tile.numpy(), axis=0)
+                t_spots_gene_no.append(g_spots_gene_no.numpy(), axis=0)
+                del g_spot_local_positions, g_spot_scores, g_spots_tile, g_spots_gene_no
 
         del coefficients
         if t_spots_tile.size == 0:
