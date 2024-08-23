@@ -231,7 +231,7 @@ def flow_correlation(
     ny, nx, nz = target.shape
     # apply the flow to the base image and compute the correlation between th shifted base and the target image
     coords = np.array(np.meshgrid(range(ny), range(nx), range(nz), indexing="ij"), dtype=np.float32)
-    base_warped = skimage.transform.warp(base, coords + flow, order=0, mode="constant", cval=0)
+    base_warped = skimage.transform.warp(base, coords - flow, order=0, mode="constant", cval=0)
     del coords, base, flow
 
     # compute the correlation

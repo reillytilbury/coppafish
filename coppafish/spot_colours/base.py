@@ -318,7 +318,7 @@ def get_spot_colours(
         flow: 'float16 memmap [n_tiles x n_rounds x 3 x im_y x im_x x im_z]' flow data.
         affine_correction: 'float32 [n_tiles x n_rounds x n_channels x 4 x 3]' affine correction data, or
         [n_rounds x n_channels x 4 x 3] for the tile of interest or
-        [n_channels x 4 x 3] if round independent.
+        [n_channels x 4 x 3] if round independent
         yxz_base: 'int [n_spots x 3]' spot coordinates, or tuple
         output_dtype: 'dtype' dtype of the output spot colours.
         fill_value: 'float' value to fill in for out of bounds spots.

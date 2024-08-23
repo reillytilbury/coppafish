@@ -575,7 +575,7 @@ def view_optical_flow(nb: Notebook, t: int, r: int):
     names = ["raw", "smooth"]
     flows = [nb.register.flow_raw[t, r], nb.register.flow[t, r]]
     # warp the base image using the flows
-    base_warped = [skimage.transform.warp(base, f.astype(np.float32) + coords, order=0, preserve_range=True)
+    base_warped = [skimage.transform.warp(base, -f.astype(np.float32) + coords, order=0, preserve_range=True)
                    for f in flows]
     print("Base image warped.")
     del coords

@@ -2,24 +2,24 @@
 
 OMP is coppafish's current best gene assignment algorithm. OMP runs independently, except requiring 
 [call spots](#call-spots) for more accurate representation of each gene's unique barcode: its bled code 
-($\mathbs{b}_{grc}$). Also, OMP does not have any understanding about the difference between rounds and channels.
+($b_{grc}$). Also, OMP does not have any understanding about the difference between rounds and channels.
 
 ## Maths Definitions
 
 - $r$ and $c$ represents sequencing rounds and channels respectively.
 - $\mathbf{B}_{grc}$ represents gene g's bled code in round $r$, channel $c$.
-- $\mathbf{S}_{prc}$ is pixel $p$'s colour in round $r$, channel $c$, after pre-processing is applied.
+- $\mathbf{F}_{prc}$ is pixel $p$'s colour in round $r$, channel $c$, after pre-processing is applied.
 - $\mathbf{c}_{pgi}$ is the OMP coefficient given to gene $g$ for image pixel $p$ on the $i$'th iteration. $i$ takes 
 values $1, 2, 3, ...$
 
 ## 0: Pre-processing
 
 All pixel colours are gathered using the results from register. Any out of bounds round/channel colour intensities are 
-set to zero. Pixel colours are normalised based on their intensities. If $\widetilde{\mathbf{S}}$ are the initial 
-pixel colours, the final pixel colours $\mathbf{S}$ become
+set to zero. Pixel colours are normalised based on their intensities. If $\widetilde{\mathbf{F}}$ are the initial 
+pixel colours, the final pixel colours $\mathbf{F}$ become
 
 $$
-\mathbf{S}_{prc} = \frac{\widetilde{\mathbf{S}}_{prc}}{\sqrt{\sum_{rc} \widetilde{\mathbf{S}}_{prc}}}
+\mathbf{F}_{prc} = \frac{\widetilde{\mathbf{F}}_{prc}}{\sqrt{\sum_{rc} \widetilde{\mathbf{F}}_{prc}}}
 $$
 
 ## 1: Assigning the Next Gene
@@ -29,10 +29,10 @@ already have $i - 1$ genes assigned to it and their coefficients have already be
 We compute the latest residual pixel colour $\mathbf{R}_{prci}$ as 
 
 $$
-\mathbf{R}_{prci} = \mathbf{S}_{prc} - \sum_g \mathbf{c}_{pg(i - 1)}\mathbf{B}_{grc}
+\mathbf{R}_{prci} = \mathbf{F}_{prc} - \sum_g \mathbf{c}_{pg(i - 1)}\mathbf{B}_{grc}
 $$
 
-For the first iteration, $\mathbf{R}_{prc(i=1)} = \mathbf{S}_{prc}$. Using this residual, a weighted dot product score 
+For the first iteration, $\mathbf{R}_{prc(i=1)} = \mathbf{F}_{prc}$. Using this residual, a weighted dot product score 
 is computed for every gene $g$ as 
 
 $$
@@ -46,16 +46,16 @@ pixel's colour. All unassigned genes have a zero coefficient. The coefficients v
 $\mathbf{c}_{pgi}$ are computed through the method of least squares by minimising the scalar residual 
 
 $$
-\sum_{rc}(\mathbf{S}_{prc} - \sum{g}\mathbf{B}_{grc}\mathbf{c}_{pgi})^2
+\sum_{rc}(\mathbf{F}_{prc} - \sum{g}\mathbf{B}_{grc}\mathbf{c}_{pgi})^2
 $$
 
 In other words, using matrix multiplication, the coefficient vector of length genes is 
 
 $$
-\mathbf{c} = \bar{\mathbf{B}}^{-1} \bar{\mathbf{S}}
+\mathbf{c} = \bar{\mathbf{B}}^{-1} \bar{\mathbf{F}}
 $$
 
 where $\bar{...}$ represents flattening the round and channel dimensions into a single dimension, so 
-$\bar{\mathbf{B}}$ is of shape $\text{genes}$ by $\text{rounds} * \text{channels}$ and $\bar{\mathbf{S}}$ is of shape 
+$\bar{\mathbf{B}}$ is of shape $\text{genes}$ by $\text{rounds} * \text{channels}$ and $\bar{\mathbf{F}}$ is of shape 
 $\text{rounds} * \text{channels}$. $(...)^{-1}$ is the Moore-Penrose matrix inverse (a psuedoinverse).
 
