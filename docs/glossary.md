@@ -15,7 +15,7 @@ code. For example, if the dyes are labelled `0, 1, 2` and there are 2 sequencing
 
 * Notebook - A write-once[^1] compressed file that stores all important outputs from coppafish. The notebook is used 
 to plot many [diagnostics](diagnostics.md). The notebook contains notebook pages. There is a notebook page for each 
-[method](overview) section. A notebook can be loaded by 
+[method](overview.md) section. A notebook can be loaded by 
 `from coppafish import Notebook; nb = Notebook("path/to/notebook.npz")`. Variables from the notebook can be directly 
 read. For example, you can read the `use_tiles` variable from the `basic_info` page by 
 `print(nb.basic_info.use_tiles)`. Each variable also has a description, which can be printed. For example, 
@@ -27,7 +27,7 @@ assuming that the pixel intensity is a linear combination of each gene intensity
 gene intensity would combine non-linearly.
 
 * Point cloud - A series of spatial pixel positions. Typically used to represent detected spot positions during 
-[find spots](overview#find-spots).
+[find spots](overview.md#find-spots).
 
 * PSF - Stands for Point Spread Function and is used during image filtering. The Wiener deconvolution requires a PSF to 
 remove blurring caused by frequencies with a low signal-to-noise ratio. See the 
@@ -45,7 +45,7 @@ and outputs the identity of each gene in situ.
 
 * Tile - A cuboid subset of the microscope image of size $n_z \times n_y \times n_x$ in z, y, and x, where $n_y = n_x$. 
 Typically, $n_z\sim55$. Usually, all adjacent tiles overlap by $10\%-15\%$ to give coppafish information on how to best 
-align tiles (see [stitch](overview#stitch) for details).
+align tiles (see [stitch](overview.md#stitch) for details).
 
 
 [^1]:
