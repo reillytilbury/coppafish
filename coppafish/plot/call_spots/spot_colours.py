@@ -861,3 +861,14 @@ class BGScaleViewer:
         fig.suptitle("BG Removal + Scaling")
 
         plt.show()
+
+    # add slider to allow us to vary value of interp between 0 and 1 and update plot
+    # def add_hist_widgets(self):
+    #     Add a slider on the right of the figure allowing the user to choose the percentile of the histogram
+    #     to use as the maximum intensity. This slider should be the same dimensions as the colorbar and should
+    #     be in the same position as the colorbar. We should slide vertically to change the percentile.
+    # self.ax_slider = self.fig.add_axes([0.94, 0.15, 0.02, 0.6])
+    # self.slider = Slider(self.ax_slider, 'Interpolation Coefficient', 0, 1, valinit=0, orientation='vertical')
+    # self.slider.on_changed(lambda val: self.update_hist(int(val)))
+    #
+    # TODO: Add 2 buttons, one for separating normalisation by channel and one for separating by round and channel
