@@ -1,12 +1,12 @@
 from datetime import datetime
 import logging
+import smtplib
 import socket
 import subprocess
+import sys
 import time
 import traceback
 from typing import Any, Callable, Union
-
-from ..utils import email, system
 
 DEBUG = 10
 INFO = 20
@@ -118,7 +118,7 @@ def log(msg: Union[str, Exception], severity: int, force_email: bool = False) ->
             + f"\n\nFor errors, please refer to our troubleshoot page "
             + f"(https://reillytilbury.github.io/coppafish/troubleshoot/)"
         )
-        email.send_email(
+        send_email(
             f"COPPAFISH: {severity_to_name[severity]}",
             email_message,
             _email_sender,
@@ -164,7 +164,7 @@ def log_package_versions(severity: int = DEBUG) -> None:
     Args:
         severity (int, optional): the log severity. Default: debug.
     """
-    log(f"Python=={system.get_python_version()}", severity=severity)
+    log(f"Python=={get_python_version()}", severity=severity)
     pip_list = str(subprocess.run(["python", "-m", "pip", "list"], capture_output=True, text=True).stdout)
     pip_list: list[str] = pip_list.split("\n")
     pip_list = pip_list[2:-1]
@@ -177,6 +177,25 @@ def log_package_versions(severity: int = DEBUG) -> None:
         versions.append(package[separation_index:].strip())
     for name, version in zip(names, versions):
         log(f"{name}=={version}", severity=severity)
+
+
+def get_python_version() -> str:
+    """
+    Get the running Python version.
+
+    Returns:
+        str: python version as a string.
+    """
+    return sys.version.split()[0]
+
+
+def send_email(subject: str, body: str, sender: str, recipient: str, password: str) -> None:
+    s = smtplib.SMTP("smtp.gmail.com", 587)
+    s.starttls()
+    s.login(sender, password)
+    message = "Subject: {}\n\n{}".format(subject, body)
+    s.sendmail(sender, recipient, message)
+    s.quit()
 
 
 class LogError(Exception):

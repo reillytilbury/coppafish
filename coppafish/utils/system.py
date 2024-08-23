@@ -1,7 +1,6 @@
 import os
 from pathlib import PurePath
 import shutil
-import sys
 from typing import Tuple
 import urllib
 
@@ -9,19 +8,11 @@ import numpy as np
 import psutil
 import torch
 
-VERSION_URL = "https://github.com/reillytilbury/coppafish/raw/HEAD/coppafish/_version.py"
-# The character(s) that encapsulate the software version tag in _version.py, in this case it is quotation marks
-VERSION_ENCAPSULATE = '"'
 
-
-def get_python_version() -> str:
-    """
-    Get the running Python version.
-
-    Returns:
-        str: python version as a string.
-    """
-    return sys.version.split()[0]
+class SystemConstants:
+    VERSION_URL = "https://github.com/reillytilbury/coppafish/raw/HEAD/coppafish/_version.py"
+    # The character(s) that encapsulate the software version tag in _version.py, in this case it is quotation marks
+    VERSION_ENCAPSULATE = '"'
 
 
 def get_software_version() -> str:
@@ -31,8 +22,9 @@ def get_software_version() -> str:
     Returns:
         str: software version.
     """
+    consts = SystemConstants()
     with open(PurePath(os.path.dirname(os.path.realpath(__file__))).parent.joinpath("_version.py"), "r") as f:
-        version_tag = f.read().split(VERSION_ENCAPSULATE)[1]
+        version_tag = f.read().split(consts.VERSION_ENCAPSULATE)[1]
     return version_tag
 
 
@@ -43,14 +35,15 @@ def get_remote_software_version() -> str:
     Returns:
         str: version tag. None if the version could not be retrieved.
     """
+    consts = SystemConstants()
     fallback = None
     if not internet_is_active():
         return fallback
     try:
-        f = urllib.request.urlopen(VERSION_URL)
+        f = urllib.request.urlopen(consts.VERSION_URL)
         version_contents = str(f.read())
-        index_start = version_contents.index(VERSION_ENCAPSULATE)
-        index_end = version_contents.index(VERSION_ENCAPSULATE, index_start + 1)
+        index_start = version_contents.index(consts.VERSION_ENCAPSULATE)
+        index_end = version_contents.index(consts.VERSION_ENCAPSULATE, index_start + 1)
     except urllib.error.HTTPError:
         # This can be reached if GitHub refuses the request due to too many recent requests.
         return fallback

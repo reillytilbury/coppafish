@@ -4,7 +4,7 @@ Coppafish is an open source data analysis software for COmbinatorial Padlock-Pro
 Hybridization (coppafish) datasets. A series of 3D microscope images are arranged into tiles, rounds and channels. For
 each sequencing round, every considered gene is fluoresced by a dye. By the end of all rounds, each gene has a unique,
 barcode-like sequence of dyes, called the gene code. For more details about coppafish's methodology, see the
-[method](overview). See [installation](#installation) on how to install our software, and [usage](basic_usage.md) to
+[overview](overview.md). See [installation](#installation) on how to install our software, and [usage](basic_usage.md) to
 run coppafish on your dataset. Some vocabulary might be unfamiliar, please see the [glossary](glossary.md) for
 reference.
 
@@ -46,11 +46,8 @@ install package dependencies and coppafish by
 cd coppafish
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-python -m pip install -e .
+python -m pip install .
 ```
-
-If you do not wish to keep a local copy of coppafish (i.e. you not interested in `git pull`ing higher coppafish versions
-later) then remove the `-e` option. The source code can then be deleted after installing.
 
 ## Updating
 
@@ -65,4 +62,4 @@ If you do not have the source code downloaded anymore, follow all the [install](
 coppafish environment.
 
 You can verify your install by running `#!bash pip show coppafish` in the coppafish environment to check you have the 
-right version.
+latest version.
