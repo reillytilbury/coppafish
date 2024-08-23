@@ -870,5 +870,4 @@ class BGScaleViewer:
     # self.ax_slider = self.fig.add_axes([0.94, 0.15, 0.02, 0.6])
     # self.slider = Slider(self.ax_slider, 'Interpolation Coefficient', 0, 1, valinit=0, orientation='vertical')
     # self.slider.on_changed(lambda val: self.update_hist(int(val)))
-    #
     # TODO: Add 2 buttons, one for separating normalisation by channel and one for separating by round and channel
