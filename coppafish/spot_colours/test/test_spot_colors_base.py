@@ -20,7 +20,7 @@ def test_get_spot_colours():
     # smooth each round and channel independently
     for r in range(n_rounds):
         for c in range(n_channels):
-            images_aligned[r, c] = skimage.filters.gaussian(images_aligned[r, c], sigma=5)
+            images_aligned[r, c] = skimage.filters.gaussian(images_aligned[r, c], sigma=[5, 5, 1])
 
     # now we would like to move these images by applying the inverse transform of the one we want to apply
     # to the spot colours and then check if we can recover the original images
@@ -52,7 +52,7 @@ def test_get_spot_colours():
     # plt.title('True vs Predicted Values')
     # plt.show()
     #
-    # open napari viewer to check the images
+    # # open napari viewer to check the images
     # import napari
     # v = napari.Viewer()
     # v.add_image(images_aligned, name='Aligned Images', colormap='red', blending='additive',
@@ -103,15 +103,15 @@ def test_get_spot_colours():
     # reorder spot colours array to n_rounds x n_channels x n_y x n_x x n_z
     spot_colours = np.transpose(spot_colours, (3, 4, 0, 1, 2))
 
-    # plot scatter plot of true vs predicted values for mid_z slice
+    # # plot scatter plot of true vs predicted values for mid_z slice
     # import matplotlib.pyplot as plt
     # plt.scatter(x=images_aligned[:, :, :, :, mid_z].flatten(), y=spot_colours[:, :, :, :, mid_z].flatten())
     # plt.xlabel('True Values')
     # plt.ylabel('Predicted Values')
     # plt.title('True vs Predicted Values')
     # plt.show()
-
-    # open napari viewer to check the images
+    #
+    # # open napari viewer to check the images
     # import napari
     # v = napari.Viewer()
     # v.add_image(images_aligned, name='Aligned Images', colormap='red', blending='additive',
@@ -120,6 +120,7 @@ def test_get_spot_colours():
     #             contrast_limits=np.nanpercentile(images_disaligned, [1, 99]))
     # v.add_image(spot_colours, name='Spot Colours', colormap='green', blending='additive',
     #             contrast_limits=np.nanpercentile(spot_colours, [1, 99]))
+    # v.dims.axis_labels = ['rounds', 'channels', 'y', 'x', 'z']
     # napari.run()
 
     # check that the spot colours are the same as the original images

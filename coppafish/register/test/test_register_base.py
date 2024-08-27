@@ -73,16 +73,12 @@ def test_optical_flow_single():
     ny, nx, nz = base.shape
     assert flow.shape == (3, ny, nx, nz)
 
-    # check that the values are correct (check near the centre so we don't have to worry about edge effects)
-    r = 0.1
+    # check that the values are correct
     flow = np.round(flow)
-    centre_idx = np.ix_(range(int( r * ny), int((1 - r) * ny)),
-                        range(int( r * nx), int((1 - r) * nx)),
-                        range(int( r * nz), int((1 - r) * nz)))
-    correct_y = flow[0][centre_idx] == -3
-    correct_x = flow[1][centre_idx] == -2
-    correct_z = flow[2][centre_idx] == 0
-    ny, nx, nz = ny // 2, nx // 2, nz // 2
-    assert np.sum(correct_y) / (ny * nx * nz) > 0.9
-    assert np.sum(correct_x) / (ny * nx * nz) > 0.9
-    assert np.sum(correct_z) / (ny * nx * nz) > 0.9
+    correct_y = flow[0] == 3
+    correct_x = flow[1] == 2
+    correct_z = flow[2] == 0
+
+    assert np.sum(correct_y) / (ny * nx * nz) > 0.99
+    assert np.sum(correct_x) / (ny * nx * nz) > 0.99
+    assert np.sum(correct_z) / (ny * nx * nz) > 0.99
