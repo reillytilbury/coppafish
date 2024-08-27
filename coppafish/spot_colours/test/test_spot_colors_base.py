@@ -26,23 +26,60 @@ def test_get_spot_colours():
     # to the spot colours and then check if we can recover the original images
     affine = np.zeros((n_channels, 4, 3))
     affine[:, :3, :3] = np.eye(3)
+    # repeat the affine transforms for each round
+    affine = np.repeat(affine[None], n_rounds, axis=0)
+    # initialise flow to be 0
+    flow = np.zeros((n_rounds, 3, *tile_shape))
+
+    # 1. check that the images are the same as the spot colours (no affine or flow applied)
+    # get coords
+    coords = np.array(np.meshgrid(*[np.arange(s) for s in tile_shape], indexing="ij"))
+    yxz_base = coords.reshape(3, -1).T
+    spot_colours = get_spot_colours(
+        image=images_aligned[None], flow=flow[None], affine_correction=affine[None], yxz_base=yxz_base, tile=0
+    )
+    # reshape spot colours from n_spots x n_rounds x n_channels to n_y x n_x x n_z x n_rounds x n_channels
+    spot_colours = spot_colours.reshape(*tile_shape, n_rounds, n_channels)
+    # reorder spot colours array to n_rounds x n_channels x n_y x n_x x n_z
+    spot_colours = np.transpose(spot_colours, (3, 4, 0, 1, 2))
+    mid_z = tile_shape[2] // 2
+
+    # # plot scatter plot of true vs predicted values for mid_z slice
+    # import matplotlib.pyplot as plt
+    # plt.scatter(x=images_aligned[:, :, :, :, mid_z].flatten(), y=spot_colours[:, :, :, :, mid_z].flatten())
+    # plt.xlabel('True Values')
+    # plt.ylabel('Predicted Values')
+    # plt.title('True vs Predicted Values')
+    # plt.show()
+    #
+    # open napari viewer to check the images
+    # import napari
+    # v = napari.Viewer()
+    # v.add_image(images_aligned, name='Aligned Images', colormap='red', blending='additive',
+    #             contrast_limits=np.nanpercentile(images_aligned, [1, 99]))
+    # v.add_image(spot_colours, name='Spot Colours', colormap='green', blending='additive',
+    #             contrast_limits=np.nanpercentile(spot_colours, [1, 99]))
+    # v.add_image(images_aligned - spot_colours, name='Difference',
+    #             contrast_limits=np.nanpercentile(images_aligned - spot_colours, [1, 99]))
+    # napari.run()
+
+    # check that the spot colours are the same as the original images
+    assert np.allclose(images_aligned, spot_colours, atol=1e-6)
+
+    # 2. check that the images are the same as the spot colours (affine applied + flow applied)
     # set these affine transforms to be shifts in y and x by 1, 2, 3 and scales in y and x by 0.9, 0.8
     # these are the transforms we need to apply to go from anchor to target, so we need to apply the inverse to the
     # images
-    affine[:, 3, 0] = [1, 2, 3]
-    affine[:, 3, 1] = [1, 2, 3]
-    affine[:, 0, 0] = 0.9
-    affine[:, 1, 1] = 0.8
-    # repeat the affine transforms for each round
-    affine = np.repeat(affine[None], n_rounds, axis=0)
+    affine[:, :, 3, 0] = [1, 2, 3]
+    affine[:, :, 3, 1] = [1, 2, 3]
+    affine[:, :, 0, 0] = 0.9
+    affine[:, :, 1, 1] = 0.8
 
-    # define flow shifts to be 1 shift in z for round 0 and 2 shifts in z for round 1
-    flow = np.zeros((n_rounds, 3, *tile_shape))
+    # set flow to be +1 shift in z for round 0 and +2 shift in z for round 1
     flow[0, 2] = 1
     flow[1, 2] = 2
 
-    # get coords and define warps (coords + flow) for each round
-    coords = np.array(np.meshgrid(*[np.arange(s) for s in tile_shape], indexing="ij"))
+    # define the inverse warp
     warp_inv = np.array([coords - flow[r] for r in range(n_rounds)])
 
     # the transform we will apply to align is A(F(x)), so to disalign apply A^(-1)(F^(-1)(x))
@@ -58,7 +95,6 @@ def test_get_spot_colours():
             images_disaligned[r, c] = skimage.transform.warp(images_disaligned[r, c], warp_inv[r], order=1, cval=np.nan)
 
     # now we want to get the spot colours from the disaligned images
-    yxz_base = coords.reshape(3, -1).T
     spot_colours = get_spot_colours(
         image=images_disaligned[None], flow=flow[None], affine_correction=affine[None], yxz_base=yxz_base, tile=0
     )
@@ -66,10 +102,8 @@ def test_get_spot_colours():
     spot_colours = spot_colours.reshape(*tile_shape, n_rounds, n_channels)
     # reorder spot colours array to n_rounds x n_channels x n_y x n_x x n_z
     spot_colours = np.transpose(spot_colours, (3, 4, 0, 1, 2))
-    # check that the spot colours are the same as the original images
-    mid_z = tile_shape[2] // 2
 
-    # # plot scatter plot of true vs predicted values for mid_z slice
+    # plot scatter plot of true vs predicted values for mid_z slice
     # import matplotlib.pyplot as plt
     # plt.scatter(x=images_aligned[:, :, :, :, mid_z].flatten(), y=spot_colours[:, :, :, :, mid_z].flatten())
     # plt.xlabel('True Values')
@@ -77,7 +111,7 @@ def test_get_spot_colours():
     # plt.title('True vs Predicted Values')
     # plt.show()
 
-    # # open napari viewer to check the images
+    # open napari viewer to check the images
     # import napari
     # v = napari.Viewer()
     # v.add_image(images_aligned, name='Aligned Images', colormap='red', blending='additive',
@@ -88,7 +122,8 @@ def test_get_spot_colours():
     #             contrast_limits=np.nanpercentile(spot_colours, [1, 99]))
     # napari.run()
 
-    assert np.nanmax(np.abs(images_aligned - spot_colours)[:, :, :, :, mid_z]) < 0.05
+    # check that the spot colours are the same as the original images
+    assert np.nanmax(np.abs(images_aligned - spot_colours)[:, :, :, :, mid_z]) < 0.01
 
 
 def test_grid_sample():

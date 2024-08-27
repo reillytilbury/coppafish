@@ -200,7 +200,8 @@ def get_spot_colours(
             input=image[r, :, None, :, :, :],
             grid=zxy_round_r[:, :, None, None, :],
             mode="bilinear",
-            align_corners=False,
+            align_corners=True,
+            padding_mode="border"
         )
 
         # grid_sample gives output as [N, M, D', H', W'] as defined above.

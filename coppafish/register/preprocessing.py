@@ -316,7 +316,7 @@ def generate_reg_images(
         # concatenate the images for each channel and save
         for i, c in enumerate(use_channels):
             im_tc = nbp_filter.images[
-                t, anchor_round, c, yxz_min[0]: yxz_max[0], yxz_min[1]: yxz_max[1], yxz_min[2]: yxz_max[2]
+                t, r_mid, c, yxz_min[0]: yxz_max[0], yxz_min[1]: yxz_max[1], yxz_min[2]: yxz_max[2]
             ]
             im_tc_concat = np.concatenate([im_tc[None], im_t_flow[:, i], im_t_flow_icp[:, i]], axis=0)
             im_tc_concat = fill_to_uint8(im_tc_concat)
