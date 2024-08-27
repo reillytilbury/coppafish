@@ -1,8 +1,12 @@
-import numpy as np
 from typing import Tuple
 
+import torch
+import numpy as np
 
-def fit_background(spot_colors: np.ndarray, weight_shift: float = 0) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+
+def fit_background(
+    spot_colors: torch.Tensor, weight_shift: float = 0
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     This determines the coefficient of the background vectors for each spot.
     Coefficients determined using a weighted dot product as to avoid overfitting
@@ -21,32 +25,24 @@ def fit_background(spot_colors: np.ndarray, weight_shift: float = 0) -> Tuple[np
 
     Returns:
         - residual - `float [n_spots x n_rounds x n_channels]`.
-            `spot_colors` after background removed.
+            `spot_colours` after background removed.
         - coef - `float [n_spots, n_channels]`.
             coefficient value for each background vector found for each spot.
         - background_vectors `float [n_channels x n_rounds x n_channels]`.
             background_vectors[c] is the background vector for channel c.
     """
-    # Preserve the spot colours datatype throughout.
-    dtype = spot_colors.dtype
-    weight_shift = np.clip(
-        weight_shift, 1e-20, np.inf, dtype=dtype
-    )  # ensure weight_shift > 1e-20 to avoid blow up to infinity.
+    # Ensure weight_shift > 1e-20 to avoid blow up to infinity.
+    weight_shift = np.clip(weight_shift, 1e-20, torch.inf)
 
     n_rounds, n_channels = spot_colors[0].shape
-    background_vectors = np.repeat(np.expand_dims(np.eye(n_channels), axis=1), n_rounds, axis=1).astype(dtype)
+    background_vectors = torch.repeat_interleave(torch.eye(n_channels)[:, None, :], n_rounds, dim=1)
     # give background_vectors an L2 norm of 1 so can compare coefficients with other genes.
-    background_vectors = background_vectors / np.linalg.norm(background_vectors, axis=(1, 2), keepdims=True)
+    background_vectors = background_vectors / torch.linalg.norm(background_vectors, axis=(1, 2), keepdims=True)
 
-    weight_factor = 1 / (np.abs(spot_colors) + weight_shift)
+    weight_factor = 1 / (torch.abs(spot_colors) + weight_shift)
     spot_weight = spot_colors * weight_factor
-    background_weight = np.ones((1, n_rounds, n_channels), dtype=dtype) * background_vectors[0, 0, 0] * weight_factor
-    # Avoid overflow from squaring the background_weight.
-    background_weight = np.clip(background_weight, None, np.sqrt(np.finfo(dtype).max))
-    coef = np.sum(spot_weight * background_weight, axis=1) / np.sum(background_weight**2, axis=1)
-    residual = (
-        spot_colors
-        - np.expand_dims(coef, 1) * np.ones((1, n_rounds, n_channels), dtype=dtype) * background_vectors[0, 0, 0]
-    )
+    background_weight = torch.ones((1, n_rounds, n_channels)) * background_vectors[0, 0, 0] * weight_factor
+    coef = torch.sum(spot_weight * background_weight, dim=1) / torch.sum(background_weight**2, dim=1)
+    residual = spot_colors - coef[:, None] * torch.ones((1, n_rounds, n_channels)) * background_vectors[0, 0, 0]
 
-    return residual, coef, background_vectors
+    return residual.float(), coef.float(), background_vectors.float()

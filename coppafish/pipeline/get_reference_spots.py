@@ -1,9 +1,10 @@
 import numpy as np
-from ..spot_colors import base as spot_colors_base
-from ..call_spots import base as call_spots_base
+
 from .. import find_spots as fs
 from .. import log
+from ..call_spots import base as call_spots_base
 from ..setup import NotebookPage
+from ..spot_colours import base as spot_colours_base
 
 
 def get_reference_spots(
@@ -11,7 +12,6 @@ def get_reference_spots(
     nbp_filter: NotebookPage,
     nbp_find_spots: NotebookPage,
     nbp_register: NotebookPage,
-    nbp_register_debug: NotebookPage,
     nbp_stitch: NotebookPage,
 ) -> NotebookPage:
     """
@@ -76,28 +76,20 @@ def get_reference_spots(
     local_yxz = np.zeros((0, 3), dtype=np.int16)
     isolated = np.zeros(0, dtype=bool)
     tile = np.zeros(0, dtype=np.int16)
-    log.info("Reading in spot_colors for ref_round spots")
+    log.info("Reading in spot_colours for ref_round spots")
     for t in nbp_basic.use_tiles:
         in_tile = nd_local_tile == t
         if np.sum(in_tile) == 0:
             continue
         log.info(f"Tile {np.where(use_tiles==t)[0][0]+1}/{n_use_tiles}")
-        colours = []
-        for r in nbp_basic.use_rounds:
-            r_colours = spot_colors_base.get_spot_colours_new(
-                nbp_filter.images,
-                nbp_register.flow,
-                nbp_register.icp_correction,
-                nbp_register_debug.channel_correction,
-                nbp_basic.use_channels,
-                nbp_basic.dapi_channel,
-                tile=t,
-                round=r,
-                yxz=nd_local_yxz[in_tile],
-            )
-            colours.append(r_colours)
-        # Colours becomes shape (n_spots, n_rounds_use, n_channels_use).
-        colours = np.array(colours, dtype=np.float32).transpose((2, 0, 1))
+        colours = spot_colours_base.get_spot_colours(
+            image=nbp_filter.images,
+            flow=nbp_register.flow,
+            affine_correction=nbp_register.icp_correction,
+            tile=t,
+            yxz_base=nd_local_yxz[in_tile],
+            use_channels=use_channels,
+        )
         valid = ~(np.isnan(colours).any(1).any(1))
         log.debug(f"Valid ref pixel colours: {valid.sum()} out of {valid.size} for tile {t}")
         spot_colours = np.append(spot_colours, colours[valid], axis=0)

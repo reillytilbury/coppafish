@@ -6,8 +6,9 @@ theme:
   logo: images/logo.svg
 
   features:
-    # Cool section selection at top
+    # Cool section selection at top (sticky makes tabs stay shown when scrolling)
     - navigation.tabs
+    - navigation.tabs.sticky
     # Code blocks
     - content.code.annotation
     # Copy code button
@@ -33,21 +34,28 @@ theme:
 
 nav:
   - Getting started: index.md
-  - Usage: basic_usage.md
-  - Method: method.md
-  - Diagnostics: diagnostics.md
-  - Advanced Usage: advanced_usage.md
+  - Usage:
+      - Basic Usage: basic_usage.md
+      - Advanced Usage: advanced_usage.md
+  - Overview: overview.md
+  - Method:
+      - Registration: register.md
+      - Call Spots: call_spots.md
+      - OMP: omp.md
   - Troubleshoot: troubleshoot.md
-  - Algorithm: algorithm.md
-  - Contributing: contributing.md
   - Glossary: glossary.md
+  - Contributing: contributing.md
 
 # This part allows mathematics to be displayed LaTeX style, by using $...$ for in line or $$...$$ for multi-line.
 markdown_extensions:
   - pymdownx.arithmatex:
       generic: true
   # Code can be highlighted, for example python code by code block: ``` python ...``` or inline: `#!python ...`.
+  - admonition
+  - pymdownx.details
   - pymdownx.superfences
+  - pymdownx.tabbed:
+        alternate_style: true
   - pymdownx.highlight
   - pymdownx.inlinehilite
   # Footnote support

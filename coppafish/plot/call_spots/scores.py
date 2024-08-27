@@ -1,14 +1,13 @@
-from matplotlib.widgets import TextBox, CheckButtons
-from ...setup import Notebook
-from ...call_spots import dot_product_score
 from typing import Optional, List
-from matplotlib.widgets import Button
-
 import warnings
-import numpy as np
-import matplotlib.pyplot as plt
+
 import matplotlib as mpl
-plt.style.use("dark_background")
+import matplotlib.pyplot as plt
+from matplotlib.widgets import TextBox, CheckButtons
+import numpy as np
+
+from ...setup import Notebook
+from ...call_spots.dot_product import dot_product_score
 
 
 class HistogramScore:
@@ -33,6 +32,8 @@ class HistogramScore:
             hist_spacing: Initial width of bin in histogram.
             show_plot: Whether to run `plt.show()` or not.
         """
+        plt.style.use("dark_background")
+
         # Add data
         self.gene_names = nb.call_spots.gene_names
         self.n_genes = self.gene_names.size
@@ -106,7 +107,10 @@ class HistogramScore:
 
         # Add text box to change score multiplier
         text_box_labels = ["Gene", "Histogram\nSpacing"]
-        text_box_values = ["all", self.hist_spacing, ]
+        text_box_values = [
+            "all",
+            self.hist_spacing,
+        ]
         text_box_funcs = [self.update_genes, self.update_hist_spacing]
         text_box_labels = text_box_labels[:2]
         text_box_values = text_box_values[:2]
@@ -138,14 +142,12 @@ class HistogramScore:
         # Add buttons to add/remove score_dp histograms
         self.buttons_ax = self.fig.add_axes([self.subplot_adjust[1] + 0.02, self.subplot_adjust[3] - 0.45, 0.15, 0.5])
         plt.axis("off")
-        self.button_labels = ["Dot Product "
-                              "\nScore",
-                              "No BG Removal",
-                              "No Free Bled "
-                              "\nCodes",
-                              "No BG Removal"
-                              "\nNo Free Bled "
-                              "\nCodes",]
+        self.button_labels = [
+            "Dot Product " "\nScore",
+            "No BG Removal",
+            "No Free Bled " "\nCodes",
+            "No BG Removal" "\nNo Free Bled " "\nCodes",
+        ]
         label_checked = [True, False, False, False]
         self.buttons = CheckButtons(
             self.buttons_ax,
@@ -253,6 +255,7 @@ class ViewAllGeneHistograms:
         Args:
             nb: Notebook object. Must have ref_spots page
         """
+        plt.style.use("dark_background")
         assert mode in ["score", "prob"], "Mode must be 'score' or 'prob'"
 
         self.nb = nb
@@ -279,8 +282,10 @@ class ViewAllGeneHistograms:
             else:
                 gene_values = np.max(self.nb.call_spots.gene_probabilities, axis=1)
                 gene_no = np.argmax(self.nb.call_spots.gene_probabilities, axis=1)
-            gene_hists[m] = [np.histogram(gene_values[gene_no == g], bins=np.linspace(0, 1, 10))[0]
-                             for g in range(len(self.nb.call_spots.gene_names))]
+            gene_hists[m] = [
+                np.histogram(gene_values[gene_no == g], bins=np.linspace(0, 1, 10))[0]
+                for g in range(len(self.nb.call_spots.gene_names))
+            ]
             n_spots[m] = [np.sum(gene_no == g) for g in range(len(self.nb.call_spots.gene_names))]
         self.gene_hists, self.n_spots = gene_hists, n_spots
 
@@ -300,7 +305,7 @@ class ViewAllGeneHistograms:
         # We also want to plot the histogram of scores for each gene, and colour the histogram based on the number of
         # spots for that gene
         vmax = max([np.percentile(self.n_spots[mode], 99) for mode in ["score", "prob"]])
-        for j, i in enumerate(range(self.n_rc ** 2 * self.index, self.n_rc ** 2 * (self.index + 1))):
+        for j, i in enumerate(range(self.n_rc**2 * self.index, self.n_rc**2 * (self.index + 1))):
             # Choose the colour of the histogram based on the number of spots. We will use a log scale, with the
             # minimum number of spots being 1 and the maximum being 1000. Use a blue to red colourmap
             cmap = plt.get_cmap("coolwarm")
@@ -309,8 +314,9 @@ class ViewAllGeneHistograms:
             # Plot the histogram of scores for each gene
             r, c = j // self.n_rc, j % self.n_rc
             if i < len(self.nb.call_spots.gene_names):
-                self.ax[r, c].plot(np.linspace(0, 1, 9), self.gene_hists[self.mode][i],
-                                   color=cmap(norm(self.n_spots[self.mode][i])))
+                self.ax[r, c].plot(
+                    np.linspace(0, 1, 9), self.gene_hists[self.mode][i], color=cmap(norm(self.n_spots[self.mode][i]))
+                )
                 self.ax[r, c].set_title(self.nb.call_spots.gene_names[i], fontsize=8)
                 self.ax[r, c].set_xlim(0, 1)
                 self.ax[r, c].set_xticks([])
@@ -323,8 +329,9 @@ class ViewAllGeneHistograms:
                 self.ax[r, c].set_yticks([])
 
         # Add overall title, colourbar and buttons
-        self.fig.suptitle(f"Mode: {self.mode}, Page: {self.index + 1} / "
-                          f"{len(self.nb.call_spots.gene_names) // self.n_rc ** 2}")
+        self.fig.suptitle(
+            f"Mode: {self.mode}, Page: {self.index + 1} / " f"{len(self.nb.call_spots.gene_names) // self.n_rc ** 2}"
+        )
         cax = self.fig.add_axes([0.85, 0.1, 0.05, 0.8])
         mpl.colorbar.ColorbarBase(cax, cmap=cmap, norm=norm, label="Number of Spots")
         # Put label on the left of the colourbar
@@ -335,7 +342,7 @@ class ViewAllGeneHistograms:
         """
         Function to scroll through the different genes. If the index is at the end, do nothing.
         """
-        n_indices = len(self.nb.call_spots.gene_names) // self.n_rc ** 2
+        n_indices = len(self.nb.call_spots.gene_names) // self.n_rc**2
         if event.key == "up":
             self.index = (self.index + 1) % n_indices
         elif event.key == "down":

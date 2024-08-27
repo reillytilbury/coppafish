@@ -1,3 +1,4 @@
+import importlib.resources as importlib_resources
 import os
 
 from .. import log
@@ -6,11 +7,6 @@ from .. import utils
 from ..setup import Notebook
 from ..setup import NotebookPage
 from .tile_details import get_tile_file_names
-
-try:
-    import importlib_resources
-except ModuleNotFoundError:
-    import importlib.resources as importlib_resources
 
 
 def get_file_names(nb: Notebook):

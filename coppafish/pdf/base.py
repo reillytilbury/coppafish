@@ -312,6 +312,7 @@ class BuildPDF:
                         use_z=nb.basic_info.use_z,
                     )
                     pdf.savefig(fig)
+                    plt.close(fig)
                 # Create a page for every gene
                 gene_probabilities = nb.call_spots.gene_probabilities
                 scores = nb.ref_spots.colours * nb.call_spots.colour_norm_factor[nb.ref_spots.tile]

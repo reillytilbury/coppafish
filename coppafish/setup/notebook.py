@@ -7,7 +7,8 @@ from typing import Any, Optional, Tuple
 import numpy as np
 
 from . import config
-from .. import log, utils
+from .. import log
+from ..utils import system as utils_system
 from .notebook_page import NotebookPage
 
 
@@ -95,7 +96,7 @@ class Notebook:
             self._config_path = os.path.abspath(config_path)
         self._directory = os.path.abspath(notebook_dir)
         self._time_created = time.time()
-        self._version = utils.system.get_software_version()
+        self._version = utils_system.get_software_version()
         if not os.path.isdir(self._directory):
             if self._config_path is None:
                 raise ValueError(f"To create a new notebook, config_path must be specified")

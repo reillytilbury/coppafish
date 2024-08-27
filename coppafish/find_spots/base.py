@@ -3,7 +3,9 @@ import numpy as np
 import os
 from typing import Optional
 
-from .. import utils, log
+from .. import log
+from ..utils import morphology as utils_morphology
+from ..utils import strel
 
 
 def spot_yxz(local_yxz: np.ndarray, tile: int, round: int, channel: int, spot_no: np.ndarray) -> np.ndarray:
@@ -108,9 +110,9 @@ def get_isolated(
             Whether each spot is isolated or not.
 
     """
-    se = utils.strel.annulus(radius_inner, radius_xy, radius_z)
+    se = strel.annulus(radius_inner, radius_xy, radius_z)
     # With just coords, takes about 3s for 50 z-planes.
-    isolated = utils.morphology.imfilter_coords(image, se, spot_yxz, padding=0, corr_or_conv="corr") / np.sum(se)
+    isolated = utils_morphology.imfilter_coords(image, se, spot_yxz, padding=0, corr_or_conv="corr") / np.sum(se)
     return isolated < thresh
 
 

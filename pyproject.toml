@@ -3,8 +3,6 @@ markers = [
     "manual: tests only run manually",
     "integration: integration tests",
 ]
-# Create a code coverage report at the end of pytest using the package pytest-cov.
-addopts = "--cov=coppafish --cov-report term"
 
 [tool.black]
 line-length = 120
@@ -13,4 +11,3 @@ line-length = 120
 typeCheckingMode = "off"
 # Fix relative importing resolves using pyright.
 executionEnvironments = {"root" = "src"}
-

@@ -15,7 +15,8 @@ import pandas
 import scipy
 import tqdm
 
-from .. import utils
+from ..utils import base as utils_base
+from ..utils import errors as utils_errors
 from .. import log
 from ..omp import base as omp_base
 from ..pipeline import run
@@ -147,7 +148,7 @@ class Robominnie:
         if self.codes is not None:
             raise ValueError(f"Already generated gene codes {len(self.codes)} gene codes")
 
-        codes = utils.base.reed_solomon_codes(n_genes, self.n_rounds, self.n_channels)
+        codes = utils_base.reed_solomon_codes(n_genes, self.n_rounds, self.n_channels)
         self.codes = codes
 
         return codes
@@ -582,7 +583,8 @@ class Robominnie:
         subvols = {self.n_planes}, {8}, {8}
         box_size = {box_size_z}, {box_size_yx}, {box_size_yx}
         pearson_r_thresh = 0.25
-        round_registration_channel = {self.dapi_channel if (self.include_dapi) else ''}
+        chunks_yx = 5
+        overlap_yx = 0.25
         icp_min_spots = 10
         
         [call_spots]
@@ -594,7 +596,7 @@ class Robominnie:
         spot_shape = 13, 13, 1
         shape_isolation_distance_yx = 5
         pixel_max_percentile = 1
-        shape_sign_thresh = 0.75
+        shape_sign_thresh = 0.5
         score_threshold = 0.1
         subset_size_xy = 50
         """
@@ -610,7 +612,7 @@ class Robominnie:
         Remove true spot positions when they are not within a tile. Any spot positions within a tile overlap are added
         multiple times, one for each tile. This is called when save_raw_data is called.
         """
-        print(f"Bounding spots")
+        print(f"Bounding spots... ", end="")
         tile_bounds = self._get_tile_bounds()[0]
 
         bounded_true_spot_positions = np.zeros((0, 3), self.true_spot_positions.dtype)
@@ -744,7 +746,7 @@ class Robominnie:
             in_bound = self._is_not_overlapping(t_truth_positions - tile_origins[[t]])
             t_truth_positions = t_truth_positions[in_bound]
             t_truth_gene_indices = t_truth_gene_indices[in_bound]
-            TPs, WPs, FPs, FNs = utils.errors.compare_spots(
+            TPs, WPs, FPs, FNs = utils_errors.compare_spots(
                 t_spot_positions, t_spot_gene_indices, t_truth_positions, t_truth_gene_indices, 2.0
             )
             t_score = 100 * TPs / (TPs + WPs + FPs + FNs)

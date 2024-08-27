@@ -37,6 +37,7 @@
 * [Algorithm](https://reillytilbury.github.io/coppafish/algorithm/)
     * [Call spots](https://reillytilbury.github.io/coppafish/algorithm/#call-spots/)
     * [Orthogonal matching pursuit](https://reillytilbury.github.io/coppafish/algorithm/#orthogonal-matching-pursuit-(omp)/)
+* [Register](https://reillytilbury.github.io/coppafish/register/)
 * [Contributing](https://reillytilbury.github.io/coppafish/contributing/)
 * [Glossary](https://reillytilbury.github.io/coppafish/glossary/)
 ![](https://github.com/jduffield65/coppafish/blob/main/docs/images/readme_viewer.png?raw=true)

@@ -5,7 +5,7 @@ found by coppafish using <a href="https://github.com/napari/napari" target="_bla
 
 ### Opening
 
-A Viewer can be displayed once coppafish has run through at least [call spots](method.md#call-spots). Do this by
+A Viewer can be displayed once coppafish has run through at least [call spots](overview.md#call-spots). Do this by
 
 ```python
 from coppafish import Notebook, Viewer
@@ -37,8 +37,8 @@ The "Image Contrast" slider below the gene legend will affect the colour scale o
 allows for multiple z planes of genes to be displayed at once. Genes further away in z are smaller. The "Score Range" 
 allows the user to change the minimum and maximum scores to be displayed. The "Intensity Threshold" affects the minimum 
 allowed spot intensity to display (only affects Anchor and OMP). The "Method" is the chosen method of gene calling. 
-"Prob" is the Von-Mises probability method, "Anchor" is the anchor method (see [call spots](method.md#call-spots)), and 
-"OMP" is the Orthogonal Matching Pursuit method (see [OMP](method.md#orthogonal-matching-pursuit)). The "OMP Score 
+"Prob" is the Von-Mises probability method, "Anchor" is the anchor method (see [call spots](overview.md#call-spots)), and 
+"OMP" is the Orthogonal Matching Pursuit method (see [OMP](overview.md#orthogonal-matching-pursuit)). The "OMP Score 
 Multiplier" will affect how much weight positive coefficient has over negative coefficient parts of a spot. We 
 recommend a value $\ge1$, but there is no known optimal value.
 
@@ -117,7 +117,7 @@ you wish to view all of the them from the sequencing images.
 
 ### Filtered images
 
-Images after all [filtering](method.md#filter) are viewed by
+Images after all [filtering](overview.md#filter) are viewed by
 
 ```python
 from coppafish import Notebook, plot

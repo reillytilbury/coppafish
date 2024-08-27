@@ -68,19 +68,18 @@ def initialize_nb(config_path: str) -> Notebook:
         `Notebook` containing `file_names` and `basic_info` pages.
     """
     config = setup.config.get_config(config_path)
-
-    config_basic = config["basic_info"]
     config_file = config["file_names"]
+    config_notify = config["notifications"]
 
     nb_path = os.path.join(config_file["output_dir"], config_file["notebook_name"])
     nb = Notebook(nb_path, config_path)
 
     log.base.set_log_config(
-        config_basic["minimum_print_severity"],
-        os.path.join(config_file["output_dir"], config_file["log_name"]),
-        config_basic["email_me"],
-        config_basic["sender_email"],
-        config_basic["sender_email_password"],
+        config_notify["minimum_print_severity"],
+        os.path.join(config_file["output_dir"], config_notify["log_name"]),
+        config_notify["email_me"],
+        config_notify["sender_email"],
+        config_notify["sender_email_password"],
     )
     log.info(
         f" COPPAFISH v{utils.system.get_software_version()} ".center(utils.system.current_terminal_size_xy(-33)[0], "=")
@@ -248,7 +247,6 @@ def run_reference_spots(nb: Notebook) -> None:
             nbp_filter=nb.filter,
             nbp_find_spots=nb.find_spots,
             nbp_register=nb.register,
-            nbp_register_debug=nb.register_debug,
             nbp_stitch=nb.stitch,
         )
         nb += nbp_ref_spots
@@ -289,7 +287,6 @@ def run_omp(nb: Notebook) -> None:
             nb.extract,
             nb.filter,
             nb.register,
-            nb.register_debug,
             nb.stitch,
             nb.call_spots,
         )
