@@ -9,7 +9,8 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 import zarr
 
-from .. import utils
+from ..utils import base as utils_base
+from ..utils import system as utils_system
 
 
 # NOTE: Every method and variable with an underscore at the start should not be accessed externally.
@@ -707,7 +708,7 @@ class NotebookPage:
             raise ValueError(f"Could not find _options for page called {page_name}")
         self._name = page_name
         self._time_created = time.time()
-        self._version = utils.system.get_software_version()
+        self._version = utils_system.get_software_version()
         self._associated_configs = copy.deepcopy(associated_config)
         self._sanity_check_options()
 
@@ -841,7 +842,7 @@ class NotebookPage:
         """
         result = object.__getattribute__(self, name)
         if type(result) is tuple:
-            result = utils.base.deep_convert(result, list)
+            result = utils_base.deep_convert(result, list)
         elif type(result) is np.ndarray:
             result = result.copy()
         return result
@@ -934,7 +935,7 @@ class NotebookPage:
                 value = json.loads(file.read())["value"]
                 # A JSON file does not support saving tuples, they must be converted back to tuples here.
                 if type(value) is list:
-                    value = utils.base.deep_convert(value)
+                    value = utils_base.deep_convert(value)
             return value
         elif file_suffix == ".npz":
             return np.load(file_path)["arr_0"]
