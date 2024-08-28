@@ -109,9 +109,7 @@ def get_spot_colours(
     Args:
         - image: 'float16 memmap [n_tiles x n_rounds x n_channels x im_y x im_x x im_z]' unregistered image data.
         - flow: 'float16 memmap [n_tiles x n_rounds x 3 x im_y x im_x x im_z]' flow data.
-        - affine_correction: 'float32 [n_tiles x n_rounds x n_channels x 4 x 3]' affine correction data, or
-            [n_rounds x n_channels x 4 x 3] for the tile of interest or
-            [n_channels x 4 x 3] if round independent
+        - affine_correction: 'float32 [n_tiles x n_rounds x n_channels x 4 x 3]' affine correction data
         - yxz_base: 'int [n_spots x 3]' spot coordinates, or tuple
         - tile: 'int' tile index to run on.
         - output_dtype: 'dtype' dtype of the output spot colours.
@@ -128,9 +126,9 @@ def get_spot_colours(
         affine_correction = torch.tensor(affine_correction, dtype=torch.float32)
     if type(yxz_base) is np.ndarray:
         yxz_base = torch.tensor(yxz_base, dtype=torch.float32)
-
-    # assert that affine_correction has the correct shape
-    assert affine_correction.shape == (image.shape[0], image.shape[1], image.shape[2], 4, 3)
+    n_tiles, n_rounds, n_channels = image.shape[0], image.shape[1] - 1, image.shape[2]
+    assert affine_correction.shape == (n_tiles, n_rounds, n_channels, 4, 3), \
+        f"Expected shape {(n_tiles, n_rounds, n_channels, 4, 3)}, got {affine_correction.shape}"
 
     # initialize variables
     n_spots, n_use_rounds, n_use_channels = yxz_base.shape[0], flow.shape[1], len(use_channels)
