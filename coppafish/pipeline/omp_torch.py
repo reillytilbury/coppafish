@@ -10,7 +10,8 @@ import tqdm
 import zarr
 
 from .. import log, utils, spot_colours
-from ..find_spots import detect_torch
+
+from ..find_spots import detect
 from ..omp import coefs, scores_torch, spots_torch
 from ..setup import NotebookPage
 
@@ -160,12 +161,12 @@ def run_omp(
             isolated_gene_no = torch.zeros(0).int()
             for g in range(n_genes):
                 g_coef_image = torch.asarray(coefficients[:, [g]].toarray()).reshape(tile_shape).float()
-                g_isolated_yxz, _ = detect_torch.detect_spots(
+                g_isolated_yxz, _ = detect.detect_spots(
                     g_coef_image,
                     config["shape_coefficient_threshold"],
-                    config["shape_isolation_distance_yx"],
-                    shape_isolation_distance_z,
-                    force_cpu=config["force_cpu"],
+                    remove_duplicates=True,
+                    radius_xy=config["shape_isolation_distance_yx"],
+                    radius_z=shape_isolation_distance_z,
                 )
                 g_gene_no = torch.full((g_isolated_yxz.shape[0],), g).int()
                 isolated_yxz = torch.cat((isolated_yxz, g_isolated_yxz), dim=0).int()
@@ -242,12 +243,11 @@ def run_omp(
 
             # STEP 4: Detect genes as score local maxima.
             for g_i, g in enumerate(gene_batch):
-                g_spot_local_positions, g_spot_scores = detect_torch.detect_spots(
+                g_spot_local_positions, g_spot_scores = detect.detect_spots(
                     g_score_image[g_i],
                     config["score_threshold"],
-                    config["radius_xy"],
-                    config["radius_z"],
-                    force_cpu=config["force_cpu"],
+                    radius_xy=config["radius_xy"],
+                    radius_z=config["radius_z"],
                     remove_duplicates=True,
                 )
                 n_g_spots = g_spot_scores.size(0)

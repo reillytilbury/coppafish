@@ -3,7 +3,8 @@ from tqdm import tqdm
 import numpy as np
 
 from .. import find_spots as fs
-from ..find_spots import detect_torch
+
+from ..find_spots import detect
 from .. import log
 from ..setup import NotebookPage
 from ..utils import indexing
@@ -91,12 +92,12 @@ def find_spots(
             pbar.set_postfix({"tile": t, "round": r, "channel": c})
             # Then need to shift the detect_spots and check_neighb_intensity thresh correspondingly.
             image_trc = nbp_filter.images[t, r, c]
-            local_yxz, spot_intensity = detect_torch.detect_spots(
+            local_yxz, spot_intensity = detect.detect_spots(
                 torch.asarray(image_trc.astype(np.float32)),
-                auto_thresh[t, r, c],
-                config["radius_xy"],
-                config["radius_z"],
-                True,
+                auto_thresh[t, r, c].item(),
+                remove_duplicates=True,
+                radius_xy=config["radius_xy"],
+                radius_z=config["radius_z"],
             )
             local_yxz = local_yxz.numpy().astype(np.int16)
             spot_intensity = spot_intensity.numpy()
