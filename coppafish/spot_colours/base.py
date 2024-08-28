@@ -206,4 +206,8 @@ def get_spot_colours(
         round_r_colours = round_r_colours[:, 0, :, 0, 0]
         spot_colours[:, r, :] = round_r_colours.T
 
+        # Any out of bound grid sample retrievals are set to fill_value.
+        is_out_of_bounds = torch.logical_or(zxy_round_r < -1, zxy_round_r > 1).any(dim=2).T
+        spot_colours[:, r, :][is_out_of_bounds] = fill_value
+
     return spot_colours.numpy()
