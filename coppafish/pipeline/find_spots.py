@@ -103,11 +103,8 @@ def find_spots(
             spot_intensity = spot_intensity.numpy()
             # If r is a reference round, we also get info about whether the spots are isolated
             if r == nbp_basic.anchor_round:
-                isolated_spots = fs.get_isolated(
-                    image_trc.astype(np.int32),
+                isolated_spots = fs.get_isolated_spots(
                     local_yxz,
-                    nbp.isolation_thresh[t],
-                    config["isolation_radius_inner"],
                     config["isolation_radius_xy"],
                     config["isolation_radius_z"],
                 )

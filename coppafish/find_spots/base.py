@@ -1,11 +1,11 @@
-from scipy.spatial import KDTree
-import numpy as np
 import os
-from typing import Optional
+from typing import Optional, Union
+
+import numpy as np
+import scipy
+import torch
 
 from .. import log
-from ..utils import morphology as utils_morphology
-from ..utils import strel
 
 
 def spot_yxz(local_yxz: np.ndarray, tile: int, round: int, channel: int, spot_no: np.ndarray) -> np.ndarray:
@@ -80,40 +80,47 @@ def spot_isolated(
     return isolated_spots[use]
 
 
-def get_isolated(
-    image: np.ndarray,
-    spot_yxz: np.ndarray,
-    thresh: float,
-    radius_inner: float,
-    radius_xy: float,
-    radius_z: Optional[float] = None,
-) -> np.ndarray:
+def get_isolated_spots(
+    yxz_positions: Union[torch.Tensor, np.ndarray],
+    distance_threshold_yx: Union[float, int],
+    distance_threshold_z: Union[float, int],
+) -> torch.Tensor:
     """
-    Determines whether each spot in ```spot_yxz``` is isolated by getting the value of image after annular filtering
-    at each location in ```spot_yxz```.
+    Checks what given point positions are truly isolated. A point is truly isolated if the closest other point
+    position is further than the given distance thresholds.
 
     Args:
-        image: ```float [n_y x n_x x n_z]```.
-            image spots were found on.
-        spot_yxz: ```int [n_peaks x image.ndim]```.
-            yx or yxz location of spots found.
-            If axis 1 dimension is more than ```image.ndim```, only first ```image.ndim``` dimensions used
-            i.e. if supply yxz, with 2d image, only yx position used.
-        thresh: Spots are isolated if annulus filtered image at spot location less than this.
-        radius_inner: Inner radius of annulus filtering kernel within which values are all zero.
-        radius_xy: Outer radius of annulus filtering kernel in xy direction.
-        radius_z: Outer radius of annulus filtering kernel in z direction.
-            If ```None```, 2D filter is used.
+        - yxz_positions (`(n_points x 3) ndarray[int] or tensor[int]`): y, x, and z positions for each point.
+        - distance_threshold_yx (float): any positions within this distance threshold along x or y are not truly
+            isolated.
+        - distance_threshold_z (float): any positions within this distance threshold along z are not truly isolated.
 
     Returns:
-        ```bool [n_peaks]```.
-            Whether each spot is isolated or not.
-
+        `(n_points) tensor[bool]`: true for each point considered truly isolated.
     """
-    se = strel.annulus(radius_inner, radius_xy, radius_z)
-    # With just coords, takes about 3s for 50 z-planes.
-    isolated = utils_morphology.imfilter_coords(image, se, spot_yxz, padding=0, corr_or_conv="corr") / np.sum(se)
-    return isolated < thresh
+    assert type(yxz_positions) is torch.Tensor or type(yxz_positions) is np.ndarray
+    assert yxz_positions.ndim == 2
+    assert yxz_positions.shape[0] > 0
+    assert yxz_positions.shape[1] == 3
+    assert type(distance_threshold_yx) is float or type(distance_threshold_yx) is int
+    assert type(distance_threshold_z) is float or type(distance_threshold_z) is int
+
+    if type(yxz_positions) is torch.Tensor:
+        yxz_norm = yxz_positions.numpy()
+    else:
+        yxz_norm = yxz_positions.copy()
+    yxz_norm = yxz_norm.astype(np.float32)
+    yxz_norm[:, 2] *= distance_threshold_yx / distance_threshold_z
+    kdtree = scipy.spatial.KDTree(yxz_norm)
+    close_pairs = kdtree.query_pairs(r=distance_threshold_yx, output_type="ndarray")
+    assert close_pairs.shape[1] == 2
+    close_pairs = close_pairs.ravel()
+    close_pairs = np.unique(close_pairs)
+    true_isolate = np.ones(yxz_norm.shape[0], dtype=bool)
+    true_isolate[close_pairs] = False
+    true_isolate = torch.tensor(true_isolate)
+
+    return true_isolate
 
 
 def check_neighbour_intensity(image: np.ndarray, spot_yxz: np.ndarray, thresh: float = 0) -> np.ndarray:
@@ -147,25 +154,6 @@ def check_neighbour_intensity(image: np.ndarray, spot_yxz: np.ndarray, thresh: f
             mod_spot_yx[:, j] = np.clip(mod_spot_yx[:, j], 0, image.shape[j] - 1)
         keep[:, i] = image[tuple([mod_spot_yx[:, j] for j in range(image.ndim)])] > thresh
     return keep.min(axis=1)
-
-
-def get_isolated_points(spot_yxz: np.ndarray, isolation_dist: float) -> np.ndarray:
-    """
-    Get the isolated points in a point cloud as those whose neighbour is far.
-
-    Args:
-        spot_yxz: ```int [n_peaks x image.ndim]```.
-            yx or yxz location of spots found in image.
-        isolation_dist: Spots are isolated if nearest neighbour is further away than this.
-
-    Returns:
-        ```bool [n_peaks]```. ```True``` for points far from any other point in ```spot_yx```.
-
-    """
-    tree = KDTree(spot_yxz)
-    # for distances more than isolation_dist, distances will be set to infinity i.e. will be > isolation_dist.
-    distances = tree.query(spot_yxz, k=[2], distance_upper_bound=isolation_dist)[0].squeeze()
-    return distances > isolation_dist
 
 
 def load_spot_info(file_path: Optional[str], n_tiles: int, n_rounds: int, n_extra_rounds: int, n_channels: int) -> dict:

@@ -12,6 +12,7 @@ import zarr
 from .. import log, utils, spot_colours
 
 from ..find_spots import detect
+from .. import find_spots
 from ..omp import coefs, scores_torch, spots_torch
 from ..setup import NotebookPage
 
@@ -161,7 +162,7 @@ def run_omp(
             isolated_gene_no = torch.zeros(0).int()
             for g in range(n_genes):
                 g_coef_image = torch.asarray(coefficients[:, [g]].toarray()).reshape(tile_shape).float()
-                g_isolated_yxz, _ = detect.detect_spots(
+                g_isolated_yxz, _ = find_spots.detect.detect_spots(
                     g_coef_image,
                     config["shape_coefficient_threshold"],
                     remove_duplicates=True,
@@ -175,7 +176,7 @@ def run_omp(
                     # Each iteration of this loop is slow, so we break out if we have lots of spots already.
                     break
                 del g_coef_image, g_isolated_yxz, g_gene_no
-            true_isolated = spots_torch.is_true_isolated(
+            true_isolated = find_spots.get_isolated_spots(
                 isolated_yxz, config["shape_isolation_distance_yx"], shape_isolation_distance_z
             )
             assert true_isolated.shape[0] == isolated_yxz.shape[0] == isolated_gene_no.shape[0]
@@ -243,7 +244,7 @@ def run_omp(
 
             # STEP 4: Detect genes as score local maxima.
             for g_i, g in enumerate(gene_batch):
-                g_spot_local_positions, g_spot_scores = detect.detect_spots(
+                g_spot_local_positions, g_spot_scores = find_spots.detect.detect_spots(
                     g_score_image[g_i],
                     config["score_threshold"],
                     radius_xy=config["radius_xy"],
