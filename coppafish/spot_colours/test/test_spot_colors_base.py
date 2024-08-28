@@ -31,6 +31,12 @@ def test_get_spot_colours():
     # initialise flow to be 0
     flow = np.zeros((n_rounds, 3, *tile_shape))
 
+    # 0. check that grabbing a single spot works
+    spot_colours = get_spot_colours(image=images_aligned[None], flow=flow[None],
+                                    affine_correction=affine[None], yxz_base=np.zeros((1, 3)), tile=0)
+    assert spot_colours.shape == (1, n_rounds, n_channels)
+    assert np.allclose(spot_colours, images_aligned[None, :, :, 0, 0, 0])
+
     # 1. check that the images are the same as the spot colours (no affine or flow applied)
     # get coords
     coords = np.array(np.meshgrid(*[np.arange(s) for s in tile_shape], indexing="ij"))

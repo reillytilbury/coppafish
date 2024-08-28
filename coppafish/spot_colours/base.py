@@ -128,11 +128,9 @@ def get_spot_colours(
         affine_correction = torch.tensor(affine_correction, dtype=torch.float32)
     if type(yxz_base) is np.ndarray:
         yxz_base = torch.tensor(yxz_base, dtype=torch.float32)
-    if np.ndim(affine_correction) == 3:
-        # repeat n_rounds times
-        affine_correction = affine_correction[None].repeat(image.shape[1], 1, 1, 1)
-        # repeat n_tiles times
-        affine_correction = affine_correction[None].repeat(image.shape[0], 1, 1, 1, 1)
+
+    # assert that affine_correction has the correct shape
+    assert affine_correction.shape == (image.shape[0], image.shape[1], image.shape[2], 4, 3)
 
     # initialize variables
     n_spots, n_use_rounds, n_use_channels = yxz_base.shape[0], flow.shape[1], len(use_channels)

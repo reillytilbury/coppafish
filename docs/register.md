@@ -385,3 +385,14 @@ The chain of transforms is captured in the figure below:
   <br />
   <span> Chain of transformations learnt for each round and channel.</span>
 </p>
+
+
+## Diagnostics
+Problems in registration can ruin several downstream analyses. These problems can be  diagnosed by looking at the Registration Viewer, as follows:
+
+```pseudo
+from coppafish import Notebook, RegistrationViewer
+nb_file = "path/to/notebook"
+nb = Notebook(nb_file)
+rv = RegistrationViewer(nb)
+```
