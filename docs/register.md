@@ -243,7 +243,7 @@ It is easy to see that this satisfies both the desired properties for the weight
 
     Another way of saying this is that as $\sigma$ grows, so does the radius of contributing pixels.
 
-    We expect the shifts to vary more quickly in $z$ than in $xy$, so we have a different parameter for the blurring in each direction: `smooth_sigma`. This takes default values `[10, 10, 2]` ($y$, $x$ and $z$).
+    We expect the shifts to vary more quickly in $z$ than in $xy$, so we have a different parameter for the blurring in each direction: `smooth_sigma`. This takes default values `[10, 10, 5]` ($y$, $x$ and $z$).
  
 
 ##### Extension to Soft Threshold Interpolation
@@ -261,8 +261,6 @@ $$
 w(\mathbf{x}, \mathbf{x}_i) = \dfrac{K(\mathbf{x}, \mathbf{x}_i)}{\sum_j \lambda(\mathbf{x}_j) K(\mathbf{x}, \mathbf{x}_j)}.
 $$
 
-ADD IMAGE OF TILES BEFORE AND AFTER INTERP.
-
 ??? note "Definition of the Score $\lambda$"
 
     We use the score
@@ -271,9 +269,15 @@ ADD IMAGE OF TILES BEFORE AND AFTER INTERP.
     \lambda(\mathbf{x}) = D_{r_{\textrm{ref}}}(\mathcal{F}_r(\mathbf{x})) D_r(\mathbf{x}),
     $$
    
-    which is just the dot product of the adjusted reference image and the target image. 
+    which is just the dot product of the adjusted reference image and the target image.
 
-    We normalise the score to have a mean of 1 for every z-plane so that the shifts don't become overly biased towards those in the bright centre. This is an issue for the $z$ shifts, which show considerable variability between z-planes.
+    The shifts computed rapidly drop off in quality after about 2/3 of the way down the image in z, as the quality deteriorates. To encourage the algorithm to weight the shifts in the top 2/3 of the image more heavily, we multiply each z-plane of $\lambda$ by a logistic function as shown below.
+
+    <p align="center">
+    <img src="https://github.com/user-attachments/assets/d3da44d4-cc7b-4799-9e00-244b37f28344" width="600" />
+    <br /> 
+    <span> Z-Weighting of the Score $\lambda$.</span>
+    </p>
       
 
 ## Iterative Closest Point
@@ -396,3 +400,191 @@ nb_file = "path/to/notebook"
 nb = Notebook(nb_file)
 rv = RegistrationViewer(nb)
 ```
+
+This will open a viewer with the following home screen:
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/18f4c16a-9005-4808-acaa-e71fbeac3670" width="600" />
+    <br />
+    <span> The Registration Viewer </span>
+</p>
+
+This shows the round registration on the top row and the channel registration on the bottom row. This is displayed as follows:
+
+- Each image in the top row shows a small patch of $(r_{\textrm{ref}}, c_{\textrm{dapi}})$ in red, overlaid with $(r, c_{\textrm{dapi}})$ in green. 
+
+- Each image in the bottom row shows a small patch of $(r_{\textrm{ref}}, c_{\textrm{ref}})$ in red, overlaid with $(r_{\textrm{mid}}, c)$ in green.
+
+Errors in registration may occur because of poor optical flow or ICP. The home screen shows small snippets of the images which indicate the overall quality of the registration. If these all look good, then the registration is likely fine. If not, then the options in the left panel will help diagnose the reason for poor round or channel registration.
+
+### Different Methods
+
+There are 2 sliders at the bottom of the viewer. The z-slider allows you to move through the z-planes, while the method slider allows you to choose between different methods of displaying the images. The methods are as follows:
+
+1. **No Registration**: This shows the images without any registration. This is useful to see how big the misalignments are.
+
+2. **Optical Flow**: This shows the images after the optical flow has been applied, but not the ICP transforms $A_{trc}$. The channel transforms shown here use the optical flow plus the initial affine transform $\tilde{A}_c$ learnt from the fluorescent bead images.
+
+3. **Optical Flow + ICP**: This shows the images after the optical flow has been applied, and the ICP transforms $A_{trc}$ have been applied. This is the final registration.
+
+!!! example "Registration with Different Methods"
+
+    The figures below show a good example of the different stages of round registration. The largest changes are made by optical flow, while ICP makes smaller corrections.
+
+    === "No Registration"
+        <p align="center">
+          <img src="https://github.com/user-attachments/assets/6da39f9f-2743-4e19-a075-19268a8c8411" width="600" />
+         <br />
+         </p>
+
+    === "Optical Flow"
+        <p align="center">
+          <img src="https://github.com/user-attachments/assets/f748d2dd-3ab0-4127-b3dc-3399a2c1a47a" width="600" />
+         <br />
+         </p>
+
+    === "Optical Flow + ICP"
+         <p align="center">
+          <img src="https://github.com/user-attachments/assets/ca9bd825-440f-46fc-9420-7988ed6593de" width="600" />
+         <br />
+         </p>
+
+    The figures below show the different stages of channel registration. Here, image 1 is unregistered, image 2 is registered with optical flow and the initial affine transform, and image 3 is registered with optical flow and ICP. Most of the work done here is by ICP as the initial affine transform is not very good.
+
+    === "No Registration"
+        <p align="center">
+          <img src="https://github.com/user-attachments/assets/b7d7de6c-69df-4c28-beea-e9fd3bda2182" width="600" />
+         <br />
+         </p>
+
+    === "Optical Flow + Initial Affine Transform"
+        <p align="center">
+          <img src="https://github.com/user-attachments/assets/a5698e0b-05f8-4cc7-ae39-5774f75b6d39" width="600" />
+         <br />
+         </p>
+
+    === "Optical Flow + ICP"
+         <p align="center">
+          <img src="https://github.com/user-attachments/assets/18f32ed5-637f-454b-b3aa-5103f7f29c09" width="600" />
+         <br />
+         </p>
+
+
+### Optical Flow Diagnostics
+
+The Optical Flow Viewer can be selected on the left hand panel to view the optical flow fields for a particular round. This will open a screen like the one below:
+
+<p align="center">
+<img src="https://github.com/user-attachments/assets/a5061aac-611b-4009-a32a-0d7097d3acdd" width="600" />
+<br />
+<span> The Optical Flow Viewer.</span>
+</p>
+
+This shows 3 columns of images:
+
+1. **No Flow**: This shows $(r_{\textrm{ref}}, c_{\textrm{dapi}})$ in red, overlaid with $(r, c_{\textrm{dapi}})$ in green before optical flow has been applied.
+
+2. **Raw Flow**: This shows $(r_{\textrm{ref}}, c_{\textrm{dapi}})$ in red, overlaid with $(r, c_{\textrm{dapi}})$ in green after the raw flow has been applied. 
+
+3. **Smoothed Flow**: This shows $(r_{\textrm{ref}}, c_{\textrm{dapi}})$ in red, overlaid with $(r, c_{\textrm{dapi}})$ in green after the smoothed flow has been applied. 
+
+Rows 2, 3 and 4 show the raw and smooth flows in the $y$, $x$ and $z$ directions respectively, while row 5 shows the correlation between the raw flow and the target image (this is the score $\lambda(\mathbf{x})$ which is used to compute the smoothed flow).
+
+!!! example "Optical Flow Viewer Example"
+
+    The figures below show an example of the different stages of optical flow. No flow shows a lot of misalignment. The raw flow shows the initial flow field, which is right in most places but wrong in others (particularly at edges). The smoothed flow is the final flow field, which is much better than the raw flow.
+
+    === "No Flow"
+        <p align="center">
+          <img src="https://github.com/user-attachments/assets/0f74c38b-3480-4176-97f0-4ee23f735817" width="800" />
+         <br />
+         </p>
+
+    === "Raw Flow"
+        <p align="center">
+          <img src="https://github.com/user-attachments/assets/8f7db328-14f4-45e2-a485-a210d43749f7" width="800" />
+         <br />
+         </p>
+
+    === "Smoothed Flow"
+         <p align="center">
+          <img src="https://github.com/user-attachments/assets/24e2351e-c309-4f18-b19f-618a9be40d05" width="800" />
+         <br />
+         </p>
+    
+    The figure below is a closer look at the raw and smoothed flow fields, with the correlation plotted below them in blue.
+    
+    <p align="center">
+    <img src="https://github.com/user-attachments/assets/c89c143b-646a-481f-aa13-188143620bf7" width="600" />
+    <br />
+    </p>
+
+    This viewer also opens a separate window showing the average shifts for each z-plane, which can be useful for diagnosing problems with the z-shifts.
+    <p align="center">
+    <img src="https://github.com/user-attachments/assets/88fcf661-f126-4803-bea8-a2b7210f2bb6" width="600" />
+    <br />
+    </p>
+
+
+### ICP Diagnostics
+
+Several diagnostics are available for ICP, and can be selected from the left hand panel. These viewers either show summary statistics or point clouds used to compute the transforms.
+
+#### Summary Statistics
+These show things like the average shift and scale for each round and channel and the convergence rates of each round and channel. This is useful for identifying outliers for some round or channel.
+
+!!! example "Summary Statistics"
+
+    The figure below shows the shifts and scales of the ICP correction for each round and channel of a particular tile. These numbers alone do not tell us the whole picture about the affine transforms (for example they don't tell us about the rotation), but they can be useful for identifying outliers, and seeing how much work ICP is doing.
+    
+    In this image, very bright or very dark columns indicate large round corrections, while very bright or very dark rows indicate large channel corrections. Take note of the following points:
+
+    - The round corrections are largest in z. 
+    - The channel corrections are largest in x and y.
+    - The channel scales and shifts are very similar in channels separated by a multiple of 4. This is because these channels come from the same camera, and therefore have roughly the same offset.
+    - Even though these scales are very small (around 1.003 at most), the images have size around 2000 pixels. This means that if we didn't correct for these scales, the images would be off by around 6 pixels, which is a lot.
+
+    <p align="center">
+    <img src="https://github.com/user-attachments/assets/c3315df5-53f4-405b-bfea-65d330320178" width="600" />
+    <br />
+    </p>
+    
+
+#### Point Clouds
+These show the point clouds used to compute the round corrections $B_r$ and channel corrections $A_c$. This is much more detailed than the summary statistics and can be used to understand why convergence fails in certain cases.
+
+!!! example "Point Clouds"
+
+    The figure below shows the point clouds used to compute the channel correction $A_c$ for $c = 5$. 
+    
+    - The white circles are the points from $(r_{\textrm{ref}}, c_{\textrm{ref}})$,
+    - the red crosses are the points from $(r_{\textrm{mid}}, c)$. 
+    - The cyan lines show the matches between points in the unaligned point clouds,
+    - the blue lines show the matches between points in the aligned point clouds. 
+    - The yellow background image is bright in places where there are many matches and dark where there are few.
+    
+    === "No Registration"
+        <p align="center">
+        <img src="https://github.com/user-attachments/assets/151d275b-062b-4bcc-bbc6-26fcb1ab90ff" width="600" />
+        <br />
+        </p>
+
+    === "Channel Correction"
+        <p align="center">
+        <img src="https://github.com/user-attachments/assets/aaf92759-92bc-416a-a5d5-a6ac14b614aa" width="600" />
+        <br />
+        </p>
+
+    The figure below shows the point clouds used to compute the round correction $B_r$ for $r = 1$. This viewer has the same components as the channel correction viewer but it defaults to showing all z-planes, as this is what ICP corrects for the most.
+    
+    === "No Registration"
+        <p align="center">
+        <img src="https://github.com/user-attachments/assets/b91d0953-a6aa-4a12-a1f5-66ae7e6dbbed" width="600" />
+        <br />
+        </p>
+
+    === "Round Correction"
+        <p align="center">
+        <img src="https://github.com/user-attachments/assets/db72c8af-c4d4-4ce5-9ca6-fecabb9c3442" width="600" />
+        <br />
+        </p>

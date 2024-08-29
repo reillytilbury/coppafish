@@ -98,7 +98,7 @@ def test_get_spot_colours():
             images_disaligned[r, c] = scipy.ndimage.affine_transform(
                 images_aligned[r, c], affine_rc, order=1, cval=np.nan
             )
-            images_disaligned[r, c] = skimage.transform.warp(images_disaligned[r, c], warp_inv[r], order=1, cval=np.nan)
+            images_disaligned[r, c] = (images_disaligned[r, c], warp_inv[r], order=1, cval=np.nan)
 
     # now we want to get the spot colours from the disaligned images
     spot_colours = get_spot_colours(

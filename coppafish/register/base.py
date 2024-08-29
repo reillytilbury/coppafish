@@ -238,6 +238,11 @@ def flow_correlation(
 
     # compute the correlation
     correlation = base_warped * target
+    # normalise to be between 0 and 1
+    correlation_min, correlation_max = np.percentile(correlation, [1, 99])
+    correlation = (correlation - correlation_min) / (correlation_max - correlation_min)
+    correlation = np.clip(correlation, 0, 1)
+    # up-sample the correlation
     correlation_upsampled = upsample_yx(correlation, upsample_factor_yx, order=1).astype(np.float16)
     # save the correlation
     if loc:
@@ -254,7 +259,7 @@ def interpolate_flow(
     correlation: np.ndarray,
     tile: int,
     round: int,
-    sigma: list = [10, 10, 2],
+    sigma: list = [10, 10, 5],
     upsample_factor_yx: int = 4,
     loc: str = "",
 ):
@@ -277,9 +282,11 @@ def interpolate_flow(
         loc: str specifying the location to save/ load the interpolated flow
     """
     time_start = time.time()
-
-    # normalise correlation so that mean of each z-plane is 1, otherwise the middle z-planes dominate the smoothed flow
-    correlation = correlation / np.mean(correlation, axis=(0, 1))[None, None, :]
+    # because we want to downweight values for high z, we will taper off the scores for high z
+    nz = flow.shape[-1]
+    kappa = 0.3
+    window = np.exp(-kappa * (np.arange(nz) - 2 * nz / 3)) / (1 + np.exp(-kappa * (np.arange(nz) - 2 * nz / 3)))
+    correlation = correlation * window[None, None, :]
     # smooth the correlation
     correlation_smooth = gaussian_filter(correlation, sigma, truncate=6)
     flow_smooth = np.zeros_like(flow)
