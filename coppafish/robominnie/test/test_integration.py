@@ -49,7 +49,8 @@ def test_integration_small_two_tile():
     robominnie.generate_gene_codes()
     robominnie.generate_pink_noise()
     robominnie.add_spots()
-    robominnie.save_raw_images(output_dir)
+    # We add a fake bad tile, round, channel image to make sure it can run through the pipeline.
+    robominnie.save_raw_images(output_dir, bad_trcs=[[0, 2, 3]])
     robominnie.run_coppafish()
     get_robominnie_scores(robominnie)
     del robominnie

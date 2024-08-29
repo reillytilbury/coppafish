@@ -414,7 +414,7 @@ def set_basic_info_new(config: dict) -> NotebookPage:
         if i == (nbp.nz - 1):
             break
         if abs(nbp.use_z[i] - nbp.use_z[i + 1]) > 1:
-            log.warn("use_z contains z planes that are not connected. This may cause software instability")
+            raise ValueError("use_z contains z planes that are not connected. This may cause software instability")
 
     if nbp.use_dyes is None:
         del nbp.use_dyes

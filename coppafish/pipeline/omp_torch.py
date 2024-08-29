@@ -9,9 +9,7 @@ import torch
 import tqdm
 import zarr
 
-from .. import log, utils, spot_colours
-
-from ..find_spots import detect
+from .. import log, spot_colours, utils
 from .. import find_spots
 from ..omp import coefs, scores_torch, spots_torch
 from ..setup import NotebookPage
@@ -162,6 +160,8 @@ def run_omp(
             isolated_gene_no = torch.zeros(0).int()
             for g in range(n_genes):
                 g_coef_image = torch.asarray(coefficients[:, [g]].toarray()).reshape(tile_shape).float()
+                if torch.allclose(g_coef_image, torch.zeros(1).float()):
+                    log.warn(f"All tile {t} OMP coefficients for gene {nbp_call_spots.gene_names[g]} are zero")
                 g_isolated_yxz, _ = find_spots.detect.detect_spots(
                     g_coef_image,
                     config["shape_coefficient_threshold"],
@@ -176,6 +176,12 @@ def run_omp(
                     # Each iteration of this loop is slow, so we break out if we have lots of spots already.
                     break
                 del g_coef_image, g_isolated_yxz, g_gene_no
+            if isolated_yxz.size(0) == 0:
+                raise ValueError(
+                    f"No local maxima found with OMP coefficients > {config['shape_coefficient_threshold']}. "
+                    + f"The threshold may be too high, no non-zero coefficients were found, or the isolation distance "
+                    + f"thresholds shape_isolation_distance_yx and shape_isolation_distance_z are too large."
+                )
             true_isolated = find_spots.get_isolated_spots(
                 isolated_yxz, config["shape_isolation_distance_yx"], shape_isolation_distance_z
             )

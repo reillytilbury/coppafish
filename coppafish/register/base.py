@@ -24,7 +24,7 @@ def optical_flow_register(
     smooth_loc: str,
     sample_factor_yx: int = 4,
     chunks_yx: int = 4,
-    overlap: float = 1/3,
+    overlap: float = 1 / 3,
     window_radius: int = 5,
     smooth_sigma: list = [10, 10, 2],
     clip_val: np.ndarray = np.array([40, 40, 15]),
@@ -116,7 +116,7 @@ def optical_flow_single(
     clip_val: np.ndarray = np.array([10, 10, 15]),
     upsample_factor_yx: int = 4,
     chunks_yx: int = 4,
-    overlap: float = 1/3,
+    overlap: float = 1 / 3,
     n_cores: Optional[int] = None,
     loc: str = "",
 ) -> np.ndarray:
@@ -146,9 +146,7 @@ def optical_flow_single(
     # First, correct for a shift in the images
     base_windowed, target_windowed = preprocessing.window_image(base), preprocessing.window_image(target)
     shift = skimage.registration.phase_cross_correlation(
-        reference_image=target_windowed,
-        moving_image=base_windowed,
-        upsample_factor=10
+        reference_image=target_windowed, moving_image=base_windowed, upsample_factor=10
     )[0]
     # round this shift and make it an integer
     shift = np.round(shift).astype(int)
@@ -156,7 +154,6 @@ def optical_flow_single(
     base = preprocessing.custom_shift(base, shift)
 
     # split the images into subvolumes and run optical flow on each subvol in parallel
-    ny, _, nz = target.shape    # ny = nx = 2304 / 4 = 576
     target_sub, pos = preprocessing.split_image(im=target, n_subvols_yx=chunks_yx, overlap=overlap)
     base_sub, _ = preprocessing.split_image(im=base, n_subvols_yx=chunks_yx)
     # Normalise each subvolume to have mean 1 (this is just so that the images are in a similar range in each subvol)
@@ -173,11 +170,17 @@ def optical_flow_single(
         )
         for n in range(pos.shape[0])
     )
-    flow_sub = np.array(flow_sub)   # convert list to numpy array. Shape: (n_subvols, 3, n_y, n_x, n_z)
+    flow_sub = np.array(flow_sub)  # convert list to numpy array. Shape: (n_subvols, 3, n_y, n_x, n_z)
 
     # Now that we have the optical flow for each subvolume, we need to merge them back together
-    flow = np.array([preprocessing.merge_subvols(im_split=flow_sub[:, i], positions=pos,
-                                                 output_shape=target.shape, overlap=overlap) for i in range(3)])
+    flow = np.array(
+        [
+            preprocessing.merge_subvols(
+                im_split=flow_sub[:, i], positions=pos, output_shape=target.shape, overlap=overlap
+            )
+            for i in range(3)
+        ]
+    )
     # clip the flow
     flow = np.array([np.clip(flow[i], -clip_val[i], clip_val[i]) for i in range(3)])
     # add back the shift
@@ -381,8 +384,9 @@ def channel_registration(
     target_cams = [i for i in range(n_cams) if i != anchor_cam_idx]
     initial_transform = np.repeat(np.eye(4, 3)[None, :, :], n_cams, axis=0)
     for i in target_cams:
-        shift_yx = skimage.registration.phase_cross_correlation(reference_image=fluorescent_beads[i],
-                                                                moving_image=fluorescent_beads[anchor_cam_idx])[0]
+        shift_yx = skimage.registration.phase_cross_correlation(
+            reference_image=fluorescent_beads[i], moving_image=fluorescent_beads[anchor_cam_idx]
+        )[0]
         initial_transform[i][-1, :-1] = shift_yx
 
     # Now we'll turn each image into a point cloud
@@ -569,4 +573,3 @@ def icp(yxz_base, yxz_target, dist_thresh_yx, dist_thresh_z, start_transform, n_
     converged = i < n_iters
 
     return transform, n_matches, error, converged
-
