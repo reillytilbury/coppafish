@@ -379,7 +379,9 @@ class Robominnie:
             self.anchor_image = self.anchor_image.astype(type)
         self.image_dtype = type
 
-    def save_raw_images(self, output_dir: str, overwrite: bool = True) -> Self:
+    def save_raw_images(
+        self, output_dir: str, bad_trcs: Optional[List[List[int]]] = None, overwrite: bool = True
+    ) -> Self:
         """
         Save known spot positions and codes, raw .npy image files, metadata.json file, gene codebook and ``config.ini``
         file for coppafish pipeline run. Output directory must be empty. After saving, able to call function
@@ -387,9 +389,15 @@ class Robominnie:
 
         Args:
             output_dir (str): save directory.
-            overwrite (bool, optional): overwrite any saved coppafish data inside the directory, delete old
-                `notebook.npz` file if there is one and ignore any other files inside the directory. Default: true.
+            bad_trcs (list of list of int, optional): each item in the list is a list of three integers that represent
+                the tile, round, and channel index respectively. This specific image will be set to bad.
+            overwrite (bool, optional): overwrite any saved coppafish data inside the directory, delete old `notebook`
+                file if there is one and ignore any other files inside the directory. Default: true.
         """
+        assert type(bad_trcs) is list or bad_trcs is None
+        if bad_trcs is None:
+            bad_trcs = []
+        assert all([type(bad_trc) is list for bad_trc in bad_trcs])
         # Same dtype as ND2s
         self.fit_images_to_type()
         self.bound_spots()
@@ -559,6 +567,7 @@ class Robominnie:
 
         [basic_info]
         is_3d = true
+        bad_trc = {", ".join([f"({bad_trc[0]}, {bad_trc[1]}, {bad_trc[2]})" for bad_trc in bad_trcs])}
         dye_names = {', '.join(self.dye_names)}
         use_rounds = {', '.join([str(i) for i in range(self.n_rounds)])}
         use_z = {', '.join([str(i) for i in range(self.n_planes)])}
@@ -583,11 +592,6 @@ class Robominnie:
         expected_overlap = {self.tile_overlap}
 
         [register]
-        subvols = {self.n_planes}, {8}, {8}
-        box_size = {box_size_z}, {box_size_yx}, {box_size_yx}
-        pearson_r_thresh = 0.25
-        chunks_yx = 5
-        overlap_yx = 0.25
         icp_min_spots = 10
         
         [call_spots]

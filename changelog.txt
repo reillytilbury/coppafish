@@ -22,6 +22,7 @@
  * The notebook has been refactored. It is now faster at saving, can save zarr arrays/groups, and has write protections.
  * OMP: Less memory intensive by saving each tile's results separately. Also, the results are compressed to disk.
  * OMP: New OMP subplots for the Viewer. Pressing "Shift + k" will bring up all subplot shortcuts.
+ * Call spots: bad_trc now works with the new colour normalisation factor computation fix.
  * Extract: Default z_plane_mean_warning 200 -> 125.
  * Register: Moved bg_scale from filter page -> register page.
  * Viewer refactor: Viewer is now much faster and less laggy, due to the removal of a transparent copy of the spots, and

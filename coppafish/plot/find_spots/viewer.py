@@ -60,6 +60,8 @@ class view_find_spots:
                 Note, this is very slow in *3D*, around 300s for a 2048 x 2048 x 50 image.
             config_file: path to config file for experiment.
         """
+        # TODO: Re-implement.
+        raise NotImplementedError(f"This diagnostic is outdated")
         if nb is None:
             nb = Notebook(config_file=config_file)
         add_basic_info_no_save(nb)  # deal with case where there is no notebook yet
