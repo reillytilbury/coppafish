@@ -2,7 +2,7 @@ import numpy as np
 import scipy
 import torch
 
-from coppafish.omp.spots_torch import compute_mean_spot, is_duplicate_spot, is_true_isolated
+from coppafish.omp.spots_torch import compute_mean_spot, is_duplicate_spot
 
 
 def test_is_duplicate_spot() -> None:
@@ -39,19 +39,6 @@ def test_is_duplicate_spot() -> None:
     assert not is_duplicate[4]
     assert type(yxz_global_positions) is torch.Tensor
     assert type(tile_centres) is torch.Tensor
-
-
-def test_is_true_isolated() -> None:
-    yxz_positions = torch.zeros((4, 3)).int()
-    yxz_positions[0, 2] = 100
-    yxz_positions[1, 0] = 3
-    yxz_positions[2, 1] = 5
-    distance_threshold_yx = 10
-    distance_threshold_z = 2.0
-    is_isolated = is_true_isolated(yxz_positions, distance_threshold_yx, distance_threshold_z)
-    assert is_isolated[0]
-    assert not is_isolated[1]
-    assert not is_isolated[2]
 
 
 def test_compute_spots_from() -> None:

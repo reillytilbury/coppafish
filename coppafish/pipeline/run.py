@@ -9,10 +9,12 @@ from . import stitch
 from . import get_reference_spots
 from . import call_reference_spots
 from . import omp_torch
-from .. import log, setup, utils
+from .. import log, setup
 from ..find_spots import check_spots
 from ..pdf.base import BuildPDF
 from ..setup import Notebook, file_names
+from ..utils import system as utils_system
+from ..utils import warnings as utils_warnings
 
 
 def run_pipeline(config_file: str) -> Notebook:
@@ -82,30 +84,30 @@ def initialize_nb(config_path: str) -> Notebook:
         config_notify["sender_email_password"],
     )
     log.info(
-        f" COPPAFISH v{utils.system.get_software_version()} ".center(utils.system.current_terminal_size_xy(-33)[0], "=")
+        f" COPPAFISH v{utils_system.get_software_version()} ".center(utils_system.current_terminal_size_xy(-33)[0], "=")
     )
     log.base.log_package_versions()
 
-    if utils.system.get_software_version() not in nb.get_unqiue_versions():
+    if utils_system.get_software_version() not in nb.get_unqiue_versions():
         log.warn(
-            f"You are running on v{utils.system.get_software_version()}, but the notebook contains "
+            f"You are running on v{utils_system.get_software_version()}, but the notebook contains "
             + f"data from versions {', '.join(set(nb.get_all_variable_instances(nb._SOFTWARE_VERSION)))}.",
         )
-    online_version = utils.system.get_remote_software_version()
-    if online_version != utils.system.get_software_version():
+    online_version = utils_system.get_remote_software_version()
+    if online_version != utils_system.get_software_version():
         log.warn(
-            f"You are running v{utils.system.get_software_version()}. The latest online version is v{online_version}"
+            f"You are running v{utils_system.get_software_version()}. The latest online version is v{online_version}"
         )
     if not nb.has_page("basic_info"):
         nbp_basic = basic_info.set_basic_info_new(config)
         nb += nbp_basic
     else:
-        log.warn(utils.warnings.NotebookPageWarning("basic_info"))
+        log.warn(utils_warnings.NotebookPageWarning("basic_info"))
     if not nb.has_page("file_names"):
         nbp_file = file_names.get_file_names(nb)
         nb += nbp_file
     else:
-        log.warn(utils.warnings.NotebookPageWarning("file_names"))
+        log.warn(utils_warnings.NotebookPageWarning("file_names"))
     return nb
 
 
@@ -129,7 +131,7 @@ def run_extract(nb: Notebook) -> None:
         nbp = extract_run.run_extract(config["extract"], nb.file_names, nb.basic_info)
         nb += nbp
     else:
-        log.warn(utils.warnings.NotebookPageWarning("extract"))
+        log.warn(utils_warnings.NotebookPageWarning("extract"))
 
 
 def run_filter(nb: Notebook) -> None:
@@ -145,7 +147,7 @@ def run_filter(nb: Notebook) -> None:
         nb += nbp
         nb += nbp_debug
     else:
-        log.warn(utils.warnings.NotebookPageWarning("filter"))
+        log.warn(utils_warnings.NotebookPageWarning("filter"))
 
 
 def run_find_spots(nb: Notebook) -> Notebook:
@@ -172,7 +174,7 @@ def run_find_spots(nb: Notebook) -> Notebook:
         )
         nb += nbp
     else:
-        log.warn(utils.warnings.NotebookPageWarning("find_spots"))
+        log.warn(utils_warnings.NotebookPageWarning("find_spots"))
     return nb
 
 
@@ -194,7 +196,7 @@ def run_stitch(nb: Notebook) -> None:
         nbp = stitch.stitch(config["stitch"], nb.basic_info, nb.file_names, nb.filter)
         nb += nbp
     else:
-        log.warn(utils.warnings.NotebookPageWarning("stitch"))
+        log.warn(utils_warnings.NotebookPageWarning("stitch"))
 
 
 def run_register(nb: Notebook) -> None:
@@ -224,8 +226,8 @@ def run_register(nb: Notebook) -> None:
         nb += nbp
         nb += nbp_debug
     else:
-        log.warn(utils.warnings.NotebookPageWarning("register"))
-        log.warn(utils.warnings.NotebookPageWarning("register_debug"))
+        log.warn(utils_warnings.NotebookPageWarning("register"))
+        log.warn(utils_warnings.NotebookPageWarning("register_debug"))
 
 
 def run_reference_spots(nb: Notebook) -> None:
@@ -251,7 +253,7 @@ def run_reference_spots(nb: Notebook) -> None:
         )
         nb += nbp_ref_spots
     else:
-        log.warn(utils.warnings.NotebookPageWarning("ref_spots"))
+        log.warn(utils_warnings.NotebookPageWarning("ref_spots"))
     if not nb.has_page("call_spots"):
         config = setup.config.get_config(nb.config_path)
         nbp_call_spots = call_reference_spots.call_reference_spots(
@@ -262,7 +264,7 @@ def run_reference_spots(nb: Notebook) -> None:
         )
         nb += nbp_call_spots
     else:
-        log.warn(utils.warnings.NotebookPageWarning("call_spots"))
+        log.warn(utils_warnings.NotebookPageWarning("call_spots"))
 
 
 def run_omp(nb: Notebook) -> None:
@@ -292,4 +294,4 @@ def run_omp(nb: Notebook) -> None:
         )
         nb += nbp
     else:
-        log.warn(utils.warnings.NotebookPageWarning("omp"))
+        log.warn(utils_warnings.NotebookPageWarning("omp"))

@@ -1,4 +1,4 @@
-from typing import Any, Tuple, Union
+from typing import Any, Tuple
 
 import numpy as np
 import scipy
@@ -38,43 +38,6 @@ def is_duplicate_spot(yxz_global_positions: torch.Tensor, tile_number: int, tile
     is_duplicate = closest_tile_numbers != tile_number
 
     return is_duplicate
-
-
-def is_true_isolated(
-    yxz_positions: torch.Tensor, distance_threshold_yx: Union[float, int], distance_threshold_z: Union[float, int]
-) -> torch.Tensor:
-    """
-    Checks what point positions are truly isolated. A point is truly isolated if the closest other point position is
-    further than the given distance thresholds.
-
-    Args:
-        - yxz_positions (`(n_points x 3) tensor[int]`): y, x, and z positions for each point.
-        - distance_threshold_yx (float): any positions within this distance threshold along x or y are not truly
-            isolated.
-        - distance_threshold_z (float): any positions within this distance threshold along z are not truly isolated.
-
-    Returns:
-        (`(n_points) tensor[bool]`): true for each point considered truly isolated.
-    """
-    assert type(yxz_positions) is torch.Tensor
-    assert yxz_positions.dim() == 2
-    assert yxz_positions.shape[0] > 0
-    assert yxz_positions.shape[1] == 3
-    assert type(distance_threshold_yx) is float or type(distance_threshold_yx) is int
-    assert type(distance_threshold_z) is float or type(distance_threshold_z) is int
-
-    yxz_norm = yxz_positions.numpy()
-    yxz_norm = yxz_norm.astype(np.float32)
-    yxz_norm[:, 2] *= distance_threshold_yx / distance_threshold_z
-    kdtree = scipy.spatial.KDTree(yxz_norm)
-    close_pairs = kdtree.query_pairs(r=distance_threshold_yx, output_type="ndarray")
-    assert close_pairs.shape[1] == 2
-    close_pairs = close_pairs.ravel()
-    close_pairs = np.unique(close_pairs)
-    true_isolate = np.ones(yxz_norm.shape[0], dtype=bool)
-    true_isolate[close_pairs] = False
-
-    return true_isolate
 
 
 def compute_mean_spot(
