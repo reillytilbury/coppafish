@@ -156,7 +156,7 @@ def fuse_tiles(
             current_tile=t,
         )
     # create the large image
-    large_image = np.zeros(large_im_shape, dtype=np.uint16)
+    large_image = np.zeros(large_im_shape, dtype=np.float16)
     for t in tqdm(range(n_tiles), desc="Adding tiles to the large image", total=n_tiles):
         y_start, x_start, z_start = tile_origins[t]
         y_end, x_end, z_end = tile_origins[t] + np.array(cropped_tiles_list[t].shape)
@@ -233,7 +233,7 @@ def taper_image(
     Returns:
         tapered_image: np.ndarray, [y_size, x_size, z_size] array of the tapered image
     """
-    # convert the image to float32 for multiplication. We will convert it back to uint16 at the end
+    # convert the image to float32 for multiplication then convert to float16 at the end.
     image = image.astype(np.float32)
     tilepos_current = tilepos_yx[current_tile]
     n_tiles = len(tilepos_yx)
@@ -268,4 +268,4 @@ def taper_image(
             y_start = tile_start[t, 0] - tile_end[current_tile, 0]
             image[y_start:, :] *= np.linspace(1, 0, -y_start)[:, None, None]
 
-    return image.astype(np.uint16)
+    return image.astype(np.float16)

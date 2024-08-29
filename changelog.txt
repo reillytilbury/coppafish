@@ -5,6 +5,8 @@
     a max intensity projection or not, which is achieved by setting the max_intensity_projection variable in the viewer
     to True or False.
  * Presequence support is completely removed from the pipeline.
+ * PDF Diagnostics: New gene spatial heat map PDFs created at runtime.
+ * PDF Diagnostics: New stitch PDF file created at runtime.
  * All output variables are now stored within the notebook except for extract images.
  * Filter: Filtered images are now saved as float16 instead of uint16.
  * Filter: Filtered images are not scaled anymore.

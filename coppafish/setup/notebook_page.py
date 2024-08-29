@@ -9,7 +9,8 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 import zarr
 
-from .. import utils
+from ..utils import base as utils_base
+from ..utils import system as utils_system
 
 
 # NOTE: Every method and variable with an underscore at the start should not be accessed externally.
@@ -333,19 +334,19 @@ class NotebookPage:
                 "ndarray[float]",
                 "Numpy array (n_tiles x n_tiles x 3)"
                 + "`shifts[t1, t2, :]` is the $yxz$ shift from tile $t1$ to tile $t2$."
-                + "nan is populated in places where shift is not calculated, i.e. if tiles are not adjacent,"
+                + "Zeros are populated in places where shift is not calculated, i.e. if tiles are not adjacent,"
                 + "or if one of the tiles is not used in the pipeline.",
             ],
             "scores": [
                 "ndarray[float]",
                 "Numpy array [n_tiles x n_tiles]"
-                + "`scores[t1, t2]` is the score of the shift from tile $t1$ to tile $t2$."
-                + "nan is populated in places where shift is not calculated, i.e. if tiles are not adjacent,"
+                + "`scores[t1, t2]` is the score of the shift from tile $t1$ to tile $t2$. "
+                + "Zeros are populated in places where the shift is not calculated, i.e. if tiles are not adjacent "
                 + "or if one of the tiles is not used in the pipeline.",
             ],
             "dapi_image": [
                 "zarray",
-                "uint16 array (im_y x im_x x im_z). "
+                "float16 array (im_z x im_y x im_x). "
                 + "Fused large dapi image created by merging all tiles together after stitch shifting is applied.",
             ],
         },
@@ -707,7 +708,7 @@ class NotebookPage:
             raise ValueError(f"Could not find _options for page called {page_name}")
         self._name = page_name
         self._time_created = time.time()
-        self._version = utils.system.get_software_version()
+        self._version = utils_system.get_software_version()
         self._associated_configs = copy.deepcopy(associated_config)
         self._sanity_check_options()
 
@@ -841,7 +842,7 @@ class NotebookPage:
         """
         result = object.__getattribute__(self, name)
         if type(result) is tuple:
-            result = utils.base.deep_convert(result, list)
+            result = utils_base.deep_convert(result, list)
         elif type(result) is np.ndarray:
             result = result.copy()
         return result
@@ -934,7 +935,7 @@ class NotebookPage:
                 value = json.loads(file.read())["value"]
                 # A JSON file does not support saving tuples, they must be converted back to tuples here.
                 if type(value) is list:
-                    value = utils.base.deep_convert(value)
+                    value = utils_base.deep_convert(value)
             return value
         elif file_suffix == ".npz":
             return np.load(file_path)["arr_0"]

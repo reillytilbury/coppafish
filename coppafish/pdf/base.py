@@ -7,8 +7,10 @@ import matplotlib as mpl
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 from matplotlib.transforms import ScaledTranslation
+from matplotlib import colors as mcolours
 import numpy as np
 from tqdm import tqdm
+from typing_extensions import Self
 
 from .. import log
 from ..omp import base as omp_base
@@ -28,6 +30,10 @@ class BuildPDF:
     GENE_PROB_THRESHOLD = 0.7
     DEFAULT_REF_SCORE_THRESHOLD = 0.3
     DEFAULT_OMP_SCORE = 0.3
+    HEATMAP_BIN_SIZE = 10  # In pixel count
+    HEATMAP_PROB_SCORE_THRESH = 0.5
+    HEATMAP_ANCHOR_SCORE_THRESH = 0.5
+    HEATMAP_OMP_SCORE_THRESH = 0.3
 
     def __init__(
         self,
@@ -45,7 +51,7 @@ class BuildPDF:
             auto_open (bool, optional): open the PDF in a web browser after creation. Default: true.
         """
         log.debug("Creating diagnostic PDF started")
-        pbar = tqdm(desc="Creating Diagnostic PDFs", total=9, unit="section")
+        pbar = tqdm(desc="Creating Diagnostic PDFs", total=11, unit="section")
         pbar.set_postfix_str("Loading notebook")
         if type(nb) is str:
             nb = Notebook(nb)
@@ -205,6 +211,89 @@ class BuildPDF:
         pbar.update()
 
         pbar.set_postfix_str("Stitch")
+        stitch_filepath = os.path.join(output_dir, "_stitch.pdf")
+        if nb.has_page("stitch") and not os.path.isfile(stitch_filepath):
+            with PdfPages(stitch_filepath) as pdf:
+                # Plot the neighbouring tile scores.
+                tile_scores = nb.stitch.scores
+                n_tiles = tile_scores.shape[0]
+                max_neighbours = (~np.isclose(nb.stitch.scores, 0)).sum(1).max()
+                n_bars = n_tiles * max_neighbours
+                bar_scores_x = [i + 1 for i in range(n_bars)]
+                bar_scores = [0 for _ in range(n_bars)]
+                bar_scores_colours = ["black" for _ in range(n_bars)]
+                if max_neighbours > 0:
+                    rng = np.random.default_rng(0)
+                    for tile in range(n_tiles):
+                        tile_colour = rng.choice(list(mcolours.CSS4_COLORS.values()), replace=False)
+                        tile_nonzero_scores = tile_scores[tile, ~np.isclose(tile_scores[tile], 0)]
+                        tile_nonzero_scores = np.append(
+                            tile_nonzero_scores, np.full(max_neighbours - tile_nonzero_scores.size, np.nan)
+                        )
+                        for i in range(max_neighbours):
+                            bar_scores[tile * max_neighbours + i] = tile_nonzero_scores[i]
+                            bar_scores_colours[tile * max_neighbours + i] = tile_colour
+                fig, axes = self.create_empty_page(1, 1, hide_frames=False)
+                fig.suptitle("Stitch tile shift scores")
+                ax: plt.Axes = axes[0, 0]
+                ax.bar(bar_scores_x, bar_scores, width=0.9, color=bar_scores_colours, linewidth=0.5, edgecolor="black")
+                ax.spines["top"].set_visible(False)
+                ax.spines["right"].set_visible(False)
+                ax.set_xticks([])
+                ax.set_ylabel("Shift score")
+                fig.tight_layout()
+                pdf.savefig(fig)
+                plt.close(fig)
+
+                # Plot the neighbouring tile shifts for every tile.
+                all_tile_scores = nb.stitch.scores
+                all_tile_shifts = nb.stitch.shifts
+                zero_shifts = np.isclose(all_tile_scores, 0)
+                max_neighbours = (~zero_shifts).sum(1).max()
+                n_bars = 3 * max_neighbours * n_tiles
+                bar_x = [i for i in range(n_bars)]
+                bar_heights = [i for i in range(n_bars)]
+                bar_colours = ["black" for _ in range(n_bars)]
+                bar_labels = ["" for _ in range(n_bars)]
+                if max_neighbours > 0:
+                    for tile in range(n_tiles):
+                        tile_shifts = all_tile_shifts[tile]
+                        # Remove zero shifts.
+                        tile_shifts = tile_shifts[~zero_shifts[tile]]
+                        # Add zeros back in to reach shape[0] of max_neighbours for consistency.
+                        tile_shifts = np.append(tile_shifts, np.zeros((max_neighbours - tile_shifts.shape[0], 3)), 0)
+                        rng = np.random.default_rng(0)
+                        tile_colour = rng.choice(list(mcolours.CSS4_COLORS.values()), replace=False)
+                        for i in range(max_neighbours):
+                            bar_heights[3 * tile * max_neighbours + i + 0] = tile_shifts[i, 0]
+                            bar_heights[3 * tile * max_neighbours + i + 1] = tile_shifts[i, 1]
+                            bar_heights[3 * tile * max_neighbours + i + 2] = tile_shifts[i, 2]
+                            bar_colours[3 * tile * max_neighbours + i + 0] = tile_colour
+                            bar_colours[3 * tile * max_neighbours + i + 1] = tile_colour
+                            bar_colours[3 * tile * max_neighbours + i + 2] = tile_colour
+                            bar_labels[3 * tile * max_neighbours + i + 0] = f"Tile {tile}"
+                    fig, axes = self.create_empty_page(1, 1, hide_frames=False)
+                    fig.suptitle("Stitch tile shifts")
+                    ax: plt.Axes = axes[0, 0]
+                    ax.bar(bar_x, bar_heights, width=0.7, edgecolor="black", linewidth=0.5)
+                    ax.set_xticks([])
+                    ax.set_ylabel("Shift (pixels)")
+                    fig.tight_layout()
+                    pdf.savefig(fig)
+                    plt.close(fig)
+
+                dapi_image = nb.stitch.dapi_image[...]
+                for z in range(dapi_image.shape[0]):
+                    fig, axes = self.create_empty_page(1, 1)
+                    fig.suptitle(f"Fused dapi, {z=}")
+                    ax: plt.Axes = axes[0, 0]
+                    im = ax.imshow(dapi_image[z], interpolation="antialiased")
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+                    fig.tight_layout()
+                    pdf.savefig(fig)
+                    plt.close(fig)
+                del dapi_image
         pbar.update()
 
         pbar.set_postfix_str("Call spots")
@@ -329,6 +418,49 @@ class BuildPDF:
                     pdf.savefig(fig)
                     plt.close(fig)
             plt.close(fig)
+        pbar.update()
+
+        pbar.set_postfix_str("Call Spots Heatmaps")
+        anchor_heatmap_path = os.path.join(output_dir, "_heat_maps_anchor.pdf")
+        prob_heatmap_path = os.path.join(output_dir, "_heat_maps_prob.pdf")
+        file_missing = not os.path.isfile(anchor_heatmap_path) or not os.path.isfile(prob_heatmap_path)
+        if nb.has_page("call_spots") and file_missing:
+            gene_names = nb.call_spots.gene_names
+            local_yxzs = nb.ref_spots.local_yxz.astype(np.float32)
+            tile_numbers = nb.ref_spots.tile
+            global_yxzs = local_yxzs + nb.stitch.tile_origin[tile_numbers]
+
+            # Anchor heat maps.
+            gene_numbers = nb.call_spots.dot_product_gene_no
+            scores = nb.call_spots.dot_product_gene_score
+            with PdfPages(anchor_heatmap_path) as pdf:
+                self.create_spatial_heatmaps(
+                    pdf, global_yxzs, gene_numbers, scores, gene_names, self.HEATMAP_ANCHOR_SCORE_THRESH
+                )
+
+            # Probability heat maps.
+            gene_numbers = np.argmax(nb.call_spots.gene_probabilities, axis=1)
+            scores = nb.call_spots.gene_probabilities.max(1)
+            with PdfPages(prob_heatmap_path) as pdf:
+                self.create_spatial_heatmaps(
+                    pdf, global_yxzs, gene_numbers, scores, gene_names, self.HEATMAP_PROB_SCORE_THRESH
+                )
+        pbar.update()
+
+        pbar.set_postfix_str("Omp Heatmaps")
+        omp_heatmap_path = os.path.join(output_dir, "_heat_maps_omp.pdf")
+        if nb.has_page("omp") and not os.path.isfile(omp_heatmap_path):
+            gene_names = nb.call_spots.gene_names
+            with PdfPages(omp_heatmap_path) as pdf:
+                local_yxzs, tile_numbers = omp_base.get_all_local_yxz(nb.basic_info, nb.omp)
+                local_yxzs = local_yxzs.astype(np.float32)
+                # Convert local positions to global positions using stitch tile origins.
+                global_yxzs = local_yxzs + nb.stitch.tile_origin[tile_numbers].astype(np.float32)
+                scores, _ = omp_base.get_all_scores(nb.basic_info, nb.omp)
+                gene_numbers, _ = omp_base.get_all_gene_no(nb.basic_info, nb.omp)
+                self.create_spatial_heatmaps(
+                    pdf, global_yxzs, gene_numbers, scores, gene_names, self.HEATMAP_OMP_SCORE_THRESH
+                )
         pbar.update()
         pbar.close()
 
@@ -822,3 +954,56 @@ class BuildPDF:
             fig.suptitle(title)
         fig.tight_layout()
         return fig
+
+    def create_spatial_heatmaps(
+        self: Self,
+        pdf: PdfPages,
+        global_yxzs: np.ndarray[np.float32],
+        gene_numbers: np.ndarray[np.int32],
+        scores: np.ndarray[np.float32],
+        gene_names: np.ndarray[str],
+        score_threshold: float,
+    ) -> Tuple[plt.Figure]:
+        """
+        Save a spatial heat map of each spot location for each gene along y and x directions for all z positions. This
+        is saved to the given PDF file.
+
+        Args:
+            - (PdfPages): pdf pages to save every figure to.
+            - (`(n_spots x 3) ndarray[float32]`) global_yxzs: the y, x, and z position for every spot on a global picture.
+            - (`(n_spots) ndarray[int32]`) gene_numbers: gene number for each spot.
+            - (`(n_spots) ndarray[float32]`) scores: every spot score.
+            - (`(n_spots) ndarray[str]`) gene_names: every gene name.
+
+        Returns:
+            (tuple of Figures) figures: each genes' heatmap figure.
+        """
+        assert global_yxzs.shape[0] == gene_numbers.shape[0] == scores.shape[0]
+        assert np.logical_and(gene_numbers >= 0, gene_numbers < gene_names.size).all()
+
+        global_maximums_yxz = global_yxzs.max(0)
+        bin_counts = np.ceil(global_maximums_yxz / self.HEATMAP_BIN_SIZE)[:2].astype(int).tolist()
+        hist_range = ((0, bin_counts[0] * self.HEATMAP_BIN_SIZE), (0, bin_counts[1] * self.HEATMAP_BIN_SIZE))
+        cmap = mpl.cm.Reds
+
+        for g, gene_name in enumerate(gene_names):
+            spot_passes = scores >= score_threshold
+            spot_gene_g = gene_numbers == g
+            subset_yxzs = global_yxzs[spot_passes & spot_gene_g]
+            image = np.histogram2d(subset_yxzs[:, 0], subset_yxzs[:, 1], bins=bin_counts, range=hist_range)[0]
+            max_count = image.max().astype(int).item()
+            norm = mpl.colors.Normalize(vmin=0, vmax=max_count)
+            fig, axes = self.create_empty_page(1, 1)
+            im = axes[0, 0].imshow(image, cmap=cmap, norm=norm)
+            axes[0, 0].set_xlabel("")
+            axes[0, 0].set_ylabel("")
+            axes[0, 0].set_xticks([])
+            axes[0, 0].set_yticks([])
+            axes[0, 0].set_xlim(-0.5, global_maximums_yxz[1] / self.HEATMAP_BIN_SIZE)
+            axes[0, 0].set_ylim(-0.5, global_maximums_yxz[0] / self.HEATMAP_BIN_SIZE)
+            fig.colorbar(im, ax=axes[0, 0], label="Spot count", ticks=[n for n in range(max_count + 1)])
+            fig.suptitle(f"Gene {g}: {gene_name}, score >= {score_threshold}")
+            fig.tight_layout()
+
+            pdf.savefig(fig)
+            plt.close(fig)
