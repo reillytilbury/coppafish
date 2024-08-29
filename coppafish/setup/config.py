@@ -97,8 +97,6 @@ _options = {
         "isolation_radius_inner": "number",
         "isolation_radius_xy": "number",
         "isolation_radius_z": "number",
-        "isolation_thresh": "maybe_number",
-        "auto_isolation_thresh_multiplier": "number",
         "n_spots_warn_fraction": "number",
         "n_spots_error_fraction": "number",
     },

@@ -47,17 +47,6 @@ def find_spots(
         max_spots = config["max_spots_3d"]
     log.debug("Find spots started")
 
-    # record threshold for isolated spots in each tile of reference round/channel
-    if config["isolation_thresh"] is None:
-        nbp.isolation_thresh = (
-            auto_thresh[:, nbp_basic.anchor_round, nbp_basic.anchor_channel]
-            * config["auto_isolation_thresh_multiplier"]
-        )
-    else:
-        nbp.isolation_thresh = (
-            np.ones_like(auto_thresh[:, nbp_basic.anchor_round, nbp_basic.anchor_channel]) * config["isolation_thresh"]
-        )
-
     # Phase 1: Load in previous results if they exist
     spot_info = fs.load_spot_info(
         None,

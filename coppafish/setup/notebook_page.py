@@ -296,14 +296,6 @@ class NotebookPage:
             ],
         },
         "find_spots": {
-            "isolation_thresh": [
-                "ndarray[float]",
-                "Numpy float array [n_tiles]"
-                + "Spots found on tile $t$, `ref_round`, `ref_channel` are isolated if annular filtered image"
-                + "is below `isolation_thresh[t]` at spot location."
-                + "\n"
-                + "*Typical: 0*",
-            ],
             "spot_no": [
                 "ndarray[int32]",
                 "Numpy array [n_tiles x (n_rounds + n_extra_rounds) x n_channels]"
