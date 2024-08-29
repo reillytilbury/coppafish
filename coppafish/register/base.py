@@ -180,8 +180,10 @@ def optical_flow_single(
                                                  output_shape=target.shape, overlap=overlap) for i in range(3)])
     # clip the flow
     flow = np.array([np.clip(flow[i], -clip_val[i], clip_val[i]) for i in range(3)])
+    # change the sign of the flow
+    flow = -flow
     # add back the shift
-    flow = np.array([flow[i] - shift[i] for i in range(3)])
+    flow = np.array([flow[i] + shift[i] for i in range(3)])
     # upsample the flow
     upsample_factor = (upsample_factor_yx, upsample_factor_yx, 1)
     flow_up = np.array(
@@ -195,7 +197,7 @@ def optical_flow_single(
     if loc:
         # save in yxz format
         zarray = zarr.open_array(loc, mode="r+")
-        zarray[tile, round] = -flow_up
+        zarray[tile, round] = flow_up
     t_end = time.time()
     log.info("Optical flow computation took " + str(t_end - t_start) + " seconds")
 

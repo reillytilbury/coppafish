@@ -105,7 +105,7 @@ def run_omp(
         colour_image = np.zeros((np.prod(tile_shape), n_rounds_use, n_channels_use), dtype=np.float16)
         yxz_all = [np.linspace(0, tile_shape[i], tile_shape[i], endpoint=False) for i in range(3)]
         yxz_all = np.array(np.meshgrid(*yxz_all, indexing="ij")).reshape((3, -1)).astype(np.int32).T
-        batch_size = maths.floor(utils.system.get_available_memory() * 1.3e7 / n_channels_use)
+        batch_size = maths.floor(utils.system.get_available_memory() * 1.3e7 / (n_channels_use * n_rounds_use))
         n_batches = maths.ceil(np.prod(tile_shape) / batch_size)
         device = torch.device("cpu") if (config["force_cpu"] or not torch.cuda.is_available()) else torch.device("cuda")
         postfix = {"tile": t, "device": str(device).upper()}
@@ -170,6 +170,7 @@ def run_omp(
                 g_gene_no = torch.full((g_isolated_yxz.shape[0],), g).int()
                 isolated_yxz = torch.cat((isolated_yxz, g_isolated_yxz), dim=0).int()
                 isolated_gene_no = torch.cat((isolated_gene_no, g_gene_no), dim=0)
+                print(f'gene {g} isolated spots: {g_isolated_yxz.size(0)}')
                 if isolated_gene_no.size(0) > config["spot_shape_max_spots_considered"]:
                     # Each iteration of this loop is slow, so we break out if we have lots of spots already.
                     break

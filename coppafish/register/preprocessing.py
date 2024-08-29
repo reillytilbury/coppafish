@@ -204,6 +204,7 @@ def generate_reg_images(
         nbp_basic.anchor_channel,
         nbp_basic.dapi_channel,
     )
+    n_tiles, n_rounds, n_channels = nbp_basic.n_tiles, nbp_basic.n_rounds, nbp_basic.n_channels
 
     # get the yxz coords for the central 500 x 500 x 10 region
     yx_centre = nbp_basic.tile_centre.astype(int)[:2]
@@ -260,10 +261,12 @@ def generate_reg_images(
     # get the round images, apply optical flow, optical flow + icp, concatenate and save
     icp_correction = nbp_register.icp_correction
     for t in tqdm(use_tiles, desc="Round Images", total=len(use_tiles)):
+        affine = np.zeros((n_tiles, n_rounds, n_channels, 4, 3))
+        affine[:, :, :, :3, :3] = np.eye(3)
         im_t_flow = spot_colours.base.get_spot_colours(
             image=nbp_filter.images,
             flow=nbp_register.flow,
-            affine_correction=np.repeat(np.eye(4, 3)[None], len(use_channels), axis=0),
+            affine_correction=affine,
             yxz_base=yxz_coords,
             use_channels=[dapi_channel],
             tile=t,
@@ -294,10 +297,13 @@ def generate_reg_images(
     # get the channel images, save, apply optical flow + channel transform initial, save, apply icp, save
     r_mid = 3
     for t in tqdm(use_tiles, desc="Channel Images", total=len(use_tiles)):
+        affine = nbp_register_debug.channel_transform_initial
+        affine = np.repeat(affine[None], n_rounds, axis=0)
+        affine = np.repeat(affine[None], n_tiles, axis=0)
         im_t_flow = spot_colours.base.get_spot_colours(
             image=nbp_filter.images,
             flow=nbp_register.flow,
-            affine_correction=nbp_register_debug.channel_transform_initial,
+            affine_correction=affine,
             yxz_base=yxz_coords,
             use_channels=use_channels,
             tile=t,
@@ -306,7 +312,7 @@ def generate_reg_images(
         im_t_flow_icp = spot_colours.base.get_spot_colours(
             image=nbp_filter.images,
             flow=nbp_register.flow,
-            affine_correction=nbp_register.icp_correction,
+            affine_correction=icp_correction,
             yxz_base=yxz_coords,
             use_channels=use_channels,
             tile=t,
@@ -316,7 +322,7 @@ def generate_reg_images(
         # concatenate the images for each channel and save
         for i, c in enumerate(use_channels):
             im_tc = nbp_filter.images[
-                t, anchor_round, c, yxz_min[0]: yxz_max[0], yxz_min[1]: yxz_max[1], yxz_min[2]: yxz_max[2]
+                t, r_mid, c, yxz_min[0]: yxz_max[0], yxz_min[1]: yxz_max[1], yxz_min[2]: yxz_max[2]
             ]
             im_tc_concat = np.concatenate([im_tc[None], im_t_flow[:, i], im_t_flow_icp[:, i]], axis=0)
             im_tc_concat = fill_to_uint8(im_tc_concat)

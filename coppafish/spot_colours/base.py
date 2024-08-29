@@ -109,9 +109,7 @@ def get_spot_colours(
     Args:
         - image: 'float16 memmap [n_tiles x n_rounds x n_channels x im_y x im_x x im_z]' unregistered image data.
         - flow: 'float16 memmap [n_tiles x n_rounds x 3 x im_y x im_x x im_z]' flow data.
-        - affine_correction: 'float32 [n_tiles x n_rounds x n_channels x 4 x 3]' affine correction data, or
-            [n_rounds x n_channels x 4 x 3] for the tile of interest or
-            [n_channels x 4 x 3] if round independent
+        - affine_correction: 'float32 [n_tiles x n_rounds x n_channels x 4 x 3]' affine correction data
         - yxz_base: 'int [n_spots x 3]' spot coordinates, or tuple
         - tile: 'int' tile index to run on.
         - output_dtype: 'dtype' dtype of the output spot colours.
@@ -128,11 +126,9 @@ def get_spot_colours(
         affine_correction = torch.tensor(affine_correction, dtype=torch.float32)
     if type(yxz_base) is np.ndarray:
         yxz_base = torch.tensor(yxz_base, dtype=torch.float32)
-    if np.ndim(affine_correction) == 3:
-        # repeat n_rounds times
-        affine_correction = affine_correction[None].repeat(image.shape[1], 1, 1, 1)
-        # repeat n_tiles times
-        affine_correction = affine_correction[None].repeat(image.shape[0], 1, 1, 1, 1)
+    n_tiles, n_rounds, n_channels = image.shape[0], flow.shape[1], image.shape[2]
+    assert affine_correction.shape == (n_tiles, n_rounds, n_channels, 4, 3), \
+        f"Expected shape {(n_tiles, n_rounds, n_channels, 4, 3)}, got {affine_correction.shape}"
 
     # initialize variables
     n_spots, n_use_rounds, n_use_channels = yxz_base.shape[0], flow.shape[1], len(use_channels)
@@ -200,11 +196,16 @@ def get_spot_colours(
             input=image[r, :, None, :, :, :],
             grid=zxy_round_r[:, :, None, None, :],
             mode="bilinear",
-            align_corners=False,
+            align_corners=True,
+            padding_mode="border"
         )
 
         # grid_sample gives output as [N, M, D', H', W'] as defined above.
         round_r_colours = round_r_colours[:, 0, :, 0, 0]
         spot_colours[:, r, :] = round_r_colours.T
+
+        # Any out of bound grid sample retrievals are set to fill_value.
+        is_out_of_bounds = torch.logical_or(zxy_round_r < -1, zxy_round_r > 1).any(dim=2).T
+        spot_colours[:, r, :][is_out_of_bounds] = fill_value
 
     return spot_colours.numpy()
