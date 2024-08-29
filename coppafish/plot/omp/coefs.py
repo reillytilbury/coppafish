@@ -255,9 +255,9 @@ class ViewOMPPixelColours:
             tile=int(tile),
             use_channels=nb.basic_info.use_channels,
         )
-        image_colours = torch.asarray(image_colours, dtype=torch.float32)
-        image_colours[torch.isnan(image_colours)] = 0
-        assert not torch.allclose(image_colours, torch.zeros(1).float())
+        image_colours = image_colours.astype(np.float32)
+        image_colours[np.isnan(image_colours)] = 0
+        assert not np.allclose(image_colours, 0)
         colour_norm_factor = np.array(nb.call_spots.colour_norm_factor, dtype=np.float32)
         colour_norm_factor = torch.asarray(colour_norm_factor).float()
         bled_codes = nb.call_spots.bled_codes
