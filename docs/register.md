@@ -263,22 +263,34 @@ $$
 
 ??? note "Definition of the Score $\lambda$"
 
-    We use the score
-   
-    $$
-    \lambda(\mathbf{x}) = D_{r_{\textrm{ref}}}(\mathcal{F}_r(\mathbf{x})) D_r(\mathbf{x}),
-    $$
-   
-    which is just the dot product of the adjusted reference image and the target image.
+    Define the auxilliary score 
 
-    The shifts computed rapidly drop off in quality after about 2/3 of the way down the image in z, as the quality deteriorates. To encourage the algorithm to weight the shifts in the top 2/3 of the image more heavily, we multiply each z-plane of $\lambda$ by a logistic function as shown below.
+    $$ 
+    \eta(\mathbf{x}) = D_{r_{\textrm{ref}}}(\mathcal{F}_r(\mathbf{x}))D_r(\mathbf{x}).
+    $$
+    
+    Then our score $\lambda$ is defined as
 
-    <p align="center">
-    <img src="https://github.com/user-attachments/assets/d3da44d4-cc7b-4799-9e00-244b37f28344" width="600" />
-    <br /> 
-    <span> Z-Weighting of the Score $\lambda$.</span>
-    </p>
+    $$
+    \lambda(\mathbf{x}) = C_{0,1}\bigg( \dfrac{\eta(\mathbf{x}) - \eta_0}{\eta_1 - \eta_0} \bigg),
+    $$
+
+    where $\eta_0$ and $\eta_1$ are the 25th and 99th percentiles of $\eta$ respectively and $C_{a, b}$ is the [clamp function](https://en.wikipedia.org/wiki/Clamping_(graphics)).
+
+    This results in a score of 0 for common low intensity background regions, and 1 for high quality regions like cell nuclei.
+   
+    
+
+#### Extrapolation in z
+The quality of the z-shifts drops rapidly towards the top end of the z-stack, because the optical flow uses windows of fixed radius (the `window_radius` parameter, which has default value 8). When these windows go over the edge of the image, the shifts get biased towards 0. This problem is made worse when the initial shift found is large in $z$, as then the adjusted image is padded with many zeros.
+
+We get around this problem by linearly predicting the z-shifts from the bottom and middle of the image and replacing all z-shifts with these linear estimates. This is illustratedc in the figure below.
       
+<p align="center">
+<img src="https://github.com/user-attachments/assets/54d294f1-241c-4ea0-9f66-f700544fbd38" width="600" />
+<br />
+<span>Interpolation of x-y shifts, and extrapolation of z-shifts. </span>
+</p>
 
 ## Iterative Closest Point
 
@@ -519,12 +531,6 @@ Rows 2, 3 and 4 show the raw and smooth flows in the $y$, $x$ and $z$ directions
     <br />
     </p>
 
-    This viewer also opens a separate window showing the average shifts for each z-plane, which can be useful for diagnosing problems with the z-shifts.
-    <p align="center">
-    <img src="https://github.com/user-attachments/assets/88fcf661-f126-4803-bea8-a2b7210f2bb6" width="600" />
-    <br />
-    </p>
-
 
 ### ICP Diagnostics
 
@@ -545,7 +551,7 @@ These show things like the average shift and scale for each round and channel an
     - Even though these scales are very small (around 1.003 at most), the images have size around 2000 pixels. This means that if we didn't correct for these scales, the images would be off by around 6 pixels, which is a lot.
 
     <p align="center">
-    <img src="https://github.com/user-attachments/assets/c3315df5-53f4-405b-bfea-65d330320178" width="600" />
+    <img src="https://github.com/user-attachments/assets/e5447df4-77be-4d59-8bdf-43c21ffb4bf8" width="600" />
     <br />
     </p>
     
@@ -579,12 +585,12 @@ These show the point clouds used to compute the round corrections $B_r$ and chan
     
     === "No Registration"
         <p align="center">
-        <img src="https://github.com/user-attachments/assets/b91d0953-a6aa-4a12-a1f5-66ae7e6dbbed" width="600" />
+        <img src="https://github.com/user-attachments/assets/2df9bb7c-8967-4008-9cf9-12e957654752" width="600" />
         <br />
         </p>
 
     === "Round Correction"
         <p align="center">
-        <img src="https://github.com/user-attachments/assets/db72c8af-c4d4-4ce5-9ca6-fecabb9c3442" width="600" />
+        <img src="https://github.com/user-attachments/assets/5cbdbd4d-9373-4fb4-ac34-594203b1512b" width="600" />
         <br />
         </p>

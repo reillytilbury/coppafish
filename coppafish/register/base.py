@@ -7,6 +7,7 @@ import numpy as np
 import scipy
 from scipy.ndimage import gaussian_filter
 import skimage
+import torch
 from tqdm import tqdm
 import zarr
 
@@ -103,6 +104,7 @@ def optical_flow_register(
         tile=tile,
         round=round,
         sigma=smooth_sigma,
+        window_radius=window_radius,
         loc=smooth_loc,
     )
 
@@ -239,7 +241,7 @@ def flow_correlation(
     # compute the correlation
     correlation = base_warped * target
     # normalise to be between 0 and 1
-    correlation_min, correlation_max = np.percentile(correlation, [1, 99])
+    correlation_min, correlation_max = np.nanpercentile(correlation, [25, 99])
     correlation = (correlation - correlation_min) / (correlation_max - correlation_min)
     correlation = np.clip(correlation, 0, 1)
     # up-sample the correlation
@@ -260,6 +262,7 @@ def interpolate_flow(
     tile: int,
     round: int,
     sigma: list = [10, 10, 5],
+    window_radius: int = 8,
     upsample_factor_yx: int = 4,
     loc: str = "",
 ):
@@ -278,24 +281,50 @@ def interpolate_flow(
         tile: int specifying the tile index
         round: int specifying the round index
         sigma: standard deviation of the Gaussian filter to be used for smoothing the flow
+        window_radius: int specifying the window radius for the optical flow algorithm
         upsample_factor_yx: int specifying the upsample factor in y and x
         loc: str specifying the location to save/ load the interpolated flow
     """
     time_start = time.time()
-    # because we want to downweight values for high z, we will taper off the scores for high z
-    nz = flow.shape[-1]
-    kappa = 0.3
-    window = np.exp(-kappa * (np.arange(nz) - 2 * nz / 3)) / (1 + np.exp(-kappa * (np.arange(nz) - 2 * nz / 3)))
-    correlation = correlation * window[None, None, :]
     # smooth the correlation
     correlation_smooth = gaussian_filter(correlation, sigma, truncate=6)
     flow_smooth = np.zeros_like(flow)
-    # smooth the correlation weighted flow
-    for i in range(3):
-        flow_smooth[i] = gaussian_filter(flow[i] * correlation, sigma, truncate=6)
 
-    # divide the smoothed correlation weighted flow by the smoothed correlation
-    flow_smooth = np.array([flow_smooth[i] / correlation_smooth for i in range(3)])
+    # smooth the correlation weighted flow in yx
+    for i in range(3):
+        flow_smooth[i] = gaussian_filter(flow[i] * correlation, sigma, truncate=6) / correlation_smooth
+
+    # When dist(z, n_z) <= window_radius, the shift in z is very biased towards 0.
+    # We correct for this by predicting the z-shift from each coordinate in y, x, and z
+    # (excluding the top 2 * window_radius z-planes) using linear regression.
+    # we then replace the z_flow with the linearly predicted z_flow
+
+    # grab samples for linear regression
+    flow_z_crop = flow_smooth[2][::10, ::10, : -2 * window_radius]
+    # grab coords of sample points
+    coords = np.array(np.meshgrid(10 * np.arange(flow_z_crop.shape[0]),
+                                  10 * np.arange(flow_z_crop.shape[1]),
+                                  np.arange(flow_z_crop.shape[2]),
+                                  indexing="ij"), dtype=np.float32)
+
+    # reshape coords and flow_z_crop and pad coords with 1s for linear regression
+    coords = coords.reshape(3, -1).T
+    coords_pad = np.pad(coords, [(0, 0), (0, 1)], constant_values=1)
+    flow_z_crop = flow_z_crop.reshape(-1)
+    # compute linear regression
+    coefficients = np.linalg.lstsq(a=coords_pad, b=flow_z_crop, rcond=None)[0]
+
+    # now we can use this to predict the flow in z
+    coords = np.array(np.meshgrid(range(flow_smooth.shape[1]),
+                                  range(flow_smooth.shape[2]),
+                                  range(flow_smooth.shape[3]),
+                                  indexing="ij"), dtype=np.float32)
+    coords = coords.reshape(3, -1).T
+    coords_pad = np.pad(coords, [(0, 0), (0, 1)], constant_values=1)
+    flow_smooth[2] = (coords_pad @ coefficients).reshape(flow_smooth.shape[1],
+                                                         flow_smooth.shape[2],
+                                                         flow_smooth.shape[3])
+    del coords, coords_pad, flow_z_crop, coefficients
 
     # remove nan values
     flow_smooth = np.nan_to_num(flow_smooth)
