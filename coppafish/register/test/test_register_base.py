@@ -25,8 +25,9 @@ def test_interpolate_flow():
     flow[1] = 2
     flow[2] = 3
     corr = np.ones((10, 10, 10))
-    # interpolate
-    flow_interp = reg_base.interpolate_flow(flow, correlation=corr, upsample_factor_yx=2, tile=0, round=0)
+    # interpolate (need to have 2 * window_radius < nz = 10)
+    flow_interp = reg_base.interpolate_flow(flow, correlation=corr, upsample_factor_yx=2, tile=0, round=0,
+                                            window_radius=2)
     # check that the shape is correct
     assert flow_interp.shape == (3, 20, 20, 10)
     # check that the values are correct
@@ -37,27 +38,23 @@ def test_interpolate_flow():
 
 def test_flow_correlation():
     # set up data
-    flow = np.ones((3, 10, 10, 10))
+    flow = np.ones((3, 7, 8, 5))
     flow[0] = 0
     flow[1] = 1
     flow[2] = 0
     # set up base and target
-    base = np.ones((10, 10, 10))
-    target = np.ones((10, 10, 10))
-    base[5, 5, 5] = 2
-    target[5, 4, 5] = 2
-    # add tiny random noise to the target
-    rng = np.random.RandomState(0)
-    target += rng.rand(10, 10, 10) * 1e-6
+    base = np.zeros((7, 8, 5), dtype=np.float32)
+    target = np.zeros((7, 8, 5), dtype=np.float32)
+    base[3:5, 3:5, 2] = 1
+    target[3:5, 4:6, 2] = 1
     # correlate
-    _, flow_corr = reg_base.flow_correlation(
+    flow_corr, flow_corr_up = reg_base.flow_correlation(
         base=base, target=target, flow=flow, upsample_factor_yx=2, tile=0, round=0
     )
     # check that the shape is correct
-    assert flow_corr.shape == (20, 20, 10)
+    assert flow_corr_up.shape == (14, 16, 5)
     # check that the values are correct
-    indices = np.ix_(range(5, 15), range(5, 15), range(10))
-    assert np.all(flow_corr[indices] >= 1)
+    assert np.allclose(flow_corr[3:5, 4:6, 2], 1)
 
 
 def test_optical_flow_single():
