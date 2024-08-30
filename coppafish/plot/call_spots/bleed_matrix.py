@@ -4,7 +4,7 @@ from ...setup import Notebook
 from .spot_colours import ColorPlotBase
 
 
-def view_bleed_matrix(nb: Notebook):
+def ViewBleedMatrix(nb: Notebook):
     """
     Diagnostic to plot `bleed_matrix`.
     Args:
