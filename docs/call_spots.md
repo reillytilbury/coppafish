@@ -216,8 +216,6 @@ $$ J_{s, c} \approx \lambda \eta_s \omega_c, $$
 
 for some scalar $\lambda$. We then set $\mathbf{B_d} = \boldsymbol{\omega}$, which is a normalised fluorescence vector for dye $d.$
 
-ADD IMAGE OF THIS PROCESS.
-
 ### 3: Free Bled Code Estimation
 
 The purpose of this step is to estimate a representative colour, which we call a _**free bled code**_ $E_{grc}$ for each gene $g$. 
