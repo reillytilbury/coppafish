@@ -1,6 +1,5 @@
 import numpy as np
 from matplotlib import pyplot as plt
-from typing import Tuple
 from ...setup import Notebook
 
 
@@ -34,11 +33,24 @@ class ViewFreeAndConstrainedBledCodes:
                                              len(nb.basic_info.use_channels))
 
         config = nb.call_spots.associated_configs["call_spots"]
+        if config["target_values"] is None:
+            if n_channels_use == 7:
+                config["target_values"] = [1, 1, 0.9, 0.7, 0.8, 1, 1]
+            elif n_channels_use == 9:
+                config["target_values"] = [1, 0.8, 0.2, 0.9, 0.6, 0.8, 0.3, 0.7, 1]
+            else:
+                raise ValueError("The target values should be provided in the config.")
+        if config["d_max"] is None:
+            if n_channels_use == 7:
+                config["d_max"] = [0, 1, 3, 2, 4, 5, 6]
+            elif n_channels_use == 9:
+                config["d_max"] = [0, 1, 1, 3, 2, 4, 5, 5, 6]
+            else:
+                raise ValueError("The d_max values should be provided in the config.")
         target_values, d_max = config["target_values"], config["d_max"]
         gene_codes = nb.call_spots.gene_codes
-        initial_scale = nb.call_spots.initial_scale[nb.basic_info.use_tiles].mean(axis=0).T
-        rc_scale = nb.call_spots.rc_scale.T * initial_scale
-        free_bled_codes = nb.call_spots.free_bled_codes_tile_independent.transpose(0, 2, 1) / initial_scale
+        rc_scale = nb.call_spots.rc_scale.T
+        free_bled_codes = nb.call_spots.free_bled_codes_tile_independent.transpose(0, 2, 1)
         free_bled_codes /= np.linalg.norm(free_bled_codes, axis=(1, 2))[:, None, None]
         constrained_bled_codes = nb.call_spots.bled_codes.transpose(0, 2, 1)
         code_image = np.zeros((n_genes, n_channels_use, 2 * n_rounds + 1)) * np.nan
@@ -151,12 +163,25 @@ class ViewTargetRegression:
         # get the data
         n_genes, n_rounds, n_channels_use = nb.call_spots.bled_codes.shape
         config = nb.call_spots.associated_configs["call_spots"]
+        if config["target_values"] is None:
+            if n_channels_use == 7:
+                config["target_values"] = [1, 1, 0.9, 0.7, 0.8, 1, 1]
+            elif n_channels_use == 9:
+                config["target_values"] = [1, 0.8, 0.2, 0.9, 0.6, 0.8, 0.3, 0.7, 1]
+            else:
+                raise ValueError("The target values should be provided in the config.")
+        if config["d_max"] is None:
+            if n_channels_use == 7:
+                config["d_max"] = [0, 1, 3, 2, 4, 5, 6]
+            elif n_channels_use == 9:
+                config["d_max"] = [0, 1, 1, 3, 2, 4, 5, 5, 6]
+            else:
+                raise ValueError("The d_max values should be provided in the config.")
         target_values, d_max = config["target_values"], config["d_max"]
         gene_codes = nb.call_spots.gene_codes
         # get the free and constrained bled codes
-        initial_scale = nb.call_spots.initial_scale[nb.basic_info.use_tiles].mean(axis=0)
-        rc_scale = nb.call_spots.rc_scale * initial_scale
-        free_bled_codes = nb.call_spots.free_bled_codes_tile_independent / initial_scale
+        rc_scale = nb.call_spots.rc_scale
+        free_bled_codes = nb.call_spots.free_bled_codes_tile_independent
         constrained_bled_codes = free_bled_codes * rc_scale[None, :, :]
 
         # get the number of spots per gene
@@ -291,86 +316,9 @@ def view_tile_bled_codes(
         plt.show()
 
 
-def view_rc_scale_regression(
+def ViewTileScaleRegression(
     nb: Notebook,
-    show: bool = True,
-) -> None:
-    """
-    Plotter to show the regression of the round_channel scale factor for each round and channel.
-    Args:
-        nb: Notebook
-            The notebook object. Should contain call_spots page.
-        show: bool (default=True)
-            Whether to show the plot. If False, the plot is not shown. False only for testing purposes.
-
-    """
-    rc_scale = nb.call_spots.rc_scale
-    gene_codes = nb.call_spots.gene_codes
-    d_max = nb.call_spots.associated_configs["call_spots"]["d_max"]
-    target_values = nb.call_spots.associated_configs["call_spots"]["target_values"]
-    free_bled_codes_tile_indep = nb.call_spots.free_bled_codes_tile_independent
-    gene_no = np.argmax(nb.call_spots.gene_probabilities, axis=1)
-    n_spots = np.array([np.sum(gene_no == i) for i in range(len(gene_no))])
-    use_channels = nb.basic_info.use_channels
-
-    n_genes, n_rounds, n_channels_use = free_bled_codes_tile_indep.shape
-    fig, ax = plt.subplots(n_channels_use, 1)
-    for c in range(n_channels_use):
-        x, y, y_scaled, s = [], [], [], []
-        for r in range(n_rounds):
-            # get data
-            relevant_genes = np.where(gene_codes[:, r] == d_max[c])[0]
-            n_spots_rc = n_spots[relevant_genes]
-            new_y_vals = free_bled_codes_tile_indep[relevant_genes, r, c]
-            new_y_scaled_vals = free_bled_codes_tile_indep[relevant_genes, r, c] * rc_scale[r, c]
-            # append data
-            y.append(new_y_vals)
-            y_scaled.append(new_y_scaled_vals)
-            s.append(np.sqrt(n_spots_rc))
-            x.append(np.repeat(2 * r, len(relevant_genes)))
-        # convert data to numpy arrays
-        x, y, y_scaled, s = np.concatenate(x), np.concatenate(y), np.concatenate(y_scaled), np.concatenate(s)
-        jitter = np.random.normal(0, 0.1, len(x))
-        ax[c].scatter(x + jitter, y, s=s, c="cyan", alpha=0.5)
-        ax[c].scatter(x + 1 + jitter, y_scaled, s=s, c="red", alpha=0.5)
-        # add a horizontal line for the target value
-        ax[c].axhline(target_values[c], color="white", linestyle="--")
-        ax[c].set_xticks([])
-        max_val = max(np.max(free_bled_codes_tile_indep), np.max(free_bled_codes_tile_indep * rc_scale))
-        ax[c].set_yticks(np.round([0, target_values[c], max_val], 2))
-        ax[c].set_xlim(-1, 2 * n_rounds)
-        ax[c].set_ylim(0, max_val)
-        ax[c].set_ylabel(f"C {use_channels[c]}")
-        # add text to the right hand side of each row
-        ax[c].text(2 * n_rounds + 0.25, 1, f"mean scale = {np.mean(rc_scale[:, c]) :.2f}")
-        if c == n_channels_use - 1:
-            ax[c].set_xlabel("Round")
-            ax[c].set_xticks(np.arange(0, 2 * n_rounds, 2), labels=np.arange(n_rounds))
-
-    plt.suptitle(
-        "Each scale $V_{rc}$ is chosen so that the loss function "
-        "$L(V_{rc}) = \sum_{g \in G_{rc}} \sqrt{N_g}(E_{grc}V_{rc} - T_{d_{max}(c)})^2$ is minimised, \n"
-        "where $G_{rc}$ is the set of genes with gene code $d_{max}(c)$ in round r and $E_g$ is the "
-        "tile-independent bled code for gene g. Cyan points are raw values, red points are scaled values."
-    )
-    # add another figure to show the round_channel scale
-    fig2, ax2 = plt.subplots(1, 1)
-    ax2.imshow(rc_scale, cmap="viridis")
-    ax2.set_title("round_channel scale")
-    ax2.set_ylabel("Round")
-    ax2.set_xlabel("Channel")
-    ax2.set_yticks(np.arange(n_rounds))
-    ax2.set_xticks(np.arange(n_channels_use), labels=use_channels)
-    # add colorbar
-    cbar = plt.colorbar(ax2.imshow(rc_scale, cmap="viridis"), ax=ax2)
-    cbar.set_label("Scale factor")
-    if show:
-        plt.show()
-
-
-def view_tile_scale_regression(
-    nb: Notebook,
-    t: int = 0,
+    t: int = None,
     show: bool = True,
 ) -> None:
     """
@@ -385,9 +333,27 @@ def view_tile_scale_regression(
             Whether to show the plot. If False, the plot is not shown. False only for testing purposes.
 
     """
+    if t is None:
+        t = nb.basic_info.use_tiles[0]
     tile_scale = nb.call_spots.tile_scale
     gene_codes = nb.call_spots.gene_codes
-    d_max = nb.call_spots.associated_configs["call_spots"]["d_max"]
+    config = nb.call_spots.associated_configs["call_spots"]
+    n_channels_use = len(nb.basic_info.use_channels)
+    if config["target_values"] is None:
+        if n_channels_use == 7:
+            config["target_values"] = [1, 1, 0.9, 0.7, 0.8, 1, 1]
+        elif n_channels_use == 9:
+            config["target_values"] = [1, 0.8, 0.2, 0.9, 0.6, 0.8, 0.3, 0.7, 1]
+        else:
+            raise ValueError("The target values should be provided in the config.")
+    if config["d_max"] is None:
+        if n_channels_use == 7:
+            config["d_max"] = [0, 1, 3, 2, 4, 5, 6]
+        elif n_channels_use == 9:
+            config["d_max"] = [0, 1, 1, 3, 2, 4, 5, 5, 6]
+        else:
+            raise ValueError("The d_max values should be provided in the config.")
+    d_max = config["d_max"]
     target_bled_codes = nb.call_spots.bled_codes
     free_bled_codes = nb.call_spots.free_bled_codes
     gene_no = np.argmax(nb.call_spots.gene_probabilities, axis=1)
@@ -425,7 +391,7 @@ def view_tile_scale_regression(
         plt.show()
 
 
-def view_scale_factors(
+def ViewScaleFactors(
     nb: Notebook,
     show: bool = True,
 ) -> None:
@@ -437,9 +403,8 @@ def view_scale_factors(
         show: bool (default=True)
             Whether to show the plot. If False, the plot is not shown. False only for testing purposes.
     """
-    initial_scale = nb.call_spots.initial_scale
-    tile_scale = nb.call_spots.tile_scale * initial_scale
-    rc_scale = nb.call_spots.rc_scale * np.mean(initial_scale, axis=0)
+    tile_scale = nb.call_spots.tile_scale
+    rc_scale = nb.call_spots.rc_scale
     use_tiles, use_rounds, use_channels = nb.basic_info.use_tiles, nb.basic_info.use_rounds, nb.basic_info.use_channels
     tile_scale = tile_scale[use_tiles]
     relative_scale = tile_scale / rc_scale[None, :, :]

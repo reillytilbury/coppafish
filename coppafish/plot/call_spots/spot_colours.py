@@ -504,7 +504,7 @@ class view_spot(ColorPlotBase):
 
 # We are now going to create a new class that will allow us to view the spots used to calculate the gene efficiency
 # for a given gene. This will be useful for checking that the spots used are representative of the gene as a whole.
-class GEViewer:
+class GeneEfficiencyViewer:
     def __init__(self, nb: Notebook, mode: str = "prob", score_threshold: float = 0):
         """
         Diagnostic to show the n_genes x n_rounds gene efficiency matrix as a heatmap.
@@ -559,7 +559,7 @@ class GEViewer:
         mplcursors.cursor(self.ax, hover=True).connect("add", lambda sel: self.plot_gene_name(sel.index[0]))
         # 2. Allow genes to be selected by clicking on them
         mplcursors.cursor(self.ax, hover=False).connect(
-            "add", lambda sel: GESpotViewer(nb, gene_index=sel.index[0], mode=mode, score_threshold=score_threshold)
+            "add", lambda sel: GeneSpotsViewer(nb, gene_index=sel.index[0], mode=mode, score_threshold=score_threshold)
         )
         # 3. We would like to add a white rectangle around the observed spot when we hover over it. We will
         # use mplcursors to do this. We need to add a rectangle to the plot when hovering over a gene.
@@ -596,7 +596,7 @@ class GEViewer:
         )
 
 
-class GESpotViewer:
+class GeneSpotsViewer:
     def __init__(self, nb: Notebook, gene_index: int = 0, mode: str = "prob", score_threshold: float = 0):
         """
         Diagnostic to show the spots used to calculate the gene efficiency for a given gene.
@@ -808,10 +808,9 @@ class GESpotViewer:
                 view_codes(self.nb, self.spot_index[s], tile=self.tile[s], method=self.mode)
 
 
-class BGScaleViewer:
+class ViewScalingAndBGRemoval:
     """
-    This function will plot isolated spots before and after background subtraction and order them by background noise.
-    We will then plot the normalised spots too.
+    This function will plot isolated spots raw, scaled and bg removed to show the effect of the bg removal and scaling.
     """
 
     def __init__(self, nb):
@@ -821,19 +820,19 @@ class BGScaleViewer:
         n_spots = spot_tile.shape[0]
         n_rounds, n_channels_use = len(nb.basic_info.use_rounds), len(nb.basic_info.use_channels)
         norm_factor = nb.call_spots.colour_norm_factor
-        bg_raw = np.repeat(np.percentile(nb.ref_spots.colours, 25, axis=1)[:, None, :], n_rounds, axis=1)
 
         # get spot colours raw, no_bg and normed_no_bg
         spot_colour_raw = nb.ref_spots.colours.copy()
-        spot_colour_no_bg = spot_colour_raw - bg_raw
-        spot_colour_normed_no_bg = spot_colour_no_bg * norm_factor[spot_tile]
+        spot_colour_normed = spot_colour_raw * norm_factor[spot_tile]
+        bg = np.repeat(np.percentile(spot_colour_normed, 25, axis=1)[:, None, :], n_rounds, axis=1)
+        spot_colour_normed_no_bg = spot_colour_normed - bg
 
         # Finally, we need to reshape the spots to be n_spots x n_rounds * n_channels. Since we want the channels to be
         # in consecutive blocks of size n_rounds, we can reshape by first switching the round and channel axes.
         # also order the spots by background noise in descending order
         max_spots = 10_000
-        background_noise = np.sum(abs(bg_raw), axis=(1, 2))
-        colours = [spot_colour_raw, spot_colour_no_bg, spot_colour_normed_no_bg]
+        background_noise = np.sum(abs(bg), axis=(1, 2))
+        colours = [spot_colour_raw, spot_colour_normed, spot_colour_normed_no_bg]
         for i, c in enumerate(colours):
             c = c[np.argsort(background_noise)[::-1]]
             c = c.transpose(0, 2, 1)
@@ -851,7 +850,7 @@ class BGScaleViewer:
                 vmax=max_intensity,
                 interpolation="none",
             )
-            ax[0, i].set_title(["Raw", "BG Removed", "BG Removed + Scaled"][i])
+            ax[0, i].set_title(["Raw", "Scaled", "Scaled + BG Removed"][i])
 
         for i, c in enumerate(colours):
             bright_colours = np.percentile(c, 95, axis=0)

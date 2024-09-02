@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - alpha
+      - omega
       - docs
 
 permissions:

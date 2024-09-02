@@ -4,14 +4,14 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import napari
 import nd2
 import numpy as np
+import skimage
+import torch
+
 from qtpy.QtCore import Qt
 from scipy.ndimage import affine_transform
 from scipy.spatial import KDTree
-import skimage
 from superqt import QRangeSlider
 from tqdm import tqdm
-import zarr
-
 from coppafish.find_spots import spot_yxz
 from coppafish.register import preprocessing
 from coppafish.setup import Notebook
@@ -200,8 +200,8 @@ class RegistrationViewer:
 
     def add_overlay_buttons(self):
         # add button to view background scale
-        button_loc = generate_button_positions(n_buttons=7, n_cols=2, x_offset=50, x_spacing=100)
-        button_name = ["r1", "c1", "r2", "c2", "z_s", "z_e"]
+        button_loc = generate_button_positions(n_buttons=5, n_cols=2, x_offset=50, x_spacing=100)
+        button_name = ["r1", "c1", "r2", "c2"]
         text_buttons = TextButtonCreator(button_name, button_loc, size=(50, 28))
         text_buttons.button.clicked.connect(
             lambda _: view_overlay(
@@ -210,8 +210,7 @@ class RegistrationViewer:
                 rc=[
                     (int(text_buttons.text_box[0].text()), int(text_buttons.text_box[1].text())),
                     (int(text_buttons.text_box[2].text()), int(text_buttons.text_box[3].text())),
-                ],
-                use_z=np.arange(int(text_buttons.text_box[4].text()), int(text_buttons.text_box[5].text())),
+                ]
             )
         )
         self.viewer.window.add_dock_widget(text_buttons, area="left", name="overlay")
@@ -362,6 +361,7 @@ class ICPPointCloudViewer:
         # base_2: mode r: icp_correction_r(base_1), mode c: icp_correction_c(base_1)
         self.points, self.matching_points = [], []
         self.score = None
+        self.z_thick_slider = None
         # fill in the points, matching points, and create the density map
         self.get_spot_data()
         self.create_density_map()
@@ -370,6 +370,12 @@ class ICPPointCloudViewer:
         self.add_toggle_base_button()
         self.add_z_thickness_slider()
         self.view_data()
+        # connect a z-thickness update to changes in the z-slider
+        if self.z_thick_slider is not None:
+            self.viewer.dims.events.current_step.connect(self.update_z_thick)
+        # if r not None then we want to show all z-planes
+        if r is not None:
+            self.viewer.dims.order = (1, 0, 2)
         napari.run()
 
     def get_spot_data(self, dist_thresh: int = 5, down_sample_yx: int = 10):
@@ -377,11 +383,11 @@ class ICPPointCloudViewer:
         self.points = []
         # Step 1: Get the points
         # get anchor points
-        base = spot_yxz(
+        base_raw = spot_yxz(
             self.nb.find_spots.spot_yxz, self.t, self.anchor_round, self.anchor_channel, self.nb.find_spots.spot_no
         )
 
-        # get base 1 points
+        # get base points after applying the flow and the affine round correction
         if self.r is None:
             # in channel mode, take middle round (r=3) and appy the flow followed by the affine correction
             r = 3
@@ -391,24 +397,31 @@ class ICPPointCloudViewer:
             r = self.r
             affine_round_correction = np.eye(4, 3)
         flow = self.nb.register.flow[self.t, r]
-        base_1, in_bounds = apply_transform(
-            yxz=base, flow=flow, icp_correction=affine_round_correction, tile_sz=self.nb.basic_info.tile_sz
-        )
-        base_1 = base_1[in_bounds]
-        base = base[in_bounds]
+        # apply the flow and affine correction
+        base_flow_plus_round_affine = apply_flow(yxz=base_raw, flow=flow)
+        base_flow_plus_round_affine = apply_affine(yxz=torch.asarray(base_flow_plus_round_affine, dtype=torch.float32),
+                                                   affine=torch.asarray(affine_round_correction,
+                                                                        dtype=torch.float32)).numpy()
+        # remove out of bounds points
+        in_bounds = (np.all(base_flow_plus_round_affine[:, :2] >= 0, axis=1)
+                     & np.all(base_flow_plus_round_affine[:, :2] < self.nb.basic_info.tile_sz, axis=1))
+        base_raw = base_raw[in_bounds]
+        base_flow_plus_round_affine = base_flow_plus_round_affine[in_bounds]
 
-        # get base 2 points
+        # get base points after applying flow and icp correction
         if self.r is None:
             icp_correction = self.nb.register_debug.channel_correction[self.t, self.c]
         else:
             icp_correction = self.nb.register_debug.round_correction[self.t, self.r]
-
-        base_2, in_bounds = apply_transform(
-            yxz=base_1, flow=None, icp_correction=icp_correction, tile_sz=self.nb.basic_info.tile_sz
-        )
-        base_2 = base_2[in_bounds]
-        base_1 = base_1[in_bounds]
-        base = base[in_bounds]
+        # apply the icp correction
+        base_flow_plus_icp_affine = apply_affine(yxz=torch.asarray(base_flow_plus_round_affine, dtype=torch.float32),
+                                                 affine=torch.asarray(icp_correction, dtype=torch.float32)).numpy()
+        # remove out of bounds points
+        in_bounds = (np.all(base_flow_plus_icp_affine[:, :2] >= 0, axis=1)
+                     & np.all(base_flow_plus_icp_affine[:, :2] < self.nb.basic_info.tile_sz, axis=1))
+        base_flow_plus_icp_affine = base_flow_plus_icp_affine[in_bounds]
+        base_flow_plus_round_affine = base_flow_plus_round_affine[in_bounds]
+        base_raw = base_raw[in_bounds]
 
         # get target points
         if self.r is None:
@@ -418,9 +431,9 @@ class ICPPointCloudViewer:
             r = self.r
             c = self.anchor_channel
         target = spot_yxz(self.nb.find_spots.spot_yxz, self.t, r, c, self.nb.find_spots.spot_no)
-        self.points.append(base)
-        self.points.append(base_1)
-        self.points.append(base_2)
+        self.points.append(base_raw)
+        self.points.append(base_flow_plus_round_affine)
+        self.points.append(base_flow_plus_icp_affine)
         self.points.append(target)
 
         # convert to zyx
@@ -460,12 +473,13 @@ class ICPPointCloudViewer:
 
     def add_z_thickness_slider(self):
         # add slider to adjust z thickness
-        z_size_slider = QSlider(Qt.Orientation.Horizontal)
-        z_size_slider.setRange(1, self.nb.basic_info.nz)
-        z_size_slider.setValue(self.z_thick)
-        z_size_slider.valueChanged.connect(lambda x: self.adjust_z_thickness(x))
-        # add the slider to the viewer
-        self.viewer.window.add_dock_widget(z_size_slider, area="left", name="z thickness")
+        if self.r is None:
+            self.z_thick_slider = QSlider(Qt.Orientation.Horizontal)
+            self.z_thick_slider.setRange(1, self.nb.basic_info.nz)
+            self.z_thick_slider.setValue(self.z_thick)
+            self.z_thick_slider.sliderReleased.connect(self.update_z_thick)
+            # add the slider to the viewer
+            self.viewer.window.add_dock_widget(self.z_thick_slider, area="left", name="z thickness")
 
     def add_toggle_base_button(self):
         # add button to toggle between base and base_1
@@ -475,11 +489,48 @@ class ICPPointCloudViewer:
         # add button to the viewer
         self.viewer.window.add_dock_widget(button, area="left", name="toggle base")
 
-    def adjust_z_thickness(self, val: int):
-        # TODO: adjust the z thickness in the same way that we do the results viewer
-        self.z_thick = val
-        for layer in self.viewer.layers:
-            layer.refresh()
+    def update_z_thick(self) -> None:
+        """
+        This method updates the z-thickness in the napari viewer to reflect the current state of the Viewer object.
+        It will be called when the z-thickness changes, or the z-position of the viewer changes.
+        """
+        range_upper = self.viewer.dims.range[0][1].copy()
+        # we will change the z-coordinates of the spots to the current z-plane if they are within the z-thickness
+        # of the current z-plane.
+        current_z = self.viewer.dims.current_step[0]
+        z_thick = self.z_thick_slider.value()
+        # layers 0, 1, 2 are points
+        # 3, 4 are lines
+        # 5 is the score
+
+        # adjust the z-coordinates of the points layers
+        for i in range(3):
+            z_coords = self.viewer.layers[i].data[:, 0].copy()
+            in_range = np.abs(z_coords - current_z) <= z_thick / 2
+            z_coords[in_range] = current_z
+            self.viewer.layers[i].data[:, 0] = z_coords
+            self.viewer.layers[i].refresh()
+
+        # adjust the z-coords of the lines layers
+        for i in range(3, 5):
+            line_coords = np.array(self.viewer.layers[i].data.copy())
+            # get the z-coords and modify them
+            line_coords_z_lower, line_coords_z_upper = line_coords[:, 0, 0].copy(), line_coords[:, 1, 0].copy()
+            in_range_lower = np.abs(line_coords_z_lower - current_z) <= z_thick / 2
+            in_range_upper = np.abs(line_coords_z_upper - current_z) <= z_thick / 2
+            in_range = in_range_lower & in_range_upper
+            line_coords_z_lower[in_range] = current_z
+            line_coords_z_upper[in_range] = current_z
+            # update the line coords array with the new z-coords
+            line_coords[:, 0, 0] = line_coords_z_lower
+            line_coords[:, 1, 0] = line_coords_z_upper
+            self.viewer.layers[i].data = list(line_coords)
+            self.viewer.layers[i].refresh()
+
+        # napari automatically adjusts the size of the z-step when points are scaled, so we undo that below:
+        v_range = list(self.viewer.dims.range)
+        v_range[0] = (0, range_upper, 1)
+        self.viewer.dims.range = tuple(v_range)
 
     def view_data(self):
         # turn off default napari widgets
@@ -499,7 +550,7 @@ class ICPPointCloudViewer:
                 visible=visible[i],
                 opacity=0.6,
                 name=name[i],
-                out_of_slice_display=True,
+                out_of_slice_display=False,
             )
         # add line between the matching points
         line_locs_old = []
@@ -616,41 +667,18 @@ def view_optical_flow(nb: Notebook, t: int, r: int):
     # run napari
     napari.run()
 
+    # plot the average shifts for each z-plane
+    mean_flow = [np.mean(f, axis=(1, 2)) for f in flows]
+    fig, ax = plt.subplots(1, 2, figsize=(15, 5))
+    for i in range(2):
+        ax[i].plot(mean_flow[i].T)
+        ax[i].set_title(names[i])
+        ax[i].set_xlabel("Z")
+        ax[i].set_ylabel("Average shift")
+        ax[i].legend(["Y", "X", "Z"])
 
-def view_flow_vector_field(nb: Notebook, t: int, r: int):
-    """
-    Visualize the optical flow results using napari.
-    Args:
-        nb: Notebook (containing register and register_debug pages)
-        t: tile number
-        r: round number
-    """
-    # load the flow
-    flow = nb.register.flow[t, r][:, ::50, ::50, ::2]
-    flow = flow.astype(np.float32)
-    im = nb.filter.images[t, r, nb.basic_info.dapi_channel, ::5, ::5, ::2]
-    ny, nx, nz = flow.shape[1:]
-    start_points = np.array(np.meshgrid(range(0, 10 * ny, 10), range(0, 10 * nx, 10), range(nz), indexing='ij'))
-    flow = np.moveaxis(flow, 0, -1)
-    flow = flow.reshape(ny * nx * nz, 3)
-    start_points = np.moveaxis(start_points, 0, -1)
-    start_points = start_points.reshape(ny * nx * nz, 3)
-    vectors = np.array([start_points, flow])
-    vectors = np.moveaxis(vectors, 0, 1)
-    print('Flow loaded.')
-    # create colourmap for the flow
-    cmap = napari.utils.Colormap([[0, 0, 1, 0], [1, 0, 0, 1]], name='blue_red', interpolation='linear')
-    flow_max = np.max(np.linalg.norm(flow, axis=-1))
-
-    # create viewer
-    viewer = napari.Viewer()
-    viewer.add_vectors(vectors, name='flow', edge_width=2, length=2,
-                       properties={'magnitude': np.linalg.norm(flow, axis=-1)},
-                       edge_colormap=cmap, edge_contrast_limits=[0, flow_max])
-    viewer.add_image(im, name='image', blending='additive')
-    viewer.dims.axis_labels = ['y', 'x', 'z']
-    viewer.dims.order = (2, 0, 1)
-    napari.run()
+    plt.suptitle("Average shifts for tile " + str(t) + " and round " + str(r))
+    plt.show()
 
 
 def view_icp_correction(nb: Notebook, t: int):
@@ -878,56 +906,42 @@ def view_camera_correction(nb: Notebook):
     napari.run()
 
 
-def view_overlay(nb: Notebook, t: int = None, rc: list = None, use_z: np.ndarray = None):
+def view_overlay(nb: Notebook, t: int = None, rc: list = None):
     """
     Visualize the overlay of two images, both in the anchor frame of reference.
     Args:
         nb: Notebook object (must have register and register_debug pages)
         t: common tile
         rc: list of length n_images where rc[i] = (r, c) for the i-th image
-        use_z: np.ndarray of z planes to load
     """
     assert len(rc) > 0, "At least one round and channel should be provided."
-    if use_z is None:
-        use_z = np.ndarray([z - np.min(nb.basic_info.use_z) for z in nb.basic_info.use_z])
-    yxz = [np.arange(nb.basic_info.tile_sz), np.arange(nb.basic_info.tile_sz), use_z]
     n_im = len(rc)
-    im_none = np.zeros((n_im, nb.basic_info.tile_sz, nb.basic_info.tile_sz, len(use_z)), dtype=np.float32)
-    im = im_none.copy()
+    coords = np.array(np.meshgrid(range(nb.basic_info.tile_sz), range(nb.basic_info.tile_sz),
+                                  range(nb.basic_info.nz), indexing="ij"), dtype=np.float32)
+    im = np.zeros((n_im, nb.basic_info.tile_sz, nb.basic_info.tile_sz, nb.basic_info.nz), dtype=np.float32)
 
+    icp_correction = nb.register.icp_correction
+    icp_correction[:, :, nb.basic_info.dapi_channel] = icp_correction[:, :, nb.basic_info.anchor_channel]
     # load, affine correct, and flow correct the images
     for i, rc_pair in tqdm(enumerate(rc), total=len(rc), desc="Loading images"):
         # LOAD IMAGE
         r, c = rc_pair
-        im_none[i] = preprocessing.load_transformed_image(
-            nb.basic_info,
-            nb.register,
-            nb.register_debug,
-            t=t,
-            r=r,
-            c=c,
-            yxz=yxz,
-            reg_type="none",
-        )
-        im[i] = preprocessing.load_transformed_image(
-            nb.basic_info,
-            nb.register,
-            nb.register_debug,
-            t=t,
-            r=r,
-            c=c,
-            yxz=yxz,
-            reg_type="flow_icp",
-        )
-
+        # if the anchor round, no need tp apply registration
+        if r == nb.basic_info.anchor_round:
+            im[i] = nb.filter.images[t, r, c].astype(np.float32)
+        else:
+            # don't use get spot colours as that loads all rounds
+            im[i] = nb.filter.images[t, r, c].astype(np.float32)
+            # apply the affine to the image (first have to adjust the shift for the new origin)
+            im[i] = affine_transform(im[i], icp_correction[t, r, c].T, order=0)
+            # apply the flow to the image
+            flow = nb.register.flow[t, r]
+            im[i] = skimage.transform.warp(im[i], coords + flow, order=0, preserve_range=True, cval=0, mode="constant")
     # create viewer
     viewer = napari.Viewer()
-    colours = ["red", "green", "blue", "yellow"]
+    colours = ["red", "green"]
     for i, rc_pair in enumerate(rc):
         r, c = rc_pair
-        viewer.add_image(
-            im_none[i], name=f"t{t}_r{r}_c{c}_none", colormap=colours[i], blending="additive", visible=False
-        )
         viewer.add_image(im[i], name=f"t{t}_r{r}_c{c}", colormap=colours[i], blending="additive")
     viewer.dims.axis_labels = ["y", "x", "z"]
     viewer.dims.order = (2, 0, 1)

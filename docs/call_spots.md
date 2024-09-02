@@ -216,8 +216,6 @@ $$ J_{s, c} \approx \lambda \eta_s \omega_c, $$
 
 for some scalar $\lambda$. We then set $\mathbf{B_d} = \boldsymbol{\omega}$, which is a normalised fluorescence vector for dye $d.$
 
-ADD IMAGE OF THIS PROCESS.
-
 ### 3: Free Bled Code Estimation
 
 The purpose of this step is to estimate a representative colour, which we call a _**free bled code**_ $E_{grc}$ for each gene $g$. 
@@ -383,9 +381,13 @@ The purpose of this step is to find a scale factor $V_{rc}$ for each round $r$ a
 
 The target values work as follows: 
 
-- $T_c$ is defined as `target_values` in the config file as a list of length $n_c$,
+- $T$ is defined as `target_values` in the config file as a list of length $n_c$. 
 
-- $d_{\textrm{max}}(c)$ is defined as `d_max` in the config file as a list of length $n_c$,
+- $T_c$ is the target value for channel $c$ in its representative dye $d_{\textrm{max}}(c)$,
+
+- $d_{\textrm{max}}$ is defined as `d_max` in the config file as a list of length $n_c$. 
+
+- $d_{\textrm{max}}(c)$ is the dye we use to represent channel $c$, and we want to get its brightness in channel $c$, $B_{d_{\textrm{max}}(c), c}$ as close as possible to $T_c$.
 
 Any gene that has dye $d_{\textrm{max}}(c)$ in round $r$ will have its free bled code $E_{grc}$ scaled by $V_{rc}$ to get as close as possible to $T_c$. Since $E_{grc}$ is a representative colour for all spots assigned to gene $g$, this will also get the spots as close as possible to their target values. 
 
@@ -400,9 +402,6 @@ where $N_g$ is the number of high probability spots assigned to gene $g$. There 
 $$
 V_{rc} = \dfrac{ \sum_{g \in G_{r, \ d_{max}(c) }} \sqrt{N_g} E_{grc} T_{c} } { \sum_{g \in G_{r, \ d_{max}(c) }} \sqrt{N_g} E_{grc}^2 },
 $$
-
-??? warning "Outliers in the Regression"
-    L2 regression is susceptible to outliers, so it may be better to use a more robust regression method like L1 regression. This is not currently implemented in the pipeline.
 
 Now define the _constrained bled codes_, which we will just call _bled codes_ 
 
@@ -452,3 +451,189 @@ where $\mathbf{F_s}$ and $\mathbf{K_{g}}$ have both been round-normalised. Final
 
 ## Diagnostics
 
+Diagnosing the quality of the gene assignments is a crucial part of the pipeline. We provide several diagnostics to help with this:
+
+### View Scaling And BG Removal
+
+```pseudo
+from coppafish.plot.call_spots import ViewScalingAndBGRemoval
+ViewScalingAndBGRemoval(nb)
+```
+(or simply press 'N' in the main results' viewer)
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/76b7f610-6898-47dc-bc43-e6ba85cc1684" width="600" />
+  <br />
+  <span> Viewing the background removal and scaling of a subset of isolated spots.</span>
+</p>
+
+This shows a subset of 10,000 isolated spots in descending order of amount of background. The images on the top row are spot colours, each flattened into a single row and demarcated into channels by the red vertical lines. The plots on the bottom row show the intensity of a bright spot in each round channel.
+
+This plot shows us a few things:
+
+- Certain channels have much higher background than others. The final column is a good check that the background has been removed.
+
+- Different channels have different baseline brightnesses. Check that the brightnesses in the middle and final column are to your liking and similar to the target values.
+
+- The final brightnesses are not all the same: this is because we imposed channel-specific target values in step 4. This is a good check that the target scaling is working as expected.
+
+### View Bleed Matrix
+
+```pseudo
+from coppafish.plot.call_spots import ViewBleedMatrix
+ViewBleedMatrix(nb)
+```
+
+(or simply press 'B' in the main results' viewer)
+
+<p align="center">
+<img src="https://github.com/user-attachments/assets/27223ed8-fac3-4d70-9440-4bf3637ef87e" width="600" />
+<br />
+<span> Viewing the bleed matrix.</span>
+</p>
+
+This viewer shows 3 bleed matrices, each with columns (dyes) normalised.
+
+- The first is the raw bleed matrix $\mathbf{B_{raw}}$ which is the initial estimate of the bleed matrix, used for the very first gene assignments in step 1.
+
+- The second is the initial bleed matrix $\tilde{\mathbf{B}}$ made from an SVD of high probability spots. This is scaled according to the initial scale factor $\tilde{A}_{trc}$ introduced in step 0. This is why channel 10 is so much brighter than its target value.
+
+- The final bleed matrix $\mathbf{B}$ is the bleed matrix estimated from the final gene assignments, on high probability spots. This is scaled according to the final scale factor $A_{trc} = Q_{trc}\tilde{A}_{trc}$. You should be able to see the values are roughly in the same ratios as the target values.
+
+### View Free And Constrained Bled Codes
+
+```pseudo
+from coppafish.plot.call_spots import ViewFreeAndConstrainedBledCodes
+ViewFreeAndConstrainedBledCodes(nb)
+```
+
+This will pull up a viewer that shows you the free bled codes $E_{grc}$ and the constrained bled codes $K_{grc}$ from the most influential genes for a given round and channel. This is a good way to check if the target scale $V_{rc}$ is working as expected.
+
+To view different rounds and channels, simply scroll.
+
+=== "R0C5"
+    <p align="center">
+    <img src="https://github.com/user-attachments/assets/2720d341-6513-4ad2-a9cf-e0ba71d65037" width="600" />
+    <br />
+    <p>
+
+=== "R2C15"
+    <p align="center">
+    <img src="https://github.com/user-attachments/assets/36bcf922-69ae-41b5-92a4-63625a416140" width="600" />
+    <br />
+    <p>
+
+If this works as expected, the constrained bled codes should have values close to their target values and the constrained bled codes should be more homogeneous than the free bled codes. This can be seen in the first image, where R0C5 is initially very bright, but after scaling is much closer to the brightnesses of the other rounds and channels.
+
+### View Target Regression
+
+```pseudo
+from coppafish.plot.call_spots import ViewTargetRegression
+ViewTargetRegression(nb)
+```
+
+This viewer is similar to the previous one in that it is showing how well the target scaling is working. It does this in a bit more detail, but is a little confusing!
+
+To view different rounds and channels, simply scroll.
+
+=== "R0C27"
+    <p align="center">
+    <img src="https://github.com/user-attachments/assets/718a4536-b70f-4025-a9b7-1e32e449f1d7" width="600" />
+    <br />
+    <p>
+
+=== "R4C5"
+    <p align="center">
+    <img src="https://github.com/user-attachments/assets/d9df4bff-2d02-4df2-9b08-26d0d907783f" width="600" />
+    <br />
+    <p>
+
+In the plots above:
+
+- Each dot is a gene, which has dyed $d_{\textrm{max}}(c)$ in round $r$.
+- The size of the dot is proportional to the number of spots assigned to that gene.
+- The x-axis values are completely random.
+- In the leftmost column, the y-axis values are the brightnesses $E_{grc}$ of the genes after the initial scaling $\tilde{A}_{trc}$ but before the target scaling $V_{trc}$.
+- In the middle column, the y-axis values are the brightnesses $K_{grc}$ of the genes after the target scaling $V_{trc}$.
+
+It is important to check how well each round and channel is being scaled to its target value. R0C27 is pretty good, with most of the genes being pretty concentrated at the target value. R4C5 is much noisier, with many genes consistently too bright or too dim.
+
+### View Tile Scale Regression
+
+```pseudo
+from coppafish.plot.call_spots import ViewTileScaleRegression
+ViewTileScaleRegression(nb, t)
+```
+This function looks at a fixed tile and then shows the regression for the tile scale factor $Q_{trc}$ for each round and channel. Recall that this is the scale factor that multiplies the tile-dependent free bled codes $D_{gtrc}$ to get the constrained bled codes $K_{grc}$.
+
+As in the previous diagnostic, each spot is a gene with dye $d_{\textrm{max}}(c)$ in round $r$ and the size of the dot is proportional to the number of spots assigned to that gene. Unlike the previous diagnostic, in this plot the x-values are not random, but are the brightnesses $D_{gtrc}$ of the genes (averaged from spots which have been multiplied by initial scale $\tilde{A}_{trc}$). The y-values are the brightnesses $K_{grc}$. 
+
+A couple of things to note:
+
+- Different slopes within the same column (channel) indicate that this is picking up on differences in round brightnesses for this channel on this tile.
+
+- If these regressions have a low $R^2$ value, the tile scaling is not working well. This may be a sign of a blank tile or poor registration.
+
+<p align="center">
+    <img src="https://github.com/user-attachments/assets/858ce3c0-b603-4633-b574-03a81ffd21c9" width="600" />
+    <br />
+    <span> Viewing the background removal and scaling of a subset of isolated spots.</span>
+<p>
+
+### View Scale Factors
+
+```pseudo
+from coppafish.plot.call_spots import ViewScaleFactors
+ViewScaleFactors(nb)
+```
+
+This simple viewer shows the target scale $V_{rc}$, the tile scale $Q_{trc}$ and the relative scale $Q_{trc}/V_{rc}$ for each round and channel. 
+
+What to expect:
+
+- The tile scale $Q_{trc}$ should be close to $V_{rc}$ for each tile $t$. This is because $D_{gtrc}Q_{trc} \approx K_{grc = E_{grc}V_{rc}}$. So if $E_{grc} \approx D_{gtrc}$, then $Q_{trc} \approx V_{rc}$.
+
+- The relative scale measures how much we deviate from the vase where $E_{grc} = D_{gtrc}$, and should not have a huge amount of variance. In the plot above the highest value is 0.5 and the lowest is 0.35, which is a good range.
+
+<p align="center">
+<img src="https://github.com/user-attachments/assets/c7333f48-8a19-4129-8730-00db6723f472" width="600" />
+<br />
+<p>
+
+### Gene Efficiency Viewer
+```pseudo
+from coppafish.plot.call_spots import GeneEfficiencyViewer
+GeneEfficiencyViewer(nb, score_threshold=gamma, mode=gene_assignment_mode)
+```
+
+(or simply press 'E' in the main results' viewer)
+
+<p align="center">
+<img src="https://github.com/user-attachments/assets/6d8de8b7-e385-4d74-9324-035baf053031" width="600" />
+<br />
+<p>
+
+Each row represents a gene and each column a round. The colour of each cell is the amount of weight that gene $g$ has in round $r$. The ideal case would be homogeneous colours across the rows, indicating that each gene is equally bright in each round, but this is never the case.
+
+Look out for:
+
+- Genes with an abnormal amount of spots assigned to them. This is often the case for poor quality genes which look a lot like background. If this is the case, the gene probability threshod `gene_prob_thresh` in the config file should be increased.
+
+- Genes with very high or low gene efficiencies. This should not happen if `concentration_parameter_parallel` is sufficiently high, as it typically should need at least 10 spots to scale each dye. If the gene efficiencies are incorrect, OMP will struggle to find the correct gene assignments.
+
+### Gene Spots Viewer
+```pseudo
+from coppafish.plot.call_spots import GeneSpotsViewer
+GeneSpotsViewer(nb, score_threshold=gamma, gene_index=g, mode=gene_assignment_mode)
+```
+
+(or simply click one of the genes in the gene efficiency viewer)
+
+<p align="center">
+<img src="https://github.com/user-attachments/assets/a0996167-5878-45e7-a609-4269dde8736a" width="600" />
+<br />
+<p>
+
+This viewer shows the spots assigned to a particular gene above a certain threshold, under a certain gene assignment mode (either 'anchor', 'prob' or 'omp'). 
+
+This is the viewer I use the most. It helps me find abnormalities that would be hard to spot otherwise, like the persistent unexpected channel 27 signal in round 0 in the images above. If a particular gene is under or over expressed, this viewer will typically tell us why. It also gives us a very nice representation of which dyes, rounds and channels are clean and which are noisy.

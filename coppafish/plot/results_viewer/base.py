@@ -20,7 +20,7 @@ from . import legend
 from .. import call_spots as call_spots_plot
 from ...omp import base as omp_base
 from ...setup import Notebook
-from ..call_spots import view_bled_codes, view_bleed_matrix, view_codes, view_spot, BGScaleViewer, GEViewer
+from ..call_spots import view_bled_codes, ViewBleedMatrix, view_codes, view_spot, ViewScalingAndBGRemoval, GeneEfficiencyViewer
 from ..call_spots import ViewAllGeneHistograms, HistogramScore
 from ..omp import ViewOMPImage, ViewOMPPixelColours
 from .hotkeys import KeyBinds, ViewHotkeys
@@ -777,11 +777,11 @@ class Viewer:
 
         @self.viewer.bind_key(KeyBinds.view_bleed_matrix)
         def call_to_view_bm(viewer):
-            view_bleed_matrix(self.nb)
+            ViewBleedMatrix(self.nb)
 
         @self.viewer.bind_key(KeyBinds.view_background_norm)
         def call_to_view_bg_norm(viewer):
-            BGScaleViewer(self.nb)
+            ViewScalingAndBGRemoval(self.nb)
 
         @self.viewer.bind_key(KeyBinds.view_bled_codes)
         def call_to_view_bled(viewer):
@@ -793,7 +793,7 @@ class Viewer:
 
         @self.viewer.bind_key(KeyBinds.view_gene_efficiency)
         def call_to_view_gene_efficiency(viewer):
-            self.open_plot = GEViewer(
+            self.open_plot = GeneEfficiencyViewer(
                 self.nb,
                 mode=self.method["names"][self.method["active"]],
                 score_threshold=self.sliders["score_range"].value()[0],
